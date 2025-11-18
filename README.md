@@ -2,7 +2,7 @@
 
 **A complete AI-assisted development environment in one command.**
 
-Agent Mail (multi-agent coordination) + Beads (task planning) + 43 bash tools = 32,000+ token savings over MCP servers.
+Agent Mail (multi-agent coordination) + Beads (task planning) + 24 bash tools = 32,000+ token savings over MCP servers.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/install.sh | bash
@@ -16,7 +16,7 @@ Jomarchy Agent Tools is a **zero-configuration AI development environment** that
 
 - **Coordinate** across multiple agents without conflicts (Agent Mail)
 - **Plan** work with dependency-aware task management (Beads)
-- **Execute** efficiently with 43 lightweight bash tools (32k+ token savings vs MCP)
+- **Execute** efficiently with 24 lightweight bash tools (32k+ token savings vs MCP)
 - **Scale** across all your projects with unified dashboard views
 
 **Philosophy:** Following [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/) by Mario Zechner - simple bash tools achieve 80x token reduction while being more composable and cross-CLI compatible.
@@ -40,7 +40,7 @@ Modern AI coding assistants face three major challenges:
 | Challenge | Solution | Benefit |
 |-----------|----------|---------|
 | Coordination | Agent Mail (file reservations + messaging) | No more merge conflicts |
-| Token bloat | 43 bash tools instead of MCP | 32,425 token savings |
+| Token bloat | 24 bash tools instead of MCP | 32,425 token savings |
 | Task amnesia | Beads (git-backed task database) | Persistent multi-session memory |
 
 **Real-world impact:**
@@ -62,7 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/
 This installs:
 - ✅ Agent Mail Server (http://localhost:3141)
 - ✅ Beads CLI (`bd` command)
-- ✅ 43 bash agent tools (am-*, browser-*, db-*, etc.)
+- ✅ 24 bash agent tools (am-*, browser-*, db-*, etc.)
 - ✅ Global ~/.claude/CLAUDE.md configuration
 - ✅ Per-repo setup (bd init, CLAUDE.md templates)
 
@@ -155,8 +155,17 @@ Based on [badlogic/browser-tools](https://github.com/badlogic/browser-tools)
 - `browser-cookies.js` - Manage cookies
 - `browser-hn-scraper.js` - Example scraper
 
-#### Additional Tools (24)
-Database, monitoring, media management, deployment helpers
+#### Database & Utility Tools (6)
+
+**Database (4):**
+- `db-query` - Execute SQL with automatic safety limits
+- `db-connection-test` - Test database connectivity
+- `db-schema` - View database schema
+- `db-sessions` - Check active database sessions
+
+**Utilities (2):**
+- `edge-logs` - View Supabase edge function logs
+- `lint-staged` - Lint only staged git files
 
 **All tools have `--help` flags:**
 ```bash
@@ -464,7 +473,7 @@ At $0.015 per 1k tokens (GPT-4):
              │ Read project CLAUDE.md
              │
 ┌────────────▼────────────────────────────────┐
-│  Bash Tools (43 scripts in ~/.local/bin)    │
+│  Bash Tools (24 scripts in ~/.local/bin)    │
 │  • Agent Mail clients (am-*)                │
 │  • Browser automation (browser-*.js)        │
 │  • Utilities (db-*, etc.)                   │
