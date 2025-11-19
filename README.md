@@ -167,126 +167,8 @@ bd close task-123 --reason "Completed"
 am-release "src/auth/**" --agent AgentName
 ```
 
-### 3. 28 Generic Bash Agent Tools
 
-**Location:** `~/.local/bin/` (globally available)
-
-**Philosophy:** Following [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/) by Mario Zechner - lightweight bash tools provide instant capability without MCP overhead. Clear, fast, composable.
-
-#### Agent Mail Tools (11)
-- `am-register` - Register agent identity
-- `am-inbox` - Check inbox (--unread, --json)
-- `am-send` - Send messages with threads
-- `am-reply` - Reply to thread
-- `am-ack` - Acknowledge messages
-- `am-reserve` - Reserve files (prevent conflicts)
-- `am-release` - Release file reservations
-- `am-reservations` - List active reservations
-- `am-search` - Search message archives
-- `am-agents` - List all agents
-- `am-whoami` - Show current agent identity
-
-#### Browser Automation Tools (11)
-Based on [badlogic/browser-tools](https://github.com/badlogic/browser-tools)
-
-**Core Tools (7):**
-- `browser-start.js` - Start Chrome with remote debugging
-- `browser-nav.js` - Navigate to URL
-- `browser-eval.js` - Execute JavaScript
-- `browser-screenshot.js` - Capture screenshots
-- `browser-pick.js` - Interactive element picker
-- `browser-cookies.js` - Manage cookies
-- `browser-hn-scraper.js` - Example scraper
-
-**Advanced Tools (4):**
-- `browser-wait.js` - Smart waiting with CDP polling (eliminates race conditions)
-- `browser-snapshot.js` - Structured page tree (1000x token savings: 5KB vs 5MB)
-- `browser-console.js` - Structured console access (debug JS errors with stack traces)
-- `browser-network.js` - Network request monitoring (API testing with timing metrics)
-
-#### Database & Utility Tools (6)
-
-**Database (4):**
-- `db-query` - Execute SQL with automatic safety limits
-- `db-connection-test` - Test database connectivity
-- `db-schema` - View database schema
-- `db-sessions` - Check active database sessions
-
-**Utilities (2):**
-- `edge-logs` - View Supabase edge function logs
-- `lint-staged` - Lint only staged git files
-
-**All tools have `--help` flags:**
-```bash
-am-inbox --help
-browser-eval.js --help
-db-query --help
-```
-
-### 4. Optional Tech Stack Tools
-
-During installation, you can select additional **tech-stack-specific tools** via an interactive menu (requires [gum](https://github.com/charmbracelet/gum)):
-
-#### SvelteKit + Supabase Stack (11 tools)
-
-**Database Schema Tools (3):**
-- `error-log` - Query error logs (assumes `error_logs` table)
-- `quota-check` - Check AI usage quotas (assumes `ai_usage_logs` table)
-- `job-monitor` - Monitor background jobs
-
-**SvelteKit-Specific (2):**
-- `component-deps` - Analyze Svelte component dependencies
-- `route-list` - List all SvelteKit routes
-
-**Project Development (6):**
-- `migration-status` - Check Supabase migration status
-- `type-check-fast` - Fast TypeScript type checking
-- `build-size` - Analyze bundle sizes
-- `cache-clear` - Clear application caches
-- `env-check` - Validate environment variables
-- `perf-check` - Performance analysis
-
-**When to use stacks:**
-- You're using SvelteKit + Supabase + TypeScript
-- You want project-specific tooling (schema-aware queries, component analysis)
-- You want to avoid duplicating tools across multiple projects with the same stack
-
-**Manual installation:**
-```bash
-# If you skip during install, you can add stacks later:
-bash ~/code/jomarchy-agent-tools/stacks/sveltekit-supabase/install.sh
-```
-
-**Documentation:**
-See `stacks/sveltekit-supabase/README.md` for detailed stack documentation.
-
-### 5. Global Configuration
-
-**File:** `~/.claude/CLAUDE.md`
-
-Contains multi-project instructions for:
-- Agent Mail usage patterns
-- Beads workflow conventions
-- Bash tool integration
-- Best practices
-
-**Automatically loaded by AI assistants in all projects.**
-
-### 6. Per-Repository Setup
-
-For each git repository in `~/code/*`:
-
-1. **Initializes Beads:**
-   - Creates `.beads/` directory
-   - Installs git hooks (pre-commit, merge driver)
-   - Sets up project-specific issue prefix
-
-2. **Creates/Updates CLAUDE.md:**
-   - Project-specific documentation template
-   - Agent tools configuration section
-   - Quick start guide for AI assistants
-
-### 7. Agent Swarm Coordination Commands
+### 3. Agent Swarm Coordination Commands
 
 **10 slash commands** installed to `~/.claude/commands/agent/` that enable sophisticated multi-agent orchestration:
 
@@ -453,6 +335,126 @@ Commands are **markdown files with instructions** that Claude Code executes:
 5. **🔄 Persistent State** - Work survives context window resets
 6. **🎯 Smart Selection** - Context-aware task matching from conversation
 7. **⚡ Bulk Parallelization** - Deploy 60+ agents for massive remediation tasks
+
+
+### 4. 28 Generic Bash Agent Tools
+
+**Location:** `~/.local/bin/` (globally available)
+
+**Philosophy:** Following [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/) by Mario Zechner - lightweight bash tools provide instant capability without MCP overhead. Clear, fast, composable.
+
+#### Agent Mail Tools (11)
+- `am-register` - Register agent identity
+- `am-inbox` - Check inbox (--unread, --json)
+- `am-send` - Send messages with threads
+- `am-reply` - Reply to thread
+- `am-ack` - Acknowledge messages
+- `am-reserve` - Reserve files (prevent conflicts)
+- `am-release` - Release file reservations
+- `am-reservations` - List active reservations
+- `am-search` - Search message archives
+- `am-agents` - List all agents
+- `am-whoami` - Show current agent identity
+
+#### Browser Automation Tools (11)
+Based on [badlogic/browser-tools](https://github.com/badlogic/browser-tools)
+
+**Core Tools (7):**
+- `browser-start.js` - Start Chrome with remote debugging
+- `browser-nav.js` - Navigate to URL
+- `browser-eval.js` - Execute JavaScript
+- `browser-screenshot.js` - Capture screenshots
+- `browser-pick.js` - Interactive element picker
+- `browser-cookies.js` - Manage cookies
+- `browser-hn-scraper.js` - Example scraper
+
+**Advanced Tools (4):**
+- `browser-wait.js` - Smart waiting with CDP polling (eliminates race conditions)
+- `browser-snapshot.js` - Structured page tree (1000x token savings: 5KB vs 5MB)
+- `browser-console.js` - Structured console access (debug JS errors with stack traces)
+- `browser-network.js` - Network request monitoring (API testing with timing metrics)
+
+#### Database & Utility Tools (6)
+
+**Database (4):**
+- `db-query` - Execute SQL with automatic safety limits
+- `db-connection-test` - Test database connectivity
+- `db-schema` - View database schema
+- `db-sessions` - Check active database sessions
+
+**Utilities (2):**
+- `edge-logs` - View Supabase edge function logs
+- `lint-staged` - Lint only staged git files
+
+**All tools have `--help` flags:**
+```bash
+am-inbox --help
+browser-eval.js --help
+db-query --help
+```
+
+### 5. Optional Tech Stack Tools
+
+During installation, you can select additional **tech-stack-specific tools** via an interactive menu (requires [gum](https://github.com/charmbracelet/gum)):
+
+#### SvelteKit + Supabase Stack (11 tools)
+
+**Database Schema Tools (3):**
+- `error-log` - Query error logs (assumes `error_logs` table)
+- `quota-check` - Check AI usage quotas (assumes `ai_usage_logs` table)
+- `job-monitor` - Monitor background jobs
+
+**SvelteKit-Specific (2):**
+- `component-deps` - Analyze Svelte component dependencies
+- `route-list` - List all SvelteKit routes
+
+**Project Development (6):**
+- `migration-status` - Check Supabase migration status
+- `type-check-fast` - Fast TypeScript type checking
+- `build-size` - Analyze bundle sizes
+- `cache-clear` - Clear application caches
+- `env-check` - Validate environment variables
+- `perf-check` - Performance analysis
+
+**When to use stacks:**
+- You're using SvelteKit + Supabase + TypeScript
+- You want project-specific tooling (schema-aware queries, component analysis)
+- You want to avoid duplicating tools across multiple projects with the same stack
+
+**Manual installation:**
+```bash
+# If you skip during install, you can add stacks later:
+bash ~/code/jomarchy-agent-tools/stacks/sveltekit-supabase/install.sh
+```
+
+**Documentation:**
+See `stacks/sveltekit-supabase/README.md` for detailed stack documentation.
+
+### 6. Global Configuration
+
+**File:** `~/.claude/CLAUDE.md`
+
+Contains multi-project instructions for:
+- Agent Mail usage patterns
+- Beads workflow conventions
+- Bash tool integration
+- Best practices
+
+**Automatically loaded by AI assistants in all projects.**
+
+### 7. Per-Repository Setup
+
+For each git repository in `~/code/*`:
+
+1. **Initializes Beads:**
+   - Creates `.beads/` directory
+   - Installs git hooks (pre-commit, merge driver)
+   - Sets up project-specific issue prefix
+
+2. **Creates/Updates CLAUDE.md:**
+   - Project-specific documentation template
+   - Agent tools configuration section
+   - Quick start guide for AI assistants
 
 **Example scenario: 60 agents fixing 1,231 TypeScript errors in 18 minutes** (via `/start` detecting bulk remediation pattern and deploying agent swarm automatically)
 
