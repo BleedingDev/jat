@@ -113,7 +113,7 @@ for repo_dir in "$CODE_DIR"/*; do
 **This project uses:**
 - ✅ Beads task planning (\`.beads/\` directory)
 - ✅ Agent Mail coordination (project key: \`$repo_dir\`)
-- ✅ 43 bash agent tools available globally
+- ✅ 28 generic bash tools available globally
 
 **Quick start for AI assistants:**
 \`\`\`bash
@@ -145,7 +145,7 @@ EOF
 **This project uses:**
 - ✅ Beads task planning (\`.beads/\` directory)
 - ✅ Agent Mail coordination (project key: \`$repo_dir\`)
-- ✅ 43 bash agent tools available globally
+- ✅ 28 generic bash tools available globally
 
 **Quick start for AI assistants:**
 \`\`\`bash

@@ -49,7 +49,7 @@
 **This project uses:**
 - ✅ Beads task planning (`.beads/` directory)
 - ✅ Agent Mail coordination (project key: `[absolute path to this repo]`)
-- ✅ 43 bash agent tools available globally
+- ✅ 28 generic bash tools available globally
 
 **Quick start for AI assistants:**
 ```bash
