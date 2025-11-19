@@ -1,0 +1,112 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run All Tests
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sqlite3
+
+    - name: Install Node dependencies
+      run: npm ci
+
+    - name: Create mock Beads directories for tests
+      run: |
+        mkdir -p ~/code/jomarchy-agent-tools/.beads
+        mkdir -p ~/code/chimaro/.beads
+        mkdir -p ~/code/test-project/.beads
+        # Create minimal test databases for query layer tests
+        echo "Creating test Beads databases..."
+        # Note: The actual test databases will be created by test scripts
+
+    - name: Run all tests
+      run: bash test/run-all-tests.sh
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-node-${{ matrix.node-version }}
+        path: |
+          /tmp/test-*.db
+          /tmp/example-*.db
+        retention-days: 7
+
+  lint:
+    name: Lint Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check bash script syntax
+      run: |
+        echo "Checking bash script syntax..."
+        find . -name "*.sh" -type f -exec bash -n {} \;
+
+    - name: Check for executable scripts
+      run: |
+        echo "Verifying executable permissions..."
+        # Check that all .sh files are executable
+        find mail examples/workflows test -name "*.sh" -type f ! -executable -print | while read file; do
+          echo "Warning: $file is not executable"
+        done
+
+  structure:
+    name: Project Structure Validation
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Verify project structure
+      run: |
+        echo "Verifying essential files exist..."
+        test -f README.md || (echo "Missing README.md" && exit 1)
+        test -f package.json || (echo "Missing package.json" && exit 1)
+        test -f install.sh || (echo "Missing install.sh" && exit 1)
+        test -d mail || (echo "Missing mail/ directory" && exit 1)
+        test -d lib || (echo "Missing lib/ directory" && exit 1)
+        test -d test || (echo "Missing test/ directory" && exit 1)
+        echo "✓ All essential files present"
+
+    - name: Verify tool scripts
+      run: |
+        echo "Verifying am-* tools exist..."
+        for tool in am-register am-send am-inbox am-reserve am-release am-ack am-reply am-search am-agents am-reservations am-whoami; do
+          test -f "mail/$tool" || (echo "Missing mail/$tool" && exit 1)
+        done
+        echo "✓ All Agent Mail tools present"
+
+    - name: Verify lib exports
+      run: |
+        echo "Verifying lib/ exports..."
+        test -f lib/beads.js || (echo "Missing lib/beads.js" && exit 1)
+        test -f lib/agent-mail.js || (echo "Missing lib/agent-mail.js" && exit 1)
+        echo "✓ All lib exports present"
