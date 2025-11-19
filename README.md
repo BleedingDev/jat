@@ -1181,22 +1181,6 @@ If you have Chimaro installed, you get a web-based dashboard that aggregates tas
 
 ## Troubleshooting
 
-### Agent Mail Not Running
-
-```bash
-# Check status
-systemctl --user status agent-mail
-
-# Start manually
-systemctl --user start agent-mail
-
-# Enable at boot
-systemctl --user enable agent-mail
-
-# Check logs
-journalctl --user -u agent-mail -f
-```
-
 ### Beads Command Not Found
 
 ```bash
@@ -1232,16 +1216,15 @@ bash ~/code/jomarchy-agent-tools/scripts/setup-repos.sh
 ## Uninstallation
 
 ```bash
-# Stop Agent Mail
-systemctl --user stop agent-mail
-systemctl --user disable agent-mail
+# Remove Agent Mail database (optional - keeps message history if you skip this)
+rm ~/.agent-mail.db
 
 # Remove Beads CLI
 # (Method depends on how it was installed - see Beads docs)
 
 # Remove symlinked tools
-rm ~/.local/bin/am-*
-rm ~/.local/bin/browser-*.js
+rm ~/bin/am-*
+rm ~/bin/browser-*.js
 
 # Remove global config (optional)
 rm ~/.claude/CLAUDE.md
@@ -1392,12 +1375,9 @@ git pull origin main
 
 # Re-run setup if commands/tools changed
 bash scripts/setup-global-claude-md.sh
-
-# Restart Agent Mail if needed
-systemctl --user restart agent-mail
 ```
 
-**Updates are git-pull simple.**
+**Updates are git-pull simple.** No services to restart - bash tools update instantly.
 
 ---
 
