@@ -202,8 +202,6 @@ am-inbox Mobile  # Gets notified
 
 ## 📖 Complete Workflow: From Idea to Production
 
-**This is the workflow curse-of-knowledge gap that most docs miss!** Here's the actual end-to-end process:
-
 ### Step 1: Write a Detailed PRD (You, in a text editor)
 
 Create a comprehensive Product Requirements Document with:
