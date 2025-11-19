@@ -48,18 +48,23 @@
 		}
 	}
 
-	// Close modal on escape key
-	function handleKeydown(event) {
-		if (event.key === 'Escape') {
-			onClose();
-		}
-	}
+	// Dialog element reference
+	let dialogEl = $state(null);
 
-	// Close modal on backdrop click
-	function handleBackdropClick(event) {
-		if (event.target === event.currentTarget) {
-			onClose();
+	// Open/close dialog using native dialog API
+	$effect(() => {
+		if (task && dialogEl) {
+			if (!dialogEl.open) {
+				dialogEl.showModal();
+			}
+		} else if (!task && dialogEl?.open) {
+			dialogEl.close();
 		}
+	});
+
+	// Handle dialog close event
+	function handleDialogClose() {
+		onClose();
 	}
 
 	// Enable edit mode
@@ -107,7 +112,8 @@
 </script>
 
 {#if task}
-	<div class="modal modal-open" onclick={handleBackdropClick} onkeydown={handleKeydown} role="dialog">
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<dialog bind:this={dialogEl} class="modal" onclose={handleDialogClose}>
 		<div class="modal-box max-w-4xl">
 			<div class="flex justify-between items-start mb-4">
 				{#if isEditing}
@@ -339,5 +345,8 @@
 				</div>
 			</div>
 		</div>
-	</div>
+		<form method="dialog" class="modal-backdrop">
+			<button>close</button>
+		</form>
+	</dialog>
 {/if}
