@@ -23,45 +23,56 @@
 		</div>
 	</div>
 
-	<div class="filters">
-		<div class="filter-group">
-			<label for="project-filter">Project:</label>
-			<select id="project-filter" bind:value={selectedProject}>
-				<option value="all">All Projects</option>
-				<option value="chimaro">Chimaro</option>
-				<option value="jomarchy">Jomarchy</option>
-				<option value="jomarchy-agent-tools">JAT</option>
-			</select>
-		</div>
+	<div class="bg-base-100 border-b border-base-300 p-4">
+		<div class="flex flex-wrap gap-4">
+			<div class="form-control">
+				<label class="label" for="project-filter">
+					<span class="label-text">Project</span>
+				</label>
+				<select id="project-filter" class="select select-bordered select-sm" bind:value={selectedProject}>
+					<option value="all">All Projects</option>
+					<option value="chimaro">Chimaro</option>
+					<option value="jomarchy">Jomarchy</option>
+					<option value="jomarchy-agent-tools">JAT</option>
+				</select>
+			</div>
 
-		<div class="filter-group">
-			<label for="priority-filter">Priority:</label>
-			<select id="priority-filter" bind:value={selectedPriority}>
-				<option value="all">All Priorities</option>
-				<option value="0">P0 (Critical)</option>
-				<option value="1">P1 (High)</option>
-				<option value="2">P2 (Medium)</option>
-				<option value="3">P3 (Low)</option>
-			</select>
-		</div>
+			<div class="form-control">
+				<label class="label" for="priority-filter">
+					<span class="label-text">Priority</span>
+				</label>
+				<select id="priority-filter" class="select select-bordered select-sm" bind:value={selectedPriority}>
+					<option value="all">All Priorities</option>
+					<option value="0">P0 (Critical)</option>
+					<option value="1">P1 (High)</option>
+					<option value="2">P2 (Medium)</option>
+					<option value="3">P3 (Low)</option>
+				</select>
+			</div>
 
-		<div class="filter-group">
-			<label for="status-filter">Status:</label>
-			<select id="status-filter" bind:value={selectedStatus}>
-				<option value="all">All Statuses</option>
-				<option value="open">Open</option>
-				<option value="closed">Closed</option>
-			</select>
-		</div>
+			<div class="form-control">
+				<label class="label" for="status-filter">
+					<span class="label-text">Status</span>
+				</label>
+				<select id="status-filter" class="select select-bordered select-sm" bind:value={selectedStatus}>
+					<option value="all">All Statuses</option>
+					<option value="open">Open</option>
+					<option value="closed">Closed</option>
+				</select>
+			</div>
 
-		<div class="filter-group">
-			<label for="search-filter">Search:</label>
-			<input
-				id="search-filter"
-				type="text"
-				placeholder="Search tasks..."
-				bind:value={searchQuery}
-			/>
+			<div class="form-control">
+				<label class="label" for="search-filter">
+					<span class="label-text">Search</span>
+				</label>
+				<input
+					id="search-filter"
+					type="text"
+					placeholder="Search tasks..."
+					class="input input-bordered input-sm"
+					bind:value={searchQuery}
+				/>
+			</div>
 		</div>
 	</div>
 
@@ -74,49 +85,4 @@
 </div>
 
 <style>
-
-	.filters {
-		background: white;
-		border-bottom: 1px solid #e5e7eb;
-		padding: 1rem 2rem;
-		display: flex;
-		gap: 2rem;
-		flex-wrap: wrap;
-	}
-
-	.filter-group {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.filter-group label {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: #374151;
-	}
-
-	.filter-group select,
-	.filter-group input {
-		padding: 0.5rem 0.75rem;
-		border: 1px solid #d1d5db;
-		border-radius: 0.375rem;
-		font-size: 0.875rem;
-		background: white;
-	}
-
-	.filter-group select {
-		cursor: pointer;
-	}
-
-	.filter-group input {
-		min-width: 200px;
-	}
-
-	.filter-group select:focus,
-	.filter-group input:focus {
-		outline: none;
-		border-color: #3b82f6;
-		box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-	}
 </style>
