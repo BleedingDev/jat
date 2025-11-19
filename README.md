@@ -1223,8 +1223,8 @@ rm ~/.agent-mail.db
 # (Method depends on how it was installed - see Beads docs)
 
 # Remove symlinked tools
-rm ~/bin/am-*
-rm ~/bin/browser-*.js
+rm ~/.local/bin/am-*
+rm ~/.local/bin/browser-*.js
 
 # Remove global config (optional)
 rm ~/.claude/CLAUDE.md

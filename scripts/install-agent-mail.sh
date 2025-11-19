@@ -15,21 +15,25 @@ echo -e "${BLUE}Installing Agent Mail (bash + SQLite)...${NC}"
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN_DIR="$HOME/bin"
+BIN_DIR="$HOME/.local/bin"
 AGENT_MAIL_DB="${AGENT_MAIL_DB:-$HOME/.agent-mail.db}"
 
-# Create ~/bin if needed
+# Create ~/.local/bin if needed
 if [ ! -d "$BIN_DIR" ]; then
     mkdir -p "$BIN_DIR"
     echo -e "${GREEN}  ✓ Created $BIN_DIR${NC}"
 fi
 
 # Symlink Agent Mail tools
-echo "  → Symlinking Agent Mail tools to ~/bin..."
+echo "  → Symlinking Agent Mail tools to ~/.local/bin..."
 TOOLS_INSTALLED=0
 for tool in "$SCRIPT_DIR/mail"/am-*; do
-    if [ -f "$tool" ] && [ -x "$tool" ] && [[ "$tool" != *.sh ]]; then
+    if [ -f "$tool" ] && [ -x "$tool" ]; then
         tool_name=$(basename "$tool")
+        # Skip .sh files except am-lib.sh (required by all tools)
+        if [[ "$tool" == *.sh ]] && [[ "$tool_name" != "am-lib.sh" ]]; then
+            continue
+        fi
         target="$BIN_DIR/$tool_name"
         if [ -L "$target" ]; then
             rm "$target"
