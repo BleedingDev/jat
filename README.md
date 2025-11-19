@@ -434,13 +434,17 @@ See `stacks/sveltekit-supabase/README.md` for detailed stack documentation.
 
 **File:** `~/.claude/CLAUDE.md`
 
-Contains multi-project instructions for:
-- Agent Mail usage patterns
-- Beads workflow conventions
-- Bash tool integration
-- Best practices
+The installer **appends** comprehensive instructions to your global `~/.claude/CLAUDE.md` file. This "prompt injection" is fully transparent and auditable.
 
-**Automatically loaded by AI assistants in all projects.**
+**What gets appended:**
+- 🤖 Agent Swarm Coordination Commands (10 slash commands)
+- 📬 MCP Agent Mail (coordination patterns, macros, pitfalls)
+- 📋 Beads Integration (workflow conventions, task mapping)
+- 🛠️ Agent Tools (28 bash tools with examples)
+
+**View the exact content:** [`scripts/setup-global-claude-md.sh`](scripts/setup-global-claude-md.sh#L53-L383) (lines 53-383)
+
+**Automatically loaded by AI assistants in all projects.** This gives every agent access to coordination primitives without consuming your context window.
 
 ### 7. Per-Repository Setup
 
