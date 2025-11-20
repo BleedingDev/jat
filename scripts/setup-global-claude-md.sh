@@ -202,6 +202,64 @@ Common pitfalls
 - "FILE_RESERVATION_CONFLICT": adjust patterns, wait for expiry, or use a non-exclusive reservation when appropriate.
 - Auth errors: if JWT+JWKS is enabled, include a bearer token with a `kid` that matches server JWKS; static bearer is used only when JWT is disabled.
 
+## Common Bash Tool Patterns
+
+The Bash tool executes commands in a shell. Proper syntax is critical to avoid "Exit code 2" errors.
+
+**Common Error: Invalid if-statement chaining**
+\`\`\`bash
+# ❌ WRONG - syntax error
+SESSION_ID="abc123"
+if [[ -f "$file" ]]; then echo "exists"; fi
+
+# ❌ WRONG - can't chain if with &&
+SESSION_ID="abc123" && if [[ -f "$file" ]]; then echo "exists"; fi
+\`\`\`
+
+**Correct Patterns:**
+
+**1. Semicolon separation (inline everything)**
+\`\`\`bash
+# ✅ CORRECT
+SESSION_ID="abc123"; if [[ -f ".claude/agent-\${SESSION_ID}.txt" ]]; then cat ".claude/agent-\${SESSION_ID}.txt"; else echo "not found"; fi
+\`\`\`
+
+**2. Use test command with && / ||**
+\`\`\`bash
+# ✅ CORRECT - most concise
+test -f "$file" && echo "exists" || echo "not found"
+
+# ✅ CORRECT - with variable
+SESSION_ID="abc123" && test -f ".claude/agent-\${SESSION_ID}.txt" && cat ".claude/agent-\${SESSION_ID}.txt" || echo "not found"
+\`\`\`
+
+**3. Use [[ ]] with && / || (no if keyword)**
+\`\`\`bash
+# ✅ CORRECT
+[[ -f "$file" ]] && echo "exists" || echo "not found"
+
+# ✅ CORRECT - multi-step
+SESSION_ID="abc123" && [[ -f ".claude/agent-\${SESSION_ID}.txt" ]] && cat ".claude/agent-\${SESSION_ID}.txt" || echo "not found"
+\`\`\`
+
+**4. Subshell for complex logic**
+\`\`\`bash
+# ✅ CORRECT - use subshell for multi-line
+SESSION_ID="abc123" && (
+  if [[ -f ".claude/agent-\${SESSION_ID}.txt" ]]; then
+    cat ".claude/agent-\${SESSION_ID}.txt"
+  else
+    echo "not found"
+  fi
+)
+\`\`\`
+
+**Key Rules:**
+- \`if\` is a keyword, not a command - can't use with \`&&\` directly
+- Use semicolons \`;\` to separate statements on one line
+- Use \`test\` or \`[[ ]]\` for conditionals with \`&&\` / \`||\`
+- When in doubt, inline everything with semicolons
+
 
 ## Integrating with Beads (dependency-aware task planning)
 
