@@ -349,27 +349,64 @@ fi
 # Build indicators section (for line 2)
 indicators=""
 
-# Add lock count (cyan - file related)
+# Add lock count (dynamic: cyan=1-2, yellow=3-5, red=>5)
 if [[ $lock_count -gt 0 ]]; then
-    indicators="${indicators}${CYAN}🔒 ${lock_count}${RESET}"
+    if [[ $lock_count -gt 5 ]]; then
+        lock_color="${RED}"
+    elif [[ $lock_count -gt 2 ]]; then
+        lock_color="${YELLOW}"
+    else
+        lock_color="${CYAN}"
+    fi
+    indicators="${indicators}${lock_color}🔒 ${lock_count}${RESET}"
 fi
 
-# Add unread messages (yellow - needs attention)
+# Add unread messages (dynamic: cyan=1-5, yellow=6-15, red=>15)
 if [[ $unread_count -gt 0 ]]; then
     [[ -n "$indicators" ]] && indicators="${indicators}  "
-    indicators="${indicators}${YELLOW}📬 ${unread_count}${RESET}"
+    if [[ $unread_count -gt 15 ]]; then
+        msg_color="${RED}"
+    elif [[ $unread_count -gt 5 ]]; then
+        msg_color="${YELLOW}"
+    else
+        msg_color="${CYAN}"
+    fi
+    indicators="${indicators}${msg_color}📬 ${unread_count}${RESET}"
 fi
 
-# Add time remaining (gray - informational)
+# Add time remaining (dynamic: green=>30m, yellow=10-30m, red=<10m)
 if [[ -n "$time_remaining" ]]; then
     [[ -n "$indicators" ]] && indicators="${indicators}  "
-    indicators="${indicators}${GRAY}⏱ ${time_remaining}${RESET}"
+
+    # Extract minutes from time_remaining (format: "45m" or "2h")
+    time_minutes=0
+    if [[ "$time_remaining" =~ ([0-9]+)h ]]; then
+        time_minutes=$((${BASH_REMATCH[1]} * 60))
+    elif [[ "$time_remaining" =~ ([0-9]+)m ]]; then
+        time_minutes=${BASH_REMATCH[1]}
+    fi
+
+    if [[ $time_minutes -gt 30 ]]; then
+        time_color="${GREEN}"
+    elif [[ $time_minutes -gt 10 ]]; then
+        time_color="${YELLOW}"
+    else
+        time_color="${RED}"
+    fi
+    indicators="${indicators}${time_color}⏱ ${time_remaining}${RESET}"
 fi
 
-# Add progress if available (green - positive progress)
+# Add progress if available (dynamic: red=<25%, yellow=25-75%, green=>75%)
 if [[ -n "$task_progress" ]] && [[ "$task_progress" != "null" ]]; then
     [[ -n "$indicators" ]] && indicators="${indicators}  "
-    indicators="${indicators}${GREEN}${task_progress} %${RESET}"
+    if [[ $task_progress -gt 75 ]]; then
+        progress_color="${GREEN}"
+    elif [[ $task_progress -gt 25 ]]; then
+        progress_color="${YELLOW}"
+    else
+        progress_color="${RED}"
+    fi
+    indicators="${indicators}${progress_color}${task_progress} %${RESET}"
 fi
 
 # Build second line with context battery, git branch, and indicators
