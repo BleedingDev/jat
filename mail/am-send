@@ -32,37 +32,58 @@ Arguments:
 
 Options:
   --from AGENT        Sending agent name (required)
-  --to AGENTS         Comma-separated list of recipient agents (required)
-                      Special mentions: @active, @recent, @all, @project:name
+  --to AGENTS         Comma-separated list of recipient agent names (required)
+                      Supports broadcast mentions for multi-agent messaging:
+                        @active, @recent, @all, @project:name
+                      Can mix mentions with specific names: "@active,Agent1,Agent2"
   --cc AGENTS         Comma-separated list of CC recipients (optional)
   --thread ID         Thread identifier (e.g., bd-123) (optional)
   --importance LEVEL  Message importance: normal | high | urgent (default: normal)
   --ack               Require acknowledgment (default: false)
-  --active-window N   Minutes for @active window (default: 60)
+  --active-window N   Time window in minutes for @active (default: 60)
+                      Only affects @active mention expansion
   --project PATH      Project path (default: current directory)
   --json              Output as JSON
   --help, -h          Show this help
 
 Examples:
+  # Basic messaging
   am-send "Hello" "Testing" --from Agent1 --to Agent2
   am-send "[bd-123] Start work" "Beginning task..." --from Builder --to Team --thread bd-123 --ack
   am-send "Update" "Progress report" --from Agent1 --to Agent2,Agent3 --cc Manager --importance high
+
+  # Broadcast examples
   am-send "Announcement" "Server maintenance tonight" --from Admin --to @active --importance high
   am-send "Quick sync" "Need immediate help" --from Dev --to @active --active-window 15 --importance urgent
   am-send "Critical Alert" "System down" --from Monitor --to @all --importance urgent
   am-send "Project Update" "Sprint completed" --from Lead --to @project:jat --importance high
+  am-send "Team sync" "Daily standup notes" --from Dev --to @recent --importance normal
 
-Mentions:
-  @active             Expands to all agents active in last 60 minutes (default)
-                      Use --active-window N to customize time window
-                      Shows: "✓ Expanded @active → N agent(s) (last X min): Agent1,Agent2..."
-  @recent             Expands to all agents active in last 24 hours
-                      Shows: "✓ Expanded @recent → N agent(s): Agent1,Agent2..."
-  @all                Expands to ALL registered agents (even offline)
-                      Shows: "✓ Broadcasting to all agents: N"
-  @project:name       Expands to all agents in specified project (by slug)
-                      Shows: "✓ Expanded @project:name → N agent(s): Agent1,Agent2..."
+  # Mixed usage (broadcast + specific agents)
+  am-send "Code review needed" "PR ready" --from Dev --to @active,SeniorDev --importance high
+  am-send "Deploy notice" "Pushing to prod" --from DevOps --to @project:backend,QA-Team --importance urgent
+
+Broadcast Mentions:
+  Use these special mentions in --to AGENTS to send messages to multiple agents.
+  All mentions automatically expand to comma-separated agent lists.
+
+  @active             Agents active in last 60 minutes (configurable with --active-window)
+                      Default window: 60 minutes
+                      Custom window: --active-window 15 (for 15 minutes)
+                      Output: "✓ Expanded @active → N agent(s) (last X min): Agent1,Agent2..."
+
+  @recent             Agents active in last 24 hours
+                      Fixed 24-hour window (not configurable)
+                      Output: "✓ Expanded @recent → N agent(s): Agent1,Agent2..."
+
+  @all                ALL registered agents (includes offline/inactive agents)
+                      Use with caution for very large agent populations
+                      Output: "✓ Broadcasting to all agents: N" or "⚠️ Broadcasting to all agents: N (large broadcast!)"
+
+  @project:name       All agents in a specific project (by project slug)
                       Example: @project:jat, @project:chimaro
+                      Output: "✓ Expanded @project:name → N agent(s): Agent1,Agent2..."
+                      Error: Shows available projects if project not found
 
 Database: $AGENT_MAIL_DB
 EOF
