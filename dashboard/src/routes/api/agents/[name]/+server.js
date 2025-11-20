@@ -24,8 +24,8 @@ export async function DELETE({ params }) {
 		}
 
 		// Use am-delete-agent command with --force to skip confirmation
-		// Use full path since Node doesn't inherit ~/bin in PATH
-		const command = `${process.env.HOME}/bin/am-delete-agent "${agentName}" --force`;
+		// Use full path since Node doesn't inherit ~/.local/bin in PATH
+		const command = `${process.env.HOME}/.local/bin/am-delete-agent "${agentName}" --force`;
 
 		try {
 			const { stdout, stderr } = await execAsync(command);

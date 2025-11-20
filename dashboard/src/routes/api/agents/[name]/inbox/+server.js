@@ -24,7 +24,7 @@ export async function GET({ params }) {
 		}
 
 		// Use am-inbox command with --json flag for structured output
-		const command = `${process.env.HOME}/bin/am-inbox "${agentName}" --json`;
+		const command = `${process.env.HOME}/.local/bin/am-inbox "${agentName}" --json`;
 
 		try {
 			const { stdout } = await execAsync(command);

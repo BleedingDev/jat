@@ -24,7 +24,7 @@ export async function GET({ params }) {
 		}
 
 		// Use am-reservations command with --agent filter and --json flag
-		const command = `${process.env.HOME}/bin/am-reservations --agent "${agentName}" --json`;
+		const command = `${process.env.HOME}/.local/bin/am-reservations --agent "${agentName}" --json`;
 
 		try {
 			const { stdout } = await execAsync(command);

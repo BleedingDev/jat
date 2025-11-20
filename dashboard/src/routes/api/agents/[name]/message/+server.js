@@ -30,7 +30,7 @@ export async function POST({ params, request }) {
 
 		// Use am-send command
 		// From: Dashboard, To: agentName
-		const command = `${process.env.HOME}/bin/am-send "${escapedSubject}" "${escapedBody}" --from Dashboard --to "${agentName}"`;
+		const command = `${process.env.HOME}/.local/bin/am-send "${escapedSubject}" "${escapedBody}" --from Dashboard --to "${agentName}"`;
 
 		try {
 			const { stdout } = await execAsync(command);
