@@ -48,6 +48,19 @@ This contains critical information about:
 
 ### Quick Dashboard Commands
 
+**Launcher Script (Recommended):**
+```bash
+# Launch dashboard from anywhere
+bd-dashboard        # Checks dependencies, starts server, opens browser
+jat-dashboard       # Alias for bd-dashboard
+
+# What it does:
+# - Checks for node_modules, runs npm install if needed
+# - Starts dev server on http://127.0.0.1:5174
+# - Opens browser automatically after 3 seconds
+```
+
+**Manual Commands:**
 ```bash
 cd dashboard
 

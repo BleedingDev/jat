@@ -77,6 +77,35 @@ for tool in "$TOOLS_DIR"/*; do
 done
 
 echo ""
+echo -e "${BLUE}Setting up dashboard launcher...${NC}"
+echo ""
+
+# Get project root directory
+PROJECT_ROOT="$(dirname "$TOOLS_DIR")"
+
+# Symlink dashboard launcher scripts
+for launcher in "bd-dashboard" "jat-dashboard"; do
+    LAUNCHER_SOURCE="$PROJECT_ROOT/$launcher"
+    LAUNCHER_TARGET="$HOME/.local/bin/$launcher"
+
+    if [ -f "$LAUNCHER_SOURCE" ]; then
+        if [ -L "$LAUNCHER_TARGET" ]; then
+            CURRENT_TARGET=$(readlink "$LAUNCHER_TARGET")
+            if [ "$CURRENT_TARGET" = "$LAUNCHER_SOURCE" ]; then
+                echo -e "  ${GREEN}✓${NC} $launcher (already linked)"
+            else
+                echo -e "  ${YELLOW}↻${NC} $launcher (updating link)"
+                rm "$LAUNCHER_TARGET"
+                ln -s "$LAUNCHER_SOURCE" "$LAUNCHER_TARGET"
+            fi
+        else
+            echo -e "  ${GREEN}+${NC} $launcher (linked)"
+            ln -s "$LAUNCHER_SOURCE" "$LAUNCHER_TARGET"
+        fi
+    fi
+done
+
+echo ""
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}Agent Tools Setup Complete${NC}"
 echo -e "${GREEN}=========================================${NC}"

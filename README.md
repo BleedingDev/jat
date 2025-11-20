@@ -925,7 +925,44 @@ bash ~/code/jomarchy-agent-tools/stacks/sveltekit-supabase/install.sh
 **Documentation:**
 See `stacks/sveltekit-supabase/README.md` for detailed stack documentation.
 
-### 6. Global Configuration
+### 6. Beads Task Dashboard
+
+**Visual task management interface for Beads** - A SvelteKit 5 web app that provides:
+
+- Multi-project task aggregation (view all tasks from `~/code/*` in one place)
+- Status, priority, and dependency filtering
+- Search and label-based organization
+- DaisyUI themes (32 color schemes)
+- Real-time updates from Beads databases
+
+**Quick Launch:**
+```bash
+bd-dashboard        # Checks dependencies, starts server, opens browser
+jat-dashboard       # Alias for bd-dashboard
+```
+
+**What the launcher does:**
+1. Checks for `node_modules` in dashboard directory
+2. Runs `npm install` if dependencies are missing
+3. Starts development server on `http://127.0.0.1:5174`
+4. Automatically opens your browser after 3 seconds
+
+**Manual start:**
+```bash
+cd ~/code/jomarchy-agent-tools/dashboard
+npm install  # If needed
+npm run dev
+```
+
+**Features:**
+- Svelte 5 runes (modern reactivity)
+- Tailwind CSS v4 + DaisyUI (theming)
+- Better-sqlite3 (reads Beads databases)
+- Agent Mail integration (future feature)
+
+**Documentation:** See `dashboard/CLAUDE.md` for development guide, Tailwind v4 setup, and troubleshooting.
+
+### 7. Global Configuration
 
 **File:** `~/.claude/CLAUDE.md`
 
@@ -941,7 +978,7 @@ The installer **appends** comprehensive instructions to your global `~/.claude/C
 
 **Automatically loaded by AI assistants in all projects.** This gives every agent access to coordination primitives without consuming your context window.
 
-### 7. Per-Repository Setup
+### 8. Per-Repository Setup
 
 For each git repository in `~/code/*`:
 
