@@ -28,10 +28,13 @@
 	};
 
 	function buildGraph() {
-		if (!svgElement || !tasks || tasks.length === 0) return;
+		if (!svgElement) return;
 
 		// Clear previous graph
 		d3.select(svgElement).selectAll('*').remove();
+
+		// Return if no tasks to display
+		if (!tasks || tasks.length === 0) return;
 
 		// Build nodes and links from tasks
 		const nodes = tasks.map(task => ({
@@ -181,9 +184,7 @@
 
 	// Rebuild graph when tasks change
 	$effect(() => {
-		if (tasks && tasks.length > 0) {
-			buildGraph();
-		}
+		buildGraph();
 	});
 
 	onMount(() => {
