@@ -17,9 +17,10 @@ Get to work! Unified smart command that handles registration, task selection, co
 2. **Global Agent Lookup:** Agents are globally unique - uses simple `am-agents` lookup (no project filtering needed)
 3. **Duplicate Prevention:** Always checks if agent name exists before registering (resumes instead of creating duplicates)
 4. **Session Persistence:** Updates `.claude/agent-{session_id}.txt` for statusline
-5. **Task Selection:** From parameter, conversation context, or priority
-6. **Conflict Detection:** File locks, git changes, dependencies
-7. **Actually Starts Work:** Reserves files, sends Agent Mail, updates Beads
+5. **Smart Cleanup:** Auto-releases file reservations from closed tasks (prevents stale statusline display)
+6. **Task Selection:** From parameter, conversation context, or priority
+7. **Conflict Detection:** File locks, git changes, dependencies
+8. **Actually Starts Work:** Reserves files, sends Agent Mail, updates Beads
 
 **IMPORTANT: Agents are globally unique across all projects.** You cannot have two agents with the same name, even in different projects. This simplifies registration - we just check `am-agents` globally without any project filtering.
 
@@ -357,6 +358,133 @@ SESSION_ID="a019c84c-7b54-45cc-9eee-dd6a70dea1a3"; grep -l "YourAgentName" .clau
 - Statusline reads from `.claude/agent-{session_id}.txt` (PRIMARY)
 - `export AGENT_NAME` doesn't work (statusline is separate process)
 - This enables multiple concurrent agents in different terminals
+
+---
+
+### STEP 1.5: Smart Cleanup of Previous Work
+
+**IMPORTANT:** Before starting new work, check for and clean up stale state from previous tasks.
+
+This prevents issues like:
+- Stale file reservations showing wrong task in statusline
+- Tasks stuck in `in_progress` when already completed
+- Confusion about what's actually being worked on
+
+#### Check for Active Reservations
+
+```bash
+# Get active reservations for this agent
+ACTIVE_RESERVATIONS=$(am-reservations --agent "$AGENT_NAME" --json 2>/dev/null | jq -r '.[] | select(.released_ts == null)')
+
+if [[ -n "$ACTIVE_RESERVATIONS" ]]; then
+    # Extract task IDs from reservation reasons
+    RESERVATION_TASKS=$(echo "$ACTIVE_RESERVATIONS" | jq -r '.reason' | grep -oE '(jat|chimaro|jomarchy)-[a-z0-9]{3}' | sort -u)
+
+    if [[ -n "$RESERVATION_TASKS" ]]; then
+        echo ""
+        echo "⚠️  Found active file reservations from previous work:"
+
+        # Check each task's status
+        for task_id in $RESERVATION_TASKS; do
+            # Get task status from Beads
+            TASK_STATUS=$(bd show "$task_id" --json 2>/dev/null | jq -r '.[0].status // "unknown"')
+
+            if [[ "$TASK_STATUS" == "closed" ]] || [[ "$TASK_STATUS" == "completed" ]]; then
+                # Task is done - auto-release silently
+                echo "  🔒 Task $task_id is closed - auto-releasing reservations"
+
+                # Get patterns for this task
+                PATTERNS=$(echo "$ACTIVE_RESERVATIONS" | jq -r "select(.reason | contains(\"$task_id\")) | .pattern" | tr '\n' ' ')
+
+                for pattern in $PATTERNS; do
+                    am-release "$pattern" --agent "$AGENT_NAME" >/dev/null 2>&1
+                done
+
+            elif [[ "$TASK_STATUS" == "in_progress" ]]; then
+                # Task still active - ask user what to do
+                echo ""
+                echo "  📋 Task $task_id is still in_progress"
+                echo "  🔒 File reservations are active"
+                echo ""
+
+                # Use AskUserQuestion
+                # Options:
+                # 1. "Complete task $task_id" → Run /agent:complete $task_id logic
+                # 2. "Abandon task $task_id" → Release locks, unassign
+                # 3. "Keep working on $task_id" → Cancel /agent:start, resume work
+                # 4. "Force release locks only" → Just release, don't change task status
+
+                # For now, show warning and let user decide
+                echo "Options:"
+                echo "  1. Run /agent:complete $task_id first"
+                echo "  2. Run /agent:pause $task_id to abandon"
+                echo "  3. Continue working on $task_id (cancel this /agent:start)"
+                echo ""
+                read -p "What do you want to do? (1/2/3): " -n 1 -r
+                echo ""
+
+                case $REPLY in
+                    1)
+                        echo "Please run: /agent:complete $task_id"
+                        exit 1
+                        ;;
+                    2)
+                        echo "Please run: /agent:pause $task_id --reason 'Switching tasks'"
+                        exit 1
+                        ;;
+                    3)
+                        echo "Cancelled. Continue working on $task_id"
+                        exit 0
+                        ;;
+                    *)
+                        echo "Invalid choice. Exiting."
+                        exit 1
+                        ;;
+                esac
+            fi
+        done
+    fi
+fi
+```
+
+#### Alternative: Simple Auto-Release
+
+For a simpler implementation (less interactive):
+
+```bash
+# Auto-release ALL reservations if they're from closed tasks
+ACTIVE_RESERVATIONS=$(am-reservations --agent "$AGENT_NAME" 2>/dev/null | grep -v "^$")
+
+if [[ -n "$ACTIVE_RESERVATIONS" ]]; then
+    echo "🔧 Checking for stale reservations..."
+
+    # Extract task IDs from reasons
+    TASK_IDS=$(echo "$ACTIVE_RESERVATIONS" | grep "^Reason:" | grep -oE '(jat|chimaro|jomarchy)-[a-z0-9]{3}' | sort -u)
+
+    for task_id in $TASK_IDS; do
+        TASK_STATUS=$(bd show "$task_id" --json 2>/dev/null | jq -r '.[0].status // "unknown"')
+
+        if [[ "$TASK_STATUS" == "closed" ]]; then
+            echo "  ✓ Releasing locks from closed task: $task_id"
+            # Release all reservations for this agent
+            am-reservations --agent "$AGENT_NAME" | grep "^Pattern:" | sed 's/^Pattern: //' | while read -r pattern; do
+                am-release "$pattern" --agent "$AGENT_NAME" 2>/dev/null || true
+            done
+        fi
+    done
+fi
+```
+
+**When to run this:**
+- After agent registration (STEP 1)
+- Before task selection (STEP 2)
+- Always run for safety (minimal performance cost)
+
+**Benefits:**
+- ✅ Automatically cleans up completed work
+- ✅ Prevents stale statusline display
+- ✅ Asks user for guidance on ambiguous cases
+- ✅ Single-command workflow (`/agent:start` just works)
 
 ---
 
@@ -713,6 +841,8 @@ SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt | tr -d '\n')  # BROKEN
 
 - **Global agent uniqueness:** Agent names are globally unique across all projects - no duplicates allowed
 - **Simple global lookup:** Uses `am-agents | grep` for simple, fast agent detection (no project filtering)
+- **Smart cleanup:** Auto-releases file reservations from closed tasks before starting new work
+- **Stale state detection:** Checks for in_progress tasks and prompts user when ambiguous
 - **PPID-based isolation:** Uses `/tmp/claude-session-${PPID}.txt` for race-free multi-terminal support
 - **One agent per terminal:** Blocks registration if agent is already active in another session
 - **Session-first:** Always writes to session file before env var
