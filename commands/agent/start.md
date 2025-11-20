@@ -214,68 +214,42 @@ echo "✅ Resuming as $AGENT_NAME (session agent)"
 
 **If AGENT_REGISTERED == false AND no agent requested:**
 ```bash
-# Get agents categorized by state (working/active/idle/offline)
-AGENTS_BY_STATE=$(~/code/jat/scripts/get-agents-by-state 2>/dev/null)
+# List existing agents (simple, fast)
+am-agents
+# Output shows all registered agents
 
-# Count agents in each category
-WORKING_COUNT=$(echo "$AGENTS_BY_STATE" | jq '.working | length')
-ACTIVE_COUNT=$(echo "$AGENTS_BY_STATE" | jq '.active | length')
-IDLE_COUNT=$(echo "$AGENTS_BY_STATE" | jq '.idle | length')
-OFFLINE_COUNT=$(echo "$AGENTS_BY_STATE" | jq '.offline | length')
-TOTAL_AGENTS=$((WORKING_COUNT + ACTIVE_COUNT + IDLE_COUNT + OFFLINE_COUNT))
+# Count agents
+AGENT_COUNT=$(am-agents --json | jq 'length')
 
-if [[ "$TOTAL_AGENTS" -gt 0 ]]; then
-  # Found existing agents - offer categorized menu
+if [[ "$AGENT_COUNT" -gt 0 ]]; then
+  # Found existing agents - offer resume or create new
+
   echo "╔══════════════════════════════════════════════════════════════════════════╗"
-  echo "║                    🔍 Found Existing Agents                              ║"
+  echo "║                    🔍 Found $AGENT_COUNT Existing Agent(s)                  ║"
   echo "╚══════════════════════════════════════════════════════════════════════════╝"
   echo ""
 
-  # Show agent summary
-  [[ $WORKING_COUNT -gt 0 ]] && echo "⚡ Working: $WORKING_COUNT agents (actively coding)"
-  [[ $ACTIVE_COUNT -gt 0 ]] && echo "✓ Active: $ACTIVE_COUNT agents (engaged, ready)"
-  [[ $IDLE_COUNT -gt 0 ]] && echo "○ Idle: $IDLE_COUNT agents (available)"
-  [[ $OFFLINE_COUNT -gt 0 ]] && echo "⏹ Offline: $OFFLINE_COUNT agents (disconnected)"
+  # Get agent list
+  am-agents --json | jq -r '.[] | "  • \(.name) (last active: \(.last_active_ts // "never"))"'
   echo ""
 
-  # Build AskUserQuestion options dynamically
-  # Priority: NEW AGENT FIRST, then active > idle > offline (skip working agents - they're busy!)
-  OPTIONS=()
+  # Check which agents are currently active in sessions
+  echo "Checking which agents are active in other sessions..."
+  for agent_file in .claude/agent-*.txt; do
+    [[ -f "$agent_file" ]] || continue
+    agent=$(cat "$agent_file" | tr -d '\n')
+    session=$(basename "$agent_file" | sed 's/agent-//;s/.txt//')
+    echo "  ⚠️  $agent is active in session ${session:0:8}..."
+  done
+  echo ""
 
-  # Option 1: Create new agent (ALWAYS FIRST - most common action)
-  OPTIONS+=("Create new agent")
-
-  # Option 2: Most recent active agent (if any)
-  if [[ $ACTIVE_COUNT -gt 0 ]]; then
-    ACTIVE_AGENT=$(echo "$AGENTS_BY_STATE" | jq -r '.active[0].name')
-    ACTIVE_TIME=$(echo "$AGENTS_BY_STATE" | jq -r '.active[0].last_active')
-    OPTIONS+=("Resume $ACTIVE_AGENT (active $ACTIVE_TIME)")
-  fi
-
-  # Option 3: Most recent idle agent (if any)
-  if [[ $IDLE_COUNT -gt 0 ]]; then
-    IDLE_AGENT=$(echo "$AGENTS_BY_STATE" | jq -r '.idle[0].name')
-    IDLE_TIME=$(echo "$AGENTS_BY_STATE" | jq -r '.idle[0].last_active')
-    OPTIONS+=("Resume $IDLE_AGENT (idle $IDLE_TIME)")
-  fi
-
-  # Option 4: Most recent offline agent (if any)
-  if [[ $OFFLINE_COUNT -gt 0 ]]; then
-    OFFLINE_AGENT=$(echo "$AGENTS_BY_STATE" | jq -r '.offline[0].name')
-    OFFLINE_TIME=$(echo "$AGENTS_BY_STATE" | jq -r '.offline[0].last_active')
-    OPTIONS+=("Resume $OFFLINE_AGENT (offline $OFFLINE_TIME)")
-  fi
-
-  # Use AskUserQuestion to show options with descriptions:
-  # Example (NEW AGENT FIRST):
-  # - Create new agent → "Fresh identity" (ALWAYS FIRST)
-  # - Resume FreeMarsh (active 2m ago) → "Recently active agent, has locks"
-  # - Resume PaleStar (idle 30m ago) → "Available idle agent"
-  # - Resume ColdBay (offline 2h ago) → "Offline agent, may need cleanup"
-
-  # Based on user selection:
-  # - If resume active/idle/offline: AGENT_NAME=<selected>
-  # - If create new: generate random name via am-register
+  # Use AskUserQuestion to let user choose:
+  # Option 1: "Create new agent" → Fresh identity (DEFAULT - recommended)
+  # Option 2: "Resume [AgentName]" → Use existing agent (only if not active elsewhere)
+  #
+  # If user picks "Resume" and agent IS active elsewhere:
+  #   Show error: "Agent [name] is already active in session [id]. Please choose a different option."
+  #   Ask again.
 
 else
   # No existing agents - auto-create
@@ -285,23 +259,26 @@ else
   echo ""
   echo "No existing agents found. Creating new agent identity..."
 
-  AGENT_NAME=$(am-register --program claude-code --model sonnet-4.5 | \
-    grep "Registered:" | awk '{print $3}')
+  # Register new agent
+  am-register --program claude-code --model sonnet-4.5
+  # → Output shows agent name
 
-  echo "✨ Created new agent: $AGENT_NAME"
+  # Extract agent name from output
+  # Example output: "✓ ✨ Created new agent: RichPrairie"
+  # Parse the agent name and use it
 fi
 
-# Register the selected/created agent (if not auto-created above and doesn't exist)
-if [[ -n "$AGENT_NAME" ]]; then
-  # Check if agent already exists before registering
-  if ! am-agents | grep -q "^  ${AGENT_NAME}$"; then
-    echo "✨ Registering agent: $AGENT_NAME"
-    am-register --name "$AGENT_NAME" --program claude-code --model sonnet-4.5
-  else
-    echo "✅ Agent $AGENT_NAME already exists, resuming"
-  fi
-fi
+# After user chooses agent name, continue to session file writing...
 ```
+
+**Key Decision Points:**
+
+When existing agents are found:
+1. **Recommend "Create new agent"** (simplest, no conflicts)
+2. If user wants to resume existing agent:
+   - Check if it's active elsewhere (grep agent name in .claude/agent-*.txt)
+   - If active: show error, ask them to choose different option
+   - If not active: OK to proceed
 
 **CRITICAL: Check for duplicate active agents and write to session file:**
 
