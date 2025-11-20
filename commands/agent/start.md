@@ -111,19 +111,27 @@ fi
 
 #### 1A: Check Current Agent Status
 
-**Use Read tool to get session status (CORRECT for Claude Code):**
+**Use bash test command to check session status (RECOMMENDED - cleaner output):**
 
 ```bash
-# Step 1: Get session ID using helper script (use separate Bash call)
+# Step 1: Get session ID using helper script
 ~/code/jat/scripts/get-current-session-id 2>/dev/null | tr -d '\n'
 # → Output: "a019c84c-7b54-45cc-9eee-dd6a70dea1a3"
 
-# Step 2: Use Read tool to check if agent file exists
-Read(.claude/agent-{session-id-from-step-1}.txt)
+# Step 2: Check if agent file exists using test command (cleaner - no error shown)
+SESSION_ID="a019c84c-7b54-45cc-9eee-dd6a70dea1a3"; test -f ".claude/agent-${SESSION_ID}.txt" && cat ".claude/agent-${SESSION_ID}.txt" || echo "NO_AGENT"
 # → If exists: shows agent name
-# → If not exists: shows error "File does not exist"
+# → If not exists: shows "NO_AGENT" (much clearer than "Error reading file")
 
 # Step 3: Based on result, either resume or create new agent
+```
+
+**Alternative: Use Read tool (works but shows confusing "Error"):**
+
+```bash
+# This works but shows "Error reading file" when no agent registered yet
+Read(.claude/agent-a019c84c-7b54-45cc-9eee-dd6a70dea1a3.txt)
+# ⚠️  Confusing UX: "Error" makes it look broken when it's actually the happy path
 ```
 
 **Alternative: Use bash with explicit variable assignment:**
