@@ -254,10 +254,33 @@ SESSION_ID="abc123" && (
 )
 \`\`\`
 
+**5. Reading file content into variables for filenames**
+\`\`\`bash
+# ❌ WRONG - command substitution with && causes escaping issues in Bash tool
+SESSION_ID=\$(cat .claude/session-id.txt | tr -d '\\n') && echo "value" > ".claude/agent-\${SESSION_ID}.txt"
+
+# ❌ WRONG - even with subshell, may fail due to Bash tool escaping
+(
+  SESSION_ID=\$(cat .claude/session-id.txt | tr -d '\\n')
+  echo "value" > ".claude/agent-\${SESSION_ID}.txt"
+)
+
+# ✅ CORRECT - Use Read + Write tools when you need file content in a filename
+# 1. Read the file using Read tool
+# 2. Extract the value in your code (not bash)
+# 3. Use Write tool with the computed filename
+# Example: Read(.claude/session-id.txt) → get "abc123" → Write(.claude/agent-abc123.txt)
+
+# ✅ ALTERNATIVE - If you must use Bash, write to fixed temp file first
+cat .claude/session-id.txt | tr -d '\\n' > /tmp/session-id.tmp && \\
+  echo "value" > ".claude/agent-\$(cat /tmp/session-id.tmp).txt"
+\`\`\`
+
 **Key Rules:**
 - \`if\` is a keyword, not a command - can't use with \`&&\` directly
 - Use semicolons \`;\` to separate statements on one line
 - Use \`test\` or \`[[ ]]\` for conditionals with \`&&\` / \`||\`
+- **When file content determines a path: prefer Read/Write tools over command substitution**
 - When in doubt, inline everything with semicolons
 
 
