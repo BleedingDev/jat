@@ -852,7 +852,7 @@ Commands are **markdown files with instructions** that Claude Code executes:
 - `am-whoami` - Show current agent identity
 
 #### Browser Automation Tools (11)
-Based on [badlogic/browser-tools](https://github.com/badlogic/browser-tools)
+**Custom-built browser automation tools using Chrome DevTools Protocol**
 
 **Core Tools (7):**
 - `browser-start.js` - Start Chrome with remote debugging
@@ -1240,7 +1240,7 @@ rm ~/.claude/CLAUDE.md
 This project combines:
 - **Agent Mail Server:** [Dicklesworthstone/mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 - **Beads CLI:** [steveyegge/beads](https://github.com/steveyegge/beads)
-- **Browser Tools:** [badlogic/browser-tools](https://github.com/badlogic/browser-tools)
+- **Browser Tools:** Custom-built using Chrome DevTools Protocol and Puppeteer
 
 Contributions welcome! Please open issues or PRs.
 
@@ -1517,7 +1517,7 @@ db-connection-test
 MIT License - See individual component licenses:
 - Agent Mail: [License](https://github.com/Dicklesworthstone/mcp_agent_mail/blob/main/LICENSE)
 - Beads: [License](https://github.com/steveyegge/beads/blob/main/LICENSE)
-- Browser Tools: [License](https://github.com/badlogic/browser-tools/blob/main/LICENSE)
+- Browser Tools: Custom-built for jomarchy-agent-tools (MIT License)
 
 ---
 
@@ -1525,7 +1525,7 @@ MIT License - See individual component licenses:
 
 - **Agent Mail:** Created by [@Dicklesworthstone](https://github.com/Dicklesworthstone)
 - **Beads:** Created by [@steveyegge](https://github.com/steveyegge)
-- **Browser Tools:** Created by [@badlogic](https://github.com/badlogic)
+- **Browser Tools:** Custom-built for jomarchy-agent-tools using Chrome DevTools Protocol and Puppeteer
 - **Tools > MCP:** Inspired by [Mario Zechner's "What if you don't need MCP?"](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/)
 - **Integration:** Assembled by [@joewinke](https://github.com/joewinke) for [Jomarchy](https://github.com/joewinke/jomarchy)
 
@@ -1537,7 +1537,6 @@ MIT License - See individual component licenses:
 - **Chimaro:** AI-powered application platform with unified Beads dashboard
 - **Agent Mail:** [github.com/Dicklesworthstone/mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 - **Beads:** [github.com/steveyegge/beads](https://github.com/steveyegge/beads)
-- **Browser Tools:** [github.com/badlogic/browser-tools](https://github.com/badlogic/browser-tools)
 
 ---
 

@@ -3,141 +3,195 @@
 import puppeteer from "puppeteer-core";
 
 const args = process.argv.slice(2);
+let follow = false;
+let filterType = null;
+let filterUrl = null;
+let limit = 100;
 
-if (args.includes("--help") || args.includes("-h")) {
-	console.log("Usage: browser-network.js [options]");
-	console.log("\nOptions:");
-	console.log("  --follow        Keep connection open and stream network requests");
-	console.log("  --failed        Show only failed requests");
-	console.log("  --help, -h      Show this help message");
-	console.log("\nDescription:");
-	console.log("  Monitors browser network requests with timing metrics.");
-	console.log("  Useful for API testing and performance analysis.");
-	console.log("\nExamples:");
-	console.log("  browser-network.js                   # Get current network state");
-	console.log("  browser-network.js --follow          # Stream network requests");
-	console.log("  browser-network.js --failed          # Show only failed requests");
-	process.exit(0);
+// Parse arguments
+for (let i = 0; i < args.length; i++) {
+	if (args[i] === "--follow" || args[i] === "-f") {
+		follow = true;
+	} else if (args[i] === "--type") {
+		filterType = args[++i];
+	} else if (args[i] === "--url") {
+		filterUrl = args[++i];
+	} else if (args[i] === "--limit") {
+		limit = parseInt(args[++i]);
+	} else if (args[i] === "--help") {
+		console.log("Usage: browser-network.js [options]");
+		console.log("\nOptions:");
+		console.log("  --follow, -f           Follow network requests (live stream)");
+		console.log("  --type <type>          Filter by resource type: xhr, fetch, document, script, stylesheet, image");
+		console.log("  --url <pattern>        Filter by URL pattern (substring match)");
+		console.log("  --limit <n>            Limit output to n requests (default: 100)");
+		console.log("\nExamples:");
+		console.log("  browser-network.js");
+		console.log("  browser-network.js --follow --type xhr");
+		console.log("  browser-network.js --url 'api.example.com' --limit 50");
+		process.exit(0);
+	}
 }
-
-const follow = args.includes("--follow");
-const failedOnly = args.includes("--failed");
 
 const b = await puppeteer.connect({
 	browserURL: "http://localhost:9222",
 	defaultViewport: null,
 });
 
-const page = (await b.pages()).at(-1);
+const p = (await b.pages()).at(-1);
 
-const requests = [];
+if (!p) {
+	console.error("✗ No active tab found");
+	process.exit(1);
+}
 
-// Enable network tracking
-const client = await page.createCDPSession();
-await client.send("Network.enable");
+const requests = new Map();
+const results = [];
 
-// Track request/response timing
-client.on("Network.requestWillBeSent", (event) => {
-	requests[event.requestId] = {
-		id: event.requestId,
-		url: event.request.url,
-		method: event.request.method,
-		type: event.type,
-		timestamp: event.timestamp,
-		startTime: Date.now(),
+function shouldInclude(url, resourceType) {
+	if (filterType && resourceType !== filterType) {
+		return false;
+	}
+	if (filterUrl && !url.includes(filterUrl)) {
+		return false;
+	}
+	return true;
+}
+
+// Enable request interception to capture request details
+await p.setRequestInterception(false); // We just want to observe, not intercept
+
+// Listen for requests
+p.on('request', request => {
+	const url = request.url();
+	const resourceType = request.resourceType();
+	
+	if (!shouldInclude(url, resourceType)) return;
+	
+	requests.set(request, {
+		url: url,
+		method: request.method(),
+		resourceType: resourceType,
+		headers: request.headers(),
+		postData: request.postData(),
+		startTime: Date.now()
+	});
+});
+
+// Listen for responses
+p.on('response', async response => {
+	const request = response.request();
+	const requestData = requests.get(request);
+	
+	if (!requestData) return;
+	
+	const endTime = Date.now();
+	const duration = endTime - requestData.startTime;
+	
+	const result = {
+		url: requestData.url,
+		method: requestData.method,
+		status: response.status(),
+		statusText: response.statusText(),
+		resourceType: requestData.resourceType,
+		timing: {
+			duration: duration,
+			timestamp: new Date(requestData.startTime).toISOString()
+		},
+		headers: {
+			request: requestData.headers,
+			response: response.headers()
+		},
+		size: {
+			headers: JSON.stringify(response.headers()).length,
+			body: 0 // Will be populated if we fetch body
+		}
 	};
-});
-
-client.on("Network.responseReceived", (event) => {
-	const req = requests[event.requestId];
-	if (req) {
-		const response = event.response;
-		req.status = response.status;
-		req.statusText = response.statusText;
-		req.mimeType = response.mimeType;
-		req.responseTime = Date.now() - req.startTime;
-		req.headers = response.headers;
-
-		// Filter failed requests
-		if (failedOnly && req.status >= 200 && req.status < 400) {
-			return;
-		}
-
-		if (follow) {
-			console.log(
-				JSON.stringify(
-					{
-						url: req.url,
-						method: req.method,
-						status: req.status,
-						responseTime: `${req.responseTime}ms`,
-						type: req.type,
-					},
-					null,
-					2,
-				),
-			);
+	
+	// Try to get response size
+	try {
+		const buffer = await response.buffer();
+		result.size.body = buffer.length;
+		result.size.total = result.size.headers + result.size.body;
+	} catch {
+		// Some responses can't be buffered (e.g., failed requests)
+		result.size.total = result.size.headers;
+	}
+	
+	// Get timing info if available
+	const timing = response.timing();
+	if (timing) {
+		result.timing.dns = timing.dnsEnd - timing.dnsStart;
+		result.timing.connect = timing.connectEnd - timing.connectStart;
+		result.timing.ssl = timing.sslEnd - timing.sslStart;
+		result.timing.send = timing.sendEnd - timing.sendStart;
+		result.timing.wait = timing.receiveHeadersEnd - timing.sendEnd;
+		result.timing.receive = endTime - requestData.startTime - (timing.receiveHeadersEnd - timing.requestTime);
+	}
+	
+	// Clean up
+	requests.delete(request);
+	
+	if (follow) {
+		console.log(JSON.stringify(result));
+	} else {
+		results.push(result);
+		if (results.length > limit) {
+			results.shift();
 		}
 	}
 });
 
-client.on("Network.loadingFailed", (event) => {
-	const req = requests[event.requestId];
-	if (req) {
-		req.failed = true;
-		req.errorText = event.errorText;
-		req.canceled = event.canceled;
-
-		if (follow) {
-			console.log(
-				JSON.stringify(
-					{
-						url: req.url,
-						method: req.method,
-						error: req.errorText,
-						failed: true,
-					},
-					null,
-					2,
-				),
-			);
+// Listen for failed requests
+p.on('requestfailed', request => {
+	const requestData = requests.get(request);
+	if (!requestData) return;
+	
+	const result = {
+		url: requestData.url,
+		method: requestData.method,
+		status: 0,
+		statusText: 'Failed',
+		resourceType: requestData.resourceType,
+		error: request.failure()?.errorText || 'Unknown error',
+		timing: {
+			duration: Date.now() - requestData.startTime,
+			timestamp: new Date(requestData.startTime).toISOString()
+		}
+	};
+	
+	requests.delete(request);
+	
+	if (follow) {
+		console.log(JSON.stringify(result));
+	} else {
+		results.push(result);
+		if (results.length > limit) {
+			results.shift();
 		}
 	}
 });
 
-// If not following, wait a bit to collect initial requests
-if (!follow) {
-	await new Promise((r) => setTimeout(r, 1000));
-
-	const completedRequests = Object.values(requests).filter((r) => r.status || r.failed);
-
-	console.log(
-		JSON.stringify(
-			{
-				requests: completedRequests.map((r) => ({
-					url: r.url,
-					method: r.method,
-					status: r.status,
-					responseTime: r.responseTime ? `${r.responseTime}ms` : undefined,
-					type: r.type,
-					failed: r.failed,
-					error: r.errorText,
-				})),
-				count: completedRequests.length,
-			},
-			null,
-			2,
-		),
-	);
-	await client.detach();
-	await b.disconnect();
-} else {
-	console.error("✓ Streaming network requests (Ctrl+C to stop)...");
-	// Keep connection alive
-	process.on("SIGINT", async () => {
-		console.error("\n✓ Stopped");
-		await client.detach();
+if (follow) {
+	// Follow mode - keep running until interrupted
+	console.error("✓ Following network requests (Ctrl+C to stop)...");
+	
+	// Keep process alive
+	process.on('SIGINT', async () => {
+		console.error("\n✓ Stopped following network");
 		await b.disconnect();
 		process.exit(0);
 	});
+	
+	// Keep alive indefinitely
+	await new Promise(() => {});
+} else {
+	// Snapshot mode - wait a bit to collect requests
+	console.error("✓ Collecting network requests...");
+	await new Promise(resolve => setTimeout(resolve, 2000));
+	
+	// Output collected requests
+	console.log(JSON.stringify(results, null, 2));
+	
+	await b.disconnect();
 }

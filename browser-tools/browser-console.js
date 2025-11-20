@@ -3,91 +3,131 @@
 import puppeteer from "puppeteer-core";
 
 const args = process.argv.slice(2);
+let follow = false;
+let filter = null;
+let limit = 100;
 
-if (args.includes("--help") || args.includes("-h")) {
-	console.log("Usage: browser-console.js [options]");
-	console.log("\nOptions:");
-	console.log("  --follow        Keep connection open and stream console logs");
-	console.log("  --errors        Show only errors");
-	console.log("  --warnings      Show only warnings");
-	console.log("  --help, -h      Show this help message");
-	console.log("\nDescription:");
-	console.log("  Captures browser console logs with stack traces.");
-	console.log("  Useful for debugging JavaScript errors.");
-	console.log("\nExamples:");
-	console.log("  browser-console.js                   # Get current console state");
-	console.log("  browser-console.js --follow          # Stream console logs");
-	console.log("  browser-console.js --errors          # Show only errors");
-	process.exit(0);
+// Parse arguments
+for (let i = 0; i < args.length; i++) {
+	if (args[i] === "--follow" || args[i] === "-f") {
+		follow = true;
+	} else if (args[i] === "--filter") {
+		filter = args[++i];
+	} else if (args[i] === "--limit") {
+		limit = parseInt(args[++i]);
+	} else if (args[i] === "--help") {
+		console.log("Usage: browser-console.js [options]");
+		console.log("\nOptions:");
+		console.log("  --follow, -f           Follow console output (live stream)");
+		console.log("  --filter <type>        Filter by type: log, warn, error, info, debug");
+		console.log("  --limit <n>            Limit output to n messages (default: 100)");
+		console.log("\nExamples:");
+		console.log("  browser-console.js");
+		console.log("  browser-console.js --follow --filter error");
+		console.log("  browser-console.js --limit 50");
+		process.exit(0);
+	}
 }
-
-const follow = args.includes("--follow");
-const errorsOnly = args.includes("--errors");
-const warningsOnly = args.includes("--warnings");
 
 const b = await puppeteer.connect({
 	browserURL: "http://localhost:9222",
 	defaultViewport: null,
 });
 
-const page = (await b.pages()).at(-1);
+const p = (await b.pages()).at(-1);
 
-const logs = [];
+if (!p) {
+	console.error("✗ No active tab found");
+	process.exit(1);
+}
 
-// Set up console listener
-page.on("console", async (msg) => {
-	const type = msg.type();
+const messages = [];
 
-	// Filter based on flags
-	if (errorsOnly && type !== "error") return;
-	if (warningsOnly && type !== "warning") return;
-
-	const text = msg.text();
-	const location = msg.location();
-
-	const logEntry = {
-		type,
-		text,
-		url: location.url,
-		lineNumber: location.lineNumber,
-		columnNumber: location.columnNumber,
+function formatMessage(msg) {
+	const output = {
+		type: msg.type(),
+		text: msg.text(),
 		timestamp: new Date().toISOString(),
 	};
 
-	// For errors, try to get stack trace
-	if (type === "error") {
-		const args = await Promise.all(
-			msg.args().map(async (arg) => {
-				try {
-					return await arg.jsonValue();
-				} catch {
-					return null;
-				}
-			}),
-		);
-		if (args.length > 0) {
-			logEntry.stack = args.filter(Boolean);
-		}
+	// Get location if available
+	const location = msg.location();
+	if (location && location.url) {
+		output.location = {
+			url: location.url,
+			line: location.lineNumber,
+			column: location.columnNumber
+		};
 	}
 
+	// Get stack trace for errors
+	if (msg.type() === 'error' && msg.stackTrace()) {
+		output.stackTrace = msg.stackTrace().callFrames.map(frame => ({
+			function: frame.functionName || '<anonymous>',
+			url: frame.url,
+			line: frame.lineNumber,
+			column: frame.columnNumber
+		}));
+	}
+
+	// Get args
+	const args = msg.args();
+	if (args.length > 0) {
+		output.args = args.map(arg => {
+			try {
+				return arg.toString();
+			} catch {
+				return '[object]';
+			}
+		});
+	}
+
+	return output;
+}
+
+function shouldInclude(msg) {
+	if (filter && msg.type() !== filter) {
+		return false;
+	}
+	return true;
+}
+
+// Listen for console messages
+p.on('console', msg => {
+	if (!shouldInclude(msg)) return;
+
+	const formatted = formatMessage(msg);
+	
 	if (follow) {
-		console.log(JSON.stringify(logEntry, null, 2));
+		console.log(JSON.stringify(formatted));
 	} else {
-		logs.push(logEntry);
+		messages.push(formatted);
+		if (messages.length > limit) {
+			messages.shift();
+		}
 	}
 });
 
-// If not following, wait a bit to collect initial logs
-if (!follow) {
-	await new Promise((r) => setTimeout(r, 1000));
-	console.log(JSON.stringify({ logs, count: logs.length }, null, 2));
-	await b.disconnect();
-} else {
-	console.error("✓ Streaming console logs (Ctrl+C to stop)...");
-	// Keep connection alive
-	process.on("SIGINT", async () => {
-		console.error("\n✓ Stopped");
+if (follow) {
+	// Follow mode - keep running until interrupted
+	console.error("✓ Following console output (Ctrl+C to stop)...");
+	
+	// Keep process alive
+	process.on('SIGINT', async () => {
+		console.error("\n✓ Stopped following console");
 		await b.disconnect();
 		process.exit(0);
 	});
+	
+	// Keep alive indefinitely
+	await new Promise(() => {});
+} else {
+	// Snapshot mode - wait a bit to collect messages
+	console.error("✓ Collecting console messages...");
+	await new Promise(resolve => setTimeout(resolve, 1000));
+	
+	// Output collected messages
+	console.log(JSON.stringify(messages, null, 2));
+	
+	await b.disconnect();
 }
