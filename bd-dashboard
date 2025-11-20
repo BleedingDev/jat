@@ -48,25 +48,42 @@ fi
 echo -e "${GREEN}🔧 Starting development server...${NC}"
 echo ""
 
-# Function to open browser after a delay
-open_browser() {
-    sleep 3
+# Create a temporary log file
+LOG_FILE="/tmp/bd-dashboard-$$.log"
+trap "rm -f $LOG_FILE" EXIT
 
-    # Detect the platform and open browser
-    if command -v xdg-open > /dev/null; then
-        xdg-open "http://127.0.0.1:5174" 2>/dev/null || true
-    elif command -v open > /dev/null; then
-        open "http://127.0.0.1:5174" 2>/dev/null || true
-    else
-        echo -e "${YELLOW}ℹ️  Open your browser to: http://127.0.0.1:5174${NC}"
-    fi
+# Function to monitor dev server output and open browser
+open_browser_when_ready() {
+    # Wait for the URL to appear in the log
+    timeout 30 bash -c "
+        while true; do
+            if [ -f '$LOG_FILE' ]; then
+                # Look for Vite's URL output (more portable regex)
+                URL=\$(grep -o 'http://127\.0\.0\.1:[0-9]*' '$LOG_FILE' | head -1)
+                if [ ! -z \"\$URL\" ]; then
+                    sleep 1  # Give server a moment to fully start
+
+                    # Open browser
+                    if command -v xdg-open > /dev/null; then
+                        xdg-open \"\$URL\" 2>/dev/null || true
+                    elif command -v open > /dev/null; then
+                        open \"\$URL\" 2>/dev/null || true
+                    else
+                        echo -e '${YELLOW}ℹ️  Open your browser to: \$URL${NC}'
+                    fi
+                    break
+                fi
+            fi
+            sleep 0.5
+        done
+    " 2>/dev/null || echo -e "${YELLOW}ℹ️  Could not auto-open browser${NC}"
 }
 
 # Start browser opener in background
-open_browser &
+open_browser_when_ready &
 
 # Start the dev server (this blocks until Ctrl+C)
-npm run dev
+npm run dev 2>&1 | tee "$LOG_FILE"
 
 # Cleanup on exit
 echo ""
