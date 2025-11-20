@@ -10,9 +10,6 @@ set -euo pipefail
 # Read tool info from stdin
 TOOL_INFO=$(cat)
 
-# Debug: Save raw input to see what we're receiving
-echo "$TOOL_INFO" >> /tmp/claude-hook-debug.log
-
 # Parse tool name and parameters (correct JSON paths)
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "Unknown"' 2>/dev/null || echo "Unknown")
 
