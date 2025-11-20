@@ -3,20 +3,32 @@
 **Usage:** `/start [parameter]`
 
 **Examples:**
-- `/start` - Resume current agent or auto-detect/create
+- `/start` - Auto-detect recent agent (last 60 minutes) or auto-create new
 - `/start agent` - Force show agent menu (even if AGENT_NAME set)
 - `/start task-abc` - Start specific task (auto-registers if needed)
 
 **What this command does:**
-1. Checks AGENT_NAME environment variable
-2. If not set: detects agents active in last hour or auto-creates new agent
-3. If parameter is "agent": forces interactive agent selection menu
-4. If parameter is task ID: starts that specific task
-5. Reviews inbox and acknowledges messages
-6. Shows ready tasks from Beads
-7. Categorizes tasks and provides recommendations
 
-This is the "just get me working" command - seamlessly handles both registration and task start.
+**Smart Agent Detection (1-hour window):**
+- Checks if AGENT_NAME is already set (resume current session)
+- If not set: scans for agents active in the last 60 minutes
+- If recent agents found: offers to resume most recent or create new
+- If no recent agents: auto-creates new agent with random name
+- This balances convenience (resume recent work) with freshness (don't show stale agents)
+
+**Task Start Flow:**
+1. Handles registration (if needed) using smart detection
+2. If parameter is "agent": forces interactive agent selection menu
+3. If parameter is task ID: verifies and starts that specific task
+4. If no parameter: reviews inbox, shows ready tasks, provides recommendations
+5. Acknowledges all unread messages
+6. Checks for file conflicts and dependencies
+7. Recommends best task to start based on priority and conflicts
+
+**When to use:**
+- `/start` - "Just get me working" (most common use case)
+- `/start agent` - "Show me all agents" (when you need explicit selection)
+- `/start task-abc` - "I know what I want to work on" (direct task start)
 
 ---
 
