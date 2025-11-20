@@ -73,6 +73,57 @@ Follow these steps in order:
 8. Acknowledge any pending messages in inbox
 9. Report completion summary to console (see format below)
 
+### Implementation for Step 8: Acknowledge Messages
+
+**Auto-acknowledge messages related to the completed task:**
+
+```bash
+# Get current task ID from context or parameter
+TASK_ID="[completed-task-id]"  # e.g., jat-abc
+
+# Find unread messages in the task thread
+UNREAD_IN_THREAD=$(am-inbox "$AGENT_NAME" --unread --json 2>/dev/null | \
+    jq -r --arg thread "$TASK_ID" '.[] | select(.thread_id == $thread) | .id')
+
+# Count messages to acknowledge
+UNREAD_COUNT=$(echo "$UNREAD_IN_THREAD" | grep -c . || echo "0")
+
+# Auto-acknowledge all messages in the completed task thread
+if [[ "$UNREAD_COUNT" -gt 0 ]]; then
+    echo "📬 Acknowledging $UNREAD_COUNT message(s) in task thread..."
+
+    for msg_id in $UNREAD_IN_THREAD; do
+        am-ack "$msg_id" --agent "$AGENT_NAME" >/dev/null 2>&1
+    done
+
+    echo "  ✓ Acknowledged $UNREAD_COUNT message(s)"
+fi
+
+# Also acknowledge any @mentions or urgent messages (not in task thread)
+UNREAD_MENTIONS=$(am-inbox "$AGENT_NAME" --unread --json 2>/dev/null | \
+    jq -r --arg agent "$AGENT_NAME" '.[] | select(.to_agents | contains($agent)) | select(.importance == "urgent" or .importance == "high") | .id')
+
+MENTION_COUNT=$(echo "$UNREAD_MENTIONS" | grep -c . || echo "0")
+
+if [[ "$MENTION_COUNT" -gt 0 ]]; then
+    echo "📬 Found $MENTION_COUNT urgent/high-priority message(s)..."
+
+    for msg_id in $UNREAD_MENTIONS; do
+        am-ack "$msg_id" --agent "$AGENT_NAME" >/dev/null 2>&1
+    done
+
+    echo "  ✓ Acknowledged $MENTION_COUNT urgent message(s)"
+fi
+```
+
+**Rationale:**
+- Auto-ack messages in the completed task thread (no longer relevant)
+- Auto-ack urgent/high-priority direct mentions (acknowledge you saw them)
+- Leaves low-priority informational messages unread for manual review
+- Prevents inbox buildup while keeping important messages visible
+
+---
+
 ## PART 1.5: Feature Completion Detection & PR Creation (Automatic)
 
 **After completing a task, detect if a feature is complete and auto-create PR:**
