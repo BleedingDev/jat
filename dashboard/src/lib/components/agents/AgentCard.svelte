@@ -417,6 +417,37 @@
 		}
 	}
 
+	// Release a file reservation
+	async function releaseReservation(lockId, pattern) {
+		if (!confirm(`Release lock on ${pattern}?\n\nThis will allow other agents to modify these files.`)) {
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/agents/${agent.name}/reservations?id=${lockId}`, {
+				method: 'DELETE'
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.message || 'Failed to release reservation');
+			}
+
+			// Refresh the reservations list
+			const refreshResponse = await fetch(`/api/agents/${agent.name}/reservations`);
+			const refreshData = await refreshResponse.json();
+			reservationsList = refreshData.reservations || [];
+
+			// Show success message
+			alert(`✓ Released lock on ${pattern}`);
+
+		} catch (error) {
+			console.error('Failed to release reservation:', error);
+			alert(`Failed to release reservation: ${error.message}`);
+		}
+	}
+
 	// Quick Action: Send message
 	function openSendMessage() {
 		messageSubject = '';
@@ -939,9 +970,18 @@
 						<div class="bg-warning/10 p-3 rounded">
 							<div class="flex justify-between items-start mb-1">
 								<span class="font-mono text-sm font-semibold">{lock.pattern}</span>
-								<span class="badge badge-sm {lock.exclusive ? 'badge-error' : 'badge-warning'}">
-									{lock.exclusive ? 'Exclusive' : 'Shared'}
-								</span>
+								<div class="flex gap-2 items-center">
+									<span class="badge badge-sm {lock.exclusive ? 'badge-error' : 'badge-warning'}">
+										{lock.exclusive ? 'Exclusive' : 'Shared'}
+									</span>
+									<button
+										class="btn btn-xs btn-error btn-outline"
+										onclick={() => releaseReservation(lock.id, lock.pattern)}
+										title="Release this lock"
+									>
+										Release
+									</button>
+								</div>
 							</div>
 							<p class="text-xs text-base-content/70">Reason: {lock.reason || 'N/A'}</p>
 							<p class="text-xs text-base-content/50">Expires: {lock.expires_ts}</p>
