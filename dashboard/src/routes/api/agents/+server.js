@@ -19,7 +19,8 @@ export async function GET({ url }) {
 	if (!fullData) {
 		// Simple agent list (backward compatible)
 		try {
-			const agents = getAgents();
+			const projectFilter = url.searchParams.get('project');
+			const agents = getAgents(projectFilter);
 			return json({ agents });
 		} catch (error) {
 			console.error('Error fetching agents:', error);

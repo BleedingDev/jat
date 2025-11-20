@@ -26,10 +26,11 @@ export function getInboxForThread(agentName, threadId) {
 
 /**
  * Get all registered agents
+ * @param {string|null} projectPath - Optional project path to filter by
  * @returns {Array} - Array of agent objects
  */
-export function getAgents() {
-	return agentMail.getAgents();
+export function getAgents(projectPath = null) {
+	return agentMail.getAgents(projectPath);
 }
 
 /**
