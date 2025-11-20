@@ -1,6 +1,7 @@
 <script>
 	import CapacityBar from '$lib/components/CapacityBar.svelte';
 	import { calculateAgentCapacity } from '$lib/utils/capacityCalculations';
+	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 
 	let { agent, tasks = [], reservations = [], onTaskAssign = () => {}, draggedTaskId = null } = $props();
 
@@ -8,6 +9,8 @@
 	let isAssigning = $state(false);
 	let hasConflict = $state(false);
 	let conflictReasons = $state([]);
+	let hasDependencyBlock = $state(false);
+	let dependencyBlockReason = $state('');
 	let showDeleteModal = $state(false);
 	let isDeleting = $state(false);
 
@@ -180,6 +183,14 @@
 		event.preventDefault();
 		isDragOver = false;
 
+		// Prevent drop if there's a dependency block
+		if (hasDependencyBlock) {
+			console.warn('Cannot assign task: has unresolved dependencies');
+			hasDependencyBlock = false;
+			dependencyBlockReason = '';
+			return;
+		}
+
 		// Prevent drop if there's a conflict
 		if (hasConflict) {
 			console.warn('Cannot assign task: file reservation conflict');
@@ -294,20 +305,32 @@
 		event.preventDefault();
 		isDragOver = true;
 
-		// Check for conflicts with the dragged task
+		// Check for dependency blocks
 		const taskId = event.dataTransfer.getData('text/plain');
-		const conflictResult = detectConflicts(taskId);
-		hasConflict = conflictResult.hasConflict;
-		conflictReasons = conflictResult.reasons;
+		const task = tasks.find((t) => t.id === taskId);
+		if (task) {
+			const depStatus = analyzeDependencies(task);
+			hasDependencyBlock = depStatus.hasBlockers;
+			dependencyBlockReason = depStatus.blockingReason || '';
+		}
 
-		// Set drag effect based on conflict
-		event.dataTransfer.dropEffect = hasConflict ? 'none' : 'move';
+		// Check for conflicts with the dragged task (only if not dependency-blocked)
+		if (!hasDependencyBlock) {
+			const conflictResult = detectConflicts(taskId);
+			hasConflict = conflictResult.hasConflict;
+			conflictReasons = conflictResult.reasons;
+		}
+
+		// Set drag effect based on blocks
+		event.dataTransfer.dropEffect = hasDependencyBlock || hasConflict ? 'none' : 'move';
 	}
 
 	function handleDragLeave() {
 		isDragOver = false;
 		hasConflict = false;
 		conflictReasons = [];
+		hasDependencyBlock = false;
+		dependencyBlockReason = '';
 	}
 
 	// Handle agent deletion
@@ -639,6 +662,19 @@
 				<div class="flex items-center justify-center gap-2">
 					<span class="loading loading-spinner loading-xs"></span>
 					<p class="text-xs text-base-content/70">Assigning task...</p>
+				</div>
+			{:else if isDragOver && hasDependencyBlock}
+				<div class="space-y-1">
+					<p class="text-xs text-error font-medium flex items-center justify-center gap-1">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+						</svg>
+						Dependency Block!
+					</p>
+					<div class="text-xs text-error/80">
+						<p>🚫 {dependencyBlockReason}</p>
+						<p class="mt-1 text-base-content/60">Complete blocking tasks first</p>
+					</div>
 				</div>
 			{:else if isDragOver && hasConflict}
 				<div class="space-y-1">

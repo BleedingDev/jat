@@ -2,6 +2,8 @@
 	import { dndzone } from 'svelte-dnd-action';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
+	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 
 	let { tasks = [], agents = [], reservations = [] } = $props();
 
@@ -349,12 +351,14 @@
 			</div>
 		{:else}
 			{#each filteredTasks as task (task.id)}
+				{@const depStatus = analyzeDependencies(task)}
 				<div
-					class="card bg-base-100 border border-base-300 hover:border-primary cursor-move transition-all {!dragDisabled ? 'opacity-50' : ''}"
+					class="card bg-base-100 border border-base-300 hover:border-primary cursor-move transition-all {!dragDisabled ? 'opacity-50' : ''} {depStatus.hasBlockers ? 'opacity-60 border-error/30' : ''}"
 					draggable="true"
 					data-task-id={task.id}
 					ondragstart={handleDragStart}
 					ondragend={handleDragEnd}
+					title={depStatus.hasBlockers ? `⚠️ ${depStatus.blockingReason}` : ''}
 				>
 					<div class="card-body p-3">
 						<!-- Task Header -->
@@ -365,9 +369,12 @@
 								</h3>
 								<p class="text-xs text-base-content/50 font-mono">{task.id}</p>
 							</div>
-							<span class="badge badge-sm {getPriorityBadge(task.priority)}">
-								P{task.priority}
-							</span>
+							<div class="flex items-center gap-1">
+								<DependencyIndicator {task} allTasks={tasks} size="sm" />
+								<span class="badge badge-sm {getPriorityBadge(task.priority)}">
+									P{task.priority}
+								</span>
+							</div>
 						</div>
 
 						<!-- Task Description (truncated) -->
