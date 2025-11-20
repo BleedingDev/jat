@@ -7,15 +7,26 @@
 	let tasks = $state([]);
 	let agents = $state([]);
 	let reservations = $state([]);
+	let unassignedTasks = $state([]);
+	let taskStats = $state(null);
 
-	// Fetch orchestration data
+	// Fetch orchestration data from unified API
 	async function fetchData() {
 		try {
-			// For now, mock data until backend API is ready
-			// When API is ready: const response = await fetch('/api/agent-data');
-			tasks = [];
-			agents = [];
-			reservations = [];
+			const response = await fetch('/api/orchestration');
+			const data = await response.json();
+
+			if (data.error) {
+				console.error('API error:', data.error);
+				return;
+			}
+
+			// Update state with real data
+			agents = data.agents || [];
+			reservations = data.reservations || [];
+			tasks = data.tasks || [];
+			unassignedTasks = data.unassigned_tasks || [];
+			taskStats = data.task_stats || null;
 		} catch (error) {
 			console.error('Failed to fetch orchestration data:', error);
 		}
@@ -89,7 +100,7 @@
 	<div class="flex h-[calc(100vh-theme(spacing.20))]">
 		<!-- Left Sidebar: Task Queue -->
 		<div class="w-80 border-r border-base-300 bg-base-100 flex flex-col">
-			<TaskQueue {tasks} {agents} {reservations} />
+			<TaskQueue tasks={unassignedTasks} {agents} {reservations} />
 		</div>
 
 		<!-- Right Panel: Agent Grid -->

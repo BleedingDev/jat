@@ -3,9 +3,17 @@
 
 	// Compute agent status using $derived
 	const agentStatus = $derived(() => {
-		// TODO: In P1 task (jomarchy-agent-tools-5bk), implement real status logic
-		// For now, return mock status
-		return 'idle'; // 'active', 'idle', 'blocked', 'offline'
+		// Use agent.active from API (computed based on reservations + in-progress tasks)
+		if (agent.active) {
+			return agent.in_progress_tasks > 0 ? 'active' : 'idle';
+		}
+		// Check if agent has been active recently (based on last_activity timestamp)
+		const lastActivity = agent.last_activity ? new Date(agent.last_activity) : null;
+		if (lastActivity && (Date.now() - lastActivity.getTime()) < 3600000) {
+			// Active within last hour
+			return 'idle';
+		}
+		return 'offline';
 	});
 
 	// Get status badge class
@@ -40,22 +48,27 @@
 		}
 	}
 
-	// Compute current task
+	// Compute current task (in-progress tasks assigned to this agent)
 	const currentTask = $derived(() => {
-		// TODO: In P1 task, get actual current task from agent data
-		return null;
+		const inProgressTasks = tasks.filter(
+			(t) => t.assignee === agent.name && t.status === 'in_progress'
+		);
+		return inProgressTasks.length > 0 ? inProgressTasks[0] : null;
 	});
 
-	// Compute queued tasks
+	// Compute queued tasks (open tasks assigned to this agent)
 	const queuedTasks = $derived(() => {
-		// TODO: In P1 task, get actual queued tasks from agent data
-		return [];
+		return tasks.filter((t) => t.assignee === agent.name && t.status === 'open');
 	});
 
 	// Compute file locks held by this agent
 	const agentLocks = $derived(() => {
-		// TODO: Filter reservations by agent name
-		return reservations.filter((r) => r.agent === agent.name || r.agent === agent.id);
+		return reservations.filter(
+			(r) =>
+				(r.agent_name === agent.name || r.agent === agent.name) &&
+				(!r.released_ts) &&
+				new Date(r.expires_ts) > new Date()
+		);
 	});
 
 	// Handle drop event (placeholder)
@@ -153,8 +166,8 @@
 				<div class="space-y-1">
 					{#each agentLocks().slice(0, 2) as lock}
 						<div class="bg-warning/10 rounded px-2 py-1">
-							<p class="text-xs text-warning truncate" title={lock.pattern}>
-								🔒 {lock.pattern}
+							<p class="text-xs text-warning truncate" title={lock.file_pattern || lock.pattern}>
+								🔒 {lock.file_pattern || lock.pattern}
 							</p>
 						</div>
 					{/each}
