@@ -1,0 +1,26 @@
+{
+  "name": "jomarchy-demo-backend",
+  "version": "1.0.0",
+  "description": "Demo Express backend API with SQLite database",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "express",
+    "api",
+    "demo",
+    "backend"
+  ],
+  "author": "Joseph Winke <j@wn.ke>",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  }
+}
