@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { onMount } from 'svelte';
 	import TaskQueue from '$lib/components/agents/TaskQueue.svelte';
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
