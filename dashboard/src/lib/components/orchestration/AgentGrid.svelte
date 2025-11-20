@@ -15,6 +15,83 @@
 		tasks.filter(t => t.status === 'open' && !t.assignee)
 	);
 
+	// Helper to compute agent status (matches AgentCard.svelte and store logic)
+	function getAgentStatus(agent) {
+		const hasActiveLocks = agent.reservation_count > 0;
+		const hasInProgressTask = agent.in_progress_tasks > 0;
+
+		let timeSinceActive = Infinity;
+		if (agent.last_active_ts) {
+			const isoTimestamp = agent.last_active_ts.includes('T')
+				? agent.last_active_ts
+				: agent.last_active_ts.replace(' ', 'T') + 'Z';
+			const lastActivity = new Date(isoTimestamp);
+			timeSinceActive = Date.now() - lastActivity.getTime();
+		}
+
+		// Priority 1: LIVE - Very recent activity (< 1 minute)
+		if (timeSinceActive < 60000) {
+			return 'live';
+		}
+
+		// Priority 2: WORKING - Recently working (1-10 minutes) with active task/locks
+		if (timeSinceActive < 600000 && (hasInProgressTask || hasActiveLocks)) {
+			return 'working';
+		}
+
+		// Priority 3: ACTIVE - Recent activity (< 10 minutes)
+		if (timeSinceActive < 600000) {
+			return 'active';
+		}
+
+		// Priority 4: IDLE - Within 1 hour
+		if (timeSinceActive < 3600000) {
+			return 'idle';
+		}
+
+		// Priority 5: OFFLINE
+		return 'offline';
+	}
+
+	// Status priority for sorting (lower number = higher priority)
+	function getStatusPriority(status) {
+		const priorities = {
+			live: 1,
+			working: 2,
+			active: 3,
+			idle: 4,
+			offline: 5
+		};
+		return priorities[status] || 999;
+	}
+
+	// Sort agents by status priority (live > working > active > idle > offline)
+	const sortedAgents = $derived(() => {
+		return [...agents].sort((a, b) => {
+			const statusA = getAgentStatus(a);
+			const statusB = getAgentStatus(b);
+			const priorityA = getStatusPriority(statusA);
+			const priorityB = getStatusPriority(statusB);
+
+			// Sort by status priority first
+			if (priorityA !== priorityB) {
+				return priorityA - priorityB;
+			}
+
+			// Within same status, sort by last activity (most recent first)
+			if (a.last_active_ts && b.last_active_ts) {
+				return new Date(b.last_active_ts).getTime() - new Date(a.last_active_ts).getTime();
+			}
+
+			// If one has activity and other doesn't, prioritize the one with activity
+			if (a.last_active_ts && !b.last_active_ts) return -1;
+			if (!a.last_active_ts && b.last_active_ts) return 1;
+
+			// Finally sort by name alphabetically
+			return a.name.localeCompare(b.name);
+		});
+	});
+
 	// Auto-assign button action
 	function handleAutoAssign() {
 		// Generate assignments using the algorithm
@@ -189,7 +266,7 @@
 		{:else}
 			<!-- Responsive Grid -->
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-				{#each agents as agent (agent.id || agent.name)}
+				{#each sortedAgents() as agent (agent.id || agent.name)}
 					<AgentCard {agent} {tasks} {reservations} {onTaskAssign} />
 				{/each}
 			</div>

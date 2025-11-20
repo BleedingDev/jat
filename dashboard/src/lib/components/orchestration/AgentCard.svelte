@@ -27,61 +27,60 @@
 	let showUnassignModal = $state(false);
 
 	// Compute agent status using $derived
-	// States: working (has in-progress tasks OR locks matching assigned task) > active (recent activity or locks) > idle (within 1h) > offline (>1h)
+	// States: live (< 1m, truly responsive) > working (1-10m with task) > active (recent activity) > idle (within 1h) > offline (>1h)
 	const agentStatus = $derived(() => {
-		// Priority 1a: Has in-progress tasks
-		if (agent.in_progress_tasks > 0) {
-			return 'working';
-		}
+		const hasActiveLocks = agent.reservation_count > 0;
+		const hasInProgressTask = agent.in_progress_tasks > 0;
 
-		// Priority 1b: Has file locks with reason matching an assigned task ID (agent is actively working)
-		const agentTaskLocks = agentLocks().filter(lock => {
-			const reason = lock.reason || '';
-			// Check if lock reason matches any task assigned to this agent
-			return tasks.some(t =>
-				t.assignee === agent.name &&
-				(t.status === 'open' || t.status === 'in_progress') &&
-				reason.includes(t.id)
-			);
-		});
-		if (agentTaskLocks.length > 0) {
-			return 'working';
-		}
-
-		// Priority 2: Recently active or holding locks
-		const hasActiveLocks = agent.reservation_count > 0; // unexpired locks
+		// Calculate time since last activity
+		let timeSinceActive = Infinity;
 		if (agent.last_active_ts) {
 			const isoTimestamp = agent.last_active_ts.includes('T')
 				? agent.last_active_ts
 				: agent.last_active_ts.replace(' ', 'T') + 'Z';
 			const lastActivity = new Date(isoTimestamp);
-			const timeSinceActive = Date.now() - lastActivity.getTime();
-
-			// Active: within 5 minutes OR has locks within 1 hour
-			if (timeSinceActive < 300000) { // 5 minutes
-				return 'active';
-			}
-			if (hasActiveLocks && timeSinceActive < 3600000) { // has locks, within hour
-				return 'active';
-			}
-
-			// Idle: within 1 hour
-			if (timeSinceActive < 3600000) { // 1 hour
-				return 'idle';
-			}
+			timeSinceActive = Date.now() - lastActivity.getTime();
 		}
 
-		// Offline: over 1 hour or never active
+		// Priority 1: LIVE - Very recent activity (< 1 minute)
+		// Agent is truly responsive right now
+		if (timeSinceActive < 60000) { // < 1 minute
+			return 'live';
+		}
+
+		// Priority 2: WORKING - Recently working (1-10 minutes) with active task/locks
+		// Agent was working very recently and has work in progress
+		if (timeSinceActive < 600000 && (hasInProgressTask || hasActiveLocks)) { // < 10 minutes
+			return 'working';
+		}
+
+		// Priority 3: ACTIVE - Recent activity (< 10 minutes) but no current work
+		// OR has locks but not super recent
+		if (timeSinceActive < 600000) { // < 10 minutes
+			return 'active';
+		}
+		if (hasActiveLocks && timeSinceActive < 3600000) { // has locks, within hour
+			return 'active';
+		}
+
+		// Priority 4: IDLE - Within 1 hour but not active
+		if (timeSinceActive < 3600000) { // 1 hour
+			return 'idle';
+		}
+
+		// Priority 5: OFFLINE - Over 1 hour or never active
 		return 'offline';
 	});
 
 	// Get status badge class
 	function getStatusBadge(status) {
 		switch (status) {
+			case 'live':
+				return 'badge-success'; // Green - truly responsive (< 1m)
 			case 'working':
-				return 'badge-info'; // Blue - actively coding
+				return 'badge-info'; // Blue - actively coding (1-10m)
 			case 'active':
-				return 'badge-success'; // Green - ready and engaged
+				return 'badge-accent'; // Purple/accent - recent activity
 			case 'idle':
 				return 'badge-ghost'; // Gray - available but quiet
 			case 'blocked':
@@ -96,6 +95,8 @@
 	// Get status icon
 	function getStatusIcon(status) {
 		switch (status) {
+			case 'live':
+				return '●'; // Solid dot - truly live/responsive
 			case 'working':
 				return '⚙'; // Actively coding (gear will spin)
 			case 'active':
@@ -505,10 +506,10 @@
 				</p>
 			</div>
 			<button
-				class="badge badge-sm {getStatusBadge(agentStatus())} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'}"
+				class="badge badge-sm {getStatusBadge(agentStatus())} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'} {agentStatus() === 'live' ? 'animate-pulse' : ''}"
 				onclick={handleBadgeClick}
 				disabled={agentStatus() !== 'offline'}
-				title={agentStatus() === 'offline' ? 'Click to delete agent' : ''}
+				title={agentStatus() === 'offline' ? 'Click to delete agent' : agentStatus() === 'live' ? 'Responsive right now (< 1 minute)' : agentStatus() === 'working' ? 'Working recently (1-10 minutes)' : ''}
 			>
 				<span class={agentStatus() === 'working' ? 'inline-block animate-spin' : ''}>
 					{getStatusIcon(agentStatus())}
@@ -592,6 +593,31 @@
 					<p class="text-xs text-base-content/50 italic">No file locks</p>
 				</div>
 			{/if}
+		</div>
+
+		<!-- Recent Activity Feed -->
+		<div class="mb-3">
+			<div class="text-xs font-medium text-base-content/70 mb-1">
+				Recent Activity:
+			</div>
+			<div class="bg-base-200 rounded px-2 py-1.5">
+				<div class="flex items-center justify-between text-xs">
+					<span class="text-base-content/70">Last seen:</span>
+					<span class="font-medium {agentStatus() === 'live' ? 'text-success' : agentStatus() === 'working' ? 'text-info' : 'text-base-content/50'}">
+						{formatLastActivity(agent.last_active_ts)}
+					</span>
+				</div>
+				{#if agentStatus() === 'live'}
+					<div class="flex items-center gap-1 text-xs text-success mt-1">
+						<span class="inline-block w-1.5 h-1.5 bg-success rounded-full animate-pulse"></span>
+						<span class="font-semibold">Responsive now</span>
+					</div>
+				{:else if agentStatus() === 'working'}
+					<div class="text-xs text-info/70 mt-1">
+						Working on task
+					</div>
+				{/if}
+			</div>
 		</div>
 
 		<!-- Enhanced Capacity Indicator with Hour-based Estimates -->

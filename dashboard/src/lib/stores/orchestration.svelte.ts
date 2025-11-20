@@ -136,12 +136,70 @@ class OrchestrationStore {
 		return this.data.task_stats;
 	}
 
+	// Helper to compute agent status (matches AgentCard.svelte logic)
+	private getAgentStatus(agent: Agent): 'live' | 'working' | 'active' | 'idle' | 'offline' {
+		const hasActiveLocks = agent.reservation_count > 0;
+		const hasInProgressTask = agent.in_progress_tasks > 0;
+
+		let timeSinceActive = Infinity;
+		if (agent.last_active_ts) {
+			const isoTimestamp = agent.last_active_ts.includes('T')
+				? agent.last_active_ts
+				: agent.last_active_ts.replace(' ', 'T') + 'Z';
+			const lastActivity = new Date(isoTimestamp);
+			timeSinceActive = Date.now() - lastActivity.getTime();
+		}
+
+		// Priority 1: LIVE - Very recent activity (< 1 minute)
+		if (timeSinceActive < 60000) {
+			return 'live';
+		}
+
+		// Priority 2: WORKING - Recently working (1-10 minutes) with active task/locks
+		if (timeSinceActive < 600000 && (hasInProgressTask || hasActiveLocks)) {
+			return 'working';
+		}
+
+		// Priority 3: ACTIVE - Recent activity (< 10 minutes)
+		if (timeSinceActive < 600000) {
+			return 'active';
+		}
+
+		// Priority 4: IDLE - Within 1 hour
+		if (timeSinceActive < 3600000) {
+			return 'idle';
+		}
+
+		// Priority 5: OFFLINE
+		return 'offline';
+	}
+
+	get liveAgents() {
+		return this.data.agents.filter(a => this.getAgentStatus(a) === 'live');
+	}
+
+	get workingAgents() {
+		return this.data.agents.filter(a => this.getAgentStatus(a) === 'working');
+	}
+
 	get activeAgents() {
-		return this.data.agents.filter(a => a.active);
+		return this.data.agents.filter(a => this.getAgentStatus(a) === 'active');
 	}
 
 	get idleAgents() {
-		return this.data.agents.filter(a => !a.active);
+		return this.data.agents.filter(a => this.getAgentStatus(a) === 'idle');
+	}
+
+	get offlineAgents() {
+		return this.data.agents.filter(a => this.getAgentStatus(a) === 'offline');
+	}
+
+	get availableAgents() {
+		// Live, active, or idle agents (can take work)
+		return this.data.agents.filter(a => {
+			const status = this.getAgentStatus(a);
+			return status === 'live' || status === 'active' || status === 'idle';
+		});
 	}
 
 	/**
