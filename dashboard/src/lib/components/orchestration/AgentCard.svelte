@@ -1,8 +1,10 @@
 <script>
-	let { agent, tasks = [], reservations = [], onTaskAssign = () => {} } = $props();
+	let { agent, tasks = [], reservations = [], onTaskAssign = () => {}, draggedTaskId = null } = $props();
 
 	let isDragOver = $state(false);
 	let isAssigning = $state(false);
+	let hasConflict = $state(false);
+	let conflictReasons = $state([]);
 
 	// Compute agent status using $derived
 	const agentStatus = $derived(() => {
@@ -124,6 +126,14 @@
 		event.preventDefault();
 		isDragOver = false;
 
+		// Prevent drop if there's a conflict
+		if (hasConflict) {
+			console.warn('Cannot assign task: file reservation conflict');
+			hasConflict = false;
+			conflictReasons = [];
+			return;
+		}
+
 		const taskId = event.dataTransfer.getData('text/plain');
 		if (!taskId) return;
 
@@ -141,18 +151,114 @@
 		}
 	}
 
+	// Infer file patterns from task based on labels and description
+	function inferFilePatterns(task) {
+		if (!task) return [];
+
+		const patterns = [];
+
+		// Extract glob patterns from description (e.g., "src/**/*.ts")
+		const descriptionPatterns = task.description?.match(/[\w-]+\/\*\*?\/\*\.\w+/g) || [];
+		patterns.push(...descriptionPatterns);
+
+		// Infer from labels (common patterns)
+		const labelPatternMap = {
+			dashboard: ['dashboard/**/*'],
+			frontend: ['dashboard/**/*', 'frontend/**/*'],
+			backend: ['backend/**/*', 'server/**/*', 'api/**/*'],
+			browser: ['browser/**/*', 'tools/browser-*.js'],
+			'agent-mail': ['agent-mail/**/*'],
+			database: ['database/**/*'],
+			monitoring: ['monitoring/**/*'],
+			development: ['development/**/*']
+		};
+
+		task.labels?.forEach((label) => {
+			if (labelPatternMap[label]) {
+				patterns.push(...labelPatternMap[label]);
+			}
+		});
+
+		return [...new Set(patterns)]; // Remove duplicates
+	}
+
+	// Check if two glob patterns conflict (simple overlap detection)
+	function patternsConflict(pattern1, pattern2) {
+		// Simple heuristic: check if patterns share a common prefix
+		// In a real system, use a proper glob matching library
+		const normalize = (p) => p.replace(/\*/g, '').replace(/\//g, '');
+		const p1 = normalize(pattern1);
+		const p2 = normalize(pattern2);
+
+		// Check if one pattern is a substring of the other
+		return p1.includes(p2) || p2.includes(p1) || p1 === p2;
+	}
+
+	// Detect conflicts between task and agent's reservations
+	function detectConflicts(taskId) {
+		if (!taskId) return { hasConflict: false, reasons: [] };
+
+		// Find the task
+		const task = tasks.find((t) => t.id === taskId);
+		if (!task) return { hasConflict: false, reasons: [] };
+
+		// Infer file patterns needed by the task
+		const taskPatterns = inferFilePatterns(task);
+		if (taskPatterns.length === 0) {
+			// No patterns means no conflicts
+			return { hasConflict: false, reasons: [] };
+		}
+
+		// Get agent's active reservations
+		const agentReservations = agentLocks();
+		if (agentReservations.length === 0) {
+			return { hasConflict: false, reasons: [] };
+		}
+
+		// Check for conflicts
+		const conflicts = [];
+		for (const reservation of agentReservations) {
+			const reservedPattern = reservation.file_pattern || reservation.pattern;
+			for (const taskPattern of taskPatterns) {
+				if (patternsConflict(taskPattern, reservedPattern)) {
+					conflicts.push({
+						taskPattern,
+						reservedPattern,
+						reservation
+					});
+				}
+			}
+		}
+
+		return {
+			hasConflict: conflicts.length > 0,
+			reasons: conflicts.map((c) => `${c.taskPattern} conflicts with ${c.reservedPattern}`)
+		};
+	}
+
 	function handleDragOver(event) {
 		event.preventDefault();
 		isDragOver = true;
+
+		// Check for conflicts with the dragged task
+		const taskId = event.dataTransfer.getData('text/plain');
+		const conflictResult = detectConflicts(taskId);
+		hasConflict = conflictResult.hasConflict;
+		conflictReasons = conflictResult.reasons;
+
+		// Set drag effect based on conflict
+		event.dataTransfer.dropEffect = hasConflict ? 'none' : 'move';
 	}
 
 	function handleDragLeave() {
 		isDragOver = false;
+		hasConflict = false;
+		conflictReasons = [];
 	}
 </script>
 
 <div
-	class="card bg-base-100 border-2 transition-all {isDragOver ? 'border-primary border-dashed bg-primary/10 scale-105' : 'border-base-300 hover:border-primary'} {isAssigning ? 'opacity-50 pointer-events-none' : ''}"
+	class="card bg-base-100 border-2 transition-all relative {isDragOver && hasConflict ? 'border-error border-dashed bg-error/10 scale-105' : isDragOver ? 'border-success border-dashed bg-success/10 scale-105' : 'border-base-300 hover:border-primary'} {isAssigning ? 'opacity-50 pointer-events-none' : ''}"
 	role="button"
 	tabindex="0"
 	ondrop={handleDrop}
@@ -281,8 +387,27 @@
 					<span class="loading loading-spinner loading-xs"></span>
 					<p class="text-xs text-base-content/70">Assigning task...</p>
 				</div>
+			{:else if isDragOver && hasConflict}
+				<div class="space-y-1">
+					<p class="text-xs text-error font-medium flex items-center justify-center gap-1">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+						</svg>
+						File Conflict!
+					</p>
+					<div class="text-xs text-error/80 max-h-20 overflow-y-auto">
+						{#each conflictReasons as reason}
+							<p class="truncate" title={reason}>• {reason}</p>
+						{/each}
+					</div>
+				</div>
 			{:else if isDragOver}
-				<p class="text-xs text-primary font-medium">Drop to assign to {agent.name}</p>
+				<p class="text-xs text-success font-medium flex items-center justify-center gap-1">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					Drop to assign to {agent.name}
+				</p>
 			{:else}
 				<p class="text-xs text-base-content/50">Drop task here to assign</p>
 			{/if}
