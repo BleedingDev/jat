@@ -41,7 +41,7 @@ bd init
 /agent:complete
 ```
 
-**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 7 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
+**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 8 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
 
 ### How It Actually Works
 
@@ -76,9 +76,9 @@ Jomarchy Agent Tools is a **self-contained AI development environment** that giv
                       ▼
          ┌────────────────────────┐
          │  Coordination Layer    │
-         │  10 Slash Commands     │  /register, /start, /complete,
-         │  ~/.claude/commands/   │  /handoff, /pause, /block,
-         └────────┬───────────────┘  /stop, /status, /verify, /plan
+         │  8 Slash Commands      │  /register, /start, /pause,
+         │  ~/.claude/commands/   │  /complete, /finish, /status,
+         └────────┬───────────────┘  /verify, /plan
                   │
     ┌─────────────┼─────────────┐
     │             │             │
@@ -567,7 +567,7 @@ This installs:
 - ✅ Agent Mail (11 bash/SQLite tools: am-register, am-send, am-inbox, etc.)
 - ✅ Beads CLI (`bd` command)
 - ✅ 28 generic bash tools (am-*, browser-*, db-*, etc.)
-- ✅ 10 coordination commands (/register, /start, /complete, /handoff, etc.)
+- ✅ 8 coordination commands (/register, /start, /pause, /complete, /finish, /status, /verify, /plan)
 - ✅ Multi-line statusline (agent, task, git, context) + real-time hooks
 - ✅ Optional tech stack tools (e.g., SvelteKit + Supabase with 11 additional tools)
 - ✅ Global ~/.claude/CLAUDE.md configuration
@@ -589,7 +589,7 @@ This installs:
 - ✅ Agent Mail (11 bash tools + SQLite schema)
 - ✅ Beads CLI (task management)
 - ✅ 28 generic bash tools
-- ✅ 10 coordination commands
+- ✅ 8 coordination commands
 - ✅ Multi-line statusline + real-time hooks (Claude Code)
 
 **What You DON'T Need:**
@@ -615,7 +615,7 @@ This installs:
 │   ├── db-query
 │   ├── db-schema
 │   └── ...
-├── commands/agent/                  # Coordination commands (7)
+├── commands/agent/                  # Coordination commands (8)
 │   ├── register.md
 │   ├── start.md
 │   └── ...
@@ -720,7 +720,7 @@ am-release "src/auth/**" --agent AgentName
 
 ### 3. Agent Swarm Coordination Commands
 
-**7 slash commands** installed to `commands/agent/` that enable sophisticated multi-agent orchestration:
+**8 slash commands** installed to `commands/agent/` that enable sophisticated multi-agent orchestration:
 
 ```
 commands/agent/
@@ -728,6 +728,7 @@ commands/agent/
 ├── start.md       - Main command: register + task start + work
 ├── pause.md       - Unified stop: pause/block/handoff/abandon
 ├── complete.md    - Finish + verify + auto-continue
+├── finish.md      - Session wrap-up: end work day gracefully
 ├── status.md      - Check current work status
 ├── verify.md      - Quality checks before completion
 └── plan.md        - Convert planning docs to Beads tasks
@@ -735,10 +736,11 @@ commands/agent/
 
 #### Command Categories
 
-**Core Workflow (3 commands):**
+**Core Workflow (4 commands):**
 - `/agent:register` - Explicit registration with full agent review
 - `/agent:start` - Main command: handles registration, task selection, conflict detection, and work start
 - `/agent:complete` - Finish work (verify, commit, auto-continue to next)
+- `/agent:finish` - Session wrap-up: gracefully end work day (release locks, commit/stash, send summary)
 
 **Coordination (2 commands):**
 - `/agent:pause` - Unified stop command with modes: pause, block, handoff, abandon
@@ -792,6 +794,16 @@ Commands are **markdown files with instructions** that Claude Code executes:
 # → Completes current task
 # → Shows available tasks but DOESN'T auto-start
 # → Agent session ends cleanly
+
+# Or end entire session gracefully
+/agent:finish
+# → Handles in-progress work (pause/complete)
+# → Releases ALL file reservations
+# → Commits/stashes uncommitted changes
+# → Reviews and acknowledges messages
+# → Generates session summary
+# → Shows tomorrow's priorities
+# → Clean slate for next session
 ```
 
 **Key insight:** `/complete` creates a **continuous flow** by automatically starting the next highest-priority task. Agents never sit idle!
@@ -845,17 +857,17 @@ Commands are **markdown files with instructions** that Claude Code executes:
 ```
 ┌─────────────────────────────────────────────┐
 │  User Input                                 │
-│  /register /start /complete /handoff        │
+│  /register /start /complete /finish         │
 └────────────┬────────────────────────────────┘
              │
              │ Expands to step-by-step prompts
              │
 ┌────────────▼────────────────────────────────┐
-│  Coordination Commands (10 .md files)       │
+│  Coordination Commands (8 .md files)        │
 │  • Context-aware task selection             │
 │  • Conflict detection logic                 │
 │  • State synchronization                    │
-│  • Handoff packaging                        │
+│  • Session & task management                │
 └────────┬───────────────────┬────────────────┘
          │                   │
          │ Executes via...   │
@@ -1018,7 +1030,7 @@ npm run dev
 The installer **appends** comprehensive instructions to your global `~/.claude/CLAUDE.md` file. This "prompt injection" is fully transparent and auditable.
 
 **What gets appended:**
-- 🤖 Agent Swarm Coordination Commands (10 slash commands)
+- 🤖 Agent Swarm Coordination Commands (8 slash commands)
 - 📬 Agent Mail (coordination patterns, macros, pitfalls)
 - 📋 Beads Integration (workflow conventions, task mapping)
 - 🛠️ Agent Tools (28 bash tools with examples)
