@@ -4,12 +4,14 @@
  * GET /api/agents              → Simple agent list (lightweight, for dropdowns/lists)
  * GET /api/agents?full=true    → Full orchestration data (agents + tasks + reservations + stats)
  * GET /api/agents?orchestration=true → Alias for full orchestration data
+ * GET /api/agents?usage=true   → Include token usage data for each agent
  * POST /api/agents             → Assign task to agent (body: { taskId, agentName })
  */
 
 import { json } from '@sveltejs/kit';
 import { getAgents, getReservations } from '$lib/server/agent-mail.js';
 import { getTasks } from '$lib/server/beads.js';
+import { getAllAgentUsage } from '$lib/utils/tokenUsage.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -37,15 +39,32 @@ export async function GET({ url }) {
 	try {
 		const projectFilter = url.searchParams.get('project');
 		const agentFilter = url.searchParams.get('agent');
+		const includeUsage = url.searchParams.get('usage') === 'true';
 
 		// Fetch all data sources in parallel for performance
 		// NOTE: Agents and reservations are NOT filtered by project
 		// because agents work across multiple projects. Only tasks are filtered.
-		const [agents, reservations, tasks] = await Promise.all([
+		const promises = [
 			Promise.resolve(getAgents(null)),  // Show all agents (don't filter by project)
 			Promise.resolve(getReservations(agentFilter, null)),  // Show all reservations
 			Promise.resolve(getTasks({ projectName: projectFilter }))  // Filter tasks only
-		]);
+		];
+
+		// Optionally fetch token usage data
+		if (includeUsage) {
+			const projectPath = process.cwd().replace('/dashboard', '');
+			promises.push(
+				getAllAgentUsage('today', projectPath),
+				getAllAgentUsage('week', projectPath)
+			);
+		}
+
+		const results = await Promise.all(promises);
+		const agents = results[0];
+		const reservations = results[1];
+		const tasks = results[2];
+		const usageToday = includeUsage ? results[3] : null;
+		const usageWeek = includeUsage ? results[4] : null;
 
 		// Calculate agent statistics
 		const agentStats = agents.map(agent => {
@@ -63,7 +82,7 @@ export async function GET({ url }) {
 				return expiresAt > new Date() && !r.released_ts;
 			});
 
-			return {
+			const baseStats = {
 				...agent,
 				reservation_count: agentReservations.length,
 				task_count: agentTasks.length,
@@ -71,6 +90,27 @@ export async function GET({ url }) {
 				in_progress_tasks: inProgressTasks,
 				active: hasActiveReservations || inProgressTasks > 0
 			};
+
+			// Optionally include token usage data
+			if (includeUsage && usageToday && usageWeek) {
+				const todayUsage = usageToday.get(agent.name);
+				const weekUsage = usageWeek.get(agent.name);
+
+				baseStats.usage = {
+					today: todayUsage ? {
+						total_tokens: todayUsage.total_tokens,
+						cost: todayUsage.cost,
+						sessionCount: todayUsage.sessionCount
+					} : { total_tokens: 0, cost: 0, sessionCount: 0 },
+					week: weekUsage ? {
+						total_tokens: weekUsage.total_tokens,
+						cost: weekUsage.cost,
+						sessionCount: weekUsage.sessionCount
+					} : { total_tokens: 0, cost: 0, sessionCount: 0 }
+				};
+			}
+
+			return baseStats;
 		});
 
 		// Group reservations by agent for easy lookup
