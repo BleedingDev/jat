@@ -49,6 +49,13 @@
 		return () => clearInterval(interval);
 	});
 
+	// Reset tab state when panel closes
+	$effect(() => {
+		if (!showDetails) {
+			activeTab = 'api-limits';
+		}
+	});
+
 	// Formatting helpers
 	function formatNumber(num: number): string {
 		if (num >= 1_000_000) {
@@ -76,7 +83,7 @@
 </script>
 
 <div
-	class="absolute right-0 inline-flex"
+	class="relative inline-flex"
 	role="button"
 	tabindex="0"
 	onmouseenter={() => (showDetails = true)}
@@ -88,7 +95,7 @@
 	{#if !showDetails && metrics && !isLoading}
 		<!-- Compact Badge (Default State) -->
 		<button
-			class="badge badge-lg gap-2 px-3 py-3 {tierColor} hover:brightness-110 transition-all"
+			class="badge badge-lg gap-2 px-3 py-3 whitespace-nowrap {tierColor} hover:brightness-110 transition-all"
 		>
 			<!-- API Icon -->
 			<svg
