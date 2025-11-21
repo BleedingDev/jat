@@ -21,8 +21,13 @@
 	let selectedStatus = $state('open');
 	let searchQuery = $state('');
 
-	// Read project from URL parameter
-	const projectParam = $derived($page.url.searchParams.get('project'));
+	// Read project from URL parameter (reactive to URL changes)
+	let projectParam = $state(null);
+
+	// Update projectParam when URL changes
+	$effect(() => {
+		projectParam = $page.url.searchParams.get('project');
+	});
 
 	// Filter tasks by project
 	const filteredTasks = $derived(() => {
