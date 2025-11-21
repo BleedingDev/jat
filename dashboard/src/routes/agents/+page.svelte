@@ -21,8 +21,8 @@
 	// Extract unique projects from ALL tasks (unfiltered)
 	const projects = $derived(getProjectsFromTasks(allTasks));
 
-	// Get task count per project from ALL tasks (unfiltered)
-	const taskCounts = $derived(getTaskCountByProject(allTasks));
+	// Get task count per project from ALL tasks (only count 'open' tasks to match TaskQueue default)
+	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
 
 	// Handle project selection change
 	function handleProjectChange(project: string) {

@@ -21,7 +21,7 @@
 		const params = new URLSearchParams(window.location.search);
 		searchQuery = params.get('search') || '';
 		priorityFilter = params.get('priority') || 'all';
-		statusFilter = params.get('status') || 'all';
+		statusFilter = params.get('status') || 'open'; // Default to 'open' to match initial state
 		typeFilter = params.get('type') || 'all';
 
 		const labels = params.get('labels');

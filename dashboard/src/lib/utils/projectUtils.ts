@@ -92,22 +92,26 @@ export function getProjectsFromTasks(tasks: Task[]): string[] {
 }
 
 /**
- * Count tasks per project
+ * Count tasks per project (filtered by status)
  *
  * @param tasks - Array of task objects
+ * @param statusFilter - Optional status filter ('open', 'in_progress', 'blocked', 'closed', or 'all' for no filter)
  * @returns Map of project name to task count
  *
  * @example
  * const tasks = [
- *   { id: "chimaro-abc" },
- *   { id: "chimaro-def" },
- *   { id: "jat-ghi" }
+ *   { id: "chimaro-abc", status: "open" },
+ *   { id: "chimaro-def", status: "closed" },
+ *   { id: "jat-ghi", status: "open" }
  * ];
  *
- * getTaskCountByProject(tasks)
+ * getTaskCountByProject(tasks, 'open')
+ * // Map { "chimaro" => 1, "jat" => 1 }
+ *
+ * getTaskCountByProject(tasks, 'all')
  * // Map { "chimaro" => 2, "jat" => 1 }
  */
-export function getTaskCountByProject(tasks: Task[]): Map<string, number> {
+export function getTaskCountByProject(tasks: Task[], statusFilter: string = 'open'): Map<string, number> {
   const counts = new Map<string, number>();
 
   if (!Array.isArray(tasks)) {
@@ -116,6 +120,11 @@ export function getTaskCountByProject(tasks: Task[]): Map<string, number> {
 
   for (const task of tasks) {
     if (!task || !task.id) {
+      continue;
+    }
+
+    // Apply status filter (default to 'open' to match TaskQueue default)
+    if (statusFilter && statusFilter !== 'all' && task.status !== statusFilter) {
       continue;
     }
 
