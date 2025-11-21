@@ -1745,6 +1745,373 @@ npm run dev
 - jat-1ux: Replace SystemCapacityBar with ClaudeUsageBar (completed)
 - jat-ozq: Document Claude API usage metrics (completed)
 
+## Per-Agent Token Tracking
+
+### Overview
+
+The dashboard tracks token usage per agent by parsing Claude Code session files (JSONL format) and displaying usage metrics on agent cards and system-wide summaries.
+
+**Key Features:**
+- Per-agent token usage (today/week)
+- Cost tracking with Sonnet 4.5 pricing
+- Color-coded thresholds (configurable)
+- System-wide usage overview
+- Top consumers ranking
+- Session count tracking
+
+### How It Works
+
+**Data Flow:**
+```
+Claude Code Sessions → JSONL Files → tokenUsage.ts → API Endpoints → UI Components
+```
+
+**1. JSONL Session Files:**
+- Location: `~/.claude/projects/{project-slug}/*.jsonl`
+- Contains: API responses with token usage per request
+- Format: One JSON object per line with `.message.usage` field
+
+**2. Session-Agent Mapping:**
+- Location: `.claude/agent-{session_id}.txt`
+- Contains: Agent name for that session
+- Created by: Agent workflow commands (`/agent:start`, etc.)
+
+**3. Token Aggregation:**
+- `tokenUsage.ts` parses JSONL files
+- Sums tokens across all sessions for each agent
+- Filters by time range (today/week/all)
+- Calculates costs using Sonnet 4.5 pricing
+
+**4. API Endpoints:**
+- `/api/agents?usage=true` - All agents with usage data
+- `/api/agents/[name]/usage?range=today|week|all` - Single agent usage
+
+**5. UI Display:**
+- AgentCard: Individual agent usage
+- Agents page: System-wide summary and top consumers
+
+### Architecture
+
+**Core Files:**
+- `src/lib/utils/tokenUsage.ts` - JSONL parsing and aggregation (460 lines)
+- `src/routes/api/agents/[name]/usage/+server.js` - Single agent API (147 lines)
+- `src/routes/api/agents/+server.js` - Orchestration API with ?usage=true (modified)
+- `src/lib/components/agents/AgentCard.svelte` - Per-agent display
+- `src/lib/config/tokenUsageConfig.ts` - Configurable thresholds
+
+**Key Functions:**
+
+```typescript
+// Build session → agent mapping
+buildSessionAgentMap(projectPath): Promise<Map<string, string>>
+
+// Parse single session JSONL file
+parseSessionUsage(sessionId, projectPath): Promise<SessionUsage | null>
+
+// Get usage for specific agent
+getAgentUsage(agentName, timeRange, projectPath): Promise<TokenUsage>
+
+// Get all agents' usage
+getAllAgentUsage(timeRange, projectPath): Promise<Map<string, TokenUsage>>
+
+// Calculate costs (Sonnet 4.5 pricing)
+calculateCost(usage): number
+```
+
+### Configuration
+
+**Thresholds:** `src/lib/config/tokenUsageConfig.ts`
+
+```typescript
+export const TOKEN_THRESHOLDS = {
+  low: 100_000_000,      // Green: < 100M tokens/day (~$300/day)
+  medium: 250_000_000,   // Yellow: 100M-250M tokens/day
+  high: 500_000_000      // Orange: 250M-500M tokens/day
+  // Red: > 500M tokens/day
+};
+
+export const HIGH_USAGE_WARNING_THRESHOLD = TOKEN_THRESHOLDS.high;
+```
+
+**To Customize:**
+1. Edit `tokenUsageConfig.ts` with your preferred thresholds
+2. Reload dashboard (no restart needed)
+3. Colors update automatically
+
+**Example (smaller budget):**
+```typescript
+export const TOKEN_THRESHOLDS = {
+  low: 100_000,      // Green: < 100K tokens/day (~$0.30/day)
+  medium: 500_000,   // Yellow: 100K-500K tokens/day
+  high: 1_000_000    // Orange: 500K-1M tokens/day
+};
+```
+
+### UI Components
+
+**1. AgentCard Token Usage Section:**
+
+Location: After File Locks, before Recent Activity Feed
+
+**Displays:**
+- **Today's Usage:**
+  - Total tokens (color-coded by threshold)
+  - Cost in USD
+  - High usage warning badge (if > threshold)
+- **Week's Usage:**
+  - Total tokens (K/M formatted)
+  - Cost in USD
+  - Session count
+
+**States:**
+- Loading: Skeleton loader
+- Error: Inline error with retry button (3 attempts max)
+- Empty: "No usage data yet" message
+- Success: Usage metrics with color coding
+
+**Color Coding:**
+- Gray: 0 tokens
+- Green: < low threshold (normal usage)
+- Yellow: low - medium threshold (elevated usage)
+- Orange: medium - high threshold (high usage)
+- Red: > high threshold (critical usage)
+
+**2. System Usage Overview (Agents Page):**
+
+Collapsible panel showing:
+- **System Stats:**
+  - Total tokens today (all agents)
+  - Total spend today
+  - Active agent count
+- **Top Agents:**
+  - Top 3 agents by token usage today
+  - Tokens and cost per agent
+
+### Pricing Reference
+
+**Claude Sonnet 4.5 Pricing (per million tokens):**
+- Input: $3.00
+- Cache creation: $3.75
+- Cache read: $0.30 (90% savings!)
+- Output: $15.00
+
+**Cost Examples:**
+- 100K tokens/day ≈ $0.30/day ≈ $9/month
+- 1M tokens/day ≈ $3/day ≈ $90/month
+- 10M tokens/day ≈ $30/day ≈ $900/month
+- 100M tokens/day ≈ $300/day ≈ $9,000/month
+
+**Note:** Actual costs vary based on cache hit rate and input/output ratio.
+
+### Data Sources
+
+**Session Files Location:**
+```
+~/.claude/projects/{project-slug}/{session-id}.jsonl
+```
+
+**Project Slug Format:**
+- Path: `/home/user/code/project` → `-home-user-code-project`
+- Leading `-` is important (don't strip it!)
+
+**Session-Agent Mapping:**
+```
+.claude/agent-{session_id}.txt → "AgentName"
+```
+
+**Example:**
+```bash
+# Session file
+~/.claude/projects/-home-jw-code-jat/abc123-def456.jsonl
+
+# Agent mapping
+.claude/agent-abc123-def456.txt → "WisePrairie"
+
+# Result: All tokens from abc123-def456.jsonl count toward WisePrairie
+```
+
+### API Usage
+
+**Fetch all agents with usage data:**
+```bash
+curl 'http://localhost:5173/api/agents?full=true&usage=true'
+```
+
+**Response:**
+```json
+{
+  "agents": [
+    {
+      "name": "WisePrairie",
+      "usage": {
+        "today": {
+          "total_tokens": 45000,
+          "cost": 0.15,
+          "sessionCount": 1
+        },
+        "week": {
+          "total_tokens": 2500000,
+          "cost": 8.50,
+          "sessionCount": 7
+        }
+      }
+    }
+  ]
+}
+```
+
+**Fetch single agent usage:**
+```bash
+curl 'http://localhost:5173/api/agents/WisePrairie/usage?range=week'
+```
+
+**Response:**
+```json
+{
+  "agent": "WisePrairie",
+  "range": "week",
+  "usage": {
+    "input_tokens": 500000,
+    "cache_creation_input_tokens": 100000,
+    "cache_read_input_tokens": 1500000,
+    "output_tokens": 400000,
+    "total_tokens": 2500000,
+    "cost": 8.50,
+    "sessionCount": 7
+  },
+  "cached": false,
+  "timestamp": "2025-11-21T15:45:00.000Z"
+}
+```
+
+### Caching Strategy
+
+**API Caching:**
+- Single agent endpoint: 60-second TTL
+- All agents endpoint: No caching (parent page handles polling)
+
+**Benefits:**
+- Reduces JSONL parsing overhead
+- Faster response times
+- Lower CPU usage on dashboard server
+
+### Troubleshooting
+
+**Usage data shows zeros or is missing:**
+
+1. **Check session files exist:**
+   ```bash
+   # Find project slug
+   pwd | sed 's/\//\-/g'
+   # Example: /home/jw/code/jat → -home-jw-code-jat
+
+   # Check for JSONL files
+   ls ~/.claude/projects/-home-jw-code-jat/*.jsonl
+   ```
+
+2. **Check agent mapping files:**
+   ```bash
+   ls .claude/agent-*.txt
+   cat .claude/agent-{session-id}.txt
+   ```
+
+3. **Verify project path in API:**
+   - Dashboard uses `process.cwd().replace('/dashboard', '')`
+   - Should resolve to parent project directory
+   - Check server logs for path transformation
+
+4. **Run test script:**
+   ```bash
+   cd dashboard
+   npx tsx test-token-usage.ts
+   ```
+
+**"No usage data yet" on all agents:**
+
+Possible causes:
+- Agents haven't made any API calls yet
+- Session files not in expected location
+- Project path slug mismatch
+
+**High usage warning always shows:**
+
+Adjust threshold in `tokenUsageConfig.ts`:
+```typescript
+export const HIGH_USAGE_WARNING_THRESHOLD = 10_000_000; // 10M tokens
+```
+
+**Colors don't match expectations:**
+
+Check thresholds in `tokenUsageConfig.ts` and adjust to your budget.
+
+### Performance Considerations
+
+**JSONL Parsing:**
+- Each file read: ~50-200ms (depends on size)
+- Caching reduces repeat parses
+- Runs server-side (not blocking UI)
+
+**Typical Performance:**
+- 10 agents, 50 sessions: ~1-2 seconds first load
+- Subsequent loads: <100ms (cached)
+- Page load: Async, doesn't block agent cards
+
+**Optimization Tips:**
+- Keep session file count reasonable (archive old sessions)
+- Use caching (already enabled)
+- Filter by time range to reduce parsing
+
+### Future Enhancements
+
+**Planned (Not Yet Implemented):**
+
+1. **Real-time Usage Tracking:**
+   - WebSocket updates for live token counting
+   - Progress bars showing current session usage
+
+2. **Cost Budgets:**
+   - Per-agent daily/weekly budgets
+   - Alerts when approaching limits
+   - Budget remaining indicators
+
+3. **Historical Trends:**
+   - Usage charts (daily/weekly/monthly)
+   - Cost projections based on trends
+   - Peak usage identification
+
+4. **Export & Reporting:**
+   - CSV export of usage data
+   - Monthly cost reports
+   - Per-project cost breakdown
+
+5. **Cache Efficiency Analysis:**
+   - Cache hit rate display
+   - Cost savings from caching
+   - Cache optimization recommendations
+
+### Files Reference
+
+**Core Implementation:**
+- `src/lib/utils/tokenUsage.ts` - Token aggregation logic (460 lines)
+- `src/lib/config/tokenUsageConfig.ts` - Configurable thresholds (60 lines)
+- `src/routes/api/agents/[name]/usage/+server.js` - Single agent API (147 lines)
+- `src/routes/api/agents/+server.js` - Orchestration API (modified)
+- `src/lib/components/agents/AgentCard.svelte` - Per-agent display (modified)
+- `src/routes/agents/+page.svelte` - System summary (modified)
+
+**Testing:**
+- `test-token-usage.ts` - Manual test script (95 lines)
+
+**Documentation:**
+- `dashboard/CLAUDE.md` - This section
+
+**Task References:**
+- jat-naq: Create tokenUsage.ts utility module (completed)
+- jat-v0w: Create usage API endpoint (completed)
+- jat-1n0: Enhance API orchestration (completed)
+- jat-oig: Display token usage on AgentCard (completed)
+- jat-1q7: Document per-agent token tracking (this section)
+
 ## Development Commands
 
 ```bash
