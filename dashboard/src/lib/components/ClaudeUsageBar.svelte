@@ -20,6 +20,7 @@
 	let showDetails = $state(false);
 	let metrics = $state<ClaudeUsageMetrics | null>(null);
 	let isLoading = $state(true);
+	let activeTab = $state<'api-limits' | 'subscription-usage'>('api-limits');
 
 	// Fetch metrics from API endpoint (server-side)
 	async function loadMetrics() {
@@ -61,6 +62,11 @@
 	function formatPercentage(used: number, total: number): string {
 		if (total === 0) return '0%';
 		return `${Math.round((used / total) * 100)}%`;
+	}
+
+	// Tab change handler
+	function handleTabChange(tab: 'api-limits' | 'subscription-usage') {
+		activeTab = tab;
 	}
 
 	// Derived values
