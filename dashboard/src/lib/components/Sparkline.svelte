@@ -33,6 +33,8 @@
 		colorMode?: 'usage' | 'static';
 		/** Static color when colorMode='static' */
 		staticColor?: string;
+		/** Show style toolbar (default: true) */
+		showStyleToolbar?: boolean;
 	}
 
 	let {
@@ -42,13 +44,16 @@
 		showTooltip = true,
 		showGrid = false,
 		colorMode = 'usage',
-		staticColor = 'oklch(var(--p))'
+		staticColor = 'oklch(var(--p))',
+		showStyleToolbar = true
 	}: Props = $props();
 
 	// ============================================================================
 	// State
 	// ============================================================================
 
+	type ChartStyle = 'smooth' | 'linear' | 'area' | 'step';
+	let chartStyle = $state<ChartStyle>('smooth');
 	let hoveredIndex = $state<number | null>(null);
 	let tooltipX = $state(0);
 	let tooltipY = $state(0);
@@ -99,21 +104,58 @@
 			return { x, y };
 		});
 
-		// Build path string (smooth curve using cubic bezier)
 		let path = `M ${points[0].x},${points[0].y}`;
 
-		for (let i = 1; i < points.length; i++) {
-			const prev = points[i - 1];
-			const curr = points[i];
-
-			// Control points for smooth curve
-			const cpX1 = prev.x + (curr.x - prev.x) / 3;
-			const cpY1 = prev.y;
-			const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
-			const cpY2 = curr.y;
-
-			path += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${curr.x},${curr.y}`;
+		if (chartStyle === 'smooth') {
+			// Smooth curve using cubic bezier
+			for (let i = 1; i < points.length; i++) {
+				const prev = points[i - 1];
+				const curr = points[i];
+				const cpX1 = prev.x + (curr.x - prev.x) / 3;
+				const cpY1 = prev.y;
+				const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
+				const cpY2 = curr.y;
+				path += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${curr.x},${curr.y}`;
+			}
+		} else if (chartStyle === 'linear') {
+			// Straight lines between points
+			for (let i = 1; i < points.length; i++) {
+				path += ` L ${points[i].x},${points[i].y}`;
+			}
+		} else if (chartStyle === 'step') {
+			// Step function (horizontal then vertical)
+			for (let i = 1; i < points.length; i++) {
+				const prev = points[i - 1];
+				const curr = points[i];
+				path += ` H ${curr.x} V ${curr.y}`;
+			}
 		}
+
+		return path;
+	});
+
+	/** Generate area path (for area chart style) */
+	const areaPath = $derived.by(() => {
+		if (!data || data.length === 0 || chartStyle !== 'area') return '';
+
+		const points = data.map((point, index) => {
+			const x = padding + (index / (data.length - 1 || 1)) * (viewBoxWidth - 2 * padding);
+			const y = scaleY(point.tokens);
+			return { x, y };
+		});
+
+		// Build area path (line + fill to bottom)
+		let path = `M ${points[0].x},${viewBoxHeight - padding}`;
+		path += ` L ${points[0].x},${points[0].y}`;
+
+		// Top line
+		for (let i = 1; i < points.length; i++) {
+			path += ` L ${points[i].x},${points[i].y}`;
+		}
+
+		// Close path at bottom
+		path += ` L ${points[points.length - 1].x},${viewBoxHeight - padding}`;
+		path += ` Z`;
 
 		return path;
 	});
@@ -207,6 +249,48 @@
 </script>
 
 <div class="sparkline-container" style="width: {typeof width === 'number' ? width + 'px' : width};">
+	<!-- Style Toolbar -->
+	{#if showStyleToolbar}
+		<div class="sparkline-toolbar">
+			<button
+				class="btn btn-xs btn-ghost {chartStyle === 'smooth' ? 'btn-active' : ''}"
+				onclick={() => (chartStyle = 'smooth')}
+				title="Smooth curve"
+			>
+				<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M3 12 C6 6, 18 6, 21 12" />
+				</svg>
+			</button>
+			<button
+				class="btn btn-xs btn-ghost {chartStyle === 'linear' ? 'btn-active' : ''}"
+				onclick={() => (chartStyle = 'linear')}
+				title="Linear"
+			>
+				<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M3 18 L9 12 L15 15 L21 6" />
+				</svg>
+			</button>
+			<button
+				class="btn btn-xs btn-ghost {chartStyle === 'area' ? 'btn-active' : ''}"
+				onclick={() => (chartStyle = 'area')}
+				title="Area chart"
+			>
+				<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
+					<path d="M3 18 L9 12 L15 15 L21 6 L21 18 Z" opacity="0.5" />
+				</svg>
+			</button>
+			<button
+				class="btn btn-xs btn-ghost {chartStyle === 'step' ? 'btn-active' : ''}"
+				onclick={() => (chartStyle = 'step')}
+				title="Step function"
+			>
+				<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M3 18 H9 V12 H15 V15 H21 V6" />
+				</svg>
+			</button>
+		</div>
+	{/if}
+
 	<svg
 		bind:this={svgElement}
 		viewBox="0 0 {viewBoxWidth} {viewBoxHeight}"
@@ -231,14 +315,29 @@
 
 		<!-- Sparkline path -->
 		{#if data && data.length > 0}
-			<path
-				d={pathData}
-				fill="none"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				style="stroke: {lineColor}; transition: stroke 0.3s ease, d 0.3s ease;"
-			/>
+			{#if chartStyle === 'area'}
+				<!-- Area chart (filled) -->
+				<path
+					d={areaPath}
+					fill={lineColor}
+					fill-opacity="0.2"
+					stroke={lineColor}
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					style="transition: fill 0.3s ease, stroke 0.3s ease, d 0.3s ease;"
+				/>
+			{:else}
+				<!-- Line chart (smooth, linear, or step) -->
+				<path
+					d={pathData}
+					fill="none"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					style="stroke: {lineColor}; transition: stroke 0.3s ease, d 0.3s ease;"
+				/>
+			{/if}
 
 			<!-- Hover indicator -->
 			{#if hoveredIndex !== null}
@@ -271,6 +370,25 @@
 	.sparkline-container {
 		position: relative;
 		display: inline-block;
+	}
+
+	.sparkline-toolbar {
+		position: absolute;
+		top: 0;
+		right: 0;
+		z-index: 10;
+		display: flex;
+		gap: 0.125rem;
+		padding: 0.25rem;
+		background: oklch(var(--b1) / 0.8);
+		backdrop-filter: blur(4px);
+		border-radius: 0.375rem;
+		opacity: 0.6;
+		transition: opacity 0.2s ease;
+	}
+
+	.sparkline-toolbar:hover {
+		opacity: 1;
 	}
 
 	svg {

@@ -234,12 +234,9 @@
 <div class="flex flex-col h-full">
 	<!-- Header -->
 	<div class="p-4 border-b border-base-300">
-		<h2 class="text-lg font-semibold text-base-content mb-3">Task Queue</h2>
-
-		<!-- Search -->
 		<input
 			type="text"
-			placeholder="Search tasks..."
+			placeholder="Search {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}..."
 			class="input input-bordered input-sm w-full mb-3"
 			bind:value={searchQuery}
 			oninput={() => updateURL()}
@@ -414,17 +411,6 @@
 				</div>
 			</div>
 		{/if}
-
-		<!-- Task Count -->
-		<div class="mt-3 text-sm text-base-content/70">
-			{filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
-			{#if filteredTasks.length !== tasks.length}
-				of {tasks.length} total
-			{/if}
-			{#if selectedProject !== 'All Projects'}
-				<span class="text-base-content/50"> (project: {selectedProject})</span>
-			{/if}
-		</div>
 	</div>
 
 	<!-- Task List -->
@@ -464,21 +450,21 @@
 					onclick={() => handleTaskClick(task.id)}
 					title={depStatus.hasBlockers ? `⚠️ ${depStatus.blockingReason}` : ''}
 				>
-					<div class="card-body p-3">
+					<div class="card-body p-3 relative">
+						<!-- Badges positioned at top border -->
+						<div class="absolute -top-2 right-2 flex items-center gap-1">
+							<DependencyIndicator {task} allTasks={tasks} size="sm" />
+							<span class="badge badge-sm {getPriorityBadge(task.priority)}">
+								P{task.priority}
+							</span>
+						</div>
+
 						<!-- Task Header -->
-						<div class="flex items-start justify-between gap-2 mb-2">
-							<div class="flex-1 min-w-0">
-								<h3 class="font-medium text-sm text-base-content truncate" title={task.title}>
-									{task.title}
-								</h3>
-								<p class="text-xs text-base-content/50 font-mono">{task.id}</p>
-							</div>
-							<div class="flex items-center gap-1">
-								<DependencyIndicator {task} allTasks={tasks} size="sm" />
-								<span class="badge badge-sm {getPriorityBadge(task.priority)}">
-									P{task.priority}
-								</span>
-							</div>
+						<div class="mb-2">
+							<h3 class="font-medium text-sm text-base-content truncate" title={task.title}>
+								{task.title}
+							</h3>
+							<p class="text-xs text-base-content/50 font-mono">{task.id}</p>
 						</div>
 
 						<!-- Task Description (truncated) -->
