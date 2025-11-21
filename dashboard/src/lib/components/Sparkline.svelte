@@ -66,6 +66,12 @@
 	let customDateTo = $state<string>(''); // Custom date range end (YYYY-MM-DD)
 	let showCustomDatePicker = $state(false); // Show custom date inputs
 
+	// Options toggles
+	let internalShowGrid = $state(showGrid); // Internal grid toggle state
+	let smoothCurves = $state(true); // Enable bezier curve smoothing
+	let internalColorMode = $state<'usage' | 'static'>(colorMode); // Internal color mode state
+	let enableAnimations = $state(true); // Enable transitions
+
 	// ============================================================================
 	// Computed Values
 	// ============================================================================
@@ -160,15 +166,22 @@
 
 		let path = `M ${points[0].x},${points[0].y}`;
 
-		// Smooth curve using cubic bezier for all themes
-		for (let i = 1; i < points.length; i++) {
-			const prev = points[i - 1];
-			const curr = points[i];
-			const cpX1 = prev.x + (curr.x - prev.x) / 3;
-			const cpY1 = prev.y;
-			const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
-			const cpY2 = curr.y;
-			path += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${curr.x},${curr.y}`;
+		if (smoothCurves) {
+			// Smooth curve using cubic bezier
+			for (let i = 1; i < points.length; i++) {
+				const prev = points[i - 1];
+				const curr = points[i];
+				const cpX1 = prev.x + (curr.x - prev.x) / 3;
+				const cpY1 = prev.y;
+				const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
+				const cpY2 = curr.y;
+				path += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${curr.x},${curr.y}`;
+			}
+		} else {
+			// Straight lines
+			for (let i = 1; i < points.length; i++) {
+				path += ` L ${points[i].x},${points[i].y}`;
+			}
 		}
 
 		return path;
@@ -176,7 +189,7 @@
 
 	/** Calculate color for a specific data point based on relative position in range */
 	function getColorForValue(tokens: number): string {
-		if (colorMode === 'static') {
+		if (internalColorMode === 'static') {
 			return staticColor;
 		}
 
@@ -342,155 +355,127 @@
 	}
 </script>
 
-<div class="sparkline-container" style="width: {typeof width === 'number' ? width + 'px' : width};">
-	<!-- Compact Badge with Hover-to-Expand Controls -->
-	{#if showStyleToolbar}
+<div
+	class="sparkline-container"
+	style="width: {typeof width === 'number' ? width + 'px' : width};"
+	onmouseenter={() => showStyleToolbar && (showControls = true)}
+	onmouseleave={() => (showControls = false)}
+	role="group"
+	aria-label="Interactive sparkline chart"
+>
+	<!-- Expanded Controls Panel (Hover State) -->
+	{#if showStyleToolbar && showControls}
 		<div
-			class="sparkline-badge-container"
-			role="button"
-			tabindex="0"
-			onmouseenter={() => (showControls = true)}
-			onmouseleave={() => (showControls = false)}
-			onfocus={() => (showControls = true)}
-			onblur={() => (showControls = false)}
-			aria-label="Sparkline controls - hover to expand"
+			class="sparkline-controls-panel"
+			transition:slide={{ duration: 200 }}
 		>
-			<!-- Compact Badge (Always Visible) -->
-			<button class="badge badge-sm gap-1.5 px-2 py-2 badge-ghost hover:badge-primary transition-all">
-				<!-- Time Range -->
-				<span class="font-mono text-xs font-semibold">
-					{timeRangeLabel()}
-				</span>
+			<div class="p-2 bg-base-200 rounded-lg shadow-lg border border-base-300 space-y-3">
+				<!-- Chart Type Section -->
+				<div>
+					<div class="text-xs font-semibold mb-1.5 text-base-content/70">Chart Type</div>
+					<div class="flex items-center gap-1">
+						<button
+							class="btn btn-xs {chartType === 'line' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'line')}
+							title="Line chart"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+								<path d="M2 12 L5 8 L8 10 L14 4" stroke-linecap="round" />
+							</svg>
+						</button>
+						<button
+							class="btn btn-xs {chartType === 'bars' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'bars')}
+							title="Bar chart"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+								<rect x="1" y="8" width="2" height="6" />
+								<rect x="4" y="4" width="2" height="10" />
+								<rect x="7" y="6" width="2" height="8" />
+								<rect x="10" y="2" width="2" height="12" />
+								<rect x="13" y="5" width="2" height="9" />
+							</svg>
+						</button>
+						<button
+							class="btn btn-xs {chartType === 'area' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'area')}
+							title="Area chart"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" opacity="0.6">
+								<path d="M2 14 L2 12 L5 8 L8 10 L14 4 L14 14 Z" />
+							</svg>
+						</button>
+						<button
+							class="btn btn-xs {chartType === 'dots' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'dots')}
+							title="Dot plot"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+								<circle cx="2" cy="12" r="1.5" />
+								<circle cx="5" cy="8" r="1.5" />
+								<circle cx="8" cy="10" r="1.5" />
+								<circle cx="11" cy="6" r="1.5" />
+								<circle cx="14" cy="4" r="1.5" />
+							</svg>
+						</button>
+					</div>
+				</div>
 
-				<!-- Separator -->
-				<span class="text-base-content/40">·</span>
-
-				<!-- Chart Type Icon -->
-				<svg
-					class="w-3 h-3"
-					viewBox="0 0 16 16"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.5"
-					stroke-linecap="round"
-				>
-					<path d={chartIconPath()} />
-				</svg>
-			</button>
-
-			<!-- Expanded Controls Panel (Hover State) -->
-			{#if showControls}
-				<div
-					class="sparkline-controls-panel"
-					transition:slide={{ duration: 200 }}
-				>
-					<div class="p-2 bg-base-200 rounded-lg shadow-lg border border-base-300 space-y-3">
-						<!-- Chart Type Section -->
-						<div>
-							<div class="text-xs font-semibold mb-1.5 text-base-content/70">Chart Type</div>
-							<div class="flex items-center gap-1">
-								<button
-									class="btn btn-xs {chartType === 'line' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => (chartType = 'line')}
-									title="Line chart"
-								>
-									<svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-										<path d="M2 12 L5 8 L8 10 L14 4" stroke-linecap="round" />
-									</svg>
-								</button>
-								<button
-									class="btn btn-xs {chartType === 'bars' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => (chartType = 'bars')}
-									title="Bar chart"
-								>
-									<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-										<rect x="1" y="8" width="2" height="6" />
-										<rect x="4" y="4" width="2" height="10" />
-										<rect x="7" y="6" width="2" height="8" />
-										<rect x="10" y="2" width="2" height="12" />
-										<rect x="13" y="5" width="2" height="9" />
-									</svg>
-								</button>
-								<button
-									class="btn btn-xs {chartType === 'area' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => (chartType = 'area')}
-									title="Area chart"
-								>
-									<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" opacity="0.6">
-										<path d="M2 14 L2 12 L5 8 L8 10 L14 4 L14 14 Z" />
-									</svg>
-								</button>
-								<button
-									class="btn btn-xs {chartType === 'dots' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => (chartType = 'dots')}
-									title="Dot plot"
-								>
-									<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-										<circle cx="2" cy="12" r="1.5" />
-										<circle cx="5" cy="8" r="1.5" />
-										<circle cx="8" cy="10" r="1.5" />
-										<circle cx="11" cy="6" r="1.5" />
-										<circle cx="14" cy="4" r="1.5" />
-									</svg>
-								</button>
-							</div>
-						</div>
-
-						<!-- Time Range Section -->
-						<div>
-							<div class="text-xs font-semibold mb-1.5 text-base-content/70">Time Range</div>
-							<div class="flex items-center gap-1 flex-wrap">
-								<button
-									class="btn btn-xs {timeRange === '1h' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => {
-										timeRange = '1h';
-										showCustomDatePicker = false;
-									}}
-									title="Last 1 hour"
-								>
-									1hr
-								</button>
-								<button
-									class="btn btn-xs {timeRange === '24h' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => {
-										timeRange = '24h';
-										showCustomDatePicker = false;
-									}}
-									title="Last 24 hours"
-								>
-									24hr
-								</button>
-								<button
-									class="btn btn-xs {timeRange === '7d' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => {
-										timeRange = '7d';
-										showCustomDatePicker = false;
-									}}
-									title="Last 7 days"
-								>
-									7d
-								</button>
-								<button
-									class="btn btn-xs {timeRange === '30d' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => {
-										timeRange = '30d';
-										showCustomDatePicker = false;
-									}}
-									title="Last 30 days"
-								>
-									30d
-								</button>
-								<button
-									class="btn btn-xs {timeRange === 'all' ? 'btn-primary' : 'btn-ghost'}"
-									onclick={() => {
-										timeRange = 'all';
-										showCustomDatePicker = false;
-									}}
-									title="All time"
-								>
-									All
-								</button>
-								<button
+				<!-- Time Range Section -->
+				<div>
+					<div class="text-xs font-semibold mb-1.5 text-base-content/70">Time Range</div>
+					<div class="flex items-center gap-1 flex-wrap">
+						<button
+							class="btn btn-xs {timeRange === '1h' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => {
+								timeRange = '1h';
+								showCustomDatePicker = false;
+							}}
+							title="Last 1 hour"
+						>
+							1hr
+						</button>
+						<button
+							class="btn btn-xs {timeRange === '24h' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => {
+								timeRange = '24h';
+								showCustomDatePicker = false;
+							}}
+							title="Last 24 hours"
+						>
+							24hr
+						</button>
+						<button
+							class="btn btn-xs {timeRange === '7d' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => {
+								timeRange = '7d';
+								showCustomDatePicker = false;
+							}}
+							title="Last 7 days"
+						>
+							7d
+						</button>
+						<button
+							class="btn btn-xs {timeRange === '30d' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => {
+								timeRange = '30d';
+								showCustomDatePicker = false;
+							}}
+							title="Last 30 days"
+						>
+							30d
+						</button>
+						<button
+							class="btn btn-xs {timeRange === 'all' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => {
+								timeRange = 'all';
+								showCustomDatePicker = false;
+							}}
+							title="All time"
+						>
+							All
+						</button>
+						<button
 									class="btn btn-xs {timeRange === 'custom' ? 'btn-primary' : 'btn-ghost'}"
 									onclick={handleCustomRangeClick}
 									title="Custom date range"
@@ -541,9 +526,64 @@
 								</div>
 							{/if}
 						</div>
-					</div>
-				</div>
-			{/if}
+
+						<!-- Options Section -->
+						<div>
+							<div class="text-xs font-semibold mb-1.5 text-base-content/70">Options</div>
+							<div class="space-y-1">
+								<!-- Show Grid Toggle -->
+								<label class="label cursor-pointer py-1 justify-between">
+									<span class="label-text text-xs">Show grid</span>
+									<input
+										type="checkbox"
+										class="checkbox checkbox-xs"
+										bind:checked={internalShowGrid}
+									/>
+								</label>
+
+								<!-- Smooth Curves Toggle -->
+								<label class="label cursor-pointer py-1 justify-between">
+									<span class="label-text text-xs">Smooth curves</span>
+									<input
+										type="checkbox"
+										class="checkbox checkbox-xs"
+										bind:checked={smoothCurves}
+									/>
+								</label>
+
+								<!-- Color Mode Toggle -->
+								<label class="label cursor-pointer py-1 justify-between">
+									<span class="label-text text-xs">Color mode</span>
+									<div class="flex items-center gap-1">
+										<button
+											class="btn btn-xs {internalColorMode === 'usage' ? 'btn-primary' : 'btn-ghost'}"
+											onclick={() => (internalColorMode = 'usage')}
+											title="Usage-based threshold colors"
+										>
+											Usage
+										</button>
+										<button
+											class="btn btn-xs {internalColorMode === 'static' ? 'btn-primary' : 'btn-ghost'}"
+											onclick={() => (internalColorMode = 'static')}
+											title="Single static color"
+										>
+											Static
+										</button>
+									</div>
+								</label>
+
+								<!-- Enable Animations Toggle -->
+								<label class="label cursor-pointer py-1 justify-between">
+									<span class="label-text text-xs">Enable animations</span>
+									<input
+										type="checkbox"
+										class="checkbox checkbox-xs"
+										bind:checked={enableAnimations}
+									/>
+								</label>
+							</div>
+						</div>
+			</div>
 		</div>
 	{/if}
 
@@ -558,7 +598,7 @@
 		aria-label="Token usage sparkline"
 	>
 		<!-- Optional grid lines -->
-		{#if showGrid}
+		{#if internalShowGrid}
 			<line
 				x1={padding}
 				y1={viewBoxHeight / 2}
@@ -579,7 +619,7 @@
 					stroke-width="2"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					style="stroke: {lineColor}; transition: stroke 0.3s ease, d 0.3s ease;"
+					style="stroke: {lineColor}; {enableAnimations ? 'transition: stroke 0.3s ease, d 0.3s ease;' : ''}"
 				/>
 			{:else if chartType === 'bars'}
 				<!-- Bar chart (equalizer style) -->
@@ -597,7 +637,7 @@
 						fill={color}
 						opacity="0.9"
 						rx="0.5"
-						style="transition: fill 0.3s ease, height 0.3s ease;"
+						style="{enableAnimations ? 'transition: fill 0.3s ease, height 0.3s ease;' : ''}"
 					/>
 				{/each}
 			{:else if chartType === 'area'}
@@ -615,7 +655,7 @@
 					stroke-width="2"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					style="transition: fill 0.3s ease, stroke 0.3s ease, d 0.3s ease;"
+					style="{enableAnimations ? 'transition: fill 0.3s ease, stroke 0.3s ease, d 0.3s ease;' : ''}"
 				/>
 			{:else if chartType === 'dots'}
 				<!-- Dot plot (small squares to avoid aspect ratio stretch) -->
@@ -631,7 +671,7 @@
 						fill={color}
 						opacity="1"
 						rx="0.5"
-						style="transition: fill 0.3s ease, y 0.3s ease;"
+						style="{enableAnimations ? 'transition: fill 0.3s ease, y 0.3s ease;' : ''}"
 					/>
 				{/each}
 			{/if}
@@ -667,15 +707,6 @@
 	.sparkline-container {
 		position: relative;
 		display: inline-block;
-	}
-
-	.sparkline-badge-container {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		justify-content: flex-end;
-		margin-bottom: 0.25rem;
-		width: 100%;
 	}
 
 	.sparkline-controls-panel {
