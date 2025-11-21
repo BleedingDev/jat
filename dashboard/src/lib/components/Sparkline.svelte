@@ -558,26 +558,36 @@
 						<!-- Options Section -->
 						<div>
 							<div class="text-xs font-semibold mb-1.5 text-base-content/70">Options</div>
-							<div class="space-y-1">
+							<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
 								<!-- Show Grid Toggle -->
-								<label class="label cursor-pointer py-1 justify-between">
-									<span class="label-text text-xs">Show grid</span>
-									<input
-										type="checkbox"
-										class="checkbox checkbox-xs"
-										bind:checked={internalShowGrid}
-									/>
-								</label>
+								<button
+									class="badge badge-sm transition-all duration-200 cursor-pointer {internalShowGrid ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+									onclick={() => (internalShowGrid = !internalShowGrid)}
+									title="Toggle grid lines"
+								>
+									{#if internalShowGrid}
+										<svg class="w-3 h-3 mr-1" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+											<path d="M2 2 L2 14 L14 14" stroke-linecap="round" />
+											<path d="M2 6 L14 6 M2 10 L14 10" stroke-linecap="round" stroke-dasharray="1 2" opacity="0.5" />
+										</svg>
+									{/if}
+									Grid
+								</button>
 
 								<!-- Smooth Curves Toggle -->
-								<label class="label cursor-pointer py-1 justify-between">
-									<span class="label-text text-xs">Smooth curves</span>
-									<input
-										type="checkbox"
-										class="checkbox checkbox-xs"
-										bind:checked={smoothCurves}
-									/>
-								</label>
+								<button
+									class="badge badge-sm transition-all duration-200 cursor-pointer {smoothCurves ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+									onclick={() => (smoothCurves = !smoothCurves)}
+									title="Toggle smooth curves"
+								>
+									{#if smoothCurves}
+										<svg class="w-3 h-3 mr-1" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+											<path d="M2 12 Q5 8, 8 10 T14 4" stroke-linecap="round" />
+										</svg>
+									{/if}
+									Smooth
+								</button>
+							</div>
 
 								<!-- Color Mode Section -->
 								<div class="space-y-2">
