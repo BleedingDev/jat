@@ -149,7 +149,7 @@
 	});
 
 	/** Hovered data point */
-	const hoveredPoint = $derived(() => {
+	const hoveredPoint = $derived.by(() => {
 		if (hoveredIndex === null || !data) return null;
 		return data[hoveredIndex];
 	});
@@ -175,6 +175,16 @@
 		hoveredIndex = clampedIndex;
 		tooltipX = event.clientX;
 		tooltipY = event.clientY;
+
+		// Debug: Log the hovered data point
+		const point = data[clampedIndex];
+		console.log('[Sparkline] Hovered point:', {
+			index: clampedIndex,
+			point,
+			timestamp: point?.timestamp,
+			tokens: point?.tokens,
+			cost: point?.cost
+		});
 	}
 
 	/**
