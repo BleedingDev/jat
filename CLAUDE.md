@@ -722,6 +722,86 @@ am-inbox AgentName --unread --hide-acked                            # Cleanest v
 am-inbox AgentName --hide-acked --thread task-abc                   # Unacked messages in specific thread
 ```
 
+### Broadcast Messaging: Examples and Best Practices
+
+Agent Mail supports broadcast messaging for multi-agent coordination. See `~/.claude/CLAUDE.md` for comprehensive broadcast documentation.
+
+**Quick Examples:**
+
+**1. Deploy coordination:**
+```bash
+am-send "Deploy: T-5min" \
+  "Deployment starting in 5min. Pause work." \
+  --from DeployBot --to @active --active-window 30 --importance urgent --ttl 600 --ack-required
+```
+
+**2. Project announcement:**
+```bash
+am-send "Feature ready" \
+  "New API available in feature/user-auth branch." \
+  --from Lead --to @project:jat --thread feature-user-auth
+```
+
+**3. Urgent all-hands:**
+```bash
+am-send "URGENT: Production down" \
+  "All agents pause work immediately." \
+  --from Monitor --to @all --importance urgent --ack-required --thread incident-2025
+```
+
+**4. Standup (short window):**
+```bash
+am-send "Standup in 5min" \
+  "Daily standup starting soon." \
+  --from Scrum --to @active --active-window 15 --ttl 600
+```
+
+**5. PR review (mixed recipients):**
+```bash
+am-send "PR review needed" \
+  "Critical fix ready for review." \
+  --from Dev --to @active,SeniorDev --thread pr-1234 --ack-required
+```
+
+**6. Checking and acknowledging:**
+```bash
+# Clean inbox view (hide acknowledged broadcasts)
+am-inbox AgentName --unread --hide-acked
+
+# Acknowledge broadcast
+am-ack MSG_ID --agent AgentName
+
+# Batch acknowledge all unread
+am-inbox AgentName --unread --json | jq -r '.[].id' | xargs -I {} am-ack {} --agent AgentName
+```
+
+**Best Practices Summary:**
+- **@active** for time-sensitive coordination (deployments, incidents)
+- **@project:name** for project-specific updates
+- **@all** only for critical system-wide alerts (use sparingly)
+- Set appropriate TTLs: short (300-600s) for immediate, long (3600s+) for extended
+- Use --ack-required for critical messages requiring confirmation
+- Combine with thread_id for context and conversation tracking
+- Use --active-window to control recipient freshness (default: 60 min)
+
+**Common Patterns:**
+```bash
+# Deployment: Before, during, after
+am-send "Deploy: T-5min" "..." --to @active --ttl 600 --ack-required
+am-send "Deploy: In progress" "..." --to @active --thread deploy-X
+am-send "Deploy: Complete" "..." --to @active --thread deploy-X
+
+# Incident: Alert, updates, resolution
+am-send "INCIDENT: DB down" "..." --to @all --ack-required --thread incident-X
+am-reply MSG_ID "Update: investigating" --agent Lead
+am-send "RESOLVED: DB restored" "..." --to @all --thread incident-X
+
+# Handoff: Notify active + specific expert
+am-send "Handoff needed" "..." --to @active,Expert --thread task-123
+```
+
+For complete broadcast documentation, examples, and detailed best practices, see: `~/.claude/CLAUDE.md` → "Broadcast Messaging: Examples and Best Practices"
+
 ## Database Tools
 
 ```bash
