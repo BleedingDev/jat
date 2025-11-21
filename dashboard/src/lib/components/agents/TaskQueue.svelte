@@ -284,7 +284,7 @@
 								}
 							}}
 						>
-							{status} <span class="ml-1 opacity-70">({tasks.filter((task) => task.status === status).length})</span>
+							{status} <span class="opacity-70">{tasks.filter((task) => task.status === status).length}</span>
 						</button>
 					{/each}
 				</div>
@@ -308,7 +308,7 @@
 									}
 								}}
 							>
-								{type} <span class="ml-1 opacity-70">({tasks.filter((task) => task.issue_type === type).length})</span>
+								{type} <span class="ml-0.5 opacity-70">{tasks.filter((task) => task.issue_type === type).length}</span>
 							</button>
 						{/each}
 					</div>
