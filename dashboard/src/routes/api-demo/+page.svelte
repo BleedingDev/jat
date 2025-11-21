@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { agents as agentsStore } from '$lib/stores/agents.svelte';
-	import ThemeSelector from '$lib/components/ThemeSelector.svelte';
+	import Nav from '$lib/components/Nav.svelte';
 
 	// Reactive state derived from agents store
 	const agents = $derived(agentsStore.agents);
@@ -49,21 +49,7 @@
 </script>
 
 <div class="min-h-screen bg-base-200">
-	<!-- Header -->
-	<div class="navbar bg-base-100 border-b border-base-300">
-		<div class="flex-1">
-			<div>
-				<h1 class="text-2xl font-bold text-base-content">Agents API Demo</h1>
-				<p class="text-sm text-base-content/70">
-					Live integration showcase for /api/agents endpoint + reactive store
-				</p>
-			</div>
-		</div>
-		<div class="flex-none gap-2">
-			<a href="/" class="btn btn-sm btn-ghost">← Back to Dashboard</a>
-			<ThemeSelector />
-		</div>
-	</div>
+	<Nav context="api-demo" />
 
 	<div class="container mx-auto p-4 space-y-6">
 		<!-- Status Banner -->

@@ -22,6 +22,7 @@
 	import ThemeSelector from './ThemeSelector.svelte';
 	import ProjectSelector from './ProjectSelector.svelte';
 	import Breadcrumbs from './Breadcrumbs.svelte';
+	import UserProfile from './UserProfile.svelte';
 
 	interface Props {
 		context: 'home' | 'agents' | 'api-demo';
@@ -175,5 +176,8 @@
 
 		<!-- Theme Selector -->
 		<ThemeSelector />
+
+		<!-- User Profile -->
+		<UserProfile />
 	</div>
 </div>

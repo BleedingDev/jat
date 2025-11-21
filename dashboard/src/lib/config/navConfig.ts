@@ -9,12 +9,18 @@ export interface ViewToggleOption {
 	link?: string; // For cross-page navigation (e.g., List View → /)
 }
 
+export interface BreadcrumbItem {
+	label: string;
+	href?: string; // Omit for current page (last item)
+}
+
 export interface NavConfig {
 	title: string;
 	subtitle: string;
 	viewToggle?: ViewToggleOption[];
 	showProjectFilter?: boolean;
 	showThemeSelector?: boolean;
+	breadcrumbs?: BreadcrumbItem[]; // Navigation path
 }
 
 // Home Page (List View)
@@ -26,7 +32,10 @@ export const homeConfig: NavConfig = {
 		{ value: 'graph', label: 'Graph' }
 	],
 	showProjectFilter: false,
-	showThemeSelector: true
+	showThemeSelector: true,
+	breadcrumbs: [
+		{ label: 'Home' } // Current page, no href
+	]
 };
 
 // Agents Page (Agent View)
@@ -38,7 +47,11 @@ export const agentsConfig: NavConfig = {
 		{ value: 'agents', label: 'Agent View', link: '/agents' }
 	],
 	showProjectFilter: true,
-	showThemeSelector: true
+	showThemeSelector: true,
+	breadcrumbs: [
+		{ label: 'Home', href: '/' },
+		{ label: 'Agents' } // Current page
+	]
 };
 
 // API Demo Page
@@ -47,5 +60,9 @@ export const apiDemoConfig: NavConfig = {
 	subtitle: 'Live integration showcase for /api/agents endpoint + reactive store',
 	viewToggle: undefined, // No view toggle on this page
 	showProjectFilter: false,
-	showThemeSelector: true
+	showThemeSelector: true,
+	breadcrumbs: [
+		{ label: 'Home', href: '/' },
+		{ label: 'API Demo' } // Current page
+	]
 };
