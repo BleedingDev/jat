@@ -61,7 +61,7 @@
 		showTooltip = true,
 		showGrid = false,
 		colorMode = 'usage',
-		staticColor = 'hsl(var(--p))',
+		staticColor = '#3b82f6',
 		showStyleToolbar = true,
 		defaultTimeRange = '24h',
 		defaultColorMode = 'usage'
@@ -210,7 +210,7 @@
 			return staticColor;
 		}
 
-		if (!filteredData || filteredData.length === 0) return 'hsl(var(--p))'; // Primary color
+		if (!filteredData || filteredData.length === 0) return '#3b82f6'; // Primary blue
 
 		// Use relative thresholds based on actual data range
 		const allTokens = filteredData.map((d) => d.tokens);
@@ -221,16 +221,16 @@
 		// Calculate percentile position (0-100)
 		const percentile = range > 0 ? ((tokens - min) / range) * 100 : 50;
 
-		// Theme-based color gradient using DaisyUI color classes
-		if (percentile < 25) return 'hsl(var(--su))'; // Success (green) - bottom 25%
-		if (percentile < 50) return 'hsl(var(--in))'; // Info (blue) - 25-50%
-		if (percentile < 75) return 'hsl(var(--wa))'; // Warning (orange) - 50-75%
-		return 'hsl(var(--er))'; // Error (red) - top 25%
+		// Color gradient using direct hex values
+		if (percentile < 25) return '#10b981'; // Green - bottom 25%
+		if (percentile < 50) return '#3b82f6'; // Blue - 25-50%
+		if (percentile < 75) return '#f59e0b'; // Orange - 50-75%
+		return '#ef4444'; // Red - top 25%
 	}
 
 	/** Calculate line color based on average usage */
 	const lineColor = $derived.by(() => {
-		if (!filteredData || filteredData.length === 0) return 'hsl(var(--p))'; // Primary color
+		if (!filteredData || filteredData.length === 0) return '#3b82f6'; // Primary blue
 		const avgTokens = filteredData.reduce((sum, d) => sum + d.tokens, 0) / filteredData.length;
 		return getColorForValue(avgTokens);
 	});
@@ -748,8 +748,8 @@
 
 	.sparkline-tooltip {
 		position: fixed;
-		background: hsl(var(--b1));
-		border: 1px solid hsl(var(--bc) / 0.2);
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.1);
 		border-radius: 0.375rem;
 		padding: 0.5rem;
 		pointer-events: none;
@@ -757,6 +757,7 @@
 		box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 		transform: translate(-50%, -100%);
 		white-space: nowrap;
+		color: #1f2937;
 	}
 
 	.sparkline-tooltip::after {
@@ -766,6 +767,6 @@
 		left: 50%;
 		transform: translateX(-50%);
 		border: 6px solid transparent;
-		border-top-color: hsl(var(--b1));
+		border-top-color: white;
 	}
 </style>
