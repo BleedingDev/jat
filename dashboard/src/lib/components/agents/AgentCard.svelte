@@ -1,5 +1,6 @@
 <script>
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
+	import { getTokenColorClass, HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
 
 	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = () => {}, draggedTaskId = null } = $props();
 
@@ -401,15 +402,6 @@
 	function formatCost(cost) {
 		if (cost === 0) return '$0.00';
 		return '$' + cost.toFixed(2);
-	}
-
-	// Get color class based on token count
-	function getTokenColorClass(tokens) {
-		if (tokens === 0) return 'text-base-content/50';
-		if (tokens < 100000) return 'text-success';     // Green (<100K)
-		if (tokens < 500000) return 'text-warning';     // Yellow (100K-500K)
-		if (tokens < 1000000) return 'text-orange-500'; // Orange (500K-1M)
-		return 'text-error';                             // Red (>1M)
 	}
 
 	// Handle right-click to show quick actions menu
@@ -951,7 +943,7 @@
 							{formatCost(agent.usage.today.cost)}
 						</span>
 					</div>
-					{#if agent.usage.today.total_tokens > 1000000}
+					{#if agent.usage.today.total_tokens > HIGH_USAGE_WARNING_THRESHOLD}
 						<div class="mt-1 flex items-center gap-1">
 							<span class="badge badge-error badge-xs">⚠ High Usage</span>
 						</div>

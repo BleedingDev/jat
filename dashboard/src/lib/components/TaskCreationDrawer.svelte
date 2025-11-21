@@ -31,7 +31,7 @@
 		if (drawerToggle) {
 			drawerToggle.addEventListener('change', (e) => {
 				if (e.target.checked) {
-					// Tiny delay to let DOM settle, but fast enough to preserve user gesture
+					// 100ms delay for reliable focus (flush pattern)
 					setTimeout(() => {
 						if (titleInput) {
 							titleInput.focus();
@@ -40,9 +40,20 @@
 								titleInput.focus();
 							}
 						}
-					}, 10);
+					}, 100);
 				}
 			});
+		}
+	});
+
+	// Reactive auto-focus with 150ms delay (flush pattern)
+	$effect(() => {
+		if (isOpen && titleInput) {
+			setTimeout(() => {
+				if (titleInput) {
+					titleInput.focus();
+				}
+			}, 150);
 		}
 	});
 
@@ -248,10 +259,11 @@
 							class="input input-bordered w-full {validationErrors.title
 								? 'input-error'
 								: ''}"
-						bind:this={titleInput}
+							bind:this={titleInput}
 							bind:value={formData.title}
 							disabled={isSubmitting}
 							required
+							autofocus={isOpen}
 						/>
 						{#if validationErrors.title}
 							<label class="label">
