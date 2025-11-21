@@ -1,359 +1,353 @@
 <script lang="ts">
 	/**
 	 * ClaudeUsageBar Component
-	 * Fixed-bottom status bar displaying Claude API usage metrics and agent coordination
+	 * Hover-to-expand stats widget displaying Claude API usage metrics
 	 *
 	 * Features:
-	 * - Weekly quota tracking with color-coded thresholds
-	 * - Cost monitoring (daily and weekly trends)
-	 * - Agent status overview ([X working] [Y idle] [Z offline])
-	 * - Real-time session context (rate limits)
-	 * - Responsive tooltips with detailed breakdowns
-	 * - Auto-refresh polling (configurable intervals)
+	 * - Compact badge showing subscription tier and token limits
+	 * - Hover/focus expansion with detailed breakdown
+	 * - Real-time metrics from claudeUsageMetrics utility
+	 * - Graceful degradation for unavailable data
+	 * - Auto-refresh polling (30 seconds)
+	 *
+	 * Design Pattern: Follows chimaro stats widget hover-to-expand pattern
 	 */
 
-	import { onMount } from 'svelte';
-
-	// ===== Props =====
-	interface SessionContext {
-		requestsUsed: number;
-		requestsLimit: number;
-		tokensUsed: number;
-		tokensLimit: number;
-		requestsReset?: Date;
-		tokensReset?: Date;
-	}
-
-	interface WeeklyQuotaData {
-		tokensUsed: number;
-		tokensLimit: number;
-		costUsd: number;
-		costLimit: number;
-		periodStart: Date;
-		periodEnd: Date;
-		estimatedEndOfWeekCost?: number;
-	}
-
-	interface AgentStats {
-		total: number;
-		working: number;
-		idle: number;
-		offline: number;
-		lastUpdate: Date;
-	}
-
-	// Default props
-	const defaultSessionContext: SessionContext = {
-		requestsUsed: 0,
-		requestsLimit: 100,
-		tokensUsed: 0,
-		tokensLimit: 100000
-	};
-
-	const defaultWeeklyQuota: WeeklyQuotaData = {
-		tokensUsed: 0,
-		tokensLimit: 1000000,
-		costUsd: 0,
-		costLimit: 100,
-		periodStart: new Date(),
-		periodEnd: new Date()
-	};
-
-	const defaultAgentStats: AgentStats = {
-		total: 0,
-		working: 0,
-		idle: 0,
-		offline: 0,
-		lastUpdate: new Date()
-	};
+	import { slide } from 'svelte/transition';
+	import type { ClaudeUsageMetrics } from '$lib/utils/claudeUsageMetrics';
 
 	// Component state
-	let sessionContext = $state<SessionContext>(defaultSessionContext);
-	let weeklyQuota = $state<WeeklyQuotaData>(defaultWeeklyQuota);
-	let agentStats = $state<AgentStats>(defaultAgentStats);
+	let showDetails = $state(false);
+	let metrics = $state<ClaudeUsageMetrics | null>(null);
+	let isLoading = $state(true);
 
-	// ===== Derived Values =====
-	const weeklyPercentage = $derived(
-		weeklyQuota.tokensLimit > 0 ? (weeklyQuota.tokensUsed / weeklyQuota.tokensLimit) * 100 : 0
-	);
-
-	const costPercentage = $derived(
-		weeklyQuota.costLimit > 0 ? (weeklyQuota.costUsd / weeklyQuota.costLimit) * 100 : 0
-	);
-
-	const dailyAvgCost = $derived(weeklyQuota.costUsd / 7);
-
-	const dailyAvgTokens = $derived(Math.floor(weeklyQuota.tokensUsed / 7));
-
-	const estimatedWeeklyTotal = $derived(dailyAvgCost * 7);
-
-	const sessionRequestsPercentage = $derived(
-		sessionContext.requestsLimit > 0
-			? (sessionContext.requestsUsed / sessionContext.requestsLimit) * 100
-			: 0
-	);
-
-	const sessionTokensPercentage = $derived(
-		sessionContext.tokensLimit > 0
-			? (sessionContext.tokensUsed / sessionContext.tokensLimit) * 100
-			: 0
-	);
-
-	// ===== Color Threshold Logic =====
-	function getQuotaColor(percentage: number): string {
-		if (percentage < 60) return 'bg-success';
-		if (percentage < 80) return 'bg-warning';
-		if (percentage < 95) return 'bg-orange-500';
-		return 'bg-error';
+	// Fetch metrics from API endpoint (server-side)
+	async function loadMetrics() {
+		try {
+			isLoading = true;
+			const response = await fetch('/api/claude/usage');
+			if (!response.ok) {
+				throw new Error(`Failed to fetch metrics: ${response.statusText}`);
+			}
+			metrics = await response.json();
+		} catch (error) {
+			console.error('Error loading Claude usage metrics:', error);
+		} finally {
+			isLoading = false;
+		}
 	}
 
-	function getCostColor(percentage: number): string {
-		if (percentage < 50) return 'text-success';
-		if (percentage < 80) return 'text-warning';
-		return 'text-error';
-	}
+	// Polling effect
+	$effect(() => {
+		// Initial load
+		loadMetrics();
 
-	const quotaColor = $derived(getQuotaColor(weeklyPercentage));
-	const costColor = $derived(getCostColor(costPercentage));
+		// Poll every 30 seconds
+		const interval = setInterval(loadMetrics, 30_000);
 
-	// ===== Formatting Helpers =====
+		return () => clearInterval(interval);
+	});
+
+	// Formatting helpers
 	function formatNumber(num: number): string {
-		if (num >= 1000000) {
-			return `${(num / 1000000).toFixed(1)}M`;
-		} else if (num >= 1000) {
-			return `${(num / 1000).toFixed(0)}K`;
+		if (num >= 1_000_000) {
+			return `${(num / 1_000_000).toFixed(1)}M`;
+		} else if (num >= 1_000) {
+			return `${(num / 1_000).toFixed(0)}K`;
 		}
 		return num.toString();
 	}
 
-	function formatDate(date: Date): string {
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+	function formatPercentage(used: number, total: number): string {
+		if (total === 0) return '0%';
+		return `${Math.round((used / total) * 100)}%`;
 	}
 
-	function formatTimeRemaining(resetDate?: Date): string {
-		if (!resetDate) return 'unknown';
-		const now = new Date();
-		const diff = resetDate.getTime() - now.getTime();
-		if (diff <= 0) return 'resetting...';
-
-		const seconds = Math.floor(diff / 1000);
-		if (seconds < 60) return `${seconds}s`;
-
-		const minutes = Math.floor(seconds / 60);
-		if (minutes < 60) return `${minutes}m`;
-
-		const hours = Math.floor(minutes / 60);
-		return `${hours}h`;
-	}
-
-	// ===== Tooltip Content Builders =====
-	function buildWeeklyQuotaTooltip(): string {
-		return `Period: ${formatDate(weeklyQuota.periodStart)} - ${formatDate(weeklyQuota.periodEnd)}
-
-Usage:
-• Tokens: ${formatNumber(weeklyQuota.tokensUsed)} / ${formatNumber(weeklyQuota.tokensLimit)} (${weeklyPercentage.toFixed(1)}%)
-• Cost: $${weeklyQuota.costUsd.toFixed(2)} / $${weeklyQuota.costLimit} (${costPercentage.toFixed(1)}%)
-
-Daily Average:
-• Tokens: ${formatNumber(dailyAvgTokens)} per day
-• Cost: $${dailyAvgCost.toFixed(2)} per day
-
-Projected End-of-Week:
-• Total cost: $${estimatedWeeklyTotal.toFixed(2)}
-
-Session Context (last 1 min):
-• Requests: ${sessionContext.requestsUsed} / ${sessionContext.requestsLimit} (${sessionRequestsPercentage.toFixed(0)}%)
-• Tokens: ${formatNumber(sessionContext.tokensUsed)} / ${formatNumber(sessionContext.tokensLimit)} (${sessionTokensPercentage.toFixed(0)}%)
-• Resets in: ${formatTimeRemaining(sessionContext.tokensReset)}`;
-	}
-
-	function buildCostTooltip(): string {
-		return `Weekly Total: $${weeklyQuota.costUsd.toFixed(2)} / $${weeklyQuota.costLimit} (${costPercentage.toFixed(1)}%)
-
-Daily Trend:
-• Today: $${dailyAvgCost.toFixed(2)}
-• Avg: $${dailyAvgCost.toFixed(2)} per day
-
-Estimated weekly cost: $${estimatedWeeklyTotal.toFixed(2)}
-
-Note: Detailed per-model breakdown coming soon`;
-	}
-
-	function buildAgentTooltip(): string {
-		const lines = [`Total Agents: ${agentStats.total}`, ''];
-
-		if (agentStats.working > 0) {
-			lines.push(`Working (${agentStats.working}):`);
-			lines.push('• Agent details coming soon');
-			lines.push('');
-		}
-
-		if (agentStats.idle > 0) {
-			lines.push(`Idle (${agentStats.idle}):`);
-			lines.push('• Agent details coming soon');
-			lines.push('');
-		}
-
-		if (agentStats.offline > 0) {
-			lines.push(`Offline (${agentStats.offline}):`);
-			lines.push('• Agent details coming soon');
-			lines.push('');
-		}
-
-		const updateTime = new Date(agentStats.lastUpdate);
-		const minutesAgo = Math.floor((Date.now() - updateTime.getTime()) / 60000);
-		lines.push(`Last updated: ${minutesAgo === 0 ? 'just now' : `${minutesAgo} min ago`}`);
-
-		return lines.join('\n');
-	}
-
-	// ===== Data Fetching =====
-	async function fetchWeeklyQuota() {
-		try {
-			const response = await fetch('/api/claude/weekly-quota');
-			if (!response.ok) {
-				console.error('Failed to fetch weekly quota:', response.statusText);
-				return;
-			}
-			const data = await response.json();
-			weeklyQuota = {
-				...defaultWeeklyQuota,
-				...data,
-				periodStart: new Date(data.periodStart),
-				periodEnd: new Date(data.periodEnd)
-			};
-		} catch (error) {
-			console.error('Error fetching weekly quota:', error);
-		}
-	}
-
-	async function fetchAgentStats() {
-		try {
-			const response = await fetch('/api/agents/stats');
-			if (!response.ok) {
-				console.error('Failed to fetch agent stats:', response.statusText);
-				return;
-			}
-			const data = await response.json();
-			agentStats = {
-				...defaultAgentStats,
-				...data,
-				lastUpdate: new Date(data.lastUpdate || Date.now())
-			};
-		} catch (error) {
-			console.error('Error fetching agent stats:', error);
-		}
-	}
-
-	// Update session context from global store or API
-	function updateSessionContext(context: Partial<SessionContext>) {
-		sessionContext = {
-			...sessionContext,
-			...context,
-			requestsReset: context.requestsReset ? new Date(context.requestsReset) : undefined,
-			tokensReset: context.tokensReset ? new Date(context.tokensReset) : undefined
-		};
-	}
-
-	// ===== Polling Effects =====
-	$effect(() => {
-		// Initial fetch
-		fetchWeeklyQuota();
-		fetchAgentStats();
-
-		// Poll weekly quota every 5 minutes
-		const weeklyInterval = setInterval(fetchWeeklyQuota, 5 * 60 * 1000);
-
-		// Poll agent stats every 30 seconds
-		const agentInterval = setInterval(fetchAgentStats, 30 * 1000);
-
-		return () => {
-			clearInterval(weeklyInterval);
-			clearInterval(agentInterval);
-		};
-	});
+	// Derived values
+	const tierColor = $derived(
+		metrics?.tier === 'max' ? 'badge-accent' : metrics?.tier === 'build' ? 'badge-primary' : 'badge-secondary'
+	);
 </script>
 
-<!-- Fixed Bottom Bar -->
 <div
-	class="fixed bottom-0 left-0 right-0 z-50 h-12 bg-base-100 border-t border-base-300 px-4 py-2"
+	class="absolute right-0 inline-flex"
+	role="button"
+	tabindex="0"
+	onmouseenter={() => (showDetails = true)}
+	onmouseleave={() => (showDetails = false)}
+	onfocus={() => (showDetails = true)}
+	onblur={() => (showDetails = false)}
+	aria-label="Claude API usage - hover for details"
 >
-	<div class="flex items-center justify-between gap-4 max-w-full">
-		<!-- Section 1: Weekly Quota (35% width) -->
-		<div
-			class="flex-1 flex items-center gap-2 min-w-0 tooltip tooltip-top"
-			title={buildWeeklyQuotaTooltip()}
-			data-tip={buildWeeklyQuotaTooltip()}
+	{#if !showDetails && metrics && !isLoading}
+		<!-- Compact Badge (Default State) -->
+		<button
+			class="badge badge-lg gap-2 px-3 py-3 {tierColor} hover:brightness-110 transition-all"
 		>
-			<div class="flex flex-col gap-1 min-w-0 flex-1">
-				<div class="flex items-center justify-between gap-2">
-					<span class="text-xs font-medium text-base-content/70 hidden sm:inline"
-						>Weekly Quota</span
-					>
-					<span class="text-xs font-mono {quotaColor.replace('bg-', 'text-')}"
-						>{weeklyPercentage.toFixed(0)}%</span
-					>
+			<!-- API Icon -->
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke-width="1.5"
+				stroke="currentColor"
+				class="w-4 h-4"
+			>
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
+				/>
+			</svg>
+
+			<!-- Tier Display -->
+			<span class="font-mono font-semibold uppercase">{metrics.tier}</span>
+
+			<!-- Token Limit -->
+			<span class="text-xs opacity-70">
+				{formatNumber(metrics.tierLimits.tokensPerMin)}/min
+			</span>
+		</button>
+	{/if}
+
+	{#if showDetails && metrics && !isLoading}
+		<!-- Expanded Details Panel (Hover State) -->
+		<div
+			class="absolute right-0 top-0 z-50 bg-base-100 border border-base-200 rounded-lg shadow-xl p-4 min-w-[320px]"
+			transition:slide={{ duration: 200 }}
+		>
+			<!-- Header with Icon and Tier -->
+			<div class="flex items-center gap-3 mb-4 pb-3 border-b border-base-200">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					class="w-6 h-6 text-primary"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"
+					/>
+				</svg>
+				<div class="flex-1">
+					<h3 class="font-bold text-base uppercase">{metrics.tier} Tier</h3>
+					<p class="text-xs text-base-content/60">Claude API Usage</p>
 				</div>
-				<div class="flex-1 h-2 bg-base-300 rounded-full overflow-hidden">
-					<div
-						class="h-full {quotaColor} transition-all duration-300"
-						style="width: {weeklyPercentage}%"
-					></div>
+			</div>
+
+			<!-- Stats Breakdown -->
+			<div class="space-y-3">
+				<!-- Rate Limits -->
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							class="w-4 h-4 text-info"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+							/>
+						</svg>
+						<span class="text-sm">Tokens/min</span>
+					</div>
+					<span class="font-mono text-sm font-semibold">
+						{formatNumber(metrics.tierLimits.tokensPerMin)}
+					</span>
 				</div>
-				<span class="text-xs text-base-content/50 hidden md:inline">
-					{formatNumber(weeklyQuota.tokensUsed)} / {formatNumber(weeklyQuota.tokensLimit)} tokens
-				</span>
+
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							class="w-4 h-4 text-info"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+							/>
+						</svg>
+						<span class="text-sm">Tokens/day</span>
+					</div>
+					<span class="font-mono text-sm font-semibold">
+						{formatNumber(metrics.tierLimits.tokensPerDay)}
+					</span>
+				</div>
+
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							class="w-4 h-4 text-success"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M7.5 7.5h-.75A2.25 2.25 0 004.5 9.75v7.5a2.25 2.25 0 002.25 2.25h7.5a2.25 2.25 0 002.25-2.25v-7.5a2.25 2.25 0 00-2.25-2.25h-.75m-6 3.75l3 3m0 0l3-3m-3 3V1.5m6 9h.75a2.25 2.25 0 012.25 2.25v7.5a2.25 2.25 0 01-2.25 2.25h-7.5a2.25 2.25 0 01-2.25-2.25v-.75"
+							/>
+						</svg>
+						<span class="text-sm">Requests/min</span>
+					</div>
+					<span class="font-mono text-sm font-semibold">
+						{formatNumber(metrics.tierLimits.requestsPerMin)}
+					</span>
+				</div>
+
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							class="w-4 h-4 text-success"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
+							/>
+						</svg>
+						<span class="text-sm">Requests/day</span>
+					</div>
+					<span class="font-mono text-sm font-semibold">
+						{formatNumber(metrics.tierLimits.requestsPerDay)}
+					</span>
+				</div>
+
+				<!-- Session Context (if available) -->
+				{#if metrics.sessionContext}
+					<div class="divider divider-start my-2">
+						<span class="text-xs text-base-content/60">Real-Time Usage</span>
+					</div>
+
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="w-4 h-4 text-warning"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+								/>
+							</svg>
+							<span class="text-sm">Tokens Remaining</span>
+						</div>
+						<span class="font-mono text-sm font-semibold text-warning">
+							{formatNumber(metrics.sessionContext.inputTokensRemaining)}
+						</span>
+					</div>
+
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="w-4 h-4 text-warning"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M7.5 7.5h-.75A2.25 2.25 0 004.5 9.75v7.5a2.25 2.25 0 002.25 2.25h7.5a2.25 2.25 0 002.25-2.25v-7.5a2.25 2.25 0 00-2.25-2.25h-.75m-6 3.75l3 3m0 0l3-3m-3 3V1.5m6 9h.75a2.25 2.25 0 012.25 2.25v7.5a2.25 2.25 0 01-2.25 2.25h-7.5a2.25 2.25 0 01-2.25-2.25v-.75"
+								/>
+							</svg>
+							<span class="text-sm">Requests Remaining</span>
+						</div>
+						<span class="font-mono text-sm font-semibold text-warning">
+							{metrics.sessionContext.requestsRemaining}
+						</span>
+					</div>
+				{:else}
+					<!-- Placeholder when session context unavailable -->
+					<div class="divider divider-start my-2">
+						<span class="text-xs text-base-content/60">Real-Time Usage</span>
+					</div>
+
+					<div class="text-center py-2">
+						<span class="text-xs text-base-content/50">
+							Session context unavailable<br />
+							<span class="text-[10px]">(Requires API integration)</span>
+						</span>
+					</div>
+				{/if}
+
+				<!-- Agent Metrics (if available) -->
+				{#if metrics.agentMetrics}
+					<div class="divider divider-start my-2">
+						<span class="text-xs text-base-content/60">Agent Activity</span>
+					</div>
+
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="w-4 h-4 text-primary"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+								/>
+							</svg>
+							<span class="text-sm">Agent Load</span>
+						</div>
+						<span class="font-mono text-sm font-semibold text-primary">
+							{metrics.agentMetrics.loadPercentage.toFixed(0)}%
+						</span>
+					</div>
+
+					<div class="flex items-center justify-between text-xs text-base-content/60">
+						<span>{metrics.agentMetrics.workingAgents} working</span>
+						<span>{metrics.agentMetrics.idleAgents} idle</span>
+						<span>{metrics.agentMetrics.sleepingAgents} sleeping</span>
+					</div>
+				{/if}
+
+				<!-- Footer -->
+				<div class="divider my-2"></div>
+				<div class="text-center text-xs text-base-content/50">
+					Last updated: {new Date(metrics.lastUpdated).toLocaleTimeString()}
+				</div>
 			</div>
 		</div>
+	{/if}
 
-		<!-- Section 2: Cost Tracking (30% width) -->
-		<div
-			class="flex flex-col gap-1 min-w-0 tooltip tooltip-top"
-			title={buildCostTooltip()}
-			data-tip={buildCostTooltip()}
-		>
-			<div class="flex items-center gap-2">
-				<span class="text-xs font-medium text-base-content/70 hidden sm:inline">Cost</span>
-				<span class="text-xs font-mono {costColor}">
-					${weeklyQuota.costUsd.toFixed(2)} / ${weeklyQuota.costLimit}
-				</span>
-			</div>
-			<span class="text-xs text-base-content/50 hidden md:inline">
-				Daily: ${dailyAvgCost.toFixed(2)}
-			</span>
-		</div>
-
-		<!-- Section 3: Session Stats (15% width) - Hidden on mobile -->
-		<div class="hidden lg:flex flex-col gap-1 min-w-0">
-			<span class="text-xs text-base-content/50">
-				Session: {formatNumber(sessionContext.tokensUsed)} / {formatNumber(
-					sessionContext.tokensLimit
-				)}
-			</span>
-			<span class="text-xs text-base-content/50">
-				Resets: {formatTimeRemaining(sessionContext.tokensReset)}
-			</span>
-		</div>
-
-		<!-- Section 4: Agent Status (20% width) -->
-		<div
-			class="flex items-center gap-1 tooltip tooltip-top"
-			title={buildAgentTooltip()}
-			data-tip={buildAgentTooltip()}
-		>
-			<span class="text-xs font-medium text-base-content/70 hidden sm:inline mr-1">Agents</span>
-			<div class="flex gap-1">
-				{#if agentStats.working > 0}
-					<span class="badge badge-xs badge-primary">{agentStats.working} working</span>
-				{/if}
-				{#if agentStats.idle > 0}
-					<span class="badge badge-xs badge-ghost">{agentStats.idle} idle</span>
-				{/if}
-				{#if agentStats.offline > 0}
-					<span class="badge badge-xs badge-error badge-outline">{agentStats.offline} offline</span
-					>
-				{/if}
-			</div>
-		</div>
-	</div>
+	{#if isLoading}
+		<!-- Loading State -->
+		<button class="badge badge-lg badge-ghost gap-2 px-3 py-3">
+			<span class="loading loading-spinner loading-xs"></span>
+			<span class="text-xs">Loading...</span>
+		</button>
+	{/if}
 </div>

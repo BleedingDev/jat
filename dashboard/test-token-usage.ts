@@ -17,9 +17,13 @@ import {
 async function test() {
 	console.log('🧪 Testing tokenUsage.ts module\n');
 
+	// Project path (parent of dashboard directory)
+	const projectPath = process.cwd().replace('/dashboard', '');
+	console.log(`📁 Project path: ${projectPath}\n`);
+
 	// Test 1: Build session-agent map
 	console.log('1️⃣  Building session-agent map...');
-	const sessionAgentMap = await buildSessionAgentMap();
+	const sessionAgentMap = await buildSessionAgentMap(projectPath);
 	console.log(`   Found ${sessionAgentMap.size} session-agent mappings`);
 	if (sessionAgentMap.size > 0) {
 		const [firstSession, firstAgent] = Array.from(sessionAgentMap.entries())[0];
@@ -29,7 +33,7 @@ async function test() {
 
 	// Test 2: Get all session IDs
 	console.log('2️⃣  Getting all session IDs...');
-	const sessionIds = await getAllSessionIds();
+	const sessionIds = await getAllSessionIds(projectPath);
 	console.log(`   Found ${sessionIds.length} JSONL session files`);
 	if (sessionIds.length > 0) {
 		console.log(`   Example: ${sessionIds[0].substring(0, 8)}...`);
@@ -39,7 +43,7 @@ async function test() {
 	// Test 3: Parse a single session
 	if (sessionIds.length > 0) {
 		console.log('3️⃣  Parsing single session usage...');
-		const sessionUsage = await parseSessionUsage(sessionIds[0]);
+		const sessionUsage = await parseSessionUsage(sessionIds[0], projectPath);
 		if (sessionUsage) {
 			console.log(`   Session: ${sessionUsage.sessionId.substring(0, 8)}...`);
 			console.log(`   Input tokens: ${sessionUsage.tokens.input.toLocaleString()}`);
@@ -57,20 +61,20 @@ async function test() {
 		const firstAgent = Array.from(sessionAgentMap.values())[0];
 		console.log(`4️⃣  Getting usage for agent: ${firstAgent}`);
 
-		const agentUsageToday = await getAgentUsage(firstAgent, 'today');
+		const agentUsageToday = await getAgentUsage(firstAgent, 'today', projectPath);
 		console.log(`   Today: ${agentUsageToday.total_tokens.toLocaleString()} tokens, $${agentUsageToday.cost.toFixed(2)}, ${agentUsageToday.sessionCount} sessions`);
 
-		const agentUsageWeek = await getAgentUsage(firstAgent, 'week');
+		const agentUsageWeek = await getAgentUsage(firstAgent, 'week', projectPath);
 		console.log(`   Week: ${agentUsageWeek.total_tokens.toLocaleString()} tokens, $${agentUsageWeek.cost.toFixed(2)}, ${agentUsageWeek.sessionCount} sessions`);
 
-		const agentUsageAll = await getAgentUsage(firstAgent, 'all');
+		const agentUsageAll = await getAgentUsage(firstAgent, 'all', projectPath);
 		console.log(`   All time: ${agentUsageAll.total_tokens.toLocaleString()} tokens, $${agentUsageAll.cost.toFixed(2)}, ${agentUsageAll.sessionCount} sessions`);
 		console.log('');
 	}
 
 	// Test 5: Get all agent usage
 	console.log('5️⃣  Getting system-wide usage...');
-	const allAgents = await getAllAgentUsage('all');
+	const allAgents = await getAllAgentUsage('all', projectPath);
 	console.log(`   Total agents: ${allAgents.size}`);
 	console.log('   Top 3 consumers:');
 
@@ -83,7 +87,7 @@ async function test() {
 
 	// Test 6: System total
 	console.log('6️⃣  Getting system total...');
-	const systemTotal = await getSystemTotalUsage('all');
+	const systemTotal = await getSystemTotalUsage('all', projectPath);
 	console.log(`   Total tokens: ${systemTotal.total_tokens.toLocaleString()}`);
 	console.log(`   Total cost: $${systemTotal.cost.toFixed(2)}`);
 	console.log(`   Total sessions: ${systemTotal.sessionCount}`);

@@ -4,6 +4,7 @@
 	import TaskList from '$lib/components/TaskList.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import TaskDetailModal from '$lib/components/TaskDetailModal.svelte';
+	import ClaudeUsageBar from '$lib/components/ClaudeUsageBar.svelte';
 
 	let selectedPriority = $state('all');
 	let selectedStatus = $state('all');
@@ -62,8 +63,8 @@
 </script>
 
 <div class="min-h-screen bg-base-200">
-	<!-- Secondary filters (priority, status, search) -->
-	<div class="bg-base-100 border-b border-base-300 p-4">
+	<!-- Secondary filters (priority, status, search) with Claude Usage Widget -->
+	<div class="bg-base-100 border-b border-base-300 p-4 relative">
 		<div class="flex flex-wrap gap-4">
 			<div class="form-control">
 				<label class="label" for="priority-filter">
@@ -101,6 +102,11 @@
 					bind:value={searchQuery}
 				/>
 			</div>
+		</div>
+
+		<!-- Claude Usage Widget (upper right) -->
+		<div class="absolute top-4 right-4">
+			<ClaudeUsageBar />
 		</div>
 	</div>
 

@@ -179,20 +179,16 @@
 	}
 </script>
 
-<!-- Drawer Overlay -->
-{#if isOpen}
-	<div class="fixed inset-0 z-50">
-		<!-- Backdrop -->
-		<div
-			class="absolute inset-0 bg-black/50 transition-opacity"
-			onclick={handleClose}
-			role="button"
-			tabindex="-1"
-			aria-label="Close drawer"
-		></div>
+<!-- DaisyUI Drawer -->
+<div class="drawer drawer-end z-50">
+	<input id="task-creation-drawer" type="checkbox" class="drawer-toggle" bind:checked={isOpen} />
+
+	<!-- Drawer side -->
+	<div class="drawer-side">
+		<label for="task-creation-drawer" aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
 
 		<!-- Drawer Panel -->
-		<div class="absolute right-0 top-0 bottom-0 bg-base-100 w-full max-w-2xl flex flex-col shadow-2xl animate-slide-in-right">
+		<div class="bg-base-100 min-h-full w-full max-w-2xl flex flex-col shadow-2xl">
 			<!-- Header -->
 			<div class="flex items-center justify-between p-6 border-b border-base-300">
 				<div>
@@ -444,19 +440,4 @@
 			</div>
 		</div>
 	</div>
-{/if}
-
-<style>
-	@keyframes slide-in-right {
-		from {
-			transform: translateX(100%);
-		}
-		to {
-			transform: translateX(0);
-		}
-	}
-
-	.animate-slide-in-right {
-		animation: slide-in-right 0.3s ease-out;
-	}
-</style>
+</div>

@@ -135,7 +135,7 @@ export async function parseSessionUsage(
 ): Promise<SessionUsage | null> {
 	const homeDir = os.homedir();
 	// Convert project path to format used by Claude Code: /home/user/path -> -home-user-path
-	const projectSlug = projectPath.replace(/\//g, '-').replace(/^-/, '');
+	const projectSlug = projectPath.replace(/\//g, '-');
 	const jsonlPath = path.join(homeDir, '.claude', 'projects', projectSlug, `${sessionId}.jsonl`);
 
 	try {
@@ -371,7 +371,7 @@ export async function getAllAgentUsage(
  */
 export async function getAllSessionIds(projectPath: string = process.cwd()): Promise<string[]> {
 	const homeDir = os.homedir();
-	const projectSlug = projectPath.replace(/\//g, '-').replace(/^-/, '');
+	const projectSlug = projectPath.replace(/\//g, '-');
 	const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
 
 	try {

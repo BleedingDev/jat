@@ -85,7 +85,7 @@
 		{
 			id: 'search-tasks',
 			label: 'Search Tasks',
-			description: 'Search all tasks across projects',
+			description: 'Find tasks by searching keywords',
 			icon: '🔍',
 			keywords: ['search', 'find', 'filter', 'query'],
 			execute: () => {
@@ -305,20 +305,42 @@
 	});
 </script>
 
-<!-- Modal -->
-{#if isOpen}
-	<div class="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
-		<!-- Backdrop -->
-		<div
-			class="modal-backdrop bg-base-300/80"
-			role="button"
-			tabindex="-1"
-			onclick={close}
-			onkeydown={(e) => e.key === 'Enter' && close()}
-		></div>
+<!-- Quick Actions Button (visible in navbar) -->
+<button
+	class="btn btn-sm btn-ghost gap-1"
+	onclick={open}
+	aria-label="Quick actions (Cmd+K)"
+>
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke-width="1.5"
+		stroke="currentColor"
+		class="w-4 h-4"
+	>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+		/>
+	</svg>
+	<kbd class="kbd kbd-xs hidden md:inline">⌘K</kbd>
+</button>
 
-		<!-- Command palette -->
-		<div class="modal-box max-w-2xl p-0 overflow-hidden">
+<!-- Modal (stays in DOM, toggle modal-open class) -->
+<div class="modal {isOpen ? 'modal-open' : ''}" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
+	<!-- Backdrop -->
+	<div
+		class="modal-backdrop bg-base-300/80"
+		role="button"
+		tabindex="-1"
+		onclick={close}
+		onkeydown={(e) => e.key === 'Enter' && close()}
+	></div>
+
+	<!-- Command palette -->
+	<div class="modal-box max-w-2xl p-0 overflow-hidden">
 			<!-- Search input -->
 			<div class="p-4 border-b border-base-300">
 				<div class="flex items-center gap-3">
@@ -507,4 +529,3 @@
 			</div>
 		</div>
 	</div>
-{/if}

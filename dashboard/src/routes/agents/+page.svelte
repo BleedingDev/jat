@@ -54,8 +54,8 @@
 	// Fetch agent data from unified API
 	async function fetchData() {
 		try {
-			// Build URL with project filter
-			let url = '/api/agents?full=true';
+			// Build URL with project filter and token usage
+			let url = '/api/agents?full=true&usage=true';
 			if (selectedProject && selectedProject !== 'All Projects') {
 				url += `&project=${encodeURIComponent(selectedProject)}`;
 			}

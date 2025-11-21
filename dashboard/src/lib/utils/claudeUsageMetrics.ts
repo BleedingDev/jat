@@ -284,48 +284,57 @@ export async function fetchSessionContext(): Promise<SessionContext | null> {
   }
 
   try {
-    // TODO (jat-sk1): Implement actual API call
-    // This requires @anthropic-ai/sdk and OAuth token
+    // NOTE: Session context requires an Anthropic API key (sk-ant-api03-...),
+    // not the OAuth token from Claude.ai (sk-ant-oat01-...).
     //
-    // Placeholder implementation:
-    // 1. Read access token from ~/.claude/.credentials.json
-    // 2. Make minimal API call: client.messages.create({ max_tokens: 1, ... })
-    // 3. Extract headers: anthropic-ratelimit-*
-    // 4. Parse and return SessionContext
+    // Most users won't have a separate API key, so this will gracefully return null.
+    // To enable this feature:
+    // 1. Get an API key from https://console.anthropic.com/
+    // 2. Set ANTHROPIC_API_KEY environment variable
     //
     // For now, return null (graceful degradation)
 
-    console.warn('fetchSessionContext() not yet implemented - returning null');
-    return null;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      // No API key configured - this is expected for most users
+      return null;
+    }
 
-    // Example future implementation:
-    //
-    // const credPath = path.join(os.homedir(), '.claude/.credentials.json');
-    // const creds: ClaudeCredentials = JSON.parse(fs.readFileSync(credPath, 'utf-8'));
-    // const accessToken = creds.claudeAiOauth.accessToken;
-    //
-    // const client = new Anthropic({ apiKey: accessToken });
-    // const response = await client.messages.create({
-    //   model: 'claude-sonnet-4-5-20250929',
-    //   max_tokens: 1,
-    //   messages: [{ role: 'user', content: 'ping' }]
-    // });
-    //
-    // const headers = response.headers; // Extract HTTP headers
-    // const sessionContext: SessionContext = {
-    //   requestsLimit: parseInt(headers['anthropic-ratelimit-requests-limit'] || '0'),
-    //   requestsRemaining: parseInt(headers['anthropic-ratelimit-requests-remaining'] || '0'),
-    //   requestsResetAt: new Date(headers['anthropic-ratelimit-requests-reset'] || ''),
-    //   inputTokensLimit: parseInt(headers['anthropic-ratelimit-input-tokens-limit'] || '0'),
-    //   inputTokensRemaining: parseInt(headers['anthropic-ratelimit-input-tokens-remaining'] || '0'),
-    //   inputTokensResetAt: new Date(headers['anthropic-ratelimit-input-tokens-reset'] || ''),
-    //   outputTokensRemaining: parseInt(headers['anthropic-ratelimit-output-tokens-remaining'] || '0'),
-    //   tier: getSubscriptionTier(),
-    //   fetchedAt: new Date()
-    // };
-    //
-    // cache.setSessionContext(sessionContext);
-    // return sessionContext;
+    // Dynamically import Anthropic SDK (only on server-side)
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+
+    // Make minimal API call to extract headers
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }]
+    });
+
+    // Extract rate limit headers
+    // Note: Anthropic SDK doesn't expose raw headers directly
+    // We need to access the underlying response object
+    const headers = (response as any).response?.headers || {};
+
+    // Parse headers into SessionContext
+    const sessionContext: SessionContext = {
+      requestsLimit: parseInt(headers['anthropic-ratelimit-requests-limit'] || '0'),
+      requestsRemaining: parseInt(headers['anthropic-ratelimit-requests-remaining'] || '0'),
+      requestsResetAt: new Date(headers['anthropic-ratelimit-requests-reset'] || Date.now() + 60000),
+
+      inputTokensLimit: parseInt(headers['anthropic-ratelimit-input-tokens-limit'] || '0'),
+      inputTokensRemaining: parseInt(headers['anthropic-ratelimit-input-tokens-remaining'] || '0'),
+      inputTokensResetAt: new Date(headers['anthropic-ratelimit-input-tokens-reset'] || Date.now() + 60000),
+
+      outputTokensRemaining: parseInt(headers['anthropic-ratelimit-output-tokens-remaining'] || '0'),
+
+      tier: getSubscriptionTier(),
+      fetchedAt: new Date()
+    };
+
+    // Cache for 30 seconds
+    cache.setSessionContext(sessionContext);
+    return sessionContext;
   } catch (error) {
     console.error('Error fetching session context:', error);
     return null; // Graceful degradation
@@ -352,45 +361,47 @@ export async function fetchAgentMetrics(): Promise<AgentMetrics | null> {
   }
 
   try {
-    // TODO (jat-sk1): Implement shell command execution
-    // This requires child_process.exec or similar
-    //
-    // Placeholder implementation:
-    // 1. Execute: am-agents --json
-    // 2. Parse agent status (working/idle/sleeping)
-    // 3. Calculate load percentage
-    //
-    // For now, return null (graceful degradation)
+    // Execute am-agents command to get agent status
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
 
-    console.warn('fetchAgentMetrics() not yet implemented - returning null');
-    return null;
+    const { stdout } = await execAsync('am-agents --json');
+    const agents = JSON.parse(stdout);
 
-    // Example future implementation:
-    //
-    // const { exec } = require('child_process');
-    // const { promisify } = require('util');
-    // const execAsync = promisify(exec);
-    //
-    // const { stdout } = await execAsync('am-agents --json');
-    // const agents = JSON.parse(stdout);
-    //
-    // const working = agents.filter(a => a.status === 'working').length;
-    // const idle = agents.filter(a => a.status === 'idle').length;
-    // const sleeping = agents.filter(a => {
-    //   const lastActivity = new Date(a.last_activity_ts);
-    //   return Date.now() - lastActivity.getTime() > 3600000; // 1 hour
-    // }).length;
-    //
-    // const metrics: AgentMetrics = {
-    //   totalAgents: agents.length,
-    //   workingAgents: working,
-    //   idleAgents: idle,
-    //   sleepingAgents: sleeping,
-    //   loadPercentage: agents.length > 0 ? (working / agents.length) * 100 : 0
-    // };
-    //
-    // cache.setAgentMetrics(metrics);
-    // return metrics;
+    // Calculate agent status counts
+    const working = agents.filter((a: any) => {
+      const lastActivity = new Date(a.last_activity_ts);
+      const minutesSinceActivity = (Date.now() - lastActivity.getTime()) / 60000;
+      // Consider "working" if active within last 10 minutes
+      return minutesSinceActivity < 10;
+    }).length;
+
+    const idle = agents.filter((a: any) => {
+      const lastActivity = new Date(a.last_activity_ts);
+      const minutesSinceActivity = (Date.now() - lastActivity.getTime()) / 60000;
+      // Consider "idle" if active between 10 min and 1 hour ago
+      return minutesSinceActivity >= 10 && minutesSinceActivity < 60;
+    }).length;
+
+    const sleeping = agents.filter((a: any) => {
+      const lastActivity = new Date(a.last_activity_ts);
+      const minutesSinceActivity = (Date.now() - lastActivity.getTime()) / 60000;
+      // Consider "sleeping" if inactive for over 1 hour
+      return minutesSinceActivity >= 60;
+    }).length;
+
+    const metrics: AgentMetrics = {
+      totalAgents: agents.length,
+      workingAgents: working,
+      idleAgents: idle,
+      sleepingAgents: sleeping,
+      loadPercentage: agents.length > 0 ? Math.round((working / agents.length) * 100) : 0
+    };
+
+    // Cache for 60 seconds
+    cache.setAgentMetrics(metrics);
+    return metrics;
   } catch (error) {
     console.error('Error fetching agent metrics:', error);
     return null; // Graceful degradation

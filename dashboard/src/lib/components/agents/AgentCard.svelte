@@ -384,6 +384,29 @@
 		}
 	}
 
+	// Format token count with K/M suffix
+	function formatTokens(tokens) {
+		if (tokens === 0) return '0';
+		if (tokens < 1000) return tokens.toLocaleString();
+		if (tokens < 1000000) return (tokens / 1000).toFixed(1) + 'K';
+		return (tokens / 1000000).toFixed(2) + 'M';
+	}
+
+	// Format cost with $ prefix
+	function formatCost(cost) {
+		if (cost === 0) return '$0.00';
+		return '$' + cost.toFixed(2);
+	}
+
+	// Get color class based on token count
+	function getTokenColorClass(tokens) {
+		if (tokens === 0) return 'text-base-content/50';
+		if (tokens < 100000) return 'text-success';     // Green (<100K)
+		if (tokens < 500000) return 'text-warning';     // Yellow (100K-500K)
+		if (tokens < 1000000) return 'text-orange-500'; // Orange (500K-1M)
+		return 'text-error';                             // Red (>1M)
+	}
+
 	// Handle right-click to show quick actions menu
 	function handleContextMenu(event) {
 		event.preventDefault();
@@ -814,6 +837,60 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- Token Usage -->
+		{#if agent.usage}
+		<div class="mb-3">
+			<div class="text-xs font-medium text-base-content/70 mb-1">
+				Token Usage:
+			</div>
+
+			<!-- Today's Usage -->
+			<div class="bg-base-200 rounded px-2 py-1.5 mb-1">
+				<div class="flex items-center justify-between text-xs mb-1">
+					<span class="text-base-content/70">Today:</span>
+					<span class="font-mono font-medium {getTokenColorClass(agent.usage.today.total_tokens)}">
+						{formatTokens(agent.usage.today.total_tokens)}
+					</span>
+				</div>
+				<div class="flex items-center justify-between text-xs">
+					<span class="text-base-content/50">Cost:</span>
+					<span class="font-mono text-base-content/70">
+						{formatCost(agent.usage.today.cost)}
+					</span>
+				</div>
+				{#if agent.usage.today.total_tokens > 1000000}
+					<div class="mt-1 flex items-center gap-1">
+						<span class="badge badge-error badge-xs">⚠ High Usage</span>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Week's Usage -->
+			<div class="bg-base-200 rounded px-2 py-1.5">
+				<div class="flex items-center justify-between text-xs mb-1">
+					<span class="text-base-content/70">This Week:</span>
+					<span class="font-mono font-medium text-base-content">
+						{formatTokens(agent.usage.week.total_tokens)}
+					</span>
+				</div>
+				<div class="flex items-center justify-between text-xs">
+					<span class="text-base-content/50">Cost:</span>
+					<span class="font-mono text-base-content/70">
+						{formatCost(agent.usage.week.cost)}
+					</span>
+				</div>
+				{#if agent.usage.week.sessionCount > 0}
+					<div class="flex items-center justify-between text-xs mt-1">
+						<span class="text-base-content/50">Sessions:</span>
+						<span class="text-base-content/70">
+							{agent.usage.week.sessionCount}
+						</span>
+					</div>
+				{/if}
+			</div>
+		</div>
+		{/if}
 
 		<!-- Recent Activity Feed -->
 		<div class="mb-3">
