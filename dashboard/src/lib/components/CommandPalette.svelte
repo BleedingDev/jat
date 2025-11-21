@@ -238,10 +238,12 @@
 	function handleKeyDown(e: KeyboardEvent) {
 		if (!isOpen) return;
 
+		const maxIndex = searchMode === 'actions' ? filteredActions.length - 1 : tasks.length - 1;
+
 		switch (e.key) {
 			case 'ArrowDown':
 				e.preventDefault();
-				selectedIndex = Math.min(selectedIndex + 1, filteredActions.length - 1);
+				selectedIndex = Math.min(selectedIndex + 1, maxIndex);
 				break;
 			case 'ArrowUp':
 				e.preventDefault();
@@ -249,13 +251,30 @@
 				break;
 			case 'Enter':
 				e.preventDefault();
-				if (filteredActions[selectedIndex]) {
-					filteredActions[selectedIndex].execute();
+				if (searchMode === 'actions') {
+					if (filteredActions[selectedIndex]) {
+						filteredActions[selectedIndex].execute();
+					}
+				} else {
+					// Task mode: navigate to task
+					if (tasks[selectedIndex]) {
+						const task = tasks[selectedIndex];
+						goto(`/?task=${task.id}`); // Navigate to home with task query param
+						close();
+					}
 				}
 				break;
 			case 'Escape':
 				e.preventDefault();
-				close();
+				// If in task mode, go back to actions mode
+				if (searchMode === 'tasks') {
+					searchMode = 'actions';
+					searchQuery = '';
+					selectedIndex = 0;
+					tasks = [];
+				} else {
+					close();
+				}
 				break;
 		}
 	}
@@ -319,52 +338,137 @@
 						bind:value={searchQuery}
 						onkeydown={handleKeyDown}
 						type="text"
-						placeholder="Search actions..."
+						placeholder={searchMode === 'actions' ? 'Search actions...' : 'Search tasks...'}
 						class="input input-ghost w-full focus:outline-none text-lg"
 						autocomplete="off"
-						aria-label="Search command palette"
+						aria-label={searchMode === 'actions' ? 'Search command palette' : 'Search tasks'}
 					/>
 					<kbd class="kbd kbd-sm">ESC</kbd>
 				</div>
 			</div>
 
-			<!-- Actions list -->
+			<!-- Results list -->
 			<div class="max-h-96 overflow-y-auto">
-				{#if filteredActions.length === 0}
-					<div class="p-8 text-center text-base-content/50">
-						<p class="text-lg mb-2">No actions found</p>
-						<p class="text-sm">Try different search terms</p>
-					</div>
-				{:else}
-					<ul class="menu p-2">
-						{#each filteredActions as action, index}
-							<li>
-								<button
-									type="button"
-									class="flex items-start gap-3 p-3 rounded-lg {index === selectedIndex
-										? 'bg-primary text-primary-content'
-										: ''}"
-									onclick={() => action.execute()}
-									onmouseenter={() => (selectedIndex = index)}
-								>
-									<span class="text-2xl flex-shrink-0">{action.icon}</span>
-									<div class="flex-1 text-left">
-										<div class="font-medium">{action.label}</div>
-										<div
-											class="text-sm opacity-70 {index === selectedIndex
-												? 'text-primary-content/70'
-												: 'text-base-content/70'}"
-										>
-											{action.description}
+				{#if searchMode === 'actions'}
+					<!-- Actions list -->
+					{#if filteredActions.length === 0}
+						<div class="p-8 text-center text-base-content/50">
+							<p class="text-lg mb-2">No actions found</p>
+							<p class="text-sm">Try different search terms</p>
+						</div>
+					{:else}
+						<ul class="menu p-2">
+							{#each filteredActions as action, index}
+								<li>
+									<button
+										type="button"
+										class="flex items-start gap-3 p-3 rounded-lg {index === selectedIndex
+											? 'bg-primary text-primary-content'
+											: ''}"
+										onclick={() => action.execute()}
+										onmouseenter={() => (selectedIndex = index)}
+									>
+										<span class="text-2xl flex-shrink-0">{action.icon}</span>
+										<div class="flex-1 text-left">
+											<div class="font-medium">{action.label}</div>
+											<div
+												class="text-sm opacity-70 {index === selectedIndex
+													? 'text-primary-content/70'
+													: 'text-base-content/70'}"
+											>
+												{action.description}
+											</div>
 										</div>
-									</div>
-									{#if index === selectedIndex}
-										<kbd class="kbd kbd-sm">↵</kbd>
-									{/if}
-								</button>
-							</li>
-						{/each}
-					</ul>
+										{#if index === selectedIndex}
+											<kbd class="kbd kbd-sm">↵</kbd>
+										{/if}
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				{:else}
+					<!-- Task search results -->
+					{#if isLoadingTasks}
+						<div class="p-8 text-center">
+							<span class="loading loading-spinner loading-lg text-primary"></span>
+							<p class="text-sm text-base-content/70 mt-4">Searching tasks...</p>
+						</div>
+					{:else if !searchQuery.trim()}
+						<div class="p-8 text-center text-base-content/50">
+							<p class="text-lg mb-2">Start typing to search</p>
+							<p class="text-sm">Search by task ID, title, description, or labels</p>
+						</div>
+					{:else if tasks.length === 0}
+						<div class="p-8 text-center text-base-content/50">
+							<p class="text-lg mb-2">No tasks found</p>
+							<p class="text-sm">Try different search terms</p>
+						</div>
+					{:else}
+						<ul class="menu p-2">
+							{#each tasks as task, index}
+								<li>
+									<button
+										type="button"
+										class="flex items-start gap-3 p-3 rounded-lg {index === selectedIndex
+											? 'bg-primary text-primary-content'
+											: ''}"
+										onclick={() => {
+											goto(`/?task=${task.id}`);
+											close();
+										}}
+										onmouseenter={() => (selectedIndex = index)}
+									>
+										<!-- Priority badge -->
+										<div class="flex-shrink-0">
+											<span
+												class="badge badge-sm {task.priority === 0
+													? 'badge-error'
+													: task.priority === 1
+														? 'badge-warning'
+														: task.priority === 2
+															? 'badge-info'
+															: 'badge-ghost'}"
+											>
+												P{task.priority}
+											</span>
+										</div>
+										<!-- Task details -->
+										<div class="flex-1 text-left min-w-0">
+											<div class="flex items-center gap-2 mb-1">
+												<span class="font-mono text-xs {index === selectedIndex ? 'text-primary-content/70' : 'text-base-content/50'}">
+													{task.id}
+												</span>
+												<span class="font-medium truncate">{task.title}</span>
+											</div>
+											{#if task.description}
+												<div
+													class="text-sm opacity-70 line-clamp-1 {index === selectedIndex
+														? 'text-primary-content/70'
+														: 'text-base-content/70'}"
+												>
+													{task.description}
+												</div>
+											{/if}
+											{#if task.labels && task.labels.length > 0}
+												<div class="flex gap-1 mt-1 flex-wrap">
+													{#each task.labels.slice(0, 3) as label}
+														<span class="badge badge-xs badge-outline">{label}</span>
+													{/each}
+													{#if task.labels.length > 3}
+														<span class="badge badge-xs badge-ghost">+{task.labels.length - 3}</span>
+													{/if}
+												</div>
+											{/if}
+										</div>
+										{#if index === selectedIndex}
+											<kbd class="kbd kbd-sm">↵</kbd>
+										{/if}
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
 				{/if}
 			</div>
 
@@ -382,7 +486,7 @@
 					</div>
 					<div class="flex items-center gap-1">
 						<kbd class="kbd kbd-xs">ESC</kbd>
-						<span class="text-base-content/70">Close</span>
+						<span class="text-base-content/70">{searchMode === 'tasks' ? 'Back' : 'Close'}</span>
 					</div>
 				</div>
 				<div class="flex items-center gap-1">
