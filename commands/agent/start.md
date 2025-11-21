@@ -265,18 +265,10 @@ if [[ "$AGENT_COUNT" -gt 0 ]]; then
   echo ""
 
   # Get agent list with human-readable time (uses UTC→local conversion)
+  echo "Available agents:"
   am-agents --json | jq -r '.[] | "  • \(.name) (last active: \(.last_active_ago // "never"))"'
   echo ""
-
-  # Check which agents are ACTIVELY working (session file modified in last 10 minutes)
-  echo "Checking which agents are actively working..."
-  am-agents --json | jq -r '.[].name' | while read agent_name; do
-    if ~/code/jat/scripts/check-agent-active "$agent_name" 10 >/dev/null 2>&1; then
-      session_file=$(~/code/jat/scripts/check-agent-active "$agent_name" 10)
-      session=$(basename "$session_file" | sed 's/agent-//;s/.txt//')
-      echo "  ⚠️  $agent_name is ACTIVELY working in session ${session:0:8}..."
-    fi
-  done
+  echo "💡 Tip: Agents shown as 'just now' may be active in another session."
   echo ""
 
   # Use AskUserQuestion to let user choose:
@@ -466,8 +458,9 @@ if [[ -n "$ACTIVE_RESERVATIONS" ]]; then
 
         if [[ "$TASK_STATUS" == "closed" ]]; then
             echo "  ✓ Releasing locks from closed task: $task_id"
-            # Release all reservations for this agent
-            am-reservations --agent "$AGENT_NAME" | grep "^Pattern:" | sed 's/^Pattern: //' | while read -r pattern; do
+            # Release all reservations for this agent (using JSON to avoid pipe issues)
+            PATTERNS=$(am-reservations --agent "$AGENT_NAME" --json 2>/dev/null | jq -r '.[].path_pattern' | tr '\n' ' ')
+            for pattern in $PATTERNS; do
                 am-release "$pattern" --agent "$AGENT_NAME" 2>/dev/null || true
             done
         fi
