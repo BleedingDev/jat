@@ -46,11 +46,7 @@
 </script>
 
 <div class="min-h-screen bg-base-200">
-	<Nav
-		context="home"
-		{viewMode}
-		onViewModeChange={(mode) => (viewMode = mode)}
-	/>
+	<Nav />
 
 	<div class="bg-base-100 border-b border-base-300 p-4">
 		<div class="flex flex-wrap gap-4">

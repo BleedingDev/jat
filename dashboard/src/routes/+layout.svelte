@@ -3,14 +3,60 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { onMount } from 'svelte';
 	import { themeChange } from 'theme-change';
+	import { page } from '$app/stores';
+	import { replaceState } from '$app/navigation';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import Nav from '$lib/components/Nav.svelte';
+	import { getProjectsFromTasks, getTaskCountByProject } from '$lib/utils/projectUtils';
 
 	let { children } = $props();
 
-	// Initialize theme-change library for DaisyUI themes
-	onMount(() => {
-		themeChange(false);
+	// Shared project state for entire app
+	let selectedProject = $state('All Projects');
+	let allTasks = $state([]);
+
+	// Derived project data
+	const projects = $derived(getProjectsFromTasks(allTasks));
+	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
+
+	// Sync selected project from URL parameter
+	$effect(() => {
+		const params = new URLSearchParams($page.url.searchParams);
+		const projectParam = params.get('project');
+		selectedProject = projectParam || 'All Projects';
 	});
+
+	// Initialize theme-change and load all tasks
+	onMount(async () => {
+		themeChange(false);
+		await loadAllTasks();
+	});
+
+	// Fetch all tasks to populate project dropdown
+	async function loadAllTasks() {
+		try {
+			const response = await fetch('/api/agents?full=true');
+			const data = await response.json();
+			allTasks = data.tasks || [];
+		} catch (error) {
+			console.error('Failed to load tasks:', error);
+			allTasks = [];
+		}
+	}
+
+	// Handle project selection change
+	function handleProjectChange(project: string) {
+		selectedProject = project;
+
+		// Update URL parameter
+		const url = new URL(window.location.href);
+		if (project === 'All Projects') {
+			url.searchParams.delete('project');
+		} else {
+			url.searchParams.set('project', project);
+		}
+		replaceState(url, {});
+	}
 </script>
 
 <svelte:head>
@@ -19,5 +65,13 @@
 
 <!-- Global Command Palette (Cmd+K / Ctrl+K) -->
 <CommandPalette />
+
+<!-- Unified Navigation Bar (shown on all pages) -->
+<Nav
+	{projects}
+	{selectedProject}
+	onProjectChange={handleProjectChange}
+	{taskCounts}
+/>
 
 {@render children()}

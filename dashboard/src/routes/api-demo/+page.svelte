@@ -49,7 +49,7 @@
 </script>
 
 <div class="min-h-screen bg-base-200">
-	<Nav context="api-demo" />
+	<Nav />
 
 	<div class="container mx-auto p-4 space-y-6">
 		<!-- Status Banner -->

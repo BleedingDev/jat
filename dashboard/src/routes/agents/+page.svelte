@@ -125,12 +125,10 @@
 <div class="min-h-screen bg-base-200">
 	<!-- Header -->
 	<Nav
-		context="agents"
 		{projects}
 		{selectedProject}
 		onProjectChange={handleProjectChange}
 		{taskCounts}
-		showProjectFilter={true}
 	/>
 
 	<!-- Main Content: Sidebar + Agent Grid -->
