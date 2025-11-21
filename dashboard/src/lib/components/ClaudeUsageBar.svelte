@@ -144,6 +144,24 @@
 				</div>
 			</div>
 
+			<!-- Tabs Navigation (folder tabs) -->
+			<div role="tablist" class="tabs tabs-lifted">
+				<button
+					role="tab"
+					class="tab {activeTab === 'api-limits' ? 'tab-active' : ''}"
+					onclick={() => handleTabChange('api-limits')}
+				>
+					API Limits
+				</button>
+				<button
+					role="tab"
+					class="tab {activeTab === 'subscription-usage' ? 'tab-active' : ''}"
+					onclick={() => handleTabChange('subscription-usage')}
+				>
+					Subscription Usage
+				</button>
+			</div>
+
 			<!-- Tab Panels -->
 			<div class="space-y-3">
 				{#if activeTab === 'api-limits'}
