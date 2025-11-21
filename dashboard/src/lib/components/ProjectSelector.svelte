@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
 	 * ProjectSelector Component
-	 * Reusable dropdown for filtering by project
+	 * DaisyUI dropdown for filtering by project
 	 */
 
 	interface Props {
@@ -20,14 +20,18 @@
 		compact = false
 	}: Props = $props();
 
-	function handleChange(event: Event) {
-		const target = event.target as HTMLSelectElement;
-		console.log('🔵 [ProjectSelector] Dropdown changed');
-		console.log('  → Selected value:', target.value);
+	function handleSelect(project: string) {
+		console.log('🔵 [ProjectSelector] Project selected');
+		console.log('  → Selected value:', project);
 		console.log('  → Previous value:', selectedProject);
 		console.log('  → Calling onProjectChange...');
-		onProjectChange(target.value);
+		onProjectChange(project);
 		console.log('  ✓ onProjectChange called');
+
+		// Close dropdown by removing focus
+		if (document.activeElement instanceof HTMLElement) {
+			document.activeElement.blur();
+		}
 	}
 
 	// Format project option with task count if available
@@ -45,15 +49,38 @@
 	}
 </script>
 
-<select
-	class="select select-bordered {compact ? 'select-sm' : 'select-md'} w-full"
-	value={selectedProject}
-	onchange={handleChange}
-	aria-label="Select project"
->
-	{#each projects as project}
-		<option value={project}>
-			{formatProjectOption(project)}
-		</option>
-	{/each}
-</select>
+<div class="dropdown dropdown-end w-full">
+	<div
+		tabindex="0"
+		role="button"
+		class="btn {compact ? 'btn-sm' : 'btn-md'} w-full justify-between"
+	>
+		<span>{formatProjectOption(selectedProject)}</span>
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			fill="none"
+			viewBox="0 0 24 24"
+			stroke-width="1.5"
+			stroke="currentColor"
+			class="w-4 h-4"
+		>
+			<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+		</svg>
+	</div>
+	<ul
+		tabindex="0"
+		class="dropdown-content menu bg-base-100 rounded-box z-[1] w-full p-2 shadow-lg border border-base-300 max-h-80 overflow-y-auto"
+	>
+		{#each projects as project}
+			<li>
+				<button
+					type="button"
+					class:active={selectedProject === project}
+					onclick={() => handleSelect(project)}
+				>
+					{formatProjectOption(project)}
+				</button>
+			</li>
+		{/each}
+	</ul>
+</div>
