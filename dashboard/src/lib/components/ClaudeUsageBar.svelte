@@ -235,11 +235,11 @@
 
 				<!-- Session Context (if available) -->
 				{#if metrics.sessionContext}
-					<div class="divider divider-start my-2">
-						<span class="text-xs text-base-content/60">Real-Time Usage</span>
+					<div class="divider divider-start my-2 opacity-50">
+						<span class="text-[10px] text-base-content/60">Dashboard API (not agents)</span>
 					</div>
 
-					<div class="flex items-center justify-between">
+					<div class="flex items-center justify-between opacity-60">
 						<div class="flex items-center gap-2">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -247,7 +247,7 @@
 								viewBox="0 0 24 24"
 								stroke-width="1.5"
 								stroke="currentColor"
-								class="w-4 h-4 text-warning"
+								class="w-3.5 h-3.5 text-base-content/60"
 							>
 								<path
 									stroke-linecap="round"
@@ -255,14 +255,14 @@
 									d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
 								/>
 							</svg>
-							<span class="text-sm">Tokens Remaining</span>
+							<span class="text-xs">Tokens Left</span>
 						</div>
-						<span class="font-mono text-sm font-semibold text-warning">
+						<span class="font-mono text-xs font-semibold text-base-content/60">
 							{formatNumber(metrics.sessionContext.inputTokensRemaining)}
 						</span>
 					</div>
 
-					<div class="flex items-center justify-between">
+					<div class="flex items-center justify-between opacity-60">
 						<div class="flex items-center gap-2">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -270,7 +270,7 @@
 								viewBox="0 0 24 24"
 								stroke-width="1.5"
 								stroke="currentColor"
-								class="w-4 h-4 text-warning"
+								class="w-3.5 h-3.5 text-base-content/60"
 							>
 								<path
 									stroke-linecap="round"
@@ -278,9 +278,9 @@
 									d="M7.5 7.5h-.75A2.25 2.25 0 004.5 9.75v7.5a2.25 2.25 0 002.25 2.25h7.5a2.25 2.25 0 002.25-2.25v-7.5a2.25 2.25 0 00-2.25-2.25h-.75m-6 3.75l3 3m0 0l3-3m-3 3V1.5m6 9h.75a2.25 2.25 0 012.25 2.25v7.5a2.25 2.25 0 01-2.25 2.25h-7.5a2.25 2.25 0 01-2.25-2.25v-.75"
 								/>
 							</svg>
-							<span class="text-sm">Requests Remaining</span>
+							<span class="text-xs">Requests Left</span>
 						</div>
-						<span class="font-mono text-sm font-semibold text-warning">
+						<span class="font-mono text-xs font-medium text-base-content/60">
 							{metrics.sessionContext.requestsRemaining}
 						</span>
 					</div>
