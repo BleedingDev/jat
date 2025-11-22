@@ -22,6 +22,9 @@ export interface UnifiedNavConfig {
  * Defines all navigation items and global nav settings.
  * Nav component imports this and renders nav items as buttons with active state.
  * Page-specific logic removed - Nav is now agnostic to which page it's on.
+ *
+ * Icons used: list, graph, calendar, columns, users
+ * (Icon SVG paths defined in Nav.svelte or Sidebar.svelte)
  */
 export const unifiedNavConfig: UnifiedNavConfig = {
 	navItems: [
@@ -32,10 +35,22 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			icon: 'list'
 		},
 		{
-			id: 'graph',
-			label: 'Graph',
-			href: '/graph',
+			id: 'dependency',
+			label: 'Dependency',
+			href: '/dependency',
 			icon: 'graph'
+		},
+		{
+			id: 'timeline',
+			label: 'Timeline',
+			href: '/timeline',
+			icon: 'calendar'
+		},
+		{
+			id: 'kanban',
+			label: 'Kanban',
+			href: '/kanban',
+			icon: 'columns'
 		},
 		{
 			id: 'agents',
