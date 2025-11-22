@@ -936,7 +936,7 @@
 					{#each queuedTasks().slice(0, 3) as task}
 						<div class="bg-base-200 rounded px-2 py-1">
 							<div class="flex items-center gap-2">
-								<span class="text-xs font-mono text-base-content/50">{task.id}</span>
+								<span class="text-xs font-mono text-base-content/50 truncate max-w-[100px] inline-block" title={task.id}>{task.id}</span>
 								<p class="text-xs text-base-content truncate flex-1" title={task.title}>
 									{task.title}
 								</p>
