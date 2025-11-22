@@ -42,17 +42,17 @@
 	}
 </script>
 
-<div class="w-full bg-base-100 rounded-lg p-6 shadow">
+<div class="w-full h-full bg-base-100 p-4 flex flex-col">
 	<!-- Kanban Board Header -->
-	<div class="flex items-center justify-between mb-6">
+	<div class="flex items-center justify-between mb-4 flex-none">
 		<h2 class="text-2xl font-bold text-base-content">Task Kanban Board</h2>
 		<div class="text-sm text-base-content/70">
 			Total: {tasks.length} task{tasks.length === 1 ? '' : 's'}
 		</div>
 	</div>
 
-	<!-- Kanban Columns -->
-	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+	<!-- Kanban Columns (Takes remaining space) -->
+	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 overflow-hidden">
 		{#each columns as column}
 			{@const columnTasks = tasksByStatus[column.id] || []}
 			<div class="flex flex-col h-full">
@@ -65,7 +65,7 @@
 				</div>
 
 				<!-- Column Content (Scrollable) -->
-				<div class="flex-1 bg-base-200 rounded-b-lg p-3 min-h-[400px] max-h-[600px] overflow-y-auto">
+				<div class="flex-1 bg-base-200 rounded-b-lg p-3 overflow-y-auto">
 					{#if columnTasks.length === 0}
 						<div class="text-center text-base-content/50 py-8 text-sm">No tasks</div>
 					{:else}
@@ -173,8 +173,8 @@
 		{/each}
 	</div>
 
-	<!-- Board Stats -->
-	<div class="mt-6 stats stats-horizontal shadow w-full">
+	<!-- Board Stats (Fixed at bottom) -->
+	<div class="mt-4 stats stats-horizontal shadow w-full flex-none">
 		<div class="stat">
 			<div class="stat-title">Total Tasks</div>
 			<div class="stat-value text-2xl">{tasks.length}</div>

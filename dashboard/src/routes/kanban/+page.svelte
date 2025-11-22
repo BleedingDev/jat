@@ -14,8 +14,7 @@
 	let drawerMode = $state<'view' | 'edit'>('view');
 
 	// Filters
-	let selectedPriority = $state('all');
-	let selectedStatus = $state('open');
+	let selectedPriorities = $state(new Set(['0', '1', '2', '3'])); // All priorities by default
 	let searchQuery = $state('');
 
 	// Read project filter from URL (managed by root layout)
@@ -27,14 +26,41 @@
 		selectedProject = projectParam || 'All Projects';
 	});
 
-	// Filter tasks by project
-	const filteredTasks = $derived(() => {
-		if (!selectedProject || selectedProject === 'All Projects') {
-			return allTasks;
+	// Toggle priority selection
+	function togglePriority(priority) {
+		if (selectedPriorities.has(priority)) {
+			selectedPriorities.delete(priority);
+		} else {
+			selectedPriorities.add(priority);
 		}
+		selectedPriorities = new Set(selectedPriorities); // Trigger reactivity
+	}
+
+	// Filter tasks by project and priority
+	const filteredTasks = $derived(() => {
+		let result = allTasks;
 
 		// Filter by project prefix (e.g., "jat-abc" matches "jat")
-		return allTasks.filter((task) => task.id.startsWith(selectedProject + '-'));
+		if (selectedProject && selectedProject !== 'All Projects') {
+			result = result.filter((task) => task.id.startsWith(selectedProject + '-'));
+		}
+
+		// Filter by priority (OR logic: task priority must be in selected set)
+		if (selectedPriorities.size > 0 && selectedPriorities.size < 4) {
+			result = result.filter((task) => selectedPriorities.has(String(task.priority)));
+		}
+
+		// Filter by search
+		if (searchQuery.trim()) {
+			const query = searchQuery.toLowerCase();
+			result = result.filter(
+				(task) =>
+					task.title?.toLowerCase().includes(query) ||
+					task.description?.toLowerCase().includes(query)
+			);
+		}
+
+		return result;
 	});
 
 	// Fetch tasks
@@ -43,11 +69,7 @@
 			loading = true;
 			error = null;
 
-			const params = new URLSearchParams();
-			if (selectedStatus !== 'all') params.append('status', selectedStatus);
-			if (selectedPriority !== 'all') params.append('priority', selectedPriority);
-
-			const response = await fetch(`/api/tasks?${params}`);
+			const response = await fetch(`/api/tasks`);
 			if (!response.ok) throw new Error('Failed to fetch tasks');
 
 			const data = await response.json();
@@ -82,48 +104,34 @@
 	});
 </script>
 
-<div class="min-h-screen bg-base-200">
+<div class="flex flex-col h-full bg-base-200">
 	<!-- Filters Bar -->
-	<div class="bg-base-100 border-b border-base-300 p-4">
+	<div class="bg-base-100 border-b border-base-300 p-4 flex-none">
 		<div class="flex flex-wrap items-center gap-4">
-			<!-- Filters -->
+			<!-- Priority Filter (Toggle Badges) -->
 			<div class="form-control">
-				<label class="label" for="priority-filter">
-					<span class="label-text">Priority</span>
+				<label class="label py-1">
+					<span class="label-text text-sm">Priority ({selectedPriorities.size} selected)</span>
 				</label>
-				<select
-					id="priority-filter"
-					class="select select-bordered select-sm"
-					bind:value={selectedPriority}
-				>
-					<option value="all">All Priorities</option>
-					<option value="0">P0 (Critical)</option>
-					<option value="1">P1 (High)</option>
-					<option value="2">P2 (Medium)</option>
-					<option value="3">P3 (Low)</option>
-				</select>
+				<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
+					{#each ['0', '1', '2', '3'] as priority}
+						<button
+							class="badge badge-sm transition-all duration-200 cursor-pointer {selectedPriorities.has(priority) ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+							onclick={() => togglePriority(priority)}
+						>
+							P{priority}
+							<span class="ml-1 opacity-70">
+								({allTasks.filter((task) => String(task.priority) === priority).length})
+							</span>
+						</button>
+					{/each}
+				</div>
 			</div>
 
+			<!-- Search -->
 			<div class="form-control">
-				<label class="label" for="status-filter">
-					<span class="label-text">Status</span>
-				</label>
-				<select
-					id="status-filter"
-					class="select select-bordered select-sm"
-					bind:value={selectedStatus}
-				>
-					<option value="all">All Statuses</option>
-					<option value="open">Open</option>
-					<option value="in_progress">In Progress</option>
-					<option value="blocked">Blocked</option>
-					<option value="closed">Closed</option>
-				</select>
-			</div>
-
-			<div class="form-control">
-				<label class="label" for="search-filter">
-					<span class="label-text">Search</span>
+				<label class="label py-1" for="search-filter">
+					<span class="label-text text-sm">Search</span>
 				</label>
 				<input
 					id="search-filter"
@@ -163,8 +171,8 @@
 
 	<!-- Main Content: Kanban Board -->
 	{:else}
-		<div class="p-4">
-			<KanbanBoard {tasks} onTaskClick={handleTaskClick} />
+		<div class="flex-1 flex flex-col overflow-hidden">
+			<KanbanBoard tasks={filteredTasks()} onTaskClick={handleTaskClick} />
 		</div>
 	{/if}
 

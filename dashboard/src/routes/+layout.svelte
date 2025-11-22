@@ -73,7 +73,7 @@
 	<input id="main-drawer" type="checkbox" class="drawer-toggle" />
 
 	<!-- Main content area -->
-	<div class="drawer-content flex flex-col">
+	<div class="drawer-content flex flex-col h-screen">
 		<!-- Top Bar -->
 		<TopBar
 			{projects}
