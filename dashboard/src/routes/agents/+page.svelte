@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { replaceState } from '$app/navigation';
 	import TaskQueue from '$lib/components/agents/TaskQueue.svelte';
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
@@ -47,15 +48,21 @@
 		fetchData();
 	}
 
-	// Sync selectedProject from URL params on mount
+	// Sync selectedProject from URL params (REACTIVE using $page store)
 	$effect(() => {
-		const params = new URLSearchParams(window.location.search);
-		const projectParam = params.get('project');
+		const projectParam = $page.url.searchParams.get('project');
 		if (projectParam && projectParam !== 'All Projects') {
 			selectedProject = projectParam;
 		} else {
 			selectedProject = 'All Projects';
 		}
+	});
+
+	// Refetch data whenever selectedProject changes (triggered by URL or dropdown)
+	$effect(() => {
+		// This effect depends on selectedProject, so it re-runs when it changes
+		selectedProject; // Read selectedProject to create dependency
+		fetchData();
 	});
 
 	// Fetch agent data from unified API
