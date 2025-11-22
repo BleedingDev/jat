@@ -289,3 +289,69 @@ export async function PATCH({ params, request }) {
 		);
 	}
 }
+
+/**
+ * Delete task (closes task in Beads)
+ * @type {import('./$types').RequestHandler}
+ */
+export async function DELETE({ params }) {
+	const taskId = params.id;
+
+	try {
+		// Check if task exists first
+		const existingTask = getTaskById(taskId);
+		if (!existingTask) {
+			return json(
+				{ error: true, message: `Task '${taskId}' not found` },
+				{ status: 404 }
+			);
+		}
+
+		// Close the task using bd close command
+		// Note: We use "close" rather than "delete" to preserve task history
+		const command = `bd close ${taskId} --reason "Deleted via dashboard"`;
+		const { stdout, stderr } = await execAsync(command);
+
+		// Check for errors in stderr
+		if (stderr && stderr.includes('Error:')) {
+			console.error('bd close error:', stderr);
+			return json(
+				{
+					error: true,
+					message: 'Failed to delete task',
+					details: stderr.trim()
+				},
+				{ status: 500 }
+			);
+		}
+
+		return json({
+			success: true,
+			message: `Task ${taskId} deleted successfully`
+		});
+
+	} catch (err) {
+		console.error('Error deleting task:', err);
+
+		// Check if it's a validation error from bd CLI
+		if (err.stderr && err.stderr.includes('Error:')) {
+			return json(
+				{
+					error: true,
+					message: err.stderr.trim(),
+					type: 'validation_error'
+				},
+				{ status: 400 }
+			);
+		}
+
+		return json(
+			{
+				error: true,
+				message: err.message || 'Internal server error deleting task',
+				type: 'server_error'
+			},
+			{ status: 500 }
+		);
+	}
+}
