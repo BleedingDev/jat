@@ -219,7 +219,7 @@
 
 	<!-- Drawer side -->
 	<div class="drawer-side">
-		<label for="task-creation-drawer" aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
+		<label aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
 
 		<!-- Drawer Panel -->
 		<div class="bg-base-100 min-h-full w-full max-w-2xl flex flex-col shadow-2xl">

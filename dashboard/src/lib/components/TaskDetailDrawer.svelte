@@ -465,7 +465,6 @@
 	<!-- Drawer side -->
 	<div class="drawer-side">
 		<label
-			for="task-detail-drawer"
 			aria-label="close sidebar"
 			class="drawer-overlay"
 			onclick={handleClose}
