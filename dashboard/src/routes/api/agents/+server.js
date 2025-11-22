@@ -2,14 +2,20 @@
  * Unified Agents API Endpoint
  *
  * GET /api/agents              → Simple agent list (lightweight, for dropdowns/lists)
- * GET /api/agents?full=true    → Full orchestration data (agents + tasks + reservations + stats)
+ * GET /api/agents?full=true    → Full orchestration data (agents + tasks + reservations + stats + activities)
  * GET /api/agents?orchestration=true → Alias for full orchestration data
  * GET /api/agents?usage=true   → Include token usage data for each agent
  * POST /api/agents             → Assign task to agent (body: { taskId, agentName })
+ *
+ * Each agent in full mode includes an 'activities' array with recent Agent Mail messages:
+ * - ts: timestamp (ISO 8601)
+ * - preview: message subject or preview text
+ * - content: full message content (markdown)
+ * - type: 'urgent' | 'action_required' | 'message'
  */
 
 import { json } from '@sveltejs/kit';
-import { getAgents, getReservations } from '$lib/server/agent-mail.js';
+import { getAgents, getReservations, getAgentActivities } from '$lib/server/agent-mail.js';
 import { getTasks } from '$lib/server/beads.js';
 import { getAllAgentUsage, getHourlyUsage } from '$lib/utils/tokenUsage.js';
 import { exec } from 'child_process';
@@ -90,13 +96,23 @@ export async function GET({ url }) {
 				return expiresAt > new Date() && !r.released_ts;
 			});
 
+			// Get recent activities (last 10 messages)
+			let activities = [];
+			try {
+				activities = getAgentActivities(agent.name);
+			} catch (error) {
+				console.error(`Failed to fetch activities for agent ${agent.name}:`, error);
+				// Continue with empty activities array
+			}
+
 			const baseStats = {
 				...agent,
 				reservation_count: agentReservations.length,
 				task_count: agentTasks.length,
 				open_tasks: openTasks,
 				in_progress_tasks: inProgressTasks,
-				active: hasActiveReservations || inProgressTasks > 0
+				active: hasActiveReservations || inProgressTasks > 0,
+				activities: activities
 			};
 
 			// Optionally include token usage data

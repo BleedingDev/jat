@@ -15,13 +15,36 @@ export function getThreadMessages(threadId) {
 }
 
 /**
- * Get inbox messages for an agent in a specific thread
+ * Get inbox messages for an agent (optionally filtered by thread)
  * @param {string} agentName - Agent name
- * @param {string} threadId - Thread identifier
+ * @param {string|null} threadId - Thread identifier (null for all messages)
+ * @param {Object} options - Query options
  * @returns {Array} - Array of message objects
  */
-export function getInboxForThread(agentName, threadId) {
-	return agentMail.getInboxForThread(agentName, threadId);
+export function getInboxForThread(agentName, threadId = null, options = {}) {
+	return agentMail.getInboxForThread(agentName, threadId, options);
+}
+
+/**
+ * Get recent activities for an agent (last 10 messages)
+ * @param {string} agentName - Agent name
+ * @returns {Array} - Array of activity objects {ts, preview, content, type}
+ */
+export function getAgentActivities(agentName) {
+	const messages = agentMail.getInboxForThread(agentName, null, {});
+
+	// Convert messages to activities format
+	// Sort by timestamp (most recent first) and limit to 10
+	return messages
+		.sort((a, b) => new Date(b.created_ts) - new Date(a.created_ts))
+		.slice(0, 10)
+		.map(msg => ({
+			ts: msg.created_ts,
+			preview: msg.subject || 'No subject',
+			content: msg.body_md || '',
+			type: msg.importance === 'urgent' ? 'urgent' :
+			      msg.ack_required ? 'action_required' : 'message'
+		}));
 }
 
 /**
