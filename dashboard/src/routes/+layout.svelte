@@ -7,7 +7,7 @@
 	import { goto } from '$app/navigation';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import TaskCreationDrawer from '$lib/components/TaskCreationDrawer.svelte';
-	import Nav from '$lib/components/Nav.svelte';
+	import TopBar from '$lib/components/TopBar.svelte';
 	import { getProjectsFromTasks, getTaskCountByProject } from '$lib/utils/projectUtils';
 
 	let { children } = $props();
@@ -70,8 +70,8 @@
 <!-- Task Creation Drawer (opens from command palette) -->
 <TaskCreationDrawer />
 
-<!-- Unified Navigation Bar (shown on all pages) -->
-<Nav
+<!-- Top Bar with utilities (shown on all pages) -->
+<TopBar
 	{projects}
 	{selectedProject}
 	onProjectChange={handleProjectChange}
