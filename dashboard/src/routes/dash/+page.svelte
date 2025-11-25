@@ -6,6 +6,7 @@
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import ClaudeUsageBar from '$lib/components/ClaudeUsageBar.svelte';
 	import {
 		getProjectsFromTasks,
 		getTaskCountByProject,
@@ -210,57 +211,64 @@
 	});
 </script>
 
-<div class="min-h-screen bg-base-200">
-	<!-- Project Badge Filter -->
-	<div class="px-4 py-2 border-b border-base-300 bg-base-100">
-		<label class="text-xs font-semibold text-base-content/60 mb-1 block">
-			Projects {selectedProjects.size > 0 ? `(${selectedProjects.size} selected)` : '(all)'}
-		</label>
-		<ProjectBadgeFilter
-			{projects}
-			{selectedProjects}
-			{taskCounts}
-			onFilterChange={handleProjectFilterChange}
-		/>
+<div class="min-h-screen bg-base-200 flex flex-col">
+	<!-- Top Row: Projects (50%) | Claude Usage (50%) -->
+	<div class="flex border-b border-base-300 bg-base-100">
+		<!-- Projects Filter -->
+		<div class="w-1/2 px-4 py-2 border-r border-base-300">
+			<label class="text-xs font-semibold text-base-content/60 mb-1 block">
+				Projects {selectedProjects.size > 0 ? `(${selectedProjects.size} selected)` : '(all)'}
+			</label>
+			<ProjectBadgeFilter
+				{projects}
+				{selectedProjects}
+				{taskCounts}
+				onFilterChange={handleProjectFilterChange}
+			/>
+		</div>
+		<!-- Claude Usage -->
+		<div class="w-1/2 px-4 py-2">
+			<label class="text-xs font-semibold text-base-content/60 mb-1 block">
+				Claude Usage
+			</label>
+			<ClaudeUsageBar mode="inline" agentsProp={agents} />
+		</div>
 	</div>
 
-	<!-- Main Content: Sidebar + Agent Grid -->
-	<div class="flex h-[calc(100vh-theme(spacing.20)-theme(spacing.16))]">
-		<!-- Left Sidebar: Task Queue -->
-		<div class="w-100 border-r border-base-300 bg-base-100 flex flex-col">
-			{#if isInitialLoad}
-				<!-- Loading State for Task Queue -->
-				<div class="flex-1 flex items-center justify-center">
-					<div class="text-center">
-						<span class="loading loading-bars loading-lg mb-4"></span>
-						<p class="text-sm text-base-content/60">Loading tasks...</p>
-					</div>
+	<!-- Agent Grid -->
+	<div class="border-b border-base-300 bg-base-100">
+		{#if isInitialLoad}
+			<!-- Loading State for Agent Grid -->
+			<div class="flex items-center justify-center h-48">
+				<div class="text-center">
+					<span class="loading loading-bars loading-lg mb-4"></span>
+					<p class="text-sm text-base-content/60">Loading agents...</p>
 				</div>
-			{:else}
-				<TaskQueue
-					tasks={filteredUnassignedTasks}
-					{agents}
-					{reservations}
-					{selectedProject}
-					ontaskclick={handleTaskClick}
-				/>
-			{/if}
-		</div>
+			</div>
+		{:else}
+			<AgentGrid {agents} tasks={filteredTasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
+		{/if}
+	</div>
 
-		<!-- Right Panel: Agent Grid -->
-		<div class="flex-1 overflow-auto">
-			{#if isInitialLoad}
-				<!-- Loading State for Agent Grid -->
-				<div class="flex items-center justify-center h-full">
-					<div class="text-center">
-						<span class="loading loading-bars loading-xl mb-4"></span>
-						<p class="text-sm text-base-content/60">Loading agents...</p>
-					</div>
+	<!-- Task Queue -->
+	<div class="flex-1 overflow-auto bg-base-100">
+		{#if isInitialLoad}
+			<!-- Loading State for Task Queue -->
+			<div class="flex items-center justify-center h-48">
+				<div class="text-center">
+					<span class="loading loading-bars loading-lg mb-4"></span>
+					<p class="text-sm text-base-content/60">Loading tasks...</p>
 				</div>
-			{:else}
-				<AgentGrid {agents} tasks={filteredTasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
-			{/if}
-		</div>
+			</div>
+		{:else}
+			<TaskQueue
+				tasks={filteredUnassignedTasks}
+				{agents}
+				{reservations}
+				{selectedProject}
+				ontaskclick={handleTaskClick}
+			/>
+		{/if}
 	</div>
 
 	<!-- Task Detail Drawer -->
