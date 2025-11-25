@@ -295,7 +295,10 @@ launch_project() {
         launch_npm "$path" "$name" "$port"
         launch_browser "$port" "$name"
         # Launch dashboard unless --no-dashboard was specified
-        [[ "$skip_dashboard" != "true" ]] && launch_dashboard "$name"
+        if [[ "$skip_dashboard" != "true" ]]; then
+            sleep 0.3
+            launch_dashboard "$name"
+        fi
     else
         $do_code && launch_code "$path" "$name"
         $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent"
