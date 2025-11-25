@@ -7,6 +7,17 @@
  * GET /api/agents?usage=true   → Include token usage data for each agent
  * POST /api/agents             → Assign task to agent (body: { taskId, agentName })
  *
+ * Date Range Filtering:
+ * - from: ISO date string (e.g., 2024-01-01) - start of range (inclusive)
+ * - to: ISO date string (e.g., 2024-01-07) - end of range (inclusive)
+ * - range: Quick preset ('today', 'yesterday', 'week', 'month', 'all')
+ *
+ * When date range is provided:
+ * - Agents are filtered by activity within date range
+ * - Activity includes: task updates, messages, reservations
+ * - Response includes: meta.dateRange with parsed from/to dates
+ * - Each agent includes: activityInRange (count), lastActiveInRange (timestamp)
+ *
  * Each agent in full mode includes an 'activities' array with recent Beads task history:
  * - ts: timestamp (ISO 8601)
  * - preview: task status update (e.g., "[jat-abc] Completed: Task title")
@@ -22,6 +33,97 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+
+/**
+ * Parse date range from query parameters
+ * @param {URLSearchParams} searchParams - URL search params
+ * @returns {{ from: Date | null, to: Date | null, hasRange: boolean }}
+ */
+function parseDateRange(searchParams) {
+	const rangePreset = searchParams.get('range');
+	let fromParam = searchParams.get('from');
+	let toParam = searchParams.get('to');
+
+	// Handle quick presets
+	if (rangePreset && rangePreset !== 'all') {
+		const now = new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+		switch (rangePreset) {
+			case 'today':
+				fromParam = today.toISOString();
+				toParam = now.toISOString();
+				break;
+			case 'yesterday': {
+				const yesterday = new Date(today);
+				yesterday.setDate(yesterday.getDate() - 1);
+				fromParam = yesterday.toISOString();
+				toParam = today.toISOString();
+				break;
+			}
+			case 'week': {
+				const weekAgo = new Date(today);
+				weekAgo.setDate(weekAgo.getDate() - 7);
+				fromParam = weekAgo.toISOString();
+				toParam = now.toISOString();
+				break;
+			}
+			case 'month': {
+				const monthAgo = new Date(today);
+				monthAgo.setMonth(monthAgo.getMonth() - 1);
+				fromParam = monthAgo.toISOString();
+				toParam = now.toISOString();
+				break;
+			}
+		}
+	}
+
+	// Parse dates
+	const from = fromParam ? new Date(fromParam) : null;
+	const to = toParam ? new Date(toParam) : null;
+
+	// Validate dates
+	const hasRange = (from !== null && !isNaN(from.getTime())) ||
+	                 (to !== null && !isNaN(to.getTime()));
+
+	return {
+		from: from && !isNaN(from.getTime()) ? from : null,
+		to: to && !isNaN(to.getTime()) ? to : null,
+		hasRange
+	};
+}
+
+/**
+ * Check if a timestamp is within a date range
+ * @param {string | Date} timestamp - Timestamp to check
+ * @param {Date | null} from - Range start (inclusive)
+ * @param {Date | null} to - Range end (inclusive)
+ * @returns {boolean}
+ */
+function isInDateRange(timestamp, from, to) {
+	if (!timestamp) return false;
+
+	const date = new Date(timestamp);
+	if (isNaN(date.getTime())) return false;
+
+	if (from && date < from) return false;
+	if (to && date > to) return false;
+
+	return true;
+}
+
+/**
+ * Filter activities by date range
+ * @param {Array} activities - Activities array
+ * @param {Date | null} from - Range start
+ * @param {Date | null} to - Range end
+ * @returns {Array} Filtered activities
+ */
+function filterActivitiesByDateRange(activities, from, to) {
+	if (!from && !to) return activities;
+
+	return activities.filter(activity => isInDateRange(activity.ts, from, to));
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
@@ -47,6 +149,10 @@ export async function GET({ url }) {
 		const agentFilter = url.searchParams.get('agent');
 		const includeUsage = url.searchParams.get('usage') === 'true';
 		const includeHourly = url.searchParams.get('hourly') === 'true';
+		const includeActivities = url.searchParams.get('activities') === 'true';
+
+		// Parse date range parameters
+		const dateRange = parseDateRange(url.searchParams);
 
 		// Fetch all data sources in parallel for performance
 		// NOTE: Agents and reservations are NOT filtered by project
@@ -98,11 +204,78 @@ export async function GET({ url }) {
 
 			// Get recent activities from Beads task history (last 10 task updates)
 			let activities = [];
-			try {
-				activities = getBeadsActivities(agent.name, tasks);
-			} catch (error) {
-				console.error(`Failed to fetch activities for agent ${agent.name}:`, error);
-				// Continue with empty activities array
+			if (includeActivities) {
+				try {
+					activities = getBeadsActivities(agent.name, tasks);
+				} catch (error) {
+					console.error(`Failed to fetch activities for agent ${agent.name}:`, error);
+					// Continue with empty activities array
+				}
+			}
+
+			// Apply date range filtering to activities if requested
+			let filteredActivities = activities;
+			let activityInRange = null;
+			let lastActiveInRange = null;
+
+			if (dateRange.hasRange && activities.length > 0) {
+				filteredActivities = filterActivitiesByDateRange(activities, dateRange.from, dateRange.to);
+				activityInRange = filteredActivities.length;
+
+				// Find the most recent activity in range
+				if (filteredActivities.length > 0) {
+					const sorted = [...filteredActivities].sort((a, b) =>
+						new Date(b.ts).getTime() - new Date(a.ts).getTime()
+					);
+					lastActiveInRange = sorted[0]?.ts || null;
+				}
+			}
+
+			// Also check task updates within range
+			if (dateRange.hasRange) {
+				const tasksInRange = agentTasks.filter(t =>
+					isInDateRange(t.updated_at, dateRange.from, dateRange.to)
+				);
+
+				// Update activity count to include tasks if higher
+				const taskActivityCount = tasksInRange.length;
+				if (activityInRange === null) {
+					activityInRange = taskActivityCount;
+				} else {
+					activityInRange = Math.max(activityInRange, taskActivityCount);
+				}
+
+				// Update last active if a task was updated more recently
+				const lastTaskUpdate = tasksInRange
+					.map(t => new Date(t.updated_at))
+					.sort((a, b) => b.getTime() - a.getTime())[0];
+
+				if (lastTaskUpdate) {
+					if (!lastActiveInRange || new Date(lastTaskUpdate) > new Date(lastActiveInRange)) {
+						lastActiveInRange = lastTaskUpdate.toISOString();
+					}
+				}
+			}
+
+			// Check reservations in date range
+			if (dateRange.hasRange) {
+				const reservationsInRange = agentReservations.filter(r =>
+					isInDateRange(r.created_ts, dateRange.from, dateRange.to)
+				);
+
+				if (reservationsInRange.length > 0) {
+					activityInRange = (activityInRange || 0) + reservationsInRange.length;
+
+					const lastReservation = reservationsInRange
+						.map(r => new Date(r.created_ts))
+						.sort((a, b) => b.getTime() - a.getTime())[0];
+
+					if (lastReservation) {
+						if (!lastActiveInRange || lastReservation > new Date(lastActiveInRange)) {
+							lastActiveInRange = lastReservation.toISOString();
+						}
+					}
+				}
 			}
 
 			const baseStats = {
@@ -112,8 +285,14 @@ export async function GET({ url }) {
 				open_tasks: openTasks,
 				in_progress_tasks: inProgressTasks,
 				active: hasActiveReservations || inProgressTasks > 0,
-				activities: activities
+				activities: filteredActivities
 			};
+
+			// Add date range specific stats if applicable
+			if (dateRange.hasRange) {
+				baseStats.activityInRange = activityInRange || 0;
+				baseStats.lastActiveInRange = lastActiveInRange;
+			}
 
 			// Optionally include token usage data
 			if (includeUsage && usageToday && usageWeek) {
@@ -173,9 +352,33 @@ export async function GET({ url }) {
 			!t.assignee && t.status === 'open'
 		);
 
+		// Build meta object with optional date range
+		const meta = {
+			poll_interval_ms: 3000, // Recommended poll interval for frontend
+			data_sources: ['agent-mail', 'beads'],
+			cache_ttl_ms: 2000 // Data freshness guarantee
+		};
+
+		// Include date range in meta if filtering was applied
+		if (dateRange.hasRange) {
+			meta.dateRange = {
+				from: dateRange.from ? dateRange.from.toISOString() : null,
+				to: dateRange.to ? dateRange.to.toISOString() : null
+			};
+		}
+
+		// Optionally filter agents to only those with activity in range
+		let filteredAgentStats = agentStats;
+		if (dateRange.hasRange) {
+			// Only include agents who had activity in the date range
+			filteredAgentStats = agentStats.filter(agent =>
+				agent.activityInRange > 0 || agent.active
+			);
+		}
+
 		// Return unified orchestration data
 		return json({
-			agents: agentStats,
+			agents: filteredAgentStats,
 			reservations,
 			reservations_by_agent: reservationsByAgent,
 			tasks: tasks, // Return all tasks (frontend handles pagination/filtering)
@@ -185,11 +388,7 @@ export async function GET({ url }) {
 			tasks_with_deps: tasksWithDeps,
 			hourlyUsage: hourlyUsage, // Raw hourly token usage (last 24 hours)
 			timestamp: new Date().toISOString(),
-			meta: {
-				poll_interval_ms: 3000, // Recommended poll interval for frontend
-				data_sources: ['agent-mail', 'beads'],
-				cache_ttl_ms: 2000 // Data freshness guarantee
-			}
+			meta
 		});
 	} catch (error) {
 		console.error('Error fetching agent data:', error);
