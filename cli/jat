@@ -412,6 +412,156 @@ edit_config() {
 }
 
 #------------------------------------------------------------------------------
+# List Projects - Helper Functions
+#------------------------------------------------------------------------------
+
+# Get task counts from Beads for a project path
+get_project_tasks() {
+    local project_path="$1"
+    local beads_dir="$project_path/.beads"
+
+    if [[ ! -d "$beads_dir" ]]; then
+        echo "-"
+        return
+    fi
+
+    # Count open and total tasks
+    local total open
+    total=$(find "$beads_dir" -name "*.json" -type f 2>/dev/null | wc -l)
+    open=$(grep -l '"status": "open"\|"status": "in_progress"' "$beads_dir"/*.json 2>/dev/null | wc -l)
+
+    if [[ "$total" -eq 0 ]]; then
+        echo "-"
+    else
+        echo "${open}/${total}"
+    fi
+}
+
+# Get count of active/total agents for a project
+# Returns: "2/67" (2 active, 67 total) or "67" (all inactive) or "-" (none)
+get_project_agents() {
+    local project_path="$1"
+    local claude_dir="$project_path/.claude"
+
+    if [[ ! -d "$claude_dir" ]]; then
+        echo "-"
+        return
+    fi
+
+    # Count total agent files
+    local total=0
+    local active=0
+
+    for agent_file in "$claude_dir"/agent-*.txt; do
+        [[ ! -f "$agent_file" ]] && continue
+        total=$((total + 1))
+
+        # Check if agent is active (file modified in last 30 minutes)
+        local mtime now diff
+        mtime=$(stat -c %Y "$agent_file" 2>/dev/null || stat -f %m "$agent_file" 2>/dev/null)
+        now=$(date +%s)
+        diff=$((now - mtime))
+
+        if [[ $diff -lt 1800 ]]; then  # 30 minutes
+            active=$((active + 1))
+        fi
+    done
+
+    if [[ $total -eq 0 ]]; then
+        echo "-"
+    elif [[ $active -gt 0 ]]; then
+        echo "${active}/${total}"
+    else
+        echo "$total"
+    fi
+}
+
+# Check if a port is in use (server running)
+get_port_status() {
+    local port="$1"
+
+    if [[ -z "$port" ]] || [[ "$port" == "null" ]]; then
+        echo "-"
+        return
+    fi
+
+    # Check if port is listening
+    if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
+       lsof -i ":${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+        echo -e "${GREEN}running${NC}"
+    else
+        echo "-"
+    fi
+}
+
+# Get time since last activity in a project (returns timestamp and human readable)
+# Usage: get_last_activity path [format]
+#   format: "human" (default) returns "3m", "2h", etc.
+#   format: "timestamp" returns unix timestamp for sorting
+get_last_activity() {
+    local project_path="$1"
+    local format="${2:-human}"
+
+    if [[ ! -d "$project_path" ]]; then
+        [[ "$format" == "timestamp" ]] && echo "0" || echo "-"
+        return
+    fi
+
+    # Get most recent modification time from git or files
+    local last_mod
+    if [[ -d "$project_path/.git" ]]; then
+        # Use git log for last commit time
+        last_mod=$(git -C "$project_path" log -1 --format="%ct" 2>/dev/null)
+    fi
+
+    if [[ -z "$last_mod" ]]; then
+        # Fall back to directory mtime
+        last_mod=$(stat -c %Y "$project_path" 2>/dev/null || stat -f %m "$project_path" 2>/dev/null)
+    fi
+
+    if [[ -z "$last_mod" ]]; then
+        [[ "$format" == "timestamp" ]] && echo "0" || echo "-"
+        return
+    fi
+
+    # Return timestamp for sorting
+    if [[ "$format" == "timestamp" ]]; then
+        echo "$last_mod"
+        return
+    fi
+
+    # Format as human readable
+    local now diff
+    now=$(date +%s)
+    diff=$((now - last_mod))
+
+    if [[ $diff -lt 60 ]]; then
+        echo "now"
+    elif [[ $diff -lt 3600 ]]; then
+        echo "$((diff / 60))m"
+    elif [[ $diff -lt 86400 ]]; then
+        echo "$((diff / 3600))h"
+    else
+        echo "$((diff / 86400))d"
+    fi
+}
+
+# Truncate path for display
+truncate_path() {
+    local path="$1"
+    local max_len="${2:-25}"
+
+    # Replace $HOME with ~
+    path="${path/#$HOME/\~}"
+
+    if [[ ${#path} -le $max_len ]]; then
+        echo "$path"
+    else
+        echo "...${path: -$((max_len - 3))}"
+    fi
+}
+
+#------------------------------------------------------------------------------
 # List Projects
 #------------------------------------------------------------------------------
 
@@ -433,21 +583,47 @@ list_all() {
     fi
 
     # Table header
-    printf "  ${DIM}%-15s %-8s %-20s${NC}\n" "PROJECT" "PORT" "COLOR"
-    printf "  ${DIM}%-15s %-8s %-20s${NC}\n" "───────────────" "────────" "────────────────────"
+    printf "  ${DIM}%-12s %-6s %-8s %-7s %-8s %-6s %-25s${NC}\n" \
+        "PROJECT" "PORT" "TASKS" "AGENTS" "STATUS" "LAST" "PATH"
+    printf "  ${DIM}%-12s %-6s %-8s %-7s %-8s %-6s %-25s${NC}\n" \
+        "────────────" "──────" "────────" "───────" "────────" "──────" "─────────────────────────"
 
+    # Collect project data with timestamps for sorting
+    local project_data=""
     for project in $projects; do
         local config
         config=$(get_project_config "$project")
-        local port active_color
-        port=$(echo "$config" | jq -r '.port // "-"')
-        active_color=$(echo "$config" | jq -r '.active_color // "-"')
 
-        printf "  %-15s %-8s %-20s\n" "$project" "$port" "$active_color"
+        local port path timestamp
+        port=$(echo "$config" | jq -r '.port // empty')
+        path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+        timestamp=$(get_last_activity "$path" "timestamp")
+
+        # Store as: timestamp|project|port|path
+        project_data+="${timestamp}|${project}|${port}|${path}"$'\n'
+    done
+
+    # Sort by timestamp descending (most recent first) and display
+    echo "$project_data" | sort -t'|' -k1 -nr | while IFS='|' read -r timestamp project port path; do
+        [[ -z "$project" ]] && continue
+
+        local tasks agents status last_activity display_path
+        tasks=$(get_project_tasks "$path")
+        agents=$(get_project_agents "$path")
+        status=$(get_port_status "$port")
+        last_activity=$(get_last_activity "$path")
+        display_path=$(truncate_path "$path" 25)
+
+        # Format port display
+        local port_display="${port:-"-"}"
+        [[ "$port_display" == "null" ]] && port_display="-"
+
+        printf "  %-12s %-6s %-8s %-7s %-8b %-6s %-25s\n" \
+            "$project" "$port_display" "$tasks" "$agents" "$status" "$last_activity" "$display_path"
     done
 
     echo ""
-    echo -e "${DIM}Usage: jat <project> [--code|--claude|--npm|--browser]${NC}"
+    echo -e "${DIM}Usage: jat <project> [N] [--code|--claude|--npm|--browser|--no-agent]${NC}"
     echo ""
 }
 
@@ -475,6 +651,7 @@ COMMANDS:
     jat config [project]       Show config (all or specific project)
     jat edit                   Edit config file
     jat colors                 Recolor all Hyprland windows
+    jat cleanup [--dry-run]    Delete stale agent session files
 
 OPTIONS:
     N               Number of Claude Code sessions to launch (1-10)
@@ -501,6 +678,112 @@ CONFIG:
     ~/.config/jat/projects.json
 
 EOF
+}
+
+#------------------------------------------------------------------------------
+# Cleanup Stale Agents
+#------------------------------------------------------------------------------
+
+cleanup_agents() {
+    local dry_run=false
+    [[ "$1" == "--dry-run" ]] && dry_run=true
+
+    echo ""
+    echo -e "${BOLD}Cleaning up stale agents...${NC}"
+    echo ""
+
+    local total_deleted=0
+    local total_kept=0
+
+    # Process each project
+    for project in $(list_projects); do
+        local config path claude_dir
+        config=$(get_project_config "$project")
+        path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+        claude_dir="$path/.claude"
+
+        [[ ! -d "$claude_dir" ]] && continue
+
+        local project_deleted=0
+        local project_kept=0
+
+        for agent_file in "$claude_dir"/agent-*.txt; do
+            [[ ! -f "$agent_file" ]] && continue
+
+            local agent_name session_id
+            agent_name=$(cat "$agent_file" 2>/dev/null)
+            session_id=$(basename "$agent_file" .txt | sed 's/agent-//')
+
+            # Check if agent should be kept
+            local keep=false
+            local keep_reason=""
+
+            # Check 1: Is the agent active (file modified in last 30 min)?
+            local mtime now diff
+            mtime=$(stat -c %Y "$agent_file" 2>/dev/null || stat -f %m "$agent_file" 2>/dev/null)
+            now=$(date +%s)
+            diff=$((now - mtime))
+            if [[ $diff -lt 1800 ]]; then
+                keep=true
+                keep_reason="active session"
+            fi
+
+            # Check 2: Does the agent have assigned tasks in Beads?
+            if [[ "$keep" == "false" ]] && command -v bd &>/dev/null; then
+                local assigned_tasks
+                assigned_tasks=$(bd list --json 2>/dev/null | jq -r --arg agent "$agent_name" \
+                    '[.[] | select(.assignee == $agent and (.status == "open" or .status == "in_progress"))] | length' 2>/dev/null)
+                if [[ "$assigned_tasks" -gt 0 ]]; then
+                    keep=true
+                    keep_reason="has $assigned_tasks assigned task(s)"
+                fi
+            fi
+
+            # Check 3: Does the agent have file reservations?
+            if [[ "$keep" == "false" ]] && command -v am-reservations &>/dev/null; then
+                local reservation_count
+                reservation_count=$(am-reservations --agent "$agent_name" --json 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
+                if [[ "$reservation_count" -gt 0 ]]; then
+                    keep=true
+                    keep_reason="has $reservation_count file reservation(s)"
+                fi
+            fi
+
+            if [[ "$keep" == "true" ]]; then
+                project_kept=$((project_kept + 1))
+                total_kept=$((total_kept + 1))
+                if $dry_run; then
+                    echo -e "  ${DIM}[keep]${NC} $agent_name ($keep_reason)"
+                fi
+            else
+                project_deleted=$((project_deleted + 1))
+                total_deleted=$((total_deleted + 1))
+                if $dry_run; then
+                    echo -e "  ${YELLOW}[delete]${NC} $agent_name (stale, no activity)"
+                else
+                    rm -f "$agent_file"
+                    echo -e "  ${RED}deleted${NC} $agent_name"
+                fi
+            fi
+        done
+
+        if [[ $project_deleted -gt 0 ]] || [[ $project_kept -gt 0 ]]; then
+            if $dry_run; then
+                echo -e "  ${DIM}$project: $project_deleted to delete, $project_kept to keep${NC}"
+            fi
+        fi
+    done
+
+    echo ""
+    if $dry_run; then
+        echo -e "${YELLOW}DRY RUN:${NC} Would delete $total_deleted agents, keep $total_kept"
+        echo ""
+        echo "Run 'jat cleanup' to actually delete stale agents"
+    else
+        echo -e "${GREEN}Deleted $total_deleted stale agents${NC}"
+        echo -e "${DIM}Kept $total_kept agents with activity${NC}"
+    fi
+    echo ""
 }
 
 #------------------------------------------------------------------------------
@@ -536,6 +819,9 @@ main() {
             ;;
         colors)
             apply_all_colors
+            ;;
+        cleanup)
+            cleanup_agents "$@"
             ;;
         *)
             # Assume it's a project name
