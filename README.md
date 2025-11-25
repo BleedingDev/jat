@@ -2,13 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tools](https://img.shields.io/badge/Tools-28-blue)](#4-28-generic-bash-tools)
-[![Commands](https://img.shields.io/badge/Commands-8-purple)](#3-agent-swarm-coordination-commands)
+[![Commands](https://img.shields.io/badge/Commands-9-purple)](#3-agent-swarm-coordination-commands)
 [![Agent Mail](https://img.shields.io/badge/Agent%20Mail-Bash%2BSQLite-green)](#1-agent-mail)
 [![Beads](https://img.shields.io/badge/Beads-CLI-orange)](https://github.com/steveyegge/beads)
 
 **Manage multiple agents across several projects in a complete AI-assisted development environment in one command.**
 
-Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools + 8 coordination commands = Full swarm orchestration that transcends context windows and project boundaries.
+Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools + 9 coordination commands = Full swarm orchestration that transcends context windows and project boundaries.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
@@ -43,7 +43,7 @@ bd init
 /agent:next
 ```
 
-**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 8 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
+**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 9 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
 
 ### How It Actually Works
 
@@ -53,6 +53,77 @@ bd init
 4. **Execution** (AI assistant or swarm): Agents pick tasks from queue and coordinate automatically
 
 See [Complete Workflow](#complete-workflow-from-idea-to-production) below for detailed walkthrough.
+
+---
+
+## 🚀 jat CLI - Launch Dev Environments
+
+The `jat` command launches complete development environments with a single command:
+
+```bash
+jat chimaro          # Launch full environment
+jat chimaro 4        # Launch with 4 Claude Code sessions
+jat chimaro --claude # Launch only Claude Code
+```
+
+### What It Launches
+
+| Component | What Happens |
+|-----------|--------------|
+| **VS Code** | Opens new window in project directory |
+| **Claude Code** | Opens in alacritty terminal with `/agent:start` auto-run |
+| **Dev Server** | Runs `npm run dev --port <configured-port>` (if port set) |
+| **Browser** | Opens `http://localhost:<port>` after 2s delay (if port set) |
+| **Window Colors** | Applies Hyprland border colors per project |
+
+### Configuration
+
+Projects are configured in `~/.config/jat/projects.json`:
+
+```json
+{
+  "projects": {
+    "chimaro": {
+      "name": "CHIMARO",
+      "path": "~/code/chimaro",
+      "port": 3500,
+      "database_url": "postgresql://...",
+      "active_color": "rgb(00d4aa)",
+      "inactive_color": "rgb(00a080)"
+    }
+  },
+  "defaults": {
+    "terminal": "alacritty",
+    "claude_flags": "--dangerously-skip-permissions"
+  }
+}
+```
+
+### Commands
+
+```bash
+jat <project>              # Full environment (VS Code + Claude + npm + browser)
+jat <project> [N]          # Launch N Claude Code sessions (default: 1)
+jat <project> --claude     # Only Claude Code
+jat <project> --code       # Only VS Code
+jat <project> --npm        # Only dev server
+jat <project> --no-agent   # Skip /agent:start (raw Claude)
+
+jat list                   # Show configured projects
+jat init                   # Auto-detect projects in ~/code
+jat config [project]       # Show config
+jat edit                   # Edit config file
+jat colors                 # Reapply Hyprland window colors
+```
+
+### Import Existing Config
+
+If you have `PROJECT_CONFIG` in your bashrc, import it:
+
+```bash
+~/code/jat/scripts/import-bashrc-config.sh --dry-run  # Preview
+~/code/jat/scripts/import-bashrc-config.sh            # Import
+```
 
 ---
 
@@ -105,22 +176,23 @@ File Locks    Dependencies  (db, browser, etc)
 
 ### 📊 Real-Time Statusline
 
-The installer automatically sets up a multi-line statusline in Claude Code that shows:
+The installer installs a **global statusline** to `~/.claude/statusline.sh` that works across all projects:
 
 **Line 1:** Agent identity, current task, priority, file locks, messages, time remaining
 ```
-WiseStar | [P1] jat-m95 - Update /start... [🔒2 📬1 ⏱45m]
+GreatWind | [P1] jat-m95 - Update /start... [🔒2 📬1 ⏱45m]
 ```
 
-**Line 2:** Git branch, last command, context remaining (color-coded)
+**Line 2:** Context battery, git display (folder@branch), last prompt
 ```
-⎇ master | 💬 yes implement top 3 | 💭 67%
+▪▪▪▪▪▪▫▫▫▫ | ⎇ jat@master* | 💬 yes implement top 3
 ```
 
 Features:
+- **Global**: Single statusline works across all projects (dynamic project name)
 - **Session-aware**: Each Claude Code terminal has its own agent identity
 - **Real-time updates**: Automatically refreshes when you run `am-*` or `bd` commands
-- **Color-coded**: Priority badges (P0=red, P1=yellow, P2=green), context warnings
+- **Color-coded**: Git (blue folder, dim @, green branch, red *), priority badges (P0=red, P1=yellow, P2=green)
 - **Multi-agent ready**: Run multiple agents in different terminals simultaneously
 
 No configuration needed - works automatically after installation!
@@ -648,9 +720,9 @@ This installs:
 **Usage:**
 ```bash
 am-register --program claude-code --model sonnet-4.5
-am-inbox AgentName --unread
-am-send "Subject" "Body" --from Agent1 --to Agent2 --thread task-123
-am-reserve "src/**" --agent AgentName --ttl 3600 --reason "task-123"
+am-inbox GreatWind --unread
+am-send "Subject" "Body" --from GreatWind --to Team --thread task-123
+am-reserve "src/**" --agent GreatWind --ttl 3600 --reason "task-123"
 ```
 
 ### 2. Beads CLI
@@ -677,7 +749,7 @@ bd create "Task title" \
   --labels security,auth \
   --priority 1 \
   --description "Detailed description"
-bd update task-id --status in_progress --assignee AgentName
+bd update task-id --status in_progress --assignee GreatWind
 bd close task-id --reason "Completed"
 ```
 
@@ -690,7 +762,7 @@ bd create "Fix OAuth authentication timeout" \
   --labels security,auth,urgent \
   --priority 1 \
   --description "Users experience timeout when logging in via OAuth. Need to investigate token refresh logic and increase timeout threshold." \
-  --assignee "AgentName"
+  --assignee "GreatWind"
 ```
 
 Set up task dependencies:
@@ -708,15 +780,15 @@ bd create "Add logout button" \
 Integrate with Agent Mail (use task IDs as thread IDs):
 ```bash
 # Reserve files for task
-am-reserve "src/auth/**" --agent AgentName --ttl 3600 --reason "task-123"
+am-reserve "src/auth/**" --agent GreatWind --ttl 3600 --reason "task-123"
 
 # Send progress updates
 am-send "[task-123] Progress Update" "Implemented token refresh logic." \
-  --from AgentName --thread task-123
+  --from GreatWind --thread task-123
 
 # Close task and release
 bd close task-123 --reason "Completed"
-am-release "src/auth/**" --agent AgentName
+am-release "src/auth/**" --agent GreatWind
 ```
 
 #### Agent Command Quick Reference
@@ -776,7 +848,7 @@ am-release "src/auth/**" --agent AgentName
 - ✅ Release file locks
 - ✅ **Show available tasks menu** (to pivot)
 
-**Support Commands (3 commands):**
+**Support Commands (4 commands):**
 
 **`/agent:status`** - Check current work status
 ```bash
@@ -793,6 +865,25 @@ am-release "src/auth/**" --agent AgentName
 ```bash
 /agent:plan                     # Analyze conversation/PRD, create tasks
 ```
+
+**`/agent:doctor`** - Diagnose and repair jat setup
+```bash
+/agent:doctor                   # Check installation health, fix issues
+```
+
+**What it checks:**
+- ✅ jat repo exists at `~/code/jat`
+- ✅ All 7 shared doc files present
+- ✅ CLAUDE.md has correct imports
+- ✅ Statusline installed
+- ✅ Agent commands installed
+- ✅ Tools symlinked to ~/bin
+- ✅ Beads initialized in project
+
+**What it repairs:**
+- 🔧 Missing/malformed imports in CLAUDE.md
+- 🔧 Missing statusline
+- 🔧 Missing Beads initialization
 
 **Common Workflows:**
 
@@ -948,10 +1039,11 @@ commands/agent/
 - `/agent:complete` - Finish properly: complete task + show menu (manual selection)
 - `/agent:pause` - Quick pivot: pause task + show menu (context switch)
 
-**Coordination & Quality (3 commands):**
+**Coordination & Quality (4 commands):**
 - `/agent:status` - Check state, sync with team, update presence
 - `/agent:verify` - Pre-completion checks (tests, lint, browser, security)
 - `/agent:plan` - Convert planning documents to structured Beads tasks
+- `/agent:doctor` - Diagnose and repair jat setup (missing imports, broken config)
 
 #### How Commands Work
 
@@ -1299,19 +1391,25 @@ For each git repository in `~/code/*`:
 
 **Example scenario: 60 agents fixing 1,231 TypeScript errors in 18 minutes** (via `/start` detecting bulk remediation pattern and deploying agent swarm automatically)
 
-### 9. Session-Aware Statusline
+### 9. Global Statusline
 
 **Visual agent identity and task progress in your terminal statusline**
 
-The statusline displays your agent name, current task, and real-time indicators directly in your terminal prompt:
+**Location:** `~/.claude/statusline.sh` (global, works across all projects)
+**Source:** `~/code/jat/.claude/statusline.sh` (canonical, edit here)
+
+The statusline displays your agent name, current task, and real-time indicators:
 
 ```
-FreeMarsh | [P1] jat-4p0 - Demo: Frontend... [🔒2 📬1 ⏱45m]
+GreatWind | [P1] jat-4p0 - Demo: Frontend... [🔒2 📬1 ⏱45m]
+▪▪▪▪▪▪▫▫▫▫ | ⎇ jat@master* | 💬 build the dashboard
 ```
 
 **Features:**
+- **Global:** Single statusline works across all projects (dynamic project prefix)
 - **Session-aware:** Each Claude Code session maintains its own agent identity
 - **Multi-agent support:** Run 9+ concurrent agents with independent statuslines
+- **Color-coded git:** Blue folder, dim @, green branch, red dirty (*)
 - **Real-time indicators:**
   - 🔒 Active file reservations
   - 📬 Unread Agent Mail messages
@@ -1321,17 +1419,18 @@ FreeMarsh | [P1] jat-4p0 - Demo: Frontend... [🔒2 📬1 ⏱45m]
 
 **How it works:**
 1. Claude Code passes unique `session_id` via JSON to statusline
-2. `/register` writes agent name to `.claude/agent-{session_id}.txt`
+2. `/agent:start` writes agent name to `.claude/agent-{session_id}.txt`
 3. Statusline reads session-specific file to display identity
-4. Each session = independent agent identity (no conflicts!)
+4. Project name extracted from `$cwd` for dynamic task ID matching
 
-**Files created:**
-- `.claude/agent-{session_id}.txt` - Session-specific agent name
+**Files:**
+- `~/.claude/statusline.sh` - Global statusline script (installed by jat)
+- `.claude/agent-{session_id}.txt` - Session-specific agent name (per-project)
 - `/tmp/claude-session-${PPID}.txt` - PPID-based session ID (process-isolated, race-free)
 
-**Setup:** Automatically configured by installer. Works immediately after `/register`.
+**Setup:** Automatically configured by installer. Works immediately after `/agent:start`.
 
-**See also:** `CLAUDE.md` section "Session-Aware Statusline" for complete documentation.
+**See also:** `CLAUDE.md` section "Global Statusline" for complete documentation.
 
 ---
 
@@ -1372,25 +1471,25 @@ am-register --program claude-code --model sonnet-4.5
 
 # 3. Reserve files (prevent conflicts)
 am-reserve "src/**/*.ts" \
-  --agent AgentName \
+  --agent GreatWind \
   --ttl 3600 \
   --exclusive \
   --reason "task-123: Implementing auth"
 
 # 4. Update task status
-bd update task-123 --status in_progress --assignee AgentName
+bd update task-123 --status in_progress --assignee GreatWind
 
 # 5. Announce start (optional - for team coordination)
 am-send "[task-123] Starting: Auth implementation" \
   "Working on OAuth flow..." \
-  --from AgentName \
+  --from GreatWind \
   --thread task-123
 
 # 6. Work on code...
 
 # 7. Complete and release
 bd close task-123 --reason "Completed: OAuth flow implemented"
-am-release "src/**/*.ts" --agent AgentName
+am-release "src/**/*.ts" --agent GreatWind
 ```
 
 ---
@@ -1403,17 +1502,17 @@ One of the major advantages of bash tools - pipe, filter, and chain:
 
 ```bash
 # Chain tools with pipes
-am-inbox AgentName --unread --json | jq '.[] | select(.importance=="urgent")'
+am-inbox GreatWind --unread --json | jq '.[] | select(.importance=="urgent")'
 
 # Bulk operations
-am-inbox AgentName --unread --json | jq -r '.[].id' | \
-  xargs -I {} am-ack {} --agent AgentName
+am-inbox GreatWind --unread --json | jq -r '.[].id' | \
+  xargs -I {} am-ack {} --agent GreatWind
 
 # Conditional logic
-if am-reservations --agent AgentName | grep -q "src/auth"; then
+if am-reservations --agent GreatWind | grep -q "src/auth"; then
   echo "Already working on auth"
 else
-  am-reserve "src/auth/**" --agent AgentName --ttl 3600
+  am-reserve "src/auth/**" --agent GreatWind --ttl 3600
 fi
 ```
 
@@ -1710,11 +1809,11 @@ Contributions welcome! Please open issues or PRs.
 ```bash
 # Use tools directly without any coordination
 db-query "SELECT * FROM users LIMIT 10"
-am-inbox AgentName --unread
+am-inbox GreatWind --unread
 browser-screenshot.js > /tmp/page.png
 
 # Or with simple bash composition
-am-inbox AgentName --json | jq '.[] | select(.importance=="urgent")'
+am-inbox GreatWind --json | jq '.[] | select(.importance=="urgent")'
 ```
 
 **You don't need Agent Mail, Beads, or coordination commands to use the 28 tools.**
@@ -1832,13 +1931,13 @@ chmod 644 ~/.agent-mail.db
 1. **Check who has the lock:**
    ```bash
    am-reservations --all
-   # Shows: Agent "BackendDev" has src/api/** until 14:30
+   # Shows: Agent "GreatWind" has src/api/** until 14:30
    ```
 
 2. **Options:**
    - **Wait:** Files auto-release after TTL expires
    - **Work elsewhere:** `/start` picks different task
-   - **Coordinate:** `am-send BackendDev "Need src/api/auth.ts"`
+   - **Coordinate:** `am-send GreatWind "Need src/api/auth.ts"`
    - **Override (last resort):** `am-release src/api/** --force` (if agent is stale)
 
 3. **Prevent conflicts:**
