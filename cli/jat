@@ -113,6 +113,7 @@ launch_claude() {
     local db_url="$3"
     local tools_path="$4"
     local count="${5:-1}"
+    local skip_agent="${6:-false}"
 
     # Build environment
     local env_vars="PATH=$PATH:$tools_path:$path/.claude/tools"
@@ -122,6 +123,11 @@ launch_claude() {
     # Get claude flags from config
     local claude_flags
     claude_flags=$(jq -r '.defaults.claude_flags // "--dangerously-skip-permissions"' "$CONFIG_FILE")
+
+    # Add /agent:start prompt unless --no-agent flag was used
+    if [[ "$skip_agent" != "true" ]]; then
+        claude_flags="$claude_flags -p '/agent:start'"
+    fi
 
     # Launch N Claude sessions with staggered timing
     for ((i=1; i<=count; i++)); do
@@ -190,6 +196,7 @@ launch_project() {
     local do_npm=false
     local do_browser=false
     local session_count=1
+    local skip_agent=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -198,6 +205,7 @@ launch_project() {
             --npm|-n)      do_all=false; do_npm=true ;;
             --browser|-b)  do_all=false; do_browser=true ;;
             --all|-a)      do_all=true ;;
+            --no-agent)    skip_agent=true ;;
             [0-9]*)        session_count="$1" ;;
             *) echo -e "${RED}Unknown option: $1${NC}"; return 1 ;;
         esac
@@ -251,13 +259,13 @@ launch_project() {
     if $do_all; then
         launch_code "$path" "$name"
         sleep 0.3
-        launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count"
+        launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent"
         sleep 0.3
         launch_npm "$path" "$name" "$port"
         launch_browser "$port" "$name"
     else
         $do_code && launch_code "$path" "$name"
-        $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count"
+        $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent"
         $do_npm && launch_npm "$path" "$name" "$port"
         $do_browser && launch_browser "$port" "$name"
     fi
