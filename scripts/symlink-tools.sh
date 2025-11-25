@@ -116,6 +116,32 @@ for launcher in "bd-dashboard" "jat-dashboard"; do
 done
 
 echo ""
+echo -e "${BLUE}Setting up jat CLI...${NC}"
+echo ""
+
+# Symlink jat CLI (dev environment launcher)
+JAT_CLI_SOURCE="$PROJECT_ROOT/cli/jat"
+JAT_CLI_TARGET="$HOME/.local/bin/jat"
+
+if [ -f "$JAT_CLI_SOURCE" ]; then
+    if [ -L "$JAT_CLI_TARGET" ]; then
+        CURRENT_TARGET=$(readlink "$JAT_CLI_TARGET")
+        if [ "$CURRENT_TARGET" = "$JAT_CLI_SOURCE" ]; then
+            echo -e "  ${GREEN}✓${NC} jat (already linked)"
+        else
+            echo -e "  ${YELLOW}↻${NC} jat (updating link)"
+            rm "$JAT_CLI_TARGET"
+            ln -s "$JAT_CLI_SOURCE" "$JAT_CLI_TARGET"
+        fi
+    else
+        echo -e "  ${GREEN}+${NC} jat (linked)"
+        ln -s "$JAT_CLI_SOURCE" "$JAT_CLI_TARGET"
+    fi
+else
+    echo -e "  ${YELLOW}⚠${NC} jat CLI not found at $JAT_CLI_SOURCE"
+fi
+
+echo ""
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}Agent Tools Setup Complete${NC}"
 echo -e "${GREEN}=========================================${NC}"
@@ -137,10 +163,12 @@ fi
 echo "  Test tools:"
 echo "    am-inbox --help"
 echo "    browser-eval.js --help"
+echo "    jat --help"
 echo ""
 
 echo "  Tool categories:"
 echo "    • Agent Mail (12): am-register, am-inbox, am-send, am-reply, am-ack, ..."
 echo "    • Browser (7): browser-start.js, browser-nav.js, browser-eval.js, ..."
 echo "    • Additional (24): db-*, monitoring, media, deployment helpers"
+echo "    • JAT CLI: jat <project> - Launch full dev environment"
 echo ""

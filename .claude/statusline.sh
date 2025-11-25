@@ -395,6 +395,17 @@ if [[ -n "$agent_name" ]]; then
     fi
 fi
 
+# Count tasks blocked by current task (shows impact/leverage of current work)
+blocked_count=0
+if [[ -n "$task_id" ]] && command -v bd &>/dev/null; then
+    # Get dependent tasks (cached) - tasks that are blocked waiting on this task
+    blocked_cache_key="${agent_name}-${task_id}-blocked"
+    blocked_json=$(cache_get_or_run "$blocked_cache_key" "bd dep tree '$task_id' --reverse --json")
+    # Count tasks with depth > 0 (children of current task in dependency tree)
+    blocked_count=$(echo "$blocked_json" | jq '[.[] | select(.depth > 0)] | length' 2>/dev/null || echo "0")
+    blocked_count=$(echo "$blocked_count" | tr -d '\n' | tr -d ' ')
+fi
+
 # Calculate active time if task has updated_at
 active_time=""
 if [[ -n "$task_updated_at" ]]; then
@@ -497,6 +508,7 @@ fi
 # 📬 Messages:   Cyan (1-5) → Yellow (6-15) → Red (>15)
 # ⏱ Time Left:  Green (>30min) → Yellow (10-30min) → Red (<10min)
 # 📊 Progress:   Red (<25%) → Yellow (25-75%) → Green (>75%)
+# ⛔ Blocked:    Cyan (1-2) → Yellow (3-5) → Red (>5) - tasks waiting on this
 #
 # See CLAUDE.md "Status Calculation Algorithm" for full color matrix
 # ============================================================================
@@ -561,7 +573,21 @@ if [[ -n "$task_progress" ]] && [[ "$task_progress" != "null" ]]; then
     else
         progress_color="${RED}"
     fi
-    indicators="${indicators}${progress_color}${task_progress} %${RESET}"
+    indicators="${indicators}${progress_color}${task_progress}%${RESET}"
+fi
+
+# Add blocked-by count (dynamic: cyan=1-2, yellow=3-5, red=>5)
+# Shows how many tasks are waiting on current task (high = high leverage work)
+if [[ $blocked_count -gt 0 ]]; then
+    [[ -n "$indicators" ]] && indicators="${indicators}  "
+    if [[ $blocked_count -gt 5 ]]; then
+        blocked_color="${RED}"
+    elif [[ $blocked_count -gt 2 ]]; then
+        blocked_color="${YELLOW}"
+    else
+        blocked_color="${CYAN}"
+    fi
+    indicators="${indicators}${blocked_color}⛔ ${blocked_count}${RESET}"
 fi
 
 # Build second line with context battery, git branch, and indicators
