@@ -57,6 +57,12 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Agents',
 			href: '/agents',
 			icon: 'users'
+		},
+		{
+			id: 'dash',
+			label: 'Dash',
+			href: '/dash',
+			icon: 'dash'
 		}
 	],
 	showProjectFilter: true,
