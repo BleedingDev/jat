@@ -5,6 +5,7 @@
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { getPriorityBadge } from '$lib/utils/badgeHelpers';
+	import { toggleSetItem } from '$lib/utils/filterHelpers';
 
 	let { tasks = [], agents = [], reservations = [], selectedProject = 'All Projects', ontaskclick } = $props();
 
@@ -131,47 +132,24 @@
 		return Array.from(typesSet).sort();
 	});
 
-	// Toggle priority selection
+	// Toggle functions using shared helper
 	function togglePriority(priority) {
-		if (selectedPriorities.has(priority)) {
-			selectedPriorities.delete(priority);
-		} else {
-			selectedPriorities.add(priority);
-		}
-		selectedPriorities = new Set(selectedPriorities); // Trigger reactivity
+		selectedPriorities = toggleSetItem(selectedPriorities, priority);
 		updateURL();
 	}
 
-	// Toggle status selection
 	function toggleStatus(status) {
-		if (selectedStatuses.has(status)) {
-			selectedStatuses.delete(status);
-		} else {
-			selectedStatuses.add(status);
-		}
-		selectedStatuses = new Set(selectedStatuses); // Trigger reactivity
+		selectedStatuses = toggleSetItem(selectedStatuses, status);
 		updateURL();
 	}
 
-	// Toggle type selection
 	function toggleType(type) {
-		if (selectedTypes.has(type)) {
-			selectedTypes.delete(type);
-		} else {
-			selectedTypes.add(type);
-		}
-		selectedTypes = new Set(selectedTypes); // Trigger reactivity
+		selectedTypes = toggleSetItem(selectedTypes, type);
 		updateURL();
 	}
 
-	// Toggle label selection
 	function toggleLabel(label) {
-		if (selectedLabels.has(label)) {
-			selectedLabels.delete(label);
-		} else {
-			selectedLabels.add(label);
-		}
-		selectedLabels = new Set(selectedLabels); // Trigger reactivity
+		selectedLabels = toggleSetItem(selectedLabels, label);
 		updateURL();
 	}
 

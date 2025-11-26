@@ -5,6 +5,7 @@
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getTimeSinceMinutes, getAgeColorClass } from '$lib/utils/dateFormatters';
+	import { toggleSetItem } from '$lib/utils/filterHelpers';
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {} } = $props();
 
@@ -331,54 +332,29 @@
 		return Array.from(projectsSet).sort();
 	});
 
-	// Toggle functions
+	// Toggle functions using shared helper
 	function toggleProject(project) {
-		if (selectedProjects.has(project)) {
-			selectedProjects.delete(project);
-		} else {
-			selectedProjects.add(project);
-		}
-		selectedProjects = new Set(selectedProjects);
+		selectedProjects = toggleSetItem(selectedProjects, project);
 		updateURL();
 	}
 
 	function togglePriority(priority) {
-		if (selectedPriorities.has(priority)) {
-			selectedPriorities.delete(priority);
-		} else {
-			selectedPriorities.add(priority);
-		}
-		selectedPriorities = new Set(selectedPriorities);
+		selectedPriorities = toggleSetItem(selectedPriorities, priority);
 		updateURL();
 	}
 
 	function toggleStatus(status) {
-		if (selectedStatuses.has(status)) {
-			selectedStatuses.delete(status);
-		} else {
-			selectedStatuses.add(status);
-		}
-		selectedStatuses = new Set(selectedStatuses);
+		selectedStatuses = toggleSetItem(selectedStatuses, status);
 		updateURL();
 	}
 
 	function toggleType(type) {
-		if (selectedTypes.has(type)) {
-			selectedTypes.delete(type);
-		} else {
-			selectedTypes.add(type);
-		}
-		selectedTypes = new Set(selectedTypes);
+		selectedTypes = toggleSetItem(selectedTypes, type);
 		updateURL();
 	}
 
 	function toggleLabel(label) {
-		if (selectedLabels.has(label)) {
-			selectedLabels.delete(label);
-		} else {
-			selectedLabels.add(label);
-		}
-		selectedLabels = new Set(selectedLabels);
+		selectedLabels = toggleSetItem(selectedLabels, label);
 		updateURL();
 	}
 
