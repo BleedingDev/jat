@@ -261,13 +261,13 @@ export AGENT_NAME=FreeMarsh
 3. Jump to Step 7.5 (line 134)
 4. Check if PARAM looks like task ID (matches pattern)
 5. Verify task exists: `bd show "$TASK_ID" --json`
-6. If valid → Delegate to /agent:start command
+6. If valid → Delegate to /jat:start command
 7. If invalid → Show error message
 
 **Expected Result:** ✅ PASS
 - Skips registration when AGENT_NAME already set
 - Validates task ID exists in Beads
-- Delegates to full /agent:start flow for comprehensive conflict checks
+- Delegates to full /jat:start flow for comprehensive conflict checks
 - Error handling for invalid task IDs
 
 **Validation:** Logic flow matches spec ✅
@@ -282,7 +282,7 @@ export AGENT_NAME=FreeMarsh
 3. After registration completes (Steps 3-6):
    - Set AGENT_NAME env var (Step 7, line 127)
    - Check PARAM type (Step 7.5, line 134)
-   - PARAM is task ID → Verify and delegate to /agent:start
+   - PARAM is task ID → Verify and delegate to /jat:start
 
 **Expected Result:** ✅ PASS
 - Registers agent first (via recent agent detection or auto-create)

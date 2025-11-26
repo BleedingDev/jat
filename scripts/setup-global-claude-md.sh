@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Setup Global Claude Configuration
-# - Installs agent coordination commands to ~/.claude/commands/agent/
+# - Installs agent coordination commands to ~/.claude/commands/jat/
 # - No longer writes to ~/.claude/CLAUDE.md (imports handled per-project)
 
 set -e
@@ -17,23 +17,23 @@ echo ""
 
 # Ensure ~/.claude directory exists
 mkdir -p ~/.claude
-mkdir -p ~/.claude/commands/agent
+mkdir -p ~/.claude/commands/jat
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-COMMANDS_SOURCE="$SCRIPT_DIR/../commands/agent"
+COMMANDS_SOURCE="$SCRIPT_DIR/../commands/jat"
 
 # Install agent coordination commands
 if [ -d "$COMMANDS_SOURCE" ]; then
     echo "  → Installing agent coordination commands..."
     COMMAND_COUNT=$(find "$COMMANDS_SOURCE" -name "*.md" -type f | wc -l)
-    cp -r "$COMMANDS_SOURCE"/*.md ~/.claude/commands/agent/ 2>/dev/null || true
+    cp -r "$COMMANDS_SOURCE"/*.md ~/.claude/commands/jat/ 2>/dev/null || true
     echo -e "${GREEN}  ✓ Installed $COMMAND_COUNT coordination commands${NC}"
-    echo "    Location: ~/.claude/commands/agent/"
+    echo "    Location: ~/.claude/commands/jat/"
     echo ""
 fi
 
 echo -e "${GREEN}  ✓ Global configuration complete${NC}"
 echo ""
-echo "  Agent commands available via /agent:* namespace"
+echo "  Agent commands available via /jat:* namespace"
 echo "  Project-specific docs are imported via @~/code/jat/shared/*.md"
 echo ""

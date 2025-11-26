@@ -7,14 +7,14 @@
 ## Executive Summary
 
 ✅ **PPID session isolation is working correctly** for the statusline architecture.
-✅ **Fixed critical bug** in `/agent:start` command that prevented session file updates.
+✅ **Fixed critical bug** in `/jat:start` command that prevented session file updates.
 ✅ **Created helper script** `get-current-session-id` to reliably get session ID.
 
 ## Problem Identified
 
 ### Root Cause
 
-The `/agent:start` command was trying to use `$PPID` in bash command substitution:
+The `/jat:start` command was trying to use `$PPID` in bash command substitution:
 
 ```bash
 # ❌ BROKEN: This doesn't work
@@ -24,13 +24,13 @@ SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt 2>/dev/null | tr -d '\n')
 **Why this fails:**
 - Each Bash tool invocation runs in a **NEW subprocess** with a **DIFFERENT PPID**
 - The statusline runs in the main Claude Code process (e.g., PPID 3518248)
-- When `/agent:start` runs bash commands, they have DIFFERENT PPIDs (e.g., 3527603)
+- When `/jat:start` runs bash commands, they have DIFFERENT PPIDs (e.g., 3527603)
 - Therefore, `$PPID` in the bash command refers to the subprocess PPID, not the Claude Code process PPID
 - The session file doesn't exist for the subprocess PPID, so it fails silently
 
 ### Impact
 
-- Agents registered via `/agent:start` wouldn't update the statusline
+- Agents registered via `/jat:start` wouldn't update the statusline
 - Session file `.claude/agent-{session_id}.txt` never got created
 - Statusline showed "no agent registered" even after successful registration
 - Users had to manually create the session file
@@ -55,7 +55,7 @@ echo "$session_id"
 - Works regardless of subprocess PPID changes
 - No race conditions (timestamp ordering is reliable)
 
-### 2. Updated `/agent:start` Command
+### 2. Updated `/jat:start` Command
 
 Replaced all `$PPID`-based session lookups with the helper script:
 
@@ -213,7 +213,7 @@ echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
 ### Scenario 2: Two terminals, same agent name ⚠️
 
 **Status:** **BLOCKED BY DESIGN**
-**Reason:** `/agent:start` includes duplicate agent blocking logic (lines 108-145)
+**Reason:** `/jat:start` includes duplicate agent blocking logic (lines 108-145)
 
 ```bash
 # Check if this agent is already active in another session
@@ -276,7 +276,7 @@ done
 
 ## Files Modified
 
-1. **`commands/agent/start.md`** (lines 66, 110, 265, 622-643)
+1. **`commands/jat/start.md`** (lines 66, 110, 265, 622-643)
    - Replaced `$PPID` with helper script calls
    - Updated documentation to reflect correct pattern
 
@@ -293,7 +293,7 @@ done
 
 ## Recommendations
 
-### For `/agent:start` Command
+### For `/jat:start` Command
 
 1. ✅ **Use helper script** - Already implemented
 2. ⚠️  **Consider adding `--force` flag** - Allow duplicate agent names if needed
@@ -306,21 +306,21 @@ done
 
 ### For Other Agent Commands
 
-Check if other commands (`/agent:register`, `/agent:complete`, etc.) also use `$PPID`:
+Check if other commands (`/jat:register`, `/jat:complete`, etc.) also use `$PPID`:
 
 ```bash
-$ grep -r '\$PPID' commands/agent/*.md
-commands/agent/register.md:SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt 2>/dev/null | tr -d '\n')
+$ grep -r '\$PPID' commands/jat/*.md
+commands/jat/register.md:SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt 2>/dev/null | tr -d '\n')
 ```
 
-**TODO:** Update `/agent:register` to use helper script too!
+**TODO:** Update `/jat:register` to use helper script too!
 
 ## Conclusion
 
 ✅ **PPID session isolation works correctly** as designed.
-✅ **Critical bug fixed** in `/agent:start` command.
+✅ **Critical bug fixed** in `/jat:start` command.
 ✅ **All acceptance criteria met** (with design clarification on duplicate agents).
-⚠️  **Follow-up needed**: Update `/agent:register` command with same fix.
+⚠️  **Follow-up needed**: Update `/jat:register` command with same fix.
 
 The architecture is sound. The bug was in agent commands trying to use `$PPID` in bash subprocesses. The helper script solution is simple, reliable, and maintains the intended process isolation.
 

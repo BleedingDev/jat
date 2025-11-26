@@ -7,7 +7,7 @@ Complete current task properly with full verification, then show menu of availab
 # Agent Complete - Finish Task Properly
 
 **Usage:**
-- `/agent:complete` - Complete current task with full verification, show menu
+- `/jat:complete` - Complete current task with full verification, show menu
 
 **What this command does:**
 1. **Read & Respond to Agent Mail** (ALWAYS - before completing)
@@ -35,8 +35,8 @@ Complete current task properly with full verification, then show menu of availab
 - **End of work**: Last task before closing terminal
 
 **When NOT to use:**
-- Want to keep going automatically → use `/agent:next` instead
-- Need to pivot quickly → use `/agent:pause` instead
+- Want to keep going automatically → use `/jat:next` instead
+- Need to pivot quickly → use `/jat:pause` instead
 
 ---
 
@@ -57,7 +57,7 @@ Complete current task properly with full verification, then show menu of availab
 
 **The typical flow:**
 1. You finish coding → display "🔍 READY FOR REVIEW"
-2. User reviews and runs `/agent:complete`
+2. User reviews and runs `/jat:complete`
 3. You run completion steps (commit, close, release, announce)
 4. THEN display "✅ TASK COMPLETE"
 
@@ -131,8 +131,8 @@ bd list --json | jq -r --arg agent "$agent_name" \
 ```
 
 **Error handling:**
-- If no session ID found → error "No active session. Run /agent:start first"
-- If no agent name found → error "No agent registered. Run /agent:start first"
+- If no session ID found → error "No active session. Run /jat:start first"
+- If no agent name found → error "No agent registered. Run /jat:start first"
 - If no in_progress task → **continue to Step 1D** (spontaneous work detection)
 
 ---
@@ -230,12 +230,12 @@ bd create "[title]" \
 Understood. No task record created.
 
 Options:
-  • /agent:start - Pick up a new task
+  • /jat:start - Pick up a new task
   • bd create "..." - Manually create a task
   • Just commit your changes directly with git
 ```
 
-**Exit the /agent:complete flow** - do not continue to Step 2.
+**Exit the /jat:complete flow** - do not continue to Step 2.
 
 #### If No Work Detected
 
@@ -243,11 +243,11 @@ Options:
 No task in progress and no spontaneous work detected.
 
 Options:
-  • /agent:start - Pick a task to work on
+  • /jat:start - Pick a task to work on
   • bd list - View available tasks
 ```
 
-**Exit the /agent:complete flow** - do not continue to Step 2.
+**Exit the /jat:complete flow** - do not continue to Step 2.
 
 ---
 
@@ -424,7 +424,7 @@ bd ready --json
 
 **This command does NOT have a quick mode.**
 
-For quick completion without verification, use `/agent:next quick` instead.
+For quick completion without verification, use `/jat:next quick` instead.
 
 **Still done (NEVER skip these):**
 - STEP 2: Read & respond to Agent Mail
@@ -527,7 +527,7 @@ This preserves attribution and maintains the audit trail.
 📋 Recommended Next Task:
    → jat-xyz "Update documentation for new API" (Priority: P1, Type: task)
 
-   Type: /agent:start jat-xyz
+   Type: /jat:start jat-xyz
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -539,9 +539,9 @@ This preserves attribution and maintains the audit trail.
    ...
 
 💡 Next steps:
-   • /agent:start jat-xyz - Start recommended task
-   • /agent:start <task-id> - Start different task
-   • /agent:status - Review current state
+   • /jat:start jat-xyz - Start recommended task
+   • /jat:start <task-id> - Start different task
+   • /jat:status - Review current state
    • Close terminal if done for the day
 ```
 
@@ -552,7 +552,7 @@ This preserves attribution and maintains the audit trail.
 **No active session:**
 ```
 No active session detected.
-Run /agent:start to begin working
+Run /jat:start to begin working
 ```
 
 **No task in progress (with spontaneous work):**
@@ -566,7 +566,7 @@ Run /agent:start to begin working
 **No task in progress (no work detected):**
 ```
 No task in progress and no spontaneous work detected.
-Run /agent:start to pick a task
+Run /jat:start to pick a task
 ```
 
 **Verification failed:**
@@ -576,7 +576,7 @@ Task verification failed:
    • 5 lint errors
 
 Fix issues and try again
-Or run /agent:verify to see detailed error report
+Or run /jat:verify to see detailed error report
 ```
 
 ---
@@ -606,9 +606,9 @@ Or run /agent:verify to see detailed error report
 
 2. **Full verification required**
    - No quick mode for this command
-   - Use `/agent:next quick` if you need speed
+   - Use `/jat:next quick` if you need speed
 
 3. **Show menu, don't auto-start**
    - User chooses next task
    - Recommend highest priority
-   - Different from `/agent:next` which auto-continues
+   - Different from `/jat:next` which auto-continues

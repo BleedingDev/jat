@@ -17,7 +17,7 @@ Session 3: StrongShore | [P0] task-xyz - Critical bug fix [🔒1]
 
 ### Registration
 
-When you run `/agent:start`, it automatically:
+When you run `/jat:start`, it automatically:
 1. Registers your agent in Agent Mail
 2. Writes agent name to `.claude/agent-{session_id}.txt`
 3. Statusline reads from that file and displays your identity
@@ -47,15 +47,15 @@ jat | no agent registered
 
 ```bash
 # Terminal 1
-/agent:start  # Choose FreeMarsh
+/jat:start  # Choose FreeMarsh
 # Statusline shows: FreeMarsh | ...
 
 # Terminal 2
-/agent:start  # Choose PaleStar
+/jat:start  # Choose PaleStar
 # Statusline shows: PaleStar | ...
 
 # Terminal 3
-/agent:start  # Choose StrongShore
+/jat:start  # Choose StrongShore
 # Statusline shows: StrongShore | ...
 ```
 
@@ -129,7 +129,7 @@ Example: `jat@master*` → blue `jat`, dim `@`, green `master`, red `*`
 |-------|-------|-----|
 | Shows "idle" but I'm working | Task not marked `in_progress` in Beads | Run `bd update task-id --status in_progress` |
 | Shows wrong task | Old reservation from previous task | Release stale reservation with `am-release` |
-| Shows "no agent registered" | Session file missing | Run `/agent:start` to register |
+| Shows "no agent registered" | Session file missing | Run `/jat:start` to register |
 
 ### Why PPID-Based Session Tracking?
 

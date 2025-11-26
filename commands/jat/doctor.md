@@ -1,4 +1,4 @@
-# /agent:doctor - Diagnose and Repair jat Setup
+# /jat:doctor - Diagnose and Repair jat Setup
 
 You are diagnosing and repairing the jat (Jomarchy Agent Tools) installation for this project.
 
@@ -45,7 +45,7 @@ Read this project's CLAUDE.md and verify it has these imports:
 test -f ~/.claude/statusline.sh && echo "✓ Statusline installed" || echo "✗ Statusline missing"
 
 # Verify agent commands installed
-ls ~/.claude/commands/agent/*.md 2>/dev/null | wc -l | xargs -I {} echo "✓ {} agent commands installed"
+ls ~/.claude/commands/jat/*.md 2>/dev/null | wc -l | xargs -I {} echo "✓ {} agent commands installed"
 ```
 
 ### 4. Check Tools

@@ -7,11 +7,11 @@ Get to work! Unified smart command that handles registration, task selection, co
 # Start Working - Unified Smart Command
 
 **Usage:**
-- `/agent:start` - **Auto-create new agent** (fast! no prompt), show task recommendations
-- `/agent:start resume` - Show menu to **choose from existing agents**
-- `/agent:start agent-name` - Register as specific agent, show tasks
-- `/agent:start task-id` - Auto-register if needed, start that task
-- `/agent:start task-id quick` - Skip conflict checks (fast mode)
+- `/jat:start` - **Auto-create new agent** (fast! no prompt), show task recommendations
+- `/jat:start resume` - Show menu to **choose from existing agents**
+- `/jat:start agent-name` - Register as specific agent, show tasks
+- `/jat:start task-id` - Auto-register if needed, start that task
+- `/jat:start task-id quick` - Skip conflict checks (fast mode)
 
 **What this command does:**
 1. **Smart Registration:** By default creates new agent instantly; use `resume` parameter to choose from existing agents
@@ -247,7 +247,7 @@ echo "$READY_TASKS" | jq -r '.[] | "  [\(.priority)] \(.id) - \(.title)"'
 
 echo ""
 echo "To start working on a task, run:"
-echo "   /agent:start TASK_ID"
+echo "   /jat:start TASK_ID"
 
 # EXIT HERE - don't continue to remaining steps
 exit 0
@@ -412,11 +412,11 @@ Changes made:
 
 Next steps:
   • Review the changes above
-  • /agent:complete - Complete this task and see menu
-  • /agent:next - Complete this task and auto-start next
+  • /jat:complete - Complete this task and see menu
+  • /jat:next - Complete this task and auto-start next
 ```
 
-**NEVER say "Task Complete" until AFTER the user runs `/agent:complete` or `/agent:next`.**
+**NEVER say "Task Complete" until AFTER the user runs `/jat:complete` or `/jat:next`.**
 
 Why? Because:
 - Other agents check Beads to see task status
@@ -432,7 +432,7 @@ Why? Because:
 
 ## Quick Mode Behavior
 
-**When using `/agent:start task-id quick`:**
+**When using `/jat:start task-id quick`:**
 
 **Skipped:**
 - STEP 6: Conflict detection (file locks, git status, dependencies)
@@ -501,9 +501,9 @@ Announcing start...
 
 💡 To start working on a task, run:
 
-   /agent:start TASK_ID
+   /jat:start TASK_ID
 
-Example: /agent:start jat-xyz
+Example: /jat:start jat-xyz
 ```
 
 **No ready tasks:**
@@ -546,7 +546,7 @@ Error: Agent 'ShortShore' is already active in another session
 Options:
   1. Close that terminal first
   2. Choose a different agent name
-  3. Run /agent:start to create a new agent
+  3. Run /jat:start to create a new agent
 ```
 
 **Reservation conflict:**
@@ -611,11 +611,11 @@ Options:
 
 | Command | Behavior |
 |---------|----------|
-| `/agent:start` | Auto-create agent → check mail → show task recommendations |
-| `/agent:start resume` | Choose from logged-out agents → check mail → show tasks |
-| `/agent:start MyAgent` | Register as MyAgent → check mail → show tasks |
-| `/agent:start task-abc` | Auto-create agent → check mail → **start** task-abc |
-| `/agent:start task-abc quick` | Auto-create agent → check mail → **start** task-abc (skip conflicts) |
+| `/jat:start` | Auto-create agent → check mail → show task recommendations |
+| `/jat:start resume` | Choose from logged-out agents → check mail → show tasks |
+| `/jat:start MyAgent` | Register as MyAgent → check mail → show tasks |
+| `/jat:start task-abc` | Auto-create agent → check mail → **start** task-abc |
+| `/jat:start task-abc quick` | Auto-create agent → check mail → **start** task-abc (skip conflicts) |
 
 ---
 
@@ -623,9 +623,9 @@ Options:
 
 | Command | Use Case |
 |---------|----------|
-| `/agent:start` | "Show me what to work on" - registration + mail + recommendations |
-| `/agent:start task-abc` | "Start this specific task NOW" - full task start flow |
-| `/agent:next` | "Complete current + auto-start next" - drive mode |
-| `/agent:complete` | "I'm done with this task" - complete and show menu |
-| `/agent:pause` | "Quick pivot" - pause current and show menu |
-| `/agent:status` | "What am I working on?" - current status check |
+| `/jat:start` | "Show me what to work on" - registration + mail + recommendations |
+| `/jat:start task-abc` | "Start this specific task NOW" - full task start flow |
+| `/jat:next` | "Complete current + auto-start next" - drive mode |
+| `/jat:complete` | "I'm done with this task" - complete and show menu |
+| `/jat:pause` | "Quick pivot" - pause current and show menu |
+| `/jat:status` | "What am I working on?" - current status check |

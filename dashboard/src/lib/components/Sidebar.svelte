@@ -194,16 +194,16 @@
 						<div>
 							<h4 class="text-lg font-semibold mb-3">Core Workflow (4 commands)</h4>
 
-							<!-- /agent:start -->
+							<!-- /jat:start -->
 							<div class="mb-4">
-								<h5 class="text-md font-semibold mb-2">/agent:start - Get to Work</h5>
+								<h5 class="text-md font-semibold mb-2">/jat:start - Get to Work</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/agent:start                    # Auto-create new agent (fast!)</code></pre>
-									<pre><code>/agent:start resume             # Choose from logged-out agents</code></pre>
-									<pre><code>/agent:start GreatWind          # Resume specific agent by name</code></pre>
-									<pre><code>/agent:start quick              # Start highest priority task immediately</code></pre>
-									<pre><code>/agent:start task-abc           # Start specific task (with checks)</code></pre>
-									<pre><code>/agent:start task-abc quick     # Start specific task (skip checks)</code></pre>
+									<pre><code>/jat:start                    # Auto-create new agent (fast!)</code></pre>
+									<pre><code>/jat:start resume             # Choose from logged-out agents</code></pre>
+									<pre><code>/jat:start GreatWind          # Resume specific agent by name</code></pre>
+									<pre><code>/jat:start quick              # Start highest priority task immediately</code></pre>
+									<pre><code>/jat:start task-abc           # Start specific task (with checks)</code></pre>
+									<pre><code>/jat:start task-abc quick     # Start specific task (skip checks)</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
 									Smart registration (auto-create or resume) → Session persistence → Task selection
@@ -211,12 +211,12 @@
 								</p>
 							</div>
 
-							<!-- /agent:next -->
+							<!-- /jat:next -->
 							<div class="mb-4">
-								<h5 class="text-md font-semibold mb-2">/agent:next - Drive Mode (Auto-Continue)</h5>
+								<h5 class="text-md font-semibold mb-2">/jat:next - Drive Mode (Auto-Continue)</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/agent:next                     # Full verify + commit + auto-start next</code></pre>
-									<pre><code>/agent:next quick               # Quick commit + auto-start next (skip verify)</code></pre>
+									<pre><code>/jat:next                     # Full verify + commit + auto-start next</code></pre>
+									<pre><code>/jat:next quick               # Quick commit + auto-start next (skip verify)</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
 									Verify → Commit → Acknowledge Mail → Announce → Mark complete → Release locks →
@@ -224,27 +224,27 @@
 								</p>
 							</div>
 
-							<!-- /agent:complete -->
+							<!-- /jat:complete -->
 							<div class="mb-4">
 								<h5 class="text-md font-semibold mb-2">
-									/agent:complete - Finish Properly (Manual Selection)
+									/jat:complete - Finish Properly (Manual Selection)
 								</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/agent:complete                 # Full verify + show menu + recommended next</code></pre>
+									<pre><code>/jat:complete                 # Full verify + show menu + recommended next</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
-									Same as /agent:next but shows available tasks menu instead of auto-continuing. Use
+									Same as /jat:next but shows available tasks menu instead of auto-continuing. Use
 									when you want to choose next task manually.
 								</p>
 							</div>
 
-							<!-- /agent:pause -->
+							<!-- /jat:pause -->
 							<div class="mb-4">
 								<h5 class="text-md font-semibold mb-2">
-									/agent:pause - Quick Pivot (Context Switch)
+									/jat:pause - Quick Pivot (Context Switch)
 								</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/agent:pause                    # Quick exit + show menu</code></pre>
+									<pre><code>/jat:pause                    # Quick exit + show menu</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
 									Quick commit/stash → Acknowledge Mail → Release locks → Show available tasks menu.
@@ -257,11 +257,11 @@
 						<div>
 							<h4 class="text-lg font-semibold mb-3">Support Commands (3 commands)</h4>
 
-							<!-- /agent:status -->
+							<!-- /jat:status -->
 							<div class="mb-4">
-								<h5 class="text-md font-semibold mb-2">/agent:status - Check Current Work</h5>
+								<h5 class="text-md font-semibold mb-2">/jat:status - Check Current Work</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/agent:status                   # Shows current task, locks, messages</code></pre>
+									<pre><code>/jat:status                   # Shows current task, locks, messages</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
 									Shows current task progress, active file reservations, unread Agent Mail messages,
@@ -269,26 +269,26 @@
 								</p>
 							</div>
 
-							<!-- /agent:verify -->
+							<!-- /jat:verify -->
 							<div class="mb-4">
-								<h5 class="text-md font-semibold mb-2">/agent:verify - Quality Checks</h5>
+								<h5 class="text-md font-semibold mb-2">/jat:verify - Quality Checks</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/agent:verify                   # Verify current task</code></pre>
-									<pre><code>/agent:verify task-abc          # Verify specific task</code></pre>
+									<pre><code>/jat:verify                   # Verify current task</code></pre>
+									<pre><code>/jat:verify task-abc          # Verify specific task</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
 									Runs tests, lint, security checks, and browser tests (if applicable). Must pass
-									before /agent:complete.
+									before /jat:complete.
 								</p>
 							</div>
 
-							<!-- /agent:plan -->
+							<!-- /jat:plan -->
 							<div class="mb-4">
 								<h5 class="text-md font-semibold mb-2">
-									/agent:plan - Convert Planning to Tasks
+									/jat:plan - Convert Planning to Tasks
 								</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/agent:plan                     # Analyze conversation/PRD, create tasks</code></pre>
+									<pre><code>/jat:plan                     # Analyze conversation/PRD, create tasks</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
 									Analyzes conversation history OR written PRD, breaks work into atomic tasks,
@@ -303,19 +303,19 @@
 							<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 								<div class="alert alert-success">
 									<span class="text-sm"
-										><strong>Speed:</strong> Use `/agent:start quick` and `/agent:next quick` for rapid
+										><strong>Speed:</strong> Use `/jat:start quick` and `/jat:next quick` for rapid
 										iteration</span
 									>
 								</div>
 								<div class="alert alert-info">
 									<span class="text-sm"
-										><strong>Control:</strong> Use `/agent:complete` when you want to choose next task
+										><strong>Control:</strong> Use `/jat:complete` when you want to choose next task
 										manually</span
 									>
 								</div>
 								<div class="alert alert-warning">
 									<span class="text-sm"
-										><strong>Quality:</strong> Always run `/agent:verify` before `/agent:complete` for
+										><strong>Quality:</strong> Always run `/jat:verify` before `/jat:complete` for
 										critical work</span
 									>
 								</div>
@@ -547,7 +547,7 @@
 								<pre><code>bd init</code></pre>
 								<pre><code></code></pre>
 								<pre><code># 3. Start working (registers agent + picks task)</code></pre>
-								<pre><code>/agent:start</code></pre>
+								<pre><code>/jat:start</code></pre>
 							</div>
 						</div>
 
@@ -632,20 +632,20 @@
 
 							<h5 class="text-md font-semibold mb-2">Drive Mode (Continuous Flow)</h5>
 							<div class="mockup-code text-xs mb-3">
-								<pre><code>/agent:start                    # Create agent</code></pre>
-								<pre><code>/agent:start task-abc           # Start first task</code></pre>
-								<pre><code>/agent:next                     # Complete + auto-start next</code></pre>
-								<pre><code>/agent:next                     # Complete + auto-start next</code></pre>
+								<pre><code>/jat:start                    # Create agent</code></pre>
+								<pre><code>/jat:start task-abc           # Start first task</code></pre>
+								<pre><code>/jat:next                     # Complete + auto-start next</code></pre>
+								<pre><code>/jat:next                     # Complete + auto-start next</code></pre>
 								<pre><code># ... continuous loop, never stops ...</code></pre>
 							</div>
 
 							<h5 class="text-md font-semibold mb-2">Manual Mode (Careful Selection)</h5>
 							<div class="mockup-code text-xs mb-3">
-								<pre><code>/agent:start                    # Create agent</code></pre>
-								<pre><code>/agent:start task-abc           # Start task</code></pre>
-								<pre><code>/agent:complete                 # Complete + show menu</code></pre>
+								<pre><code>/jat:start                    # Create agent</code></pre>
+								<pre><code>/jat:start task-abc           # Start task</code></pre>
+								<pre><code>/jat:complete                 # Complete + show menu</code></pre>
 								<pre><code># Review recommendations...</code></pre>
-								<pre><code>/agent:start task-xyz           # Pick manually</code></pre>
+								<pre><code>/jat:start task-xyz           # Pick manually</code></pre>
 							</div>
 						</div>
 

@@ -449,7 +449,7 @@ jat/
 │   ├── setup-repos.sh
 │   └── symlink-tools.sh
 │
-├── .claude/commands/agent/    # Coordination commands
+├── .claude/commands/jat/    # Coordination commands
 │   ├── register.md           # /register command
 │   ├── start.md              # /start command
 │   └── ...                   # Other commands

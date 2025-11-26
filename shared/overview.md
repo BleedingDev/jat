@@ -8,7 +8,7 @@ You are running as part of a **multi-agent development system** that enables par
 
 **Beads** - Task management with dependencies. Pick ready work, track status, manage priorities across projects.
 
-**Workflow Commands** - `/agent:start`, `/agent:next`, `/agent:complete`, `/agent:pause` - streamlined commands that handle registration, task selection, mail checking, and coordination automatically.
+**Workflow Commands** - `/jat:start`, `/jat:next`, `/jat:complete`, `/jat:pause` - streamlined commands that handle registration, task selection, mail checking, and coordination automatically.
 
 **Statusline** - Real-time display of your agent identity, current task, file locks, unread messages.
 
@@ -25,10 +25,10 @@ You are running as part of a **multi-agent development system** that enables par
 ### Quick Start
 
 ```bash
-/agent:start          # Register + pick task + begin work
-/agent:next           # Complete current + auto-start next (drive mode)
-/agent:complete       # Complete current + show menu (manual mode)
-/agent:pause          # Pause + pivot to different work
+/jat:start          # Register + pick task + begin work
+/jat:next           # Complete current + auto-start next (drive mode)
+/jat:complete       # Complete current + show menu (manual mode)
+/jat:pause          # Pause + pivot to different work
 ```
 
 ### Key Behaviors

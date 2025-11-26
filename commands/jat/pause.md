@@ -7,7 +7,7 @@ Pause current task quickly (without full completion) and show available tasks to
 # Agent Pause - Quick Pivot
 
 **Usage:**
-- `/agent:pause` - Pause current task, show menu to pivot to different work
+- `/jat:pause` - Pause current task, show menu to pivot to different work
 
 **What this command does:**
 1. **Read & Respond to Agent Mail** (ALWAYS - before pausing)
@@ -33,8 +33,8 @@ Pause current task quickly (without full completion) and show available tasks to
 - **Context switch**: Switching from frontend to backend work
 
 **When NOT to use:**
-- Task is actually complete → use `/agent:complete` instead
-- Want to auto-continue → use `/agent:next` instead
+- Task is actually complete → use `/jat:complete` instead
+- Want to auto-continue → use `/jat:next` instead
 
 ---
 
@@ -101,8 +101,8 @@ bd list --json | jq -r --arg agent "$agent_name" \
 ```
 
 **Error handling:**
-- If no session ID found → error "No active session. Run /agent:start first"
-- If no agent name found → error "No agent registered. Run /agent:start first"
+- If no session ID found → error "No active session. Run /jat:start first"
+- If no agent name found → error "No agent registered. Run /jat:start first"
 - If no in_progress task → warning "No task in progress" but continue to show menu
 
 ---
@@ -259,9 +259,9 @@ bd ready --json
    ...
 
 💡 Next steps:
-   • /agent:start jat-xyz - Start highest priority task
-   • /agent:start <task-id> - Start different task
-   • /agent:start jat-abc - Resume paused task
+   • /jat:start jat-xyz - Start highest priority task
+   • /jat:start <task-id> - Start different task
+   • /jat:start jat-abc - Resume paused task
    • Close terminal if done for the day
 ```
 
@@ -278,8 +278,8 @@ bd ready --json
 📋 No other ready tasks available.
 
 💡 Next steps:
-   • /agent:start jat-abc - Resume this task
-   • /agent:plan - Create new tasks
+   • /jat:start jat-abc - Resume this task
+   • /jat:plan - Create new tasks
    • Close terminal if done for the day
 ```
 
@@ -290,7 +290,7 @@ bd ready --json
 **No active session:**
 ```
 No active session detected.
-Run /agent:start to begin working
+Run /jat:start to begin working
 ```
 
 **No task in progress:**
@@ -338,7 +338,7 @@ Fix git issues or use 'git stash' manually
 3. **Show menu, don't auto-start**
    - User chooses next task
    - Can resume paused task
-   - Different from `/agent:next` which auto-continues
+   - Different from `/jat:next` which auto-continues
 
 ---
 
@@ -347,7 +347,7 @@ Fix git issues or use 'git stash' manually
 **Emergency exit (laptop dying):**
 ```bash
 # Battery at 2%!
-/agent:pause
+/jat:pause
 # → Check mail (fast)
 # → Quick commit (2 seconds)
 # → Release locks
@@ -357,16 +357,16 @@ Fix git issues or use 'git stash' manually
 **Pivot to different work:**
 ```bash
 # Working on frontend, suddenly need to fix backend bug
-/agent:pause
+/jat:pause
 # → Shows backend tasks in menu
-/agent:start jat-backend-bug
+/jat:start jat-backend-bug
 ```
 
 **Blocked by dependency:**
 ```bash
 # Can't continue, waiting for API team
-/agent:pause
+/jat:pause
 # → Shows other tasks
-/agent:start jat-different-task
+/jat:start jat-different-task
 # (Original task stays in_progress, can resume later)
 ```

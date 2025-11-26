@@ -15,7 +15,7 @@ Lightweight bash tools for agent orchestration, database operations, monitoring,
 ```
 jat/
 ├── mail/                # Agent Mail coordination system (11 tools)
-├── commands/agent/      # Agent workflow commands (8 commands)
+├── commands/jat/        # JAT workflow commands (9 commands)
 ├── browser-tools/       # Browser automation tools (11 tools)
 ├── tools/               # Database & monitoring tools (6 tools)
 ├── dashboard/           # Beads Task Dashboard (SvelteKit app)
@@ -36,7 +36,7 @@ db-schema
 browser-start.js --help
 
 # Start working (registers agent + picks task)
-/agent:start
+/jat:start
 ```
 
 ## Dashboard Development
@@ -104,7 +104,7 @@ See `dashboard/CLAUDE.md` for full details.
 
 ### Agent Mail "not registered"
 ```bash
-/agent:start              # Quick fix (auto-registers)
+/jat:start                # Quick fix (auto-registers)
 # Or manually:
 am-register --name YourAgentName --program claude-code --model sonnet-4.5
 ```
@@ -132,6 +132,6 @@ session_id=$(cat /tmp/claude-session-${PPID}.txt | tr -d '\n') && echo "YourAgen
 
 - **Shared docs**: `./shared/*.md` (imported above)
 - **Dashboard docs**: `dashboard/CLAUDE.md`
-- **Agent commands**: `./commands/agent/*.md`
+- **JAT commands**: `./commands/jat/*.md`
 - **Tool source**: Each tool directory contains implementation
 - **Installation**: `install.sh` for symlink setup

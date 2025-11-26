@@ -12,7 +12,7 @@
 #
 # Features:
 #   Agent Status (Line 1):
-#     1. Agent identification (set by /agent:start via .claude/agent-{session_id}.txt)
+#     1. Agent identification (set by /jat:start via .claude/agent-{session_id}.txt)
 #     2. Task priority badge [P0/P1/P2] with color coding (Red/Yellow/Green)
 #     3. Task ID and title from Beads database (dynamic project prefix)
 #     4. Active time on task (⏲ since updated_at)
@@ -48,7 +48,7 @@
 #   ▪▪▪▪▪▪▫▫▫▫ · ⎇ jat@master* · 🔒 2  📬 1  ⏱ 45m
 #   💬 12m yes implement top 3
 #
-#   chimaro · no agent registered (new session, run /agent:start)
+#   chimaro · no agent registered (new session, run /jat:start)
 #   ▪▪▪▪▪▪▪▪▪▫ · ⎇ chimaro@main
 #
 

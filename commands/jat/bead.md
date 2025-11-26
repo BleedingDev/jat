@@ -1,0 +1,250 @@
+---
+argument-hint: [prd-path]
+---
+
+Convert a PRD, spec, or requirements doc into structured Beads tasks with dependencies and priorities.
+
+# Bead: PRD to Tasks
+
+**Use this command when:**
+- You have a PRD or feature spec to convert into tasks
+- Need to break down requirements into actionable work items
+- Want to create a batch of related Beads with proper dependencies
+- Converting high-level requirements into agent-ready tasks
+
+**What this does:**
+- Reads and parses the PRD/spec (file, conversation, or inline)
+- Asks clarifying questions if requirements are ambiguous
+- Creates right-sized Beads (2-8 hour tasks)
+- Sets up dependency chains between tasks
+- Assigns priorities (P0-P2) based on criticality
+- Reports summary of created Beads
+
+**Usage:**
+- `/jat:bead` - Parse from conversation context or prompt for input
+- `/jat:bead path/to/prd.md` - Convert specific PRD file
+- `/jat:bead "inline: user auth with Google OAuth and email/password"` - Inline spec
+
+---
+
+## STEP 1: Get the Input
+
+**If `$1` is a file path:**
+- Read the PRD/spec file
+- Parse requirements, features, constraints
+
+**If `$1` starts with "inline:":**
+- Use the inline text as the spec
+
+**If `$1` is empty:**
+- Check conversation for recent feature/requirements discussion
+- Look for: "we need to...", "build...", "implement...", requirements lists
+- If found: use that as input
+- If not found: ask user to provide PRD or paste requirements
+
+---
+
+## STEP 2: Parse Requirements
+
+Extract from the input:
+
+1. **Features/Capabilities** - What needs to be built?
+2. **Requirements** - Specific constraints or needs?
+3. **Technical context** - Stack, integrations, APIs?
+4. **Priority signals** - What's critical vs nice-to-have?
+5. **Scope boundaries** - What's in vs out?
+
+---
+
+## STEP 3: Clarify Ambiguities (if needed)
+
+If the spec is unclear or missing key info, use `AskUserQuestion` (max 4 questions):
+
+- **Scope:** "What's MVP vs future?"
+- **Priority:** "What's most critical?"
+- **Technical:** "Any tech constraints?"
+- **Dependencies:** "External blockers?"
+
+Skip this step if the PRD is already clear and complete.
+
+---
+
+## STEP 4: Structure the Tasks
+
+### Task Sizing (2-8 hours each)
+
+**Good size:**
+- "Implement Google OAuth login flow"
+- "Create user profile database schema"
+- "Build settings page UI"
+
+**Too big (break down):**
+- "Build authentication system" → multiple tasks
+- "Implement user management" → multiple tasks
+
+**Too small (combine):**
+- "Add button" → part of larger UI task
+- "Update import" → part of larger change
+
+### Breakdown Strategies
+
+Choose based on the spec:
+- **By feature:** Auth, Profiles, Settings
+- **By layer:** DB schema, API, UI
+- **By user flow:** Signup, Login, Reset password
+- **By dependency:** Foundation → Building blocks → Features
+
+### Priority Levels
+
+- **P0 (Critical):** Foundation, blocks everything else
+- **P1 (High):** Core features, MVP requirements
+- **P2 (Medium):** Enhancements, nice-to-have
+
+### Identify Dependencies
+
+- What must happen before what?
+- What can run in parallel?
+- What's on the critical path?
+
+---
+
+## STEP 5: Create Beads
+
+For each task:
+
+```bash
+bd create "Task title" \
+  --description "What to do and acceptance criteria" \
+  --priority [0-2] \
+  --type task \
+  --labels "label1,label2"
+```
+
+Set up dependencies:
+
+```bash
+bd dep add <task-id> <depends-on-task-id>
+```
+
+---
+
+## STEP 6: Verify & Report
+
+```bash
+bd ready --json
+```
+
+Confirm:
+- P0 tasks have no unmet dependencies
+- Dependency chains make sense
+- Tasks are right-sized
+
+---
+
+## Output Format
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║                        BEADS CREATED FROM PRD                            ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+📄 Source: [file path, inline, or conversation]
+🎯 Scope: [brief summary]
+
+┌─ SUMMARY ──────────────────────────────────────────────────────────────────┐
+│                                                                            │
+│  Total: [X] beads created                                                  │
+│  🔴 P0: [X]  🟠 P1: [X]  🟡 P2: [X]                                        │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌─ DEPENDENCY GRAPH ─────────────────────────────────────────────────────────┐
+│                                                                            │
+│  Foundation (no deps):                                                     │
+│  ├─ [task-id]: [title]                                                     │
+│  └─ [task-id]: [title]                                                     │
+│                                                                            │
+│  Core (depends on foundation):                                             │
+│  ├─ [task-id]: [title] (← task-id)                                         │
+│  └─ [task-id]: [title] (← task-id, task-id)                                │
+│                                                                            │
+│  Features (depends on core):                                               │
+│  ├─ [task-id]: [title] (← task-id)                                         │
+│  └─ [task-id]: [title] (← task-id)                                         │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌─ CREATED BEADS ────────────────────────────────────────────────────────────┐
+│                                                                            │
+│  [task-id] (P0): [Title]                                                   │
+│  ├─ [Description summary]                                                  │
+│  ├─ Depends: [none or task-ids]                                            │
+│  └─ Enables: [task-ids that depend on this]                                │
+│                                                                            │
+│  [task-id] (P1): [Title]                                                   │
+│  ├─ [Description summary]                                                  │
+│  ├─ Depends: [task-ids]                                                    │
+│  └─ Enables: [task-ids]                                                    │
+│                                                                            │
+│  [...repeat for all beads...]                                              │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌─ EXECUTION STRATEGY ───────────────────────────────────────────────────────┐
+│                                                                            │
+│  Phase 1: [X] foundation tasks (can parallelize)                           │
+│  Phase 2: [X] core tasks (after phase 1)                                   │
+│  Phase 3: [X] feature tasks (after phase 2)                                │
+│                                                                            │
+│  Parallelization: Up to [N] agents can work simultaneously                 │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+💡 Next: Run `/jat:start` to pick a task, or `bd ready` to see available work
+```
+
+---
+
+## Example
+
+**Input PRD:** "User authentication with Google OAuth and email/password"
+
+**Clarifying questions:**
+1. Include password reset? → Yes
+2. Email verification? → P2, nice-to-have
+3. Use Supabase? → Yes
+
+**Beads created:**
+
+```
+P0 - Foundation:
+  jat-abc: Set up Supabase auth config
+  jat-def: Create users table with RLS
+  jat-ghi: Session management utilities
+
+P1 - Core:
+  jat-jkl: Google OAuth flow (← jat-abc, jat-def)
+  jat-mno: Email/password flow (← jat-def)
+  jat-pqr: Login UI components (← jat-jkl, jat-mno)
+  jat-stu: Logout & cleanup (← jat-ghi)
+
+P2 - Enhancements:
+  jat-vwx: Password reset (← jat-mno)
+  jat-yz1: Email verification (← jat-mno)
+```
+
+**Execution:**
+- Phase 1: 3 agents on P0 tasks in parallel
+- Phase 2: 4 agents on P1 tasks
+- Phase 3: P2 tasks as capacity allows
+
+---
+
+## Best Practices
+
+1. **Right-size tasks** - 2-8 hours, not too big or small
+2. **Set dependencies correctly** - enables parallel work
+3. **Prioritize thoughtfully** - P0 = foundation, P1 = core, P2 = nice-to-have
+4. **Write clear descriptions** - acceptance criteria included
+5. **Ask if unclear** - don't guess on ambiguous requirements
+6. **Front-load foundation** - so agents can parallelize sooner

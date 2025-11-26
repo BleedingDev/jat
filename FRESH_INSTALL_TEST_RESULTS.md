@@ -38,15 +38,15 @@ All acceptance criteria verified successfully:
 ### 3. Agent Commands Available
 **Status:** ✅ PASS
 
-- Location: `~/.claude/commands/agent/`
+- Location: `~/.claude/commands/jat/`
 - Commands installed: **7**
-  - complete.md (/agent:complete)
-  - pause.md (/agent:pause)
-  - plan.md (/agent:plan)
-  - register.md (/agent:register)
-  - start.md (/agent:start)
-  - status.md (/agent:status)
-  - verify.md (/agent:verify)
+  - complete.md (/jat:complete)
+  - pause.md (/jat:pause)
+  - plan.md (/jat:plan)
+  - register.md (/jat:register)
+  - start.md (/jat:start)
+  - status.md (/jat:status)
+  - verify.md (/jat:verify)
 
 ### 4. Global CLAUDE.md Paths
 **Status:** ✅ PASS
@@ -172,7 +172,7 @@ Update jat's install.sh to:
 
 ### Configuration Files:
 - ✅ Global CLAUDE.md (~/.claude/CLAUDE.md)
-- ✅ Agent commands (~/.claude/commands/agent/)
+- ✅ Agent commands (~/.claude/commands/jat/)
 - ✅ Post-bash hook (~/.claude/hooks/)
 - ✅ Project CLAUDE.md (~/code/jat/CLAUDE.md)
 - ✅ Beads config (~/code/jat/.beads/)

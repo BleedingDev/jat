@@ -4,12 +4,12 @@
 
 ## Getting Help
 
-### `/agent:help` - Command Reference
+### `/jat:help` - Command Reference
 
 **Usage:**
 ```bash
-/agent:help                     # Show all commands
-/agent:help start               # Show detailed help for specific command
+/jat:help                     # Show all commands
+/jat:help start               # Show detailed help for specific command
 ```
 
 **What it shows:**
@@ -26,16 +26,16 @@
 
 ## Core Workflow (4 commands)
 
-### `/agent:start` - Get to Work
+### `/jat:start` - Get to Work
 
 **All parameter variations:**
 ```bash
-/agent:start                    # Auto-create new agent (fast!)
-/agent:start resume             # Choose from logged-out agents
-/agent:start GreatWind          # Resume specific agent by name
-/agent:start quick              # Start highest priority task immediately
-/agent:start task-abc           # Start specific task (with checks)
-/agent:start task-abc quick     # Start specific task (skip checks)
+/jat:start                    # Auto-create new agent (fast!)
+/jat:start resume             # Choose from logged-out agents
+/jat:start GreatWind          # Resume specific agent by name
+/jat:start quick              # Start highest priority task immediately
+/jat:start task-abc           # Start specific task (with checks)
+/jat:start task-abc quick     # Start specific task (skip checks)
 ```
 
 **What it does:**
@@ -47,12 +47,12 @@
 
 ---
 
-### `/agent:next` - Drive Mode (Auto-Continue)
+### `/jat:next` - Drive Mode (Auto-Continue)
 
 **Usage:**
 ```bash
-/agent:next                     # Full verify + commit + auto-start next
-/agent:next quick               # Quick commit + auto-start next (skip verify)
+/jat:next                     # Full verify + commit + auto-start next
+/jat:next quick               # Quick commit + auto-start next (skip verify)
 ```
 
 **What it does:**
@@ -71,11 +71,11 @@
 
 ---
 
-### `/agent:complete` - Finish Properly (Manual Selection)
+### `/jat:complete` - Finish Properly (Manual Selection)
 
 **Usage:**
 ```bash
-/agent:complete                 # Full verify + show menu + recommended next
+/jat:complete                 # Full verify + show menu + recommended next
 ```
 
 **What it does:**
@@ -96,7 +96,7 @@
 📋 Recommended Next Task:
    → jat-xyz "Update documentation" (Priority: P1)
 
-   Type: /agent:start jat-xyz
+   Type: /jat:start jat-xyz
 ```
 
 **When to use:**
@@ -107,11 +107,11 @@
 
 ---
 
-### `/agent:pause` - Quick Pivot (Context Switch)
+### `/jat:pause` - Quick Pivot (Context Switch)
 
 **Usage:**
 ```bash
-/agent:pause                    # Quick exit + show menu
+/jat:pause                    # Quick exit + show menu
 ```
 
 **What it does:**
@@ -132,11 +132,11 @@
 
 ## Support Commands (5 commands)
 
-### `/agent:status` - Check Current Work
+### `/jat:status` - Check Current Work
 
 **Usage:**
 ```bash
-/agent:status                   # Shows current task, locks, messages
+/jat:status                   # Shows current task, locks, messages
 ```
 
 **What it shows:**
@@ -147,12 +147,12 @@
 
 ---
 
-### `/agent:verify` - Quality Checks
+### `/jat:verify` - Quality Checks
 
 **Usage:**
 ```bash
-/agent:verify                   # Verify current task
-/agent:verify task-abc          # Verify specific task
+/jat:verify                   # Verify current task
+/jat:verify task-abc          # Verify specific task
 ```
 
 **What it checks:**
@@ -161,15 +161,15 @@
 - Security (common vulnerabilities)
 - Browser (if applicable)
 
-**Note:** Must pass before `/agent:complete`
+**Note:** Must pass before `/jat:complete`
 
 ---
 
-### `/agent:plan` - Convert Planning to Tasks
+### `/jat:plan` - Convert Planning to Tasks
 
 **Usage:**
 ```bash
-/agent:plan                     # Analyze conversation/PRD, create tasks
+/jat:plan                     # Analyze conversation/PRD, create tasks
 ```
 
 **What it does:**
@@ -181,11 +181,11 @@
 
 ---
 
-### `/agent:doctor` - Diagnose and Repair jat Setup
+### `/jat:doctor` - Diagnose and Repair jat Setup
 
 **Usage:**
 ```bash
-/agent:doctor                   # Check installation health, fix issues
+/jat:doctor                   # Check installation health, fix issues
 ```
 
 **What it checks:**
@@ -193,7 +193,7 @@
 - ✅ All 7 shared doc files present (`~/code/jat/shared/*.md`)
 - ✅ CLAUDE.md has correct imports
 - ✅ Statusline installed (`~/.claude/statusline.sh`)
-- ✅ Agent commands installed (`~/.claude/commands/agent/*.md`)
+- ✅ Agent commands installed (`~/.claude/commands/jat/*.md`)
 - ✅ Tools symlinked to `~/bin`
 - ✅ Beads initialized in project (`.beads/` directory)
 
@@ -232,50 +232,50 @@
 
 ### Drive Mode (Continuous Flow)
 ```bash
-/agent:start                    # Create agent
-/agent:start task-abc           # Start first task
-/agent:next                     # Complete + auto-start next
-/agent:next                     # Complete + auto-start next
-/agent:next                     # Complete + auto-start next
+/jat:start                    # Create agent
+/jat:start task-abc           # Start first task
+/jat:next                     # Complete + auto-start next
+/jat:next                     # Complete + auto-start next
+/jat:next                     # Complete + auto-start next
 # ... continuous loop, never stops ...
 ```
 
 ### Manual Mode (Careful Selection)
 ```bash
-/agent:start                    # Create agent
-/agent:start task-abc           # Start task
-/agent:complete                 # Complete + show menu
+/jat:start                    # Create agent
+/jat:start task-abc           # Start task
+/jat:complete                 # Complete + show menu
 # Review recommendations...
-/agent:start task-xyz           # Pick manually
-/agent:complete                 # Complete + show menu
+/jat:start task-xyz           # Pick manually
+/jat:complete                 # Complete + show menu
 # ... controlled workflow ...
 ```
 
 ### Quick Pivot (Context Switch)
 ```bash
-/agent:start task-ui-123        # Working on UI
+/jat:start task-ui-123        # Working on UI
 # Got stuck, need to switch...
-/agent:pause                    # Quick exit + show menu
-/agent:start task-bug-456       # Switch to different work
+/jat:pause                    # Quick exit + show menu
+/jat:start task-bug-456       # Switch to different work
 ```
 
 ### Multi-Agent Coordination
 ```bash
 # Terminal 1: Frontend (drive mode)
-/agent:start
-/agent:start task-ui-123
-/agent:next                     # Auto-continues
+/jat:start
+/jat:start task-ui-123
+/jat:next                     # Auto-continues
 
 # Terminal 2: Backend (manual)
-/agent:start resume             # Choose logged-out agent
-/agent:start task-api-456
-/agent:complete                 # Manual control
+/jat:start resume             # Choose logged-out agent
+/jat:start task-api-456
+/jat:complete                 # Manual control
 
 # Terminal 3: QA (quick pivot)
-/agent:start
-/agent:start task-test-789
-/agent:pause                    # Switch to urgent bug
-/agent:start task-hotfix-001
+/jat:start
+/jat:start task-test-789
+/jat:pause                    # Switch to urgent bug
+/jat:start task-hotfix-001
 ```
 
 ---
@@ -283,16 +283,16 @@
 ## Quick Tips
 
 **Speed:**
-- Use `/agent:start quick` for immediate task start (no checks)
-- Use `/agent:next quick` for rapid iteration (no verification)
+- Use `/jat:start quick` for immediate task start (no checks)
+- Use `/jat:next quick` for rapid iteration (no verification)
 
 **Control:**
-- Use `/agent:complete` when you want to choose next task
-- Use `/agent:pause` for emergency exits or context switches
+- Use `/jat:complete` when you want to choose next task
+- Use `/jat:pause` for emergency exits or context switches
 
 **Quality:**
-- Always run `/agent:verify` before `/agent:complete` for critical work
-- Let `/agent:next` handle verification automatically (default mode)
+- Always run `/jat:verify` before `/jat:complete` for critical work
+- Let `/jat:next` handle verification automatically (default mode)
 
 **Coordination:**
 - All commands acknowledge Agent Mail (stay synchronized)
@@ -306,6 +306,6 @@
 - **Full Documentation:** `README.md`
 - **Shared Docs:** `~/code/jat/shared/*.md` (imported by all projects)
 - **Project-Specific Docs:** `CLAUDE.md`
-- **Command Implementations:** `commands/agent/*.md`
+- **Command Implementations:** `commands/jat/*.md`
 - **Dashboard:** Run `bd-dashboard` to see tasks visually
 - **Beads:** See `README.md` section on Beads command reference

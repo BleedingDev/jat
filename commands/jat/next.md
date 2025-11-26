@@ -7,8 +7,8 @@ Find the highest priority ready task and start working. If you have a task in pr
 # Agent Next - Drive Mode
 
 **Usage:**
-- `/agent:next` - **Complete current task + auto-start next** (full verification)
-- `/agent:next quick` - Same but skip verification
+- `/jat:next` - **Complete current task + auto-start next** (full verification)
+- `/jat:next quick` - Same but skip verification
 
 **What this command does:**
 1. **Check for in-progress task** (assigned to YOU, not others)
@@ -54,8 +54,8 @@ Changes made:
 
 Next steps:
   • Review the changes above
-  • /agent:complete - Complete this task and see menu
-  • /agent:next - Complete this task and auto-start next
+  • /jat:complete - Complete this task and see menu
+  • /jat:next - Complete this task and auto-start next
 ```
 
 **Only after running completion steps, display:**
@@ -125,7 +125,7 @@ SESSION_ID="abc" && if [[ -f "$file" ]]; then echo "yes"; fi
 ```
 
 **If no agent registered:**
-- Auto-register using `/agent:start` flow
+- Auto-register using `/jat:start` flow
 - Create new agent with random name
 - Write to session file
 
@@ -350,7 +350,7 @@ Display full task details to the user and begin working on the task.
 
 ## Quick Mode Behavior
 
-**When using `/agent:next quick`:**
+**When using `/jat:next quick`:**
 
 **Skipped:**
 - STEP 4: Task verification (tests, lint, security)

@@ -28,19 +28,19 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
 bd init
 
 # 3. Start working (registers agent + picks task)
-/agent:start
+/jat:start
 
 # 4. Plan your feature (optional - if not already planned)
 # Option A - Conversational (recommended):
 #   "I want to build [feature]. It should [requirements]..."
-#   Agent asks questions, you discuss, then: /agent:plan
+#   Agent asks questions, you discuss, then: /jat:plan
 #
 # Option B - Formal PRD:
-#   Paste written PRD, then: /agent:plan
-/agent:plan
+#   Paste written PRD, then: /jat:plan
+/jat:plan
 
 # 5. Complete tasks (drive mode - auto-continues)
-/agent:next
+/jat:next
 ```
 
 **From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 9 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
@@ -71,7 +71,7 @@ jat chimaro --claude # Launch only Claude Code
 | Component | What Happens |
 |-----------|--------------|
 | **VS Code** | Opens new window in project directory |
-| **Claude Code** | Opens in alacritty terminal with `/agent:start` auto-run |
+| **Claude Code** | Opens in alacritty terminal with `/jat:start` auto-run |
 | **Dev Server** | Runs `npm run dev --port <configured-port>` (if port set) |
 | **Browser** | Opens `http://localhost:<port>` after 2s delay (if port set) |
 | **Window Colors** | Applies Hyprland border colors per project |
@@ -107,7 +107,7 @@ jat <project> [N]          # Launch N Claude Code sessions (default: 1)
 jat <project> --claude     # Only Claude Code
 jat <project> --code       # Only VS Code
 jat <project> --npm        # Only dev server
-jat <project> --no-agent   # Skip /agent:start (raw Claude)
+jat <project> --no-agent   # Skip /jat:start (raw Claude)
 
 jat list                   # Show configured projects
 jat init                   # Auto-detect projects in ~/code
@@ -131,7 +131,7 @@ If you have `PROJECT_CONFIG` in your bashrc, import it:
 
 Jomarchy Agent Tools is a **self-contained AI development environment** that gives your AI coding assistants (Claude Code, Cline, Codex, OpenCode, etc.) the ability to:
 
-- **Command** agent swarms with high-level coordination primitives (/agent:start, /agent:next, /agent:complete, /agent:pause)
+- **Command** agent swarms with high-level coordination primitives (/jat:start, /jat:next, /jat:complete, /jat:pause)
 - **Coordinate** across multiple agents without conflicts (Agent Mail messaging + file locks)
 - **Transcend** project folders and context window bounds with persistent state
 - **Plan** work with dependency-aware task management (Beads)
@@ -689,7 +689,7 @@ This installs:
 │   ├── db-query
 │   ├── db-schema
 │   └── ...
-├── commands/agent/                  # Coordination commands (8)
+├── commands/jat/                  # Coordination commands (8)
 │   ├── register.md
 │   ├── start.md
 │   └── ...
@@ -795,20 +795,20 @@ am-release "src/auth/**" --agent GreatWind
 
 **Core Workflow (4 commands):**
 
-**`/agent:start` - Get to Work**
+**`/jat:start` - Get to Work**
 ```bash
-/agent:start                    # Auto-create new agent (fast!)
-/agent:start resume             # Choose from logged-out agents
-/agent:start GreatWind          # Resume specific agent by name
-/agent:start quick              # Start highest priority task immediately
-/agent:start task-abc           # Start specific task (with checks)
-/agent:start task-abc quick     # Start specific task (skip checks)
+/jat:start                    # Auto-create new agent (fast!)
+/jat:start resume             # Choose from logged-out agents
+/jat:start GreatWind          # Resume specific agent by name
+/jat:start quick              # Start highest priority task immediately
+/jat:start task-abc           # Start specific task (with checks)
+/jat:start task-abc quick     # Start specific task (skip checks)
 ```
 
-**`/agent:next` - Drive Mode (Auto-Continue)**
+**`/jat:next` - Drive Mode (Auto-Continue)**
 ```bash
-/agent:next                     # Full verify + commit + auto-start next
-/agent:next quick               # Quick commit + auto-start next (skip verify)
+/jat:next                     # Full verify + commit + auto-start next
+/jat:next quick               # Quick commit + auto-start next (skip verify)
 ```
 
 **What it does:**
@@ -820,9 +820,9 @@ am-release "src/auth/**" --agent GreatWind
 - ✅ Release file locks
 - ✅ **Auto-start highest priority task** (continuous flow)
 
-**`/agent:complete` - Finish Properly (Manual Selection)**
+**`/jat:complete` - Finish Properly (Manual Selection)**
 ```bash
-/agent:complete                 # Full verify + show menu + recommended next
+/jat:complete                 # Full verify + show menu + recommended next
 ```
 
 **What it does:**
@@ -835,9 +835,9 @@ am-release "src/auth/**" --agent GreatWind
 - ✅ **Show available tasks menu**
 - ✅ **Display recommended next task** (you choose)
 
-**`/agent:pause` - Quick Pivot (Context Switch)**
+**`/jat:pause` - Quick Pivot (Context Switch)**
 ```bash
-/agent:pause                    # Quick exit + show menu
+/jat:pause                    # Quick exit + show menu
 ```
 
 **What it does:**
@@ -850,25 +850,25 @@ am-release "src/auth/**" --agent GreatWind
 
 **Support Commands (4 commands):**
 
-**`/agent:status`** - Check current work status
+**`/jat:status`** - Check current work status
 ```bash
-/agent:status                   # Shows task, locks, messages
+/jat:status                   # Shows task, locks, messages
 ```
 
-**`/agent:verify`** - Pre-completion quality checks
+**`/jat:verify`** - Pre-completion quality checks
 ```bash
-/agent:verify                   # Verify current task
-/agent:verify task-abc          # Verify specific task
+/jat:verify                   # Verify current task
+/jat:verify task-abc          # Verify specific task
 ```
 
-**`/agent:plan`** - Convert planning to Beads tasks
+**`/jat:plan`** - Convert planning to Beads tasks
 ```bash
-/agent:plan                     # Analyze conversation/PRD, create tasks
+/jat:plan                     # Analyze conversation/PRD, create tasks
 ```
 
-**`/agent:doctor`** - Diagnose and repair jat setup
+**`/jat:doctor`** - Diagnose and repair jat setup
 ```bash
-/agent:doctor                   # Check installation health, fix issues
+/jat:doctor                   # Check installation health, fix issues
 ```
 
 **What it checks:**
@@ -889,28 +889,28 @@ am-release "src/auth/**" --agent GreatWind
 
 **Drive Mode (Continuous):**
 ```bash
-/agent:start                    # Create agent
-/agent:start task-abc           # Start first task
-/agent:next                     # Complete + auto-start next
-/agent:next                     # Complete + auto-start next
+/jat:start                    # Create agent
+/jat:start task-abc           # Start first task
+/jat:next                     # Complete + auto-start next
+/jat:next                     # Complete + auto-start next
 # ... continuous loop ...
 ```
 
 **Manual Mode (Careful):**
 ```bash
-/agent:start                    # Create agent
-/agent:start task-abc           # Start task
-/agent:complete                 # Complete + show menu
+/jat:start                    # Create agent
+/jat:start task-abc           # Start task
+/jat:complete                 # Complete + show menu
 # Review recommendations...
-/agent:start task-xyz           # Pick manually
+/jat:start task-xyz           # Pick manually
 ```
 
 **Quick Pivot:**
 ```bash
-/agent:start task-ui-123        # Working on UI
+/jat:start task-ui-123        # Working on UI
 # Got stuck, need to switch...
-/agent:pause                    # Quick exit + show menu
-/agent:start task-bug-456       # Switch to different work
+/jat:pause                    # Quick exit + show menu
+/jat:start task-bug-456       # Switch to different work
 ```
 
 ---
@@ -1014,10 +1014,10 @@ bd show <task-id> --json               # Get task details as JSON
 
 ### 3. Agent Swarm Coordination Commands
 
-**8 slash commands** installed to `commands/agent/` that enable sophisticated multi-agent orchestration:
+**8 slash commands** installed to `commands/jat/` that enable sophisticated multi-agent orchestration:
 
 ```
-commands/agent/
+commands/jat/
 ├── help.md        - Command reference: show all commands or specific help
 ├── start.md       - Begin work: register + task start
 ├── next.md        - Drive mode: complete + auto-start next
@@ -1031,24 +1031,24 @@ commands/agent/
 #### Command Categories
 
 **Getting Help (1 command):**
-- `/agent:help` - Command reference: display all commands with examples (like `--help` in bash)
+- `/jat:help` - Command reference: display all commands with examples (like `--help` in bash)
 
 **Core Workflow (4 commands):**
-- `/agent:start` - Begin work: handles registration, task selection, conflict detection, and work start
-- `/agent:next` - Drive mode: complete task + auto-start next (high velocity)
-- `/agent:complete` - Finish properly: complete task + show menu (manual selection)
-- `/agent:pause` - Quick pivot: pause task + show menu (context switch)
+- `/jat:start` - Begin work: handles registration, task selection, conflict detection, and work start
+- `/jat:next` - Drive mode: complete task + auto-start next (high velocity)
+- `/jat:complete` - Finish properly: complete task + show menu (manual selection)
+- `/jat:pause` - Quick pivot: pause task + show menu (context switch)
 
 **Coordination & Quality (4 commands):**
-- `/agent:status` - Check state, sync with team, update presence
-- `/agent:verify` - Pre-completion checks (tests, lint, browser, security)
-- `/agent:plan` - Convert planning documents to structured Beads tasks
-- `/agent:doctor` - Diagnose and repair jat setup (missing imports, broken config)
+- `/jat:status` - Check state, sync with team, update presence
+- `/jat:verify` - Pre-completion checks (tests, lint, browser, security)
+- `/jat:plan` - Convert planning documents to structured Beads tasks
+- `/jat:doctor` - Diagnose and repair jat setup (missing imports, broken config)
 
 #### How Commands Work
 
 Commands are **markdown files with instructions** that Claude Code executes:
-- Located in `~/.claude/commands/agent/`
+- Located in `~/.claude/commands/jat/`
 - Invoked with `/command-name` in Claude Code
 - Expand to full prompts with step-by-step coordination logic
 - Leverage bash tools (am-*, bd, browser-*) under the hood
@@ -1060,39 +1060,39 @@ Commands are **markdown files with instructions** that Claude Code executes:
 
 ```bash
 # Start session (auto-creates agent)
-/agent:start
+/jat:start
 # → Auto-creates new agent identity
 # → Shows available tasks from Beads
 # → Ready to pick a task
 
 # Resume existing agent (choose from menu)
-/agent:start resume
+/jat:start resume
 # → Shows ALL registered agents (no time filter)
 # → Pick existing agent to resume work
 # → Shows their inbox, tasks, status
 
 # Resume specific agent by name
-/agent:start GreatWind
+/jat:start GreatWind
 # → Resumes as GreatWind agent
 # → Shows tasks assigned to GreatWind
 # → Ready to continue work
 
 # Start highest priority task (quick mode)
-/agent:start quick
+/jat:start quick
 # → Picks highest priority task automatically
 # → Skips conflict detection
 # → Skips dependency checks
 # → BEGINS WORKING IMMEDIATELY
 
 # Start specific task (with conflict checks)
-/agent:start task-abc
+/jat:start task-abc
 # → Starts task-abc specifically
 # → Conflict checks: File locks, git, dependencies
 # → Reserves files, announces start
 # → BEGINS WORKING IMMEDIATELY
 
 # Start specific task (quick mode - skip checks)
-/agent:start task-abc quick
+/jat:start task-abc quick
 # → Starts task-abc immediately
 # → Skips conflict detection
 # → Skips dependency checks
@@ -1101,8 +1101,8 @@ Commands are **markdown files with instructions** that Claude Code executes:
 # ... work happens (write code, test, document) ...
 
 # Drive mode - complete and auto-continue
-/agent:next
-# → Runs /agent:verify (tests, lint, security)
+/jat:next
+# → Runs /jat:verify (tests, lint, security)
 # → Commits changes
 # → Acknowledges all unread Agent Mail
 # → Announces completion
@@ -1111,10 +1111,10 @@ Commands are **markdown files with instructions** that Claude Code executes:
 # → AUTO-STARTS NEXT TASK (continuous flow)
 
 # ... next task starts automatically ...
-# ... work, /agent:next, work, /agent:next (loop) ...
+# ... work, /jat:next, work, /jat:next (loop) ...
 
 # Complete properly and show menu (manual selection)
-/agent:complete
+/jat:complete
 # → Full verification and completion
 # → Shows available tasks menu
 # → Displays recommended next task
@@ -1126,23 +1126,23 @@ Commands are **markdown files with instructions** that Claude Code executes:
 #   📋 Recommended Next Task:
 #      → jat-xyz "Update docs" (Priority: P1)
 #
-#      Type: /agent:start jat-xyz
+#      Type: /jat:start jat-xyz
 
 # Quick pivot to different work
-/agent:pause
+/jat:pause
 # → Quick commit/stash (2 seconds)
 # → Acknowledges all unread Agent Mail
 # → Releases locks
 # → Shows available tasks menu
 # → You pick different work
 
-# End of day - just close terminal after /agent:complete
-/agent:complete
+# End of day - just close terminal after /jat:complete
+/jat:complete
 # → Shows menu + recommended next task
 # → Close terminal when done
 ```
 
-**Key insight:** `/agent:next` creates a **continuous flow** by automatically starting the next highest-priority task. Agents never sit idle!
+**Key insight:** `/jat:next` creates a **continuous flow** by automatically starting the next highest-priority task. Agents never sit idle!
 
 #### Example: Multi-Agent Coordination
 
@@ -1419,7 +1419,7 @@ GreatWind | [P1] jat-4p0 - Demo: Frontend... [🔒2 📬1 ⏱45m]
 
 **How it works:**
 1. Claude Code passes unique `session_id` via JSON to statusline
-2. `/agent:start` writes agent name to `.claude/agent-{session_id}.txt`
+2. `/jat:start` writes agent name to `.claude/agent-{session_id}.txt`
 3. Statusline reads session-specific file to display identity
 4. Project name extracted from `$cwd` for dynamic task ID matching
 
@@ -1428,7 +1428,7 @@ GreatWind | [P1] jat-4p0 - Demo: Frontend... [🔒2 📬1 ⏱45m]
 - `.claude/agent-{session_id}.txt` - Session-specific agent name (per-project)
 - `/tmp/claude-session-${PPID}.txt` - PPID-based session ID (process-isolated, race-free)
 
-**Setup:** Automatically configured by installer. Works immediately after `/agent:start`.
+**Setup:** Automatically configured by installer. Works immediately after `/jat:start`.
 
 **See also:** `CLAUDE.md` section "Global Statusline" for complete documentation.
 
@@ -1979,7 +1979,7 @@ bd init
 
 **Symptoms:** `/start` not recognized or does nothing
 
-**Cause:** Commands not installed in `~/.claude/commands/agent/`
+**Cause:** Commands not installed in `~/.claude/commands/jat/`
 
 **Solution:**
 ```bash
@@ -1988,7 +1988,7 @@ cd ~/code/jat
 bash scripts/setup-global-claude-md.sh
 
 # Verify installation
-ls ~/.claude/commands/agent/
+ls ~/.claude/commands/jat/
 # Should show: register.md, start.md, complete.md, etc.
 ```
 

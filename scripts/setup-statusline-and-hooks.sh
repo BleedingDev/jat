@@ -78,7 +78,7 @@ if [ ! -f "$HOOK_SOURCE" ]; then
 # Monitored commands:
 #   - am-* (Agent Mail: reserve, release, send, reply, ack, etc.)
 #   - bd (Beads: create, update, close, etc.)
-#   - /agent:* slash commands (via SlashCommand tool)
+#   - /jat:* slash commands (via SlashCommand tool)
 #
 # Hook input (stdin): JSON with tool name, input, and output
 # Hook output (stdout): Message to display (triggers statusline refresh)

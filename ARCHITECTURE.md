@@ -133,7 +133,7 @@ Bash tools are better when:
              ▼
 ┌─────────────────────────────────────────────┐
 │  Coordination Commands (10 .md files)       │
-│  ~/.claude/commands/agent/                  │
+│  ~/.claude/commands/jat/                  │
 │  /register, /start, /complete, /handoff,    │
 │  /pause, /block, /stop, /status, /verify    │
 └────────┬──────────────────┬─────────────────┘
@@ -155,7 +155,7 @@ Bash tools are better when:
 **Workflow Example: `/start` command**
 
 1. **User invokes:** `/start`
-2. **Claude reads:** `~/.claude/commands/agent/start.md`
+2. **Claude reads:** `~/.claude/commands/jat/start.md`
 3. **Expands to steps:**
    - Parse parameters and mode (quick/normal)
    - Detect task type (bulk vs normal)

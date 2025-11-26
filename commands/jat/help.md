@@ -7,9 +7,9 @@ Display help information for agent commands.
 # Agent Help - Command Reference
 
 **Usage:**
-- `/agent:help` - Show all agent commands
-- `/agent:help start` - Show detailed help for specific command
-- `/agent:help --quick` - Show quick reference only
+- `/jat:help` - Show all agent commands
+- `/jat:help start` - Show detailed help for specific command
+- `/jat:help --quick` - Show quick reference only
 
 **What this command does:**
 Displays comprehensive help information for all agent coordination commands, similar to `--help` flags in bash commands.
@@ -28,51 +28,51 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "CORE WORKFLOW (4 commands):"
 echo ""
-echo "  /agent:start [agent|task|quick|resume]"
+echo "  /jat:start [agent|task|quick|resume]"
 echo "    Get to work - register agent, select task, start working"
 echo "    Examples:"
-echo "      /agent:start                    # Auto-create new agent"
-echo "      /agent:start resume             # Choose from logged-out agents"
-echo "      /agent:start task-abc           # Start specific task"
-echo "      /agent:start task-abc quick     # Skip conflict checks"
+echo "      /jat:start                    # Auto-create new agent"
+echo "      /jat:start resume             # Choose from logged-out agents"
+echo "      /jat:start task-abc           # Start specific task"
+echo "      /jat:start task-abc quick     # Skip conflict checks"
 echo ""
-echo "  /agent:next [quick]"
+echo "  /jat:next [quick]"
 echo "    Drive mode - complete current task, auto-start next"
 echo "    Examples:"
-echo "      /agent:next                     # Full verify + auto-continue"
-echo "      /agent:next quick               # Skip verify, fast iteration"
+echo "      /jat:next                     # Full verify + auto-continue"
+echo "      /jat:next quick               # Skip verify, fast iteration"
 echo ""
-echo "  /agent:complete [task-id]"
+echo "  /jat:complete [task-id]"
 echo "    Finish properly - verify, commit, show menu, you choose next"
 echo "    Examples:"
-echo "      /agent:complete                 # Complete current task"
+echo "      /jat:complete                 # Complete current task"
 echo ""
-echo "  /agent:pause [task-id] [options]"
+echo "  /jat:pause [task-id] [options]"
 echo "    Quick pivot - pause/block/handoff/abandon current work"
 echo "    Examples:"
-echo "      /agent:pause --reason \"Break\"           # Keep locks"
-echo "      /agent:pause --blocked --reason \"API\"  # Release locks"
-echo "      /agent:pause --handoff Alice            # Hand off to agent"
-echo "      /agent:pause --abandon                  # Unassign task"
+echo "      /jat:pause --reason \"Break\"           # Keep locks"
+echo "      /jat:pause --blocked --reason \"API\"  # Release locks"
+echo "      /jat:pause --handoff Alice            # Hand off to agent"
+echo "      /jat:pause --abandon                  # Unassign task"
 echo ""
 echo "SUPPORT COMMANDS (3 commands):"
 echo ""
-echo "  /agent:status"
+echo "  /jat:status"
 echo "    Check current work - task, locks, messages, team sync"
 echo ""
-echo "  /agent:verify [task-id]"
+echo "  /jat:verify [task-id]"
 echo "    Quality checks - tests, lint, security, browser"
 echo ""
-echo "  /agent:plan"
+echo "  /jat:plan"
 echo "    Convert planning to tasks - analyze conversation/PRD, create Beads tasks"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "QUICK TIPS:"
 echo ""
-echo "  Speed:        /agent:start quick  /agent:next quick"
-echo "  Control:      /agent:complete (manual selection)"
-echo "  Quality:      /agent:verify before /agent:complete"
+echo "  Speed:        /jat:start quick  /jat:next quick"
+echo "  Control:      /jat:complete (manual selection)"
+echo "  Quality:      /jat:verify before /jat:complete"
 echo "  Coordination: All commands sync via Agent Mail"
 echo ""
 echo "LEARN MORE:"
@@ -83,9 +83,9 @@ echo "  Dashboard:    bd-dashboard"
 echo "  Agent Mail:   cat ~/.claude/CLAUDE.md"
 echo ""
 echo "For detailed help on a specific command:"
-echo "  /agent:help start"
-echo "  /agent:help next"
-echo "  /agent:help complete"
+echo "  /jat:help start"
+echo "  /jat:help next"
+echo "  /jat:help complete"
 echo ""
 ```
 
@@ -105,25 +105,25 @@ fi
 # Show detailed help for specific command
 case "$COMMAND" in
     start)
-        cat ~/code/jat/commands/agent/start.md | grep -A 50 "^# Agent Start"
+        cat ~/code/jat/commands/jat/start.md | grep -A 50 "^# Agent Start"
         ;;
     next)
-        cat ~/code/jat/commands/agent/next.md | grep -A 30 "^# Agent Next"
+        cat ~/code/jat/commands/jat/next.md | grep -A 30 "^# Agent Next"
         ;;
     complete)
-        cat ~/code/jat/commands/agent/complete.md | grep -A 30 "^# Agent Complete"
+        cat ~/code/jat/commands/jat/complete.md | grep -A 30 "^# Agent Complete"
         ;;
     pause)
-        cat ~/code/jat/commands/agent/pause.md | grep -A 40 "^# Agent Pause"
+        cat ~/code/jat/commands/jat/pause.md | grep -A 40 "^# Agent Pause"
         ;;
     status)
-        cat ~/code/jat/commands/agent/status.md | grep -A 20 "^# Agent Status"
+        cat ~/code/jat/commands/jat/status.md | grep -A 20 "^# Agent Status"
         ;;
     verify)
-        cat ~/code/jat/commands/agent/verify.md | grep -A 20 "^# Agent Verify"
+        cat ~/code/jat/commands/jat/verify.md | grep -A 20 "^# Agent Verify"
         ;;
     plan)
-        cat ~/code/jat/commands/agent/plan.md | grep -A 20 "^# Agent Plan"
+        cat ~/code/jat/commands/jat/plan.md | grep -A 20 "^# Agent Plan"
         ;;
     *)
         echo "❌ Unknown command: $COMMAND"
@@ -131,7 +131,7 @@ case "$COMMAND" in
         echo "Available commands:"
         echo "  start, next, complete, pause, status, verify, plan"
         echo ""
-        echo "Usage: /agent:help <command>"
+        echo "Usage: /jat:help <command>"
         exit 1
         ;;
 esac
@@ -149,51 +149,51 @@ esac
 
 CORE WORKFLOW (4 commands):
 
-  /agent:start [agent|task|quick|resume]
+  /jat:start [agent|task|quick|resume]
     Get to work - register agent, select task, start working
     Examples:
-      /agent:start                    # Auto-create new agent
-      /agent:start resume             # Choose from logged-out agents
-      /agent:start task-abc           # Start specific task
-      /agent:start task-abc quick     # Skip conflict checks
+      /jat:start                    # Auto-create new agent
+      /jat:start resume             # Choose from logged-out agents
+      /jat:start task-abc           # Start specific task
+      /jat:start task-abc quick     # Skip conflict checks
 
-  /agent:next [quick]
+  /jat:next [quick]
     Drive mode - complete current task, auto-start next
     Examples:
-      /agent:next                     # Full verify + auto-continue
-      /agent:next quick               # Skip verify, fast iteration
+      /jat:next                     # Full verify + auto-continue
+      /jat:next quick               # Skip verify, fast iteration
 
-  /agent:complete [task-id]
+  /jat:complete [task-id]
     Finish properly - verify, commit, show menu, you choose next
     Examples:
-      /agent:complete                 # Complete current task
+      /jat:complete                 # Complete current task
 
-  /agent:pause [task-id] [options]
+  /jat:pause [task-id] [options]
     Quick pivot - pause/block/handoff/abandon current work
     Examples:
-      /agent:pause --reason "Break"           # Keep locks
-      /agent:pause --blocked --reason "API"  # Release locks
-      /agent:pause --handoff Alice            # Hand off to agent
-      /agent:pause --abandon                  # Unassign task
+      /jat:pause --reason "Break"           # Keep locks
+      /jat:pause --blocked --reason "API"  # Release locks
+      /jat:pause --handoff Alice            # Hand off to agent
+      /jat:pause --abandon                  # Unassign task
 
 SUPPORT COMMANDS (3 commands):
 
-  /agent:status
+  /jat:status
     Check current work - task, locks, messages, team sync
 
-  /agent:verify [task-id]
+  /jat:verify [task-id]
     Quality checks - tests, lint, security, browser
 
-  /agent:plan
+  /jat:plan
     Convert planning to tasks - analyze conversation/PRD, create Beads tasks
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 QUICK TIPS:
 
-  Speed:        /agent:start quick  /agent:next quick
-  Control:      /agent:complete (manual selection)
-  Quality:      /agent:verify before /agent:complete
+  Speed:        /jat:start quick  /jat:next quick
+  Control:      /jat:complete (manual selection)
+  Quality:      /jat:verify before /jat:complete
   Coordination: All commands sync via Agent Mail
 
 LEARN MORE:
@@ -204,24 +204,24 @@ LEARN MORE:
   Agent Mail:   cat ~/.claude/CLAUDE.md
 
 For detailed help on a specific command:
-  /agent:help start
-  /agent:help next
-  /agent:help complete
+  /jat:help start
+  /jat:help next
+  /jat:help complete
 ```
 
 **Specific command help:**
 ```bash
-$ /agent:help start
+$ /jat:help start
 
 # Agent Start - Get to Work
 
 Usage:
-- /agent:start                    # Auto-create new agent (fast!)
-- /agent:start resume             # Choose from logged-out agents
-- /agent:start GreatWind          # Resume specific agent by name
-- /agent:start quick              # Start highest priority task immediately
-- /agent:start task-abc           # Start specific task (with checks)
-- /agent:start task-abc quick     # Start specific task (skip checks)
+- /jat:start                    # Auto-create new agent (fast!)
+- /jat:start resume             # Choose from logged-out agents
+- /jat:start GreatWind          # Resume specific agent by name
+- /jat:start quick              # Start highest priority task immediately
+- /jat:start task-abc           # Start specific task (with checks)
+- /jat:start task-abc quick     # Start specific task (skip checks)
 
 What it does:
 1. Smart registration (auto-create or resume)
@@ -240,32 +240,32 @@ What it does:
 **Quick reference while coding:**
 ```bash
 # Forgot command syntax?
-/agent:help
+/jat:help
 # → Shows all commands with examples
 
 # Need detailed info about a specific command?
-/agent:help pause
+/jat:help pause
 # → Shows full pause.md documentation
 ```
 
 **New user onboarding:**
 ```bash
 # First time using agent commands
-/agent:help
+/jat:help
 # → See all available commands and their purposes
 
 # Ready to start first task
-/agent:help start
-# → Learn all variations of /agent:start
+/jat:help start
+# → Learn all variations of /jat:start
 ```
 
 **Command discovery:**
 ```bash
 # What commands are available?
-/agent:help
+/jat:help
 # → Complete command reference
 
 # How do I switch tasks quickly?
-/agent:help pause
+/jat:help pause
 # → Learn about pause modes (block, handoff, abandon)
 ```

@@ -2163,7 +2163,7 @@ Claude Code Sessions → JSONL Files → tokenUsage.ts → API Endpoints → UI 
 **2. Session-Agent Mapping:**
 - Location: `.claude/agent-{session_id}.txt`
 - Contains: Agent name for that session
-- Created by: Agent workflow commands (`/agent:start`, etc.)
+- Created by: Agent workflow commands (`/jat:start`, etc.)
 
 **3. Token Aggregation:**
 - `tokenUsage.ts` parses JSONL files

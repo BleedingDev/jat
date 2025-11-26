@@ -118,7 +118,7 @@ $JAT_IMPORTS
 
 \`\`\`bash
 # Start working (registers agent + picks task)
-/agent:start
+/jat:start
 
 # See available tasks
 bd ready
@@ -187,11 +187,11 @@ else
     echo "    @~/code/jat/shared/bash-patterns.md # Bash patterns"
     echo "    @~/code/jat/shared/beads.md         # Beads task planning"
     echo "    @~/code/jat/shared/tools.md         # 33 bash tools"
-    echo "    @~/code/jat/shared/workflow-commands.md # /agent:* commands"
+    echo "    @~/code/jat/shared/workflow-commands.md # /jat:* commands"
     echo "    @~/code/jat/shared/statusline.md    # Statusline docs"
     echo ""
     echo "  Test in any project:"
     echo "    cd ~/code/<project>"
-    echo "    /agent:start                # Register + start work"
+    echo "    /jat:start                # Register + start work"
     echo ""
 fi
