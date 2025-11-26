@@ -1,45 +1,39 @@
 /**
  * Badge helper utilities for consistent styling across the dashboard.
  *
- * Consolidates duplicate badge functions from:
- * - TaskTable.svelte
- * - TaskQueue.svelte
- * - AgentCard.svelte
+ * Uses centralized config from statusColors.ts for consistency.
+ * These functions provide backward-compatible API while pulling from single source of truth.
  */
 
-// Task priority badge classes
+import {
+	AGENT_STATUS_VISUALS,
+	TASK_STATUS_VISUALS,
+	PRIORITY_VISUALS,
+	getAgentStatusVisual,
+	getTaskStatusVisual,
+	getPriorityVisual
+} from '$lib/config/statusColors';
+
+// =============================================================================
+// PRIORITY HELPERS (now using primary color with opacity)
+// =============================================================================
+
 export function getPriorityBadge(priority: number | null | undefined): string {
-	switch (priority) {
-		case 0: return 'badge-error';    // P0 - Critical (Red)
-		case 1: return 'badge-warning';  // P1 - High (Yellow)
-		case 2: return 'badge-info';     // P2 - Medium (Blue)
-		default: return 'badge-ghost';   // P3+ - Low (Gray)
-	}
+	return getPriorityVisual(priority).badge;
 }
 
-// Task priority label
 export function getPriorityLabel(priority: number | null | undefined): string {
-	switch (priority) {
-		case 0: return 'Critical';
-		case 1: return 'High';
-		case 2: return 'Medium';
-		case 3: return 'Low';
-		default: return 'Low';
-	}
+	return getPriorityVisual(priority).description;
 }
 
-// Task status badge classes
+// =============================================================================
+// TASK STATUS HELPERS
+// =============================================================================
+
 export function getTaskStatusBadge(status: string | null | undefined): string {
-	switch (status) {
-		case 'open': return 'badge-info';
-		case 'in_progress': return 'badge-warning';
-		case 'blocked': return 'badge-error';
-		case 'closed': return 'badge-success';
-		default: return 'badge-ghost';
-	}
+	return getTaskStatusVisual(status || 'open').badge;
 }
 
-// Task status label (formatted for display)
 export function getTaskStatusLabel(status: string | null | undefined): string {
 	switch (status) {
 		case 'open': return 'Open';
@@ -50,59 +44,53 @@ export function getTaskStatusLabel(status: string | null | undefined): string {
 	}
 }
 
-// Issue type badge classes
+// =============================================================================
+// ISSUE TYPE HELPERS (unchanged - no config yet)
+// =============================================================================
+
 export function getTypeBadge(type: string | null | undefined): string {
 	switch (type) {
 		case 'bug': return 'badge-error';
 		case 'feature': return 'badge-success';
 		case 'epic': return 'badge-primary';
 		case 'chore': return 'badge-ghost';
-		case 'task': return 'badge-info';
-		default: return 'badge-info';
+		case 'task': return 'badge-ghost';  // Changed from badge-info to avoid blue overload
+		default: return 'badge-ghost';
 	}
 }
 
-// Issue type label
 export function getTypeLabel(type: string | null | undefined): string {
 	if (!type) return 'No Type';
 	return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-// Agent status badge classes (different from task status)
+// =============================================================================
+// AGENT STATUS HELPERS
+// =============================================================================
+
 export function getAgentStatusBadge(status: string | null | undefined): string {
-	switch (status) {
-		case 'live': return 'badge-success';    // Green - truly responsive (< 1m)
-		case 'working': return 'badge-warning'; // Yellow - actively coding (1-10m)
-		case 'active': return 'badge-accent';   // Purple/accent - recent activity
-		case 'idle': return 'badge-ghost';      // Gray - available but quiet
-		case 'blocked': return 'badge-warning'; // Yellow - paused
-		case 'offline': return 'badge-error';   // Red - disconnected
-		default: return 'badge-ghost';
-	}
+	return getAgentStatusVisual(status || 'idle').badge;
 }
 
-// Agent status icon
 export function getAgentStatusIcon(status: string | null | undefined): string {
+	const visual = getAgentStatusVisual(status || 'idle');
+	// Return emoji/character for backward compat with existing badge rendering
 	switch (status) {
-		case 'live': return '●';     // Solid dot - truly live/responsive
-		case 'working': return '⚙';  // Actively coding (gear will spin)
-		case 'active': return '✓';   // Ready and engaged
-		case 'idle': return '○';     // Available but quiet
-		case 'blocked': return '⏸';  // Paused
-		case 'offline': return '⏹';  // Disconnected
-		default: return '?';
+		case 'live': return '...';     // Will be replaced with loading-dots component
+		case 'working': return '⚙';    // Gear emoji (actual SVG rendered separately)
+		case 'active': return '●';     // Pulsing dot
+		case 'idle': return '○';       // Empty circle
+		case 'offline': return '⏻';    // Power symbol
+		default: return '○';
 	}
 }
 
-// Agent status label
 export function getAgentStatusLabel(status: string | null | undefined): string {
-	switch (status) {
-		case 'live': return 'Live';
-		case 'working': return 'Working';
-		case 'active': return 'Active';
-		case 'idle': return 'Idle';
-		case 'blocked': return 'Blocked';
-		case 'offline': return 'Offline';
-		default: return 'Unknown';
-	}
+	return getAgentStatusVisual(status || 'idle').label;
 }
+
+// =============================================================================
+// EXTENDED HELPERS (new - for components that need full visual config)
+// =============================================================================
+
+export { getAgentStatusVisual, getTaskStatusVisual, getPriorityVisual };

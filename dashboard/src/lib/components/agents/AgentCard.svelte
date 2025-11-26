@@ -4,7 +4,8 @@
 	import { getTokenColorClass, HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
 	import { getActivityStatusConfig } from '$lib/config/activityStatusConfig';
 	import Sparkline from '$lib/components/Sparkline.svelte';
-	import { getAgentStatusBadge, getAgentStatusIcon } from '$lib/utils/badgeHelpers';
+	import { getAgentStatusBadge, getAgentStatusIcon, getAgentStatusVisual } from '$lib/utils/badgeHelpers';
+	import { STATUS_ICONS } from '$lib/config/statusColors';
 	import { formatLastActivity } from '$lib/utils/dateFormatters';
 	import { computeAgentStatus } from '$lib/utils/agentStatusUtils';
 
@@ -51,6 +52,7 @@
 	// Compute agent status using shared utility
 	// States: live (< 1m, truly responsive) > working (1-10m with task) > active (recent activity) > idle (within 1h) > offline (>1h)
 	const agentStatus = $derived(() => computeAgentStatus(agent));
+	const statusVisual = $derived(() => getAgentStatusVisual(agentStatus()));
 
 	// Compute current task (in-progress tasks assigned to this agent)
 	const currentTask = $derived(() => {
@@ -654,15 +656,37 @@
 				</h3>
 			</div>
 			<button
-				class="badge badge-sm {getAgentStatusBadge(agentStatus())} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'} {agentStatus() === 'live' ? 'animate-pulse' : ''}"
+				class="badge badge-sm {statusVisual().badge} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'}"
 				onclick={handleBadgeClick}
 				disabled={agentStatus() !== 'offline'}
-				title={agentStatus() === 'offline' ? 'Click to delete agent' : agentStatus() === 'live' ? 'Responsive right now (< 1 minute)' : agentStatus() === 'working' ? 'Working recently (1-10 minutes)' : ''}
+				title={statusVisual().description}
 			>
-				<span class={agentStatus() === 'working' ? 'inline-block animate-spin' : ''}>
-					{getAgentStatusIcon(agentStatus())}
-				</span>
-				{agentStatus().charAt(0).toUpperCase() + agentStatus().slice(1)}
+				{#if agentStatus() === 'working'}
+					<!-- Working: spinning gear SVG -->
+					<svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="currentColor">
+						<path d={STATUS_ICONS.gear} />
+					</svg>
+				{:else if agentStatus() === 'live'}
+					<!-- Live: DaisyUI loading dots (has built-in animation) -->
+					<span class="loading loading-dots loading-xs"></span>
+				{:else if agentStatus() === 'active'}
+					<!-- Active: pulsing dot -->
+					<span class="relative flex h-2 w-2">
+						<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
+						<span class="relative inline-flex rounded-full h-2 w-2 bg-current"></span>
+					</span>
+				{:else if agentStatus() === 'idle'}
+					<!-- Idle: empty circle -->
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="8" />
+					</svg>
+				{:else if agentStatus() === 'offline'}
+					<!-- Offline: power off symbol -->
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS['power-off']} />
+					</svg>
+				{/if}
+				<span class="ml-1">{statusVisual().label}</span>
 			</button>
 		</div>
 

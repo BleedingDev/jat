@@ -27,6 +27,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { parseSessionUsage, buildSessionAgentMap, calculateCost } from './tokenUsage';
 import type { TimeRange, SessionUsage, TokenUsage } from './tokenUsage';
+import { getAllProjects, getProjectColor } from './projectConfig';
+import type { ProjectConfig } from './projectConfig';
 
 // ============================================================================
 // Types
@@ -90,6 +92,68 @@ export interface TimeSeriesResult {
 	startTime: string;
 	/** End timestamp of range */
 	endTime: string;
+}
+
+/**
+ * Per-project token data for a time bucket
+ */
+export interface ProjectTokenData {
+	/** Project key (e.g., 'jat', 'chimaro') */
+	project: string;
+	/** Total tokens for this project in this bucket */
+	tokens: number;
+	/** Cost in USD for this project in this bucket */
+	cost: number;
+	/** Hex color for this project (from config) */
+	color: string;
+}
+
+/**
+ * Multi-project time-series data point
+ */
+export interface MultiProjectTimeSeriesPoint {
+	/** Bucket timestamp (start of bucket) */
+	timestamp: string;
+	/** Total tokens across all projects in this bucket */
+	totalTokens: number;
+	/** Total cost across all projects in this bucket */
+	totalCost: number;
+	/** Per-project breakdown */
+	projects: ProjectTokenData[];
+}
+
+/**
+ * Options for multi-project time-series aggregation
+ */
+export interface MultiProjectTimeSeriesOptions {
+	/** Time range filter */
+	range?: '24h' | '7d' | 'all';
+	/** Bucket size for aggregation */
+	bucketSize?: BucketSize;
+}
+
+/**
+ * Multi-project time-series result
+ */
+export interface MultiProjectTimeSeriesResult {
+	/** Array of data points sorted by timestamp */
+	data: MultiProjectTimeSeriesPoint[];
+	/** Total tokens across all projects and buckets */
+	totalTokens: number;
+	/** Total cost across all projects and buckets */
+	totalCost: number;
+	/** Number of buckets */
+	bucketCount: number;
+	/** Bucket size used */
+	bucketSize: BucketSize;
+	/** Start timestamp of range */
+	startTime: string;
+	/** End timestamp of range */
+	endTime: string;
+	/** List of all projects found */
+	projectKeys: string[];
+	/** Map of project key to hex color */
+	projectColors: Record<string, string>;
 }
 
 // ============================================================================
@@ -413,4 +477,226 @@ export async function getAgentTimeSeries(
 		range: 'all',
 		projectPath
 	});
+}
+
+// ============================================================================
+// Multi-Project Time Series
+// ============================================================================
+
+/**
+ * Get time-series data aggregated across ALL projects from jat config
+ *
+ * Scans all project paths from ~/.config/jat/projects.json and aggregates
+ * token usage into time buckets with per-project breakdown and colors.
+ *
+ * @param options - Aggregation options
+ * @returns Multi-project time-series result with per-project breakdown
+ *
+ * @example
+ * const data = await getMultiProjectTimeSeries({ range: '24h', bucketSize: '30min' });
+ * // data.data[0].projects = [
+ * //   { project: 'jat', tokens: 50000, cost: 0.15, color: '#5588ff' },
+ * //   { project: 'chimaro', tokens: 30000, cost: 0.09, color: '#00d4aa' }
+ * // ]
+ */
+export async function getMultiProjectTimeSeries(
+	options: MultiProjectTimeSeriesOptions = {}
+): Promise<MultiProjectTimeSeriesResult> {
+	const { range = '24h', bucketSize = '30min' } = options;
+
+	const homeDir = os.homedir();
+
+	// Get all projects from config
+	const projects = getAllProjects();
+	const projectKeys = Array.from(projects.keys());
+
+	// Build project colors map
+	const projectColors: Record<string, string> = {};
+	for (const [key, config] of projects) {
+		projectColors[key] = config.activeColor;
+	}
+
+	// Get date range boundaries
+	const { start: startTime, end: endTime } = getDateRange(range);
+
+	// Map: bucketKey -> projectKey -> { tokens, cost }
+	const bucketProjectData = new Map<string, Map<string, { tokens: number; cost: number }>>();
+
+	// Process each project
+	for (const [projectKey, projectConfig] of projects) {
+		const projectPath = projectConfig.path;
+		const projectSlug = projectPath.replace(/\//g, '-');
+		const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
+
+		// Get all session files for this project
+		let sessionIds: string[] = [];
+		try {
+			const files = await readdir(projectsDir);
+			sessionIds = files
+				.filter((file) => file.endsWith('.jsonl'))
+				.map((file) => file.replace('.jsonl', ''));
+		} catch {
+			// Project directory doesn't exist or can't be read - skip
+			continue;
+		}
+
+		// Process each session
+		for (const sid of sessionIds) {
+			const jsonlPath = path.join(projectsDir, `${sid}.jsonl`);
+
+			try {
+				const content = await readFile(jsonlPath, 'utf-8');
+				const lines = content.split('\n').filter((line) => line.trim());
+
+				// Parse each JSONL line
+				for (const line of lines) {
+					try {
+						const entry = JSON.parse(line);
+
+						// Skip entries without usage data or timestamp
+						if (!entry.message?.usage || !entry.timestamp) {
+							continue;
+						}
+
+						const timestamp = new Date(entry.timestamp);
+
+						// Filter by date range
+						if (timestamp < startTime || timestamp > endTime) {
+							continue;
+						}
+
+						const usage = entry.message.usage;
+						const inputTokens = usage.input_tokens || 0;
+						const cacheCreation = usage.cache_creation_input_tokens || 0;
+						const cacheRead = usage.cache_read_input_tokens || 0;
+						const outputTokens = usage.output_tokens || 0;
+						const totalTokens = inputTokens + cacheCreation + cacheRead + outputTokens;
+
+						// Calculate cost for this entry
+						const cost = calculateCost({
+							input_tokens: inputTokens,
+							cache_creation_input_tokens: cacheCreation,
+							cache_read_input_tokens: cacheRead,
+							output_tokens: outputTokens,
+							total_tokens: totalTokens,
+							cost: 0,
+							sessionCount: 1
+						});
+
+						// Determine bucket
+						const bucketKey = getBucketKey(timestamp, bucketSize);
+
+						// Get or create bucket data
+						if (!bucketProjectData.has(bucketKey)) {
+							bucketProjectData.set(bucketKey, new Map());
+						}
+						const projectMap = bucketProjectData.get(bucketKey)!;
+
+						// Add to project data in bucket
+						if (projectMap.has(projectKey)) {
+							const existing = projectMap.get(projectKey)!;
+							existing.tokens += totalTokens;
+							existing.cost += cost;
+						} else {
+							projectMap.set(projectKey, { tokens: totalTokens, cost });
+						}
+					} catch {
+						// Skip malformed JSON lines
+						continue;
+					}
+				}
+			} catch {
+				// Skip sessions that can't be read
+				continue;
+			}
+		}
+	}
+
+	// Convert to MultiProjectTimeSeriesPoint array with filled buckets
+	const result: MultiProjectTimeSeriesPoint[] = [];
+
+	if (bucketSize === 'session') {
+		// Session-based: use actual data only, no gap filling
+		const sortedKeys = Array.from(bucketProjectData.keys()).sort();
+		for (const bucketKey of sortedKeys) {
+			const projectMap = bucketProjectData.get(bucketKey)!;
+			const projectsData: ProjectTokenData[] = [];
+			let totalTokens = 0;
+			let totalCost = 0;
+
+			for (const [projectKey, data] of projectMap) {
+				projectsData.push({
+					project: projectKey,
+					tokens: data.tokens,
+					cost: data.cost,
+					color: projectColors[projectKey] || '#888888'
+				});
+				totalTokens += data.tokens;
+				totalCost += data.cost;
+			}
+
+			result.push({
+				timestamp: bucketKey,
+				totalTokens,
+				totalCost,
+				projects: projectsData
+			});
+		}
+	} else {
+		// Time-based: fill gaps with zero values
+		const bucketMs = getBucketDurationMs(bucketSize);
+		let currentBucketStart = roundToBucketStart(startTime, bucketSize);
+		const endBucketStart = roundToBucketStart(endTime, bucketSize);
+
+		while (currentBucketStart <= endBucketStart) {
+			const key = getBucketKey(currentBucketStart, bucketSize);
+			const projectMap = bucketProjectData.get(key);
+
+			const projectsData: ProjectTokenData[] = [];
+			let totalTokens = 0;
+			let totalCost = 0;
+
+			// Include all projects (even with zero tokens for consistency)
+			for (const projectKey of projectKeys) {
+				const data = projectMap?.get(projectKey);
+				const tokens = data?.tokens || 0;
+				const cost = data?.cost || 0;
+
+				projectsData.push({
+					project: projectKey,
+					tokens,
+					cost,
+					color: projectColors[projectKey] || '#888888'
+				});
+				totalTokens += tokens;
+				totalCost += cost;
+			}
+
+			result.push({
+				timestamp: currentBucketStart.toISOString(),
+				totalTokens,
+				totalCost,
+				projects: projectsData
+			});
+
+			// Move to next bucket
+			currentBucketStart = new Date(currentBucketStart.getTime() + bucketMs);
+		}
+	}
+
+	// Calculate totals
+	const grandTotalTokens = result.reduce((sum, point) => sum + point.totalTokens, 0);
+	const grandTotalCost = result.reduce((sum, point) => sum + point.totalCost, 0);
+
+	return {
+		data: result,
+		totalTokens: grandTotalTokens,
+		totalCost: grandTotalCost,
+		bucketCount: result.length,
+		bucketSize,
+		startTime: startTime.toISOString(),
+		endTime: endTime.toISOString(),
+		projectKeys,
+		projectColors
+	};
 }
