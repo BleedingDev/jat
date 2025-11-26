@@ -611,8 +611,8 @@
 			onclick={handleClose}
 		></label>
 
-		<!-- Drawer Panel -->
-		<div class="bg-base-100 min-h-full w-full max-w-2xl flex flex-col shadow-2xl">
+		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) -->
+		<div class="bg-base-100 h-full w-full max-w-2xl flex flex-col shadow-2xl">
 			<!-- Header -->
 			<div class="flex items-center justify-between p-6 border-b border-base-300">
 				<div class="flex-1">
@@ -766,8 +766,8 @@
 				</div>
 			</div>
 
-			<!-- Content -->
-			<div class="flex-1 overflow-y-auto p-6">
+			<!-- Content (scrollable area between sticky header and footer) -->
+			<div class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0">
 				{#if loading}
 					<!-- Loading state -->
 					<div class="flex items-center justify-center py-12">
@@ -798,24 +798,35 @@
 					</div>
 				{:else if task && mode === 'view'}
 					<!-- View Mode -->
-					<div class="space-y-6">
+					<div class="flex flex-col gap-6 h-full">
 						<!-- Title -->
 						<div>
 							<h3 class="text-xl font-bold text-base-content mb-3">{task.title}</h3>
 						</div>
 
-						<!-- Badges -->
-						<div class="flex flex-wrap gap-2">
-							<div class="badge {statusColors[task.status] || 'badge-ghost'}">
-								{task.status || 'unknown'}
+						<!-- Badges (left) + Metadata (right) -->
+						<div class="flex items-start justify-between gap-4">
+							<!-- Badges -->
+							<div class="flex flex-wrap gap-2">
+								<div class="badge {statusColors[task.status] || 'badge-ghost'}">
+									{task.status || 'unknown'}
+								</div>
+								<div class="badge {priorityColors[task.priority] || 'badge-ghost'}">
+									P{task.priority ?? '?'}
+								</div>
+								<div class="badge badge-outline">{task.type || 'task'}</div>
+								{#if task.project}
+									<div class="badge badge-primary">{task.project}</div>
+								{/if}
 							</div>
-							<div class="badge {priorityColors[task.priority] || 'badge-ghost'}">
-								P{task.priority ?? '?'}
+							<!-- Metadata (compact, right-aligned) -->
+							<div class="text-xs text-base-content/60 text-right shrink-0">
+								<div><span class="text-base-content/40">Created:</span> {formatDate(task.created_at)}</div>
+								<div><span class="text-base-content/40">Updated:</span> {formatDate(task.updated_at)}</div>
+								{#if task.assignee}
+									<div><span class="text-base-content/40">Assignee:</span> {task.assignee}</div>
+								{/if}
 							</div>
-							<div class="badge badge-outline">{task.type || 'task'}</div>
-							{#if task.project}
-								<div class="badge badge-primary">{task.project}</div>
-							{/if}
 						</div>
 
 						<!-- Labels -->
@@ -880,28 +891,7 @@
 							</div>
 						{/if}
 
-						<!-- Metadata -->
-						<div class="border-t border-base-300 pt-4">
-							<h4 class="text-sm font-semibold mb-3 text-base-content/70">Metadata</h4>
-							<div class="text-xs text-base-content/60 space-y-2">
-								<div class="flex justify-between">
-									<strong>Created:</strong>
-									<span>{formatDate(task.created_at)}</span>
-								</div>
-								<div class="flex justify-between">
-									<strong>Updated:</strong>
-									<span>{formatDate(task.updated_at)}</span>
-								</div>
-								{#if task.assignee}
-									<div class="flex justify-between">
-										<strong>Assignee:</strong>
-										<span>{task.assignee}</span>
-									</div>
-								{/if}
-							</div>
-						</div>
-
-						<!-- Activity Timeline (Unified Task Events + Coordination Messages) -->
+						<!-- Activity Timeline (Task Events on Left, Messages on Right) -->
 						<div class="border-t border-base-300 pt-4 flex-1 flex flex-col min-h-0">
 							<!-- Header with filter tabs -->
 							<div class="flex items-center justify-between mb-3">
@@ -955,65 +945,28 @@
 									<span class="text-xs">{historyError}</span>
 								</div>
 							{:else if filteredTimeline().length > 0}
-								<!-- Unified DaisyUI Timeline -->
-								<ul class="timeline timeline-vertical timeline-compact max-h-80 overflow-y-auto">
+								<!-- Centered DaisyUI Timeline: Task events on left (30%), Messages on right (70%) -->
+								<ul class="timeline timeline-vertical flex-1 overflow-y-auto w-full">
 									{#each filteredTimeline() as event, i}
-										<li>
+										<li style="grid-template-columns: 30% min-content 1fr;">
 											<!-- Top connector (skip for first item) -->
 											{#if i > 0}
 												<hr class="{event.type === 'beads_event' ? 'bg-info' : 'bg-warning'}" />
 											{/if}
 
-											<!-- Timeline middle icon -->
-											<div class="timeline-middle">
-												{#if event.type === 'beads_event'}
-													<!-- Database icon for task events -->
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														class="h-4 w-4 text-info"
-														fill="none"
-														viewBox="0 0 24 24"
-														stroke="currentColor"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
-														/>
-													</svg>
-												{:else}
-													<!-- Mail icon for agent mail -->
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														class="h-4 w-4 text-warning"
-														fill="none"
-														viewBox="0 0 24 24"
-														stroke="currentColor"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-														/>
-													</svg>
-												{/if}
-											</div>
+											{#if event.type === 'beads_event'}
+												<!-- Task events on LEFT side (timeline-start) -->
+												<div class="timeline-start timeline-box text-xs mb-4 border-info/30 bg-info/5">
+													<!-- Event description -->
+													<div class="font-semibold text-base-content">
+														{event.description}
+													</div>
 
-											<!-- Timeline content box -->
-											<div class="timeline-end timeline-box text-xs mb-4 {event.type === 'beads_event' ? 'border-info/30 bg-info/5' : 'border-warning/30 bg-warning/5'}">
-												<!-- Event description -->
-												<div class="font-semibold text-base-content">
-													{event.description}
-												</div>
+													<!-- Timestamp -->
+													<div class="text-base-content/60 mt-1">
+														{formatDate(event.timestamp)}
+													</div>
 
-												<!-- Timestamp -->
-												<div class="text-base-content/60 mt-1">
-													{formatDate(event.timestamp)}
-												</div>
-
-												{#if event.type === 'beads_event'}
 													<!-- Task event metadata badges -->
 													<div class="mt-2 flex flex-wrap gap-1">
 														{#if event.metadata.status}
@@ -1037,7 +990,64 @@
 															</span>
 														{/if}
 													</div>
-												{:else}
+												</div>
+
+												<!-- Timeline middle icon -->
+												<div class="timeline-middle">
+													<!-- Database icon for task events -->
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														class="h-4 w-4 text-info"
+														fill="none"
+														viewBox="0 0 24 24"
+														stroke="currentColor"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
+														/>
+													</svg>
+												</div>
+
+												<!-- Empty timeline-end to balance the layout -->
+												<div class="timeline-end"></div>
+											{:else}
+												<!-- Messages on RIGHT side (timeline-end) -->
+												<!-- Empty timeline-start to balance the layout -->
+												<div class="timeline-start"></div>
+
+												<!-- Timeline middle icon -->
+												<div class="timeline-middle">
+													<!-- Mail icon for agent mail -->
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														class="h-4 w-4 text-warning"
+														fill="none"
+														viewBox="0 0 24 24"
+														stroke="currentColor"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+														/>
+													</svg>
+												</div>
+
+												<div class="timeline-end timeline-box text-xs mb-4 border-warning/30 bg-warning/5">
+													<!-- Event description -->
+													<div class="font-semibold text-base-content">
+														{event.description}
+													</div>
+
+													<!-- Timestamp -->
+													<div class="text-base-content/60 mt-1">
+														{formatDate(event.timestamp)}
+													</div>
+
 													<!-- Agent mail metadata -->
 													<div class="mt-2 space-y-1">
 														{#if event.metadata.from_agent}
@@ -1046,7 +1056,7 @@
 															</div>
 														{/if}
 														{#if event.metadata.body}
-															<div class="text-base-content/80 whitespace-pre-wrap max-h-16 overflow-y-auto text-xs bg-base-100 p-2 rounded mt-1">
+															<div class="text-base-content/80 whitespace-pre-wrap max-h-64 overflow-y-auto text-xs bg-base-100 p-2 rounded mt-1">
 																{event.metadata.body}
 															</div>
 														{/if}
@@ -1059,8 +1069,8 @@
 															{/if}
 														</div>
 													</div>
-												{/if}
-											</div>
+												</div>
+											{/if}
 
 											<!-- Bottom connector (skip for last item) -->
 											{#if i < filteredTimeline().length - 1}
