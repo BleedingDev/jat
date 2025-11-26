@@ -160,14 +160,28 @@ if [[ -n "$session_id" ]]; then
     echo "$session_id" > "/tmp/claude-session-${PPID}.txt" 2>/dev/null
 fi
 
+# Get git root directory (agent files are stored at repo root, not subdirs)
+git_root=""
+if command -v git &>/dev/null; then
+    git_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)
+fi
+
 # Get agent name from session-specific file
 # Each Claude Code session gets its own agent identity file
+# Look in git root first (for subdirectory support), then current directory
 agent_name=""
 
-if [[ -n "$session_id" ]] && [[ -f "$cwd/.claude/agent-${session_id}.txt" ]]; then
-    # Read from session-specific file (supports multiple concurrent agents)
-    agent_name=$(cat "$cwd/.claude/agent-${session_id}.txt" 2>/dev/null | tr -d '\n')
-elif [[ -n "$AGENT_NAME" ]]; then
+if [[ -n "$session_id" ]]; then
+    # Try git root first (handles working in subdirectories like jat/dashboard)
+    if [[ -n "$git_root" ]] && [[ -f "$git_root/.claude/agent-${session_id}.txt" ]]; then
+        agent_name=$(cat "$git_root/.claude/agent-${session_id}.txt" 2>/dev/null | tr -d '\n')
+    # Fall back to current directory
+    elif [[ -f "$cwd/.claude/agent-${session_id}.txt" ]]; then
+        agent_name=$(cat "$cwd/.claude/agent-${session_id}.txt" 2>/dev/null | tr -d '\n')
+    fi
+fi
+
+if [[ -z "$agent_name" ]] && [[ -n "$AGENT_NAME" ]]; then
     # Fall back to environment variable if set
     agent_name="$AGENT_NAME"
 fi
