@@ -709,7 +709,8 @@
 		if (!preview) return null;
 
 		// Match task ID pattern: [project-xxx] or just project-xxx
-		const match = preview.match(/\[?([a-z0-9_-]+-[a-z0-9]{3})\]?/i);
+		// Task IDs have 3-8 alphanumeric chars after the hyphen (e.g., jat-abc, jat-wuxb, chimaro-12ab)
+		const match = preview.match(/\[?([a-z0-9_-]+-[a-z0-9]{3,8})\]?/i);
 		return match ? match[1] : null;
 	}
 
@@ -746,6 +747,22 @@
 		const taskId = extractTaskId(activity.preview);
 		if (taskId && ontaskclick) {
 			ontaskclick(taskId);
+		}
+	}
+
+	// Copy to clipboard
+	let copiedTaskId = $state<string | null>(null);
+
+	async function copyTaskId(taskId: string, event: MouseEvent): Promise<void> {
+		event.stopPropagation(); // Don't trigger parent click handlers
+		try {
+			await navigator.clipboard.writeText(taskId);
+			copiedTaskId = taskId;
+			setTimeout(() => {
+				copiedTaskId = null;
+			}, 1500);
+		} catch (err) {
+			console.error('Failed to copy:', err);
 		}
 	}
 </script>
@@ -1072,9 +1089,26 @@
 
 				<div class="space-y-1">
 					{#each queuedTasks().slice(0, 3) as task}
-						<div class="bg-base-200 rounded px-2 py-1">
+						<div class="bg-base-200 rounded px-2 py-1 group/queueitem">
 							<div class="flex items-center gap-2">
-								<span class="text-xs font-mono text-base-content/50 truncate max-w-[100px] inline-block" title={task.id}>{task.id}</span>
+								<div class="flex items-center gap-0.5">
+									<span class="text-xs font-mono text-base-content/50 truncate max-w-[100px] inline-block" title={task.id}>{task.id}</span>
+									<button
+										class="opacity-0 group-hover/queueitem:opacity-100 transition-opacity btn btn-xs btn-ghost btn-square p-0 h-4 w-4 min-h-0"
+										title="Copy task ID"
+										onclick={(e) => copyTaskId(task.id, e)}
+									>
+										{#if copiedTaskId === task.id}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 text-success">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+											</svg>
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+											</svg>
+										{/if}
+									</button>
+								</div>
 								<p class="text-xs text-base-content truncate flex-1" title={task.title}>
 									{task.title}
 								</p>

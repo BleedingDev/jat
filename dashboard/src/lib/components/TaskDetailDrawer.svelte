@@ -27,9 +27,29 @@
 	let error = $state(null);
 
 	// Task history state
-	let taskHistory = $state(null);
+	interface TimelineEvent {
+		type: 'beads_event' | 'agent_mail';
+		event: string;
+		timestamp: string;
+		description: string;
+		metadata: Record<string, any>;
+	}
+
+	interface TaskHistory {
+		task_id: string;
+		task_title: string;
+		timeline: TimelineEvent[];
+		count: {
+			total: number;
+			beads_events: number;
+			agent_mail: number;
+		};
+		timestamp: string;
+	}
+
+	let taskHistory = $state<TaskHistory | null>(null);
 	let historyLoading = $state(false);
-	let historyError = $state(null);
+	let historyError = $state<string | null>(null);
 
 	// Edit mode state
 	let formData = $state({
@@ -54,6 +74,18 @@
 	let validationErrors = $state({});
 	let toastMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 	let showHelp = $state(false);
+	let copiedTaskId = $state(false);
+
+	// Timeline filter state
+	let timelineFilter = $state<'all' | 'tasks' | 'messages'>('all');
+
+	// Filtered timeline based on selected tab
+	const filteredTimeline = $derived((): TimelineEvent[] => {
+		if (!taskHistory?.timeline) return [];
+		if (timelineFilter === 'all') return taskHistory.timeline;
+		if (timelineFilter === 'tasks') return taskHistory.timeline.filter(e => e.type === 'beads_event');
+		return taskHistory.timeline.filter(e => e.type === 'agent_mail');
+	});
 
 	// Status badge colors
 	const statusColors = {
@@ -174,6 +206,20 @@
 		setTimeout(() => {
 			toastMessage = null;
 		}, 3000); // Hide after 3 seconds
+	}
+
+	// Copy task ID to clipboard
+	async function copyTaskIdToClipboard() {
+		if (!task?.id) return;
+		try {
+			await navigator.clipboard.writeText(task.id);
+			copiedTaskId = true;
+			setTimeout(() => {
+				copiedTaskId = false;
+			}, 1500);
+		} catch (err) {
+			console.error('Failed to copy:', err);
+		}
 	}
 
 	// Debounced auto-save function
@@ -575,7 +621,22 @@
 							{mode === 'view' ? 'Task Details' : 'Edit Task'}
 						</h2>
 						{#if task && mode === 'view'}
-							<span class="badge badge-lg badge-outline">{task.id}</span>
+							<button
+								class="badge badge-lg badge-outline gap-1 cursor-pointer hover:badge-primary transition-colors"
+								onclick={copyTaskIdToClipboard}
+								title="Click to copy task ID"
+							>
+								{task.id}
+								{#if copiedTaskId}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-success">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+									</svg>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+									</svg>
+								{/if}
+							</button>
 						{/if}
 					</div>
 					<p class="text-sm text-base-content/70 mt-1">
@@ -840,34 +901,40 @@
 							</div>
 						</div>
 
-						<!-- Task Events (Beads) -->
-						<div class="border-t border-base-300 pt-4">
-							<h4 class="text-sm font-semibold mb-3 text-base-content/70 flex items-center gap-2">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-info"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
-									/>
-								</svg>
-								Task Events
-								{#if taskHistory}
-									<span class="badge badge-xs badge-info">{taskHistory.count.beads_events}</span>
-								{/if}
-							</h4>
+						<!-- Activity Timeline (Unified Task Events + Coordination Messages) -->
+						<div class="border-t border-base-300 pt-4 flex-1 flex flex-col min-h-0">
+							<!-- Header with filter tabs -->
+							<div class="flex items-center justify-between mb-3">
+								<h4 class="text-sm font-semibold text-base-content/70">Activity Timeline</h4>
+
+								<!-- Filter tabs -->
+								<div class="tabs tabs-boxed tabs-xs bg-base-200">
+									<button
+										class="tab {timelineFilter === 'all' ? 'tab-active' : ''}"
+										onclick={() => timelineFilter = 'all'}
+									>
+										All ({taskHistory?.count?.total || 0})
+									</button>
+									<button
+										class="tab {timelineFilter === 'tasks' ? 'tab-active' : ''}"
+										onclick={() => timelineFilter = 'tasks'}
+									>
+										Tasks ({taskHistory?.count?.beads_events || 0})
+									</button>
+									<button
+										class="tab {timelineFilter === 'messages' ? 'tab-active' : ''}"
+										onclick={() => timelineFilter = 'messages'}
+									>
+										Messages ({taskHistory?.count?.agent_mail || 0})
+									</button>
+								</div>
+							</div>
 
 							{#if historyLoading}
 								<!-- Loading state -->
 								<div class="flex items-center justify-center py-6">
 									<span class="loading loading-spinner loading-sm"></span>
-									<span class="ml-2 text-xs">Loading events...</span>
+									<span class="ml-2 text-xs">Loading timeline...</span>
 								</div>
 							{:else if historyError}
 								<!-- Error state -->
@@ -887,14 +954,20 @@
 									</svg>
 									<span class="text-xs">{historyError}</span>
 								</div>
-							{:else if taskHistory && taskHistory.timeline}
-								{#if taskHistory.timeline.filter(e => e.type === 'beads_event').length > 0}
-									<!-- Beads events display -->
-									<div class="space-y-3 max-h-64 overflow-y-auto">
-										{#each taskHistory.timeline.filter(e => e.type === 'beads_event') as event}
-											<div class="flex gap-3 text-xs p-3 rounded bg-info/10 border border-info/30">
-												<!-- Icon -->
-												<div class="flex-shrink-0">
+							{:else if filteredTimeline().length > 0}
+								<!-- Unified DaisyUI Timeline -->
+								<ul class="timeline timeline-vertical timeline-compact max-h-80 overflow-y-auto">
+									{#each filteredTimeline() as event, i}
+										<li>
+											<!-- Top connector (skip for first item) -->
+											{#if i > 0}
+												<hr class="{event.type === 'beads_event' ? 'bg-info' : 'bg-warning'}" />
+											{/if}
+
+											<!-- Timeline middle icon -->
+											<div class="timeline-middle">
+												{#if event.type === 'beads_event'}
+													<!-- Database icon for task events -->
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
 														class="h-4 w-4 text-info"
@@ -909,113 +982,8 @@
 															d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
 														/>
 													</svg>
-												</div>
-
-												<!-- Content -->
-												<div class="flex-1 min-w-0">
-													<!-- Event description -->
-													<div class="font-semibold text-base-content">
-														{event.description}
-													</div>
-
-													<!-- Timestamp -->
-													<div class="text-base-content/60 mt-1">
-														{formatDate(event.timestamp)}
-													</div>
-
-													<!-- Metadata badges -->
-													<div class="mt-2 flex flex-wrap gap-1">
-														{#if event.metadata.status}
-															<span class="badge badge-xs {statusColors[event.metadata.status]}">
-																{event.metadata.status}
-															</span>
-														{/if}
-														{#if event.metadata.priority !== undefined}
-															<span
-																class="badge badge-xs {priorityColors[event.metadata.priority]}"
-															>
-																P{event.metadata.priority}
-															</span>
-														{/if}
-														{#if event.metadata.type}
-															<span class="badge badge-xs badge-outline">
-																{event.metadata.type}
-															</span>
-														{/if}
-														{#if event.metadata.assignee}
-															<span class="badge badge-xs badge-ghost">
-																@{event.metadata.assignee}
-															</span>
-														{/if}
-													</div>
-												</div>
-											</div>
-										{/each}
-									</div>
-								{:else}
-									<!-- Empty state -->
-									<div class="text-xs text-base-content/60 py-4 text-center">
-										No task events yet
-									</div>
-								{/if}
-							{/if}
-						</div>
-
-						<!-- Coordination Messages (Agent Mail) -->
-						<div class="border-t border-base-300 pt-4">
-							<h4 class="text-sm font-semibold mb-3 text-base-content/70 flex items-center gap-2">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4 text-warning"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-									/>
-								</svg>
-								Coordination Messages
-								{#if taskHistory}
-									<span class="badge badge-xs badge-warning">{taskHistory.count.agent_mail}</span>
-								{/if}
-							</h4>
-
-							{#if historyLoading}
-								<!-- Loading state -->
-								<div class="flex items-center justify-center py-6">
-									<span class="loading loading-spinner loading-sm"></span>
-									<span class="ml-2 text-xs">Loading messages...</span>
-								</div>
-							{:else if historyError}
-								<!-- Error state -->
-								<div class="alert alert-warning py-2">
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										class="stroke-current shrink-0 h-4 w-4"
-										fill="none"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-										/>
-									</svg>
-									<span class="text-xs">{historyError}</span>
-								</div>
-							{:else if taskHistory && taskHistory.timeline}
-								{#if taskHistory.timeline.filter(e => e.type === 'agent_mail').length > 0}
-									<!-- Agent Mail messages display -->
-									<div class="space-y-3 max-h-64 overflow-y-auto">
-										{#each taskHistory.timeline.filter(e => e.type === 'agent_mail') as event}
-											<div class="flex gap-3 text-xs p-3 rounded bg-warning/10 border border-warning/30">
-												<!-- Icon -->
-												<div class="flex-shrink-0">
+												{:else}
+													<!-- Mail icon for agent mail -->
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
 														class="h-4 w-4 text-warning"
@@ -1030,34 +998,59 @@
 															d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
 														/>
 													</svg>
+												{/if}
+											</div>
+
+											<!-- Timeline content box -->
+											<div class="timeline-end timeline-box text-xs mb-4 {event.type === 'beads_event' ? 'border-info/30 bg-info/5' : 'border-warning/30 bg-warning/5'}">
+												<!-- Event description -->
+												<div class="font-semibold text-base-content">
+													{event.description}
 												</div>
 
-												<!-- Content -->
-												<div class="flex-1 min-w-0">
-													<!-- Event description -->
-													<div class="font-semibold text-base-content">
-														{event.description}
-													</div>
+												<!-- Timestamp -->
+												<div class="text-base-content/60 mt-1">
+													{formatDate(event.timestamp)}
+												</div>
 
-													<!-- Timestamp -->
-													<div class="text-base-content/60 mt-1">
-														{formatDate(event.timestamp)}
+												{#if event.type === 'beads_event'}
+													<!-- Task event metadata badges -->
+													<div class="mt-2 flex flex-wrap gap-1">
+														{#if event.metadata.status}
+															<span class="badge badge-xs {statusColors[event.metadata.status]}">
+																{event.metadata.status}
+															</span>
+														{/if}
+														{#if event.metadata.priority !== undefined}
+															<span class="badge badge-xs {priorityColors[event.metadata.priority]}">
+																P{event.metadata.priority}
+															</span>
+														{/if}
+														{#if event.metadata.type}
+															<span class="badge badge-xs badge-outline">
+																{event.metadata.type}
+															</span>
+														{/if}
+														{#if event.metadata.assignee}
+															<span class="badge badge-xs badge-ghost">
+																@{event.metadata.assignee}
+															</span>
+														{/if}
 													</div>
-
-													<!-- Agent Mail metadata -->
+												{:else}
+													<!-- Agent mail metadata -->
 													<div class="mt-2 space-y-1">
 														{#if event.metadata.from_agent}
 															<div class="text-base-content/70">
-																<strong>From:</strong>
-																{event.metadata.from_agent}
+																<strong>From:</strong> {event.metadata.from_agent}
 															</div>
 														{/if}
 														{#if event.metadata.body}
-															<div class="text-base-content/80 whitespace-pre-wrap max-h-24 overflow-y-auto text-xs bg-base-100 p-2 rounded">
+															<div class="text-base-content/80 whitespace-pre-wrap max-h-16 overflow-y-auto text-xs bg-base-100 p-2 rounded mt-1">
 																{event.metadata.body}
 															</div>
 														{/if}
-														<div class="flex gap-1">
+														<div class="flex gap-1 mt-1">
 															{#if event.metadata.importance === 'urgent'}
 																<span class="badge badge-xs badge-error">urgent</span>
 															{/if}
@@ -1066,16 +1059,21 @@
 															{/if}
 														</div>
 													</div>
-												</div>
+												{/if}
 											</div>
-										{/each}
-									</div>
-								{:else}
-									<!-- Empty state -->
-									<div class="text-xs text-base-content/60 py-4 text-center">
-										No coordination messages yet
-									</div>
-								{/if}
+
+											<!-- Bottom connector (skip for last item) -->
+											{#if i < filteredTimeline().length - 1}
+												<hr class="{filteredTimeline()[i + 1]?.type === 'beads_event' ? 'bg-info' : 'bg-warning'}" />
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							{:else}
+								<!-- Empty state -->
+								<div class="text-xs text-base-content/60 py-4 text-center">
+									No activity yet
+								</div>
 							{/if}
 						</div>
 					</div>

@@ -619,10 +619,10 @@
 				}, 200);
 			}}
 		>
-			<div class="p-2 bg-base-200 rounded-lg shadow-lg border border-base-300 space-y-0.5">
+			<div class="p-1 bg-base-200 rounded-lg shadow-lg border border-base-300 space-y-0.5">
 				<!-- Chart Type Section -->
 				<div>
-					<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
+					<div class="flex flex-wrap gap-1.5 p-1 bg-base-200 rounded-lg">
 						<button
 							class="badge badge-sm transition-all duration-200 cursor-pointer {chartType === 'line' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
 							onclick={() => (chartType = 'line')}
@@ -673,7 +673,7 @@
 				<!-- Multi-Series Mode Section (only shown when multi-series data is present) -->
 				{#if isMultiSeries}
 					<div>
-						<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
+						<div class="flex flex-wrap gap-1.5 p-1 bg-base-200 rounded-lg">
 							<button
 								class="badge badge-sm transition-all duration-200 cursor-pointer {multiSeriesMode === 'stacked' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
 								onclick={() => setMultiSeriesMode('stacked')}
@@ -764,7 +764,7 @@
 
 							<!-- Custom Date Range Picker -->
 							{#if showCustomDatePicker}
-								<div class="mt-2 p-2 bg-base-100 rounded-md border border-base-300 space-y-2" transition:slide={{ duration: 150 }}>
+								<div class="mt-2 p-1 bg-base-100 rounded-md border border-base-300 space-y-2" transition:slide={{ duration: 150 }}>
 									<div class="grid grid-cols-2 gap-2">
 										<!-- From Date -->
 										<div class="form-control">
@@ -807,7 +807,7 @@
 
 						<!-- Options Section -->
 						<div>
-							<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
+							<div class="flex flex-wrap gap-1.5 p-1 bg-base-200 rounded-lg">
 								<!-- Show Grid Toggle -->
 								<button
 									class="badge badge-sm transition-all duration-200 cursor-pointer {internalShowGrid ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
@@ -841,7 +841,7 @@
 							<!-- Color Section (only for single-series) -->
 							{#if !isMultiSeries}
 							<div>
-								<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg items-center">
+								<div class="flex flex-wrap gap-1.5 p-1 bg-base-200 rounded-lg items-center">
 									<!-- Auto (Percentile-based) -->
 									<button
 										class="badge badge-sm transition-all duration-200 cursor-pointer {internalColorMode === 'usage' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
