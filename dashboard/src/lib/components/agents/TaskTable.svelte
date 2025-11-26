@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {} } = $props();
 
@@ -15,6 +16,33 @@
 	// Sorting state
 	let sortColumn = $state('priority');
 	let sortDirection = $state('asc'); // 'asc' or 'desc'
+
+	// Selection state
+	let selectedTasks = $state(new Set());
+
+	// Toggle single task selection
+	function toggleTask(taskId) {
+		if (selectedTasks.has(taskId)) {
+			selectedTasks.delete(taskId);
+		} else {
+			selectedTasks.add(taskId);
+		}
+		selectedTasks = new Set(selectedTasks); // trigger reactivity
+	}
+
+	// Toggle all visible tasks
+	function toggleAll() {
+		if (allSelected) {
+			selectedTasks = new Set(); // deselect all
+		} else {
+			selectedTasks = new Set(sortedTasks.map(t => t.id)); // select all visible
+		}
+	}
+
+	// Clear selection
+	function clearSelection() {
+		selectedTasks = new Set();
+	}
 
 	// Sync filters with URL on mount and page changes
 	$effect(() => {
@@ -164,6 +192,17 @@
 		});
 	});
 
+	// Derived: are all visible tasks selected?
+	const allSelected = $derived(
+		sortedTasks.length > 0 &&
+		sortedTasks.every(t => selectedTasks.has(t.id))
+	);
+
+	// Derived: is selection partial (some but not all)?
+	const partialSelected = $derived(
+		selectedTasks.size > 0 && !allSelected
+	);
+
 	// Get unique labels and types from tasks
 	const availableLabels = $derived.by(() => {
 		const labelsSet = new Set();
@@ -292,6 +331,170 @@
 	// Handle row click
 	function handleRowClick(taskId) {
 		ontaskclick(taskId);
+	}
+
+	// Bulk action state
+	let bulkActionLoading = $state(false);
+	let bulkActionError = $state('');
+
+	// Bulk action handlers
+	async function handleBulkDelete() {
+		if (!confirm(`Delete ${selectedTasks.size} task(s)? This cannot be undone.`)) return;
+
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		try {
+			for (const taskId of selectedTasks) {
+				const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+				if (!response.ok) {
+					throw new Error(`Failed to delete task ${taskId}`);
+				}
+			}
+			clearSelection();
+		} catch (err) {
+			bulkActionError = err.message;
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkRelease() {
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		try {
+			for (const taskId of selectedTasks) {
+				// Unassign task and set to open
+				const response = await fetch(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ assignee: null, status: 'open' })
+				});
+				if (!response.ok) {
+					throw new Error(`Failed to release task ${taskId}`);
+				}
+			}
+			clearSelection();
+		} catch (err) {
+			bulkActionError = err.message;
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	function handleBulkAssign() {
+		// For now, prompt for agent name
+		const agentName = prompt('Enter agent name to assign tasks to:');
+		if (!agentName) return;
+
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		(async () => {
+			try {
+				for (const taskId of selectedTasks) {
+					const response = await fetch(`/api/tasks/${taskId}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ assignee: agentName, status: 'in_progress' })
+					});
+					if (!response.ok) {
+						throw new Error(`Failed to assign task ${taskId}`);
+					}
+				}
+				clearSelection();
+			} catch (err) {
+				bulkActionError = err.message;
+			} finally {
+				bulkActionLoading = false;
+			}
+		})();
+	}
+
+	async function handleBulkChangePriority(priority) {
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		try {
+			for (const taskId of selectedTasks) {
+				const response = await fetch(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ priority })
+				});
+				if (!response.ok) {
+					throw new Error(`Failed to update priority for ${taskId}`);
+				}
+			}
+			clearSelection();
+		} catch (err) {
+			bulkActionError = err.message;
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkChangeStatus(status) {
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		try {
+			for (const taskId of selectedTasks) {
+				const response = await fetch(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ status })
+				});
+				if (!response.ok) {
+					throw new Error(`Failed to update status for ${taskId}`);
+				}
+			}
+			clearSelection();
+		} catch (err) {
+			bulkActionError = err.message;
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	function handleBulkAddLabel() {
+		const label = prompt('Enter label to add to selected tasks:');
+		if (!label) return;
+
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		(async () => {
+			try {
+				for (const taskId of selectedTasks) {
+					// First get current task to get existing labels
+					const getResponse = await fetch(`/api/tasks/${taskId}`);
+					if (!getResponse.ok) {
+						throw new Error(`Failed to fetch task ${taskId}`);
+					}
+					const taskData = await getResponse.json();
+					const currentLabels = taskData.task?.labels || [];
+
+					// Add new label if not already present
+					if (!currentLabels.includes(label)) {
+						const response = await fetch(`/api/tasks/${taskId}`, {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ labels: [...currentLabels, label] })
+						});
+						if (!response.ok) {
+							throw new Error(`Failed to add label to ${taskId}`);
+						}
+					}
+				}
+				clearSelection();
+			} catch (err) {
+				bulkActionError = err.message;
+			} finally {
+				bulkActionLoading = false;
+			}
+		})();
 	}
 </script>
 
@@ -426,18 +629,134 @@
 				</button>
 			{/if}
 
-			<!-- Task count -->
-			<div class="ml-auto text-sm text-base-content/60">
-				{sortedTasks.length} of {tasks.length} tasks
+			<!-- Right side: Selection controls or task count -->
+			<div class="ml-auto flex items-center gap-2">
+				{#if selectedTasks.size > 0}
+					<!-- Selection mode -->
+					<span class="text-sm font-medium">{selectedTasks.size} selected</span>
+					<div class="dropdown dropdown-end">
+						<div tabindex="0" role="button" class="btn btn-sm btn-primary gap-1">
+							Bulk Actions
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+							</svg>
+						</div>
+						<ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-300">
+							<li><button onclick={handleBulkAssign} class="gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+								</svg>
+								Assign to...
+							</button></li>
+							<li><button onclick={handleBulkRelease} class="gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+								</svg>
+								Release
+							</button></li>
+							<li>
+								<details>
+									<summary class="gap-2">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21l3.75-3.75" />
+										</svg>
+										Change Priority
+									</summary>
+									<ul class="bg-base-100 rounded-box">
+										<li><button onclick={() => handleBulkChangePriority(0)}>P0 - Critical</button></li>
+										<li><button onclick={() => handleBulkChangePriority(1)}>P1 - High</button></li>
+										<li><button onclick={() => handleBulkChangePriority(2)}>P2 - Medium</button></li>
+										<li><button onclick={() => handleBulkChangePriority(3)}>P3 - Low</button></li>
+									</ul>
+								</details>
+							</li>
+							<li>
+								<details>
+									<summary class="gap-2">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+										</svg>
+										Change Status
+									</summary>
+									<ul class="bg-base-100 rounded-box">
+										<li><button onclick={() => handleBulkChangeStatus('open')}>Open</button></li>
+										<li><button onclick={() => handleBulkChangeStatus('in_progress')}>In Progress</button></li>
+										<li><button onclick={() => handleBulkChangeStatus('blocked')}>Blocked</button></li>
+										<li><button onclick={() => handleBulkChangeStatus('closed')}>Closed</button></li>
+									</ul>
+								</details>
+							</li>
+							<li><button onclick={handleBulkAddLabel} class="gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" />
+								</svg>
+								Add Label
+							</button></li>
+							<div class="divider my-1"></div>
+							<li><button onclick={handleBulkDelete} class="gap-2 text-error hover:bg-error/10">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+								</svg>
+								Delete
+							</button></li>
+						</ul>
+					</div>
+					<button class="btn btn-sm btn-ghost" onclick={clearSelection}>
+						Clear
+					</button>
+				{:else}
+					<!-- Normal mode -->
+					<span class="text-sm text-base-content/60">
+						{sortedTasks.length} of {tasks.length} tasks
+					</span>
+					<button class="btn btn-sm btn-primary gap-1" onclick={openTaskDrawer}>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+						</svg>
+						Task
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
+
+	<!-- Bulk Action Error -->
+	{#if bulkActionError}
+		<div class="alert alert-error mx-4 mt-2">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+			</svg>
+			<span>{bulkActionError}</span>
+			<button class="btn btn-sm btn-ghost" onclick={() => bulkActionError = ''}>Dismiss</button>
+		</div>
+	{/if}
+
+	<!-- Bulk Action Loading Overlay -->
+	{#if bulkActionLoading}
+		<div class="mx-4 mt-2">
+			<div class="alert">
+				<span class="loading loading-spinner loading-sm"></span>
+				<span>Processing {selectedTasks.size} task(s)...</span>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Table -->
 	<div class="flex-1 overflow-auto">
 		<table class="table table-sm table-pin-rows">
 			<thead>
 				<tr class="bg-base-200">
+					<th class="w-10">
+						<input
+							type="checkbox"
+							class="checkbox checkbox-sm"
+							checked={allSelected}
+							indeterminate={partialSelected}
+							onchange={toggleAll}
+							onclick={(e) => e.stopPropagation()}
+						/>
+					</th>
 					<th class="cursor-pointer hover:bg-base-300 w-28" onclick={() => handleSort('id')}>
 						<div class="flex items-center gap-1">
 							ID
@@ -509,7 +828,7 @@
 			<tbody>
 				{#if sortedTasks.length === 0}
 					<tr>
-						<td colspan="10" class="text-center py-12">
+						<td colspan="11" class="text-center py-12">
 							<div class="text-base-content/50">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto mb-2 opacity-30">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
@@ -527,10 +846,18 @@
 					{#each sortedTasks as task (task.id)}
 						{@const depStatus = analyzeDependencies(task)}
 						<tr
-							class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''}"
+							class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''}"
 							onclick={() => handleRowClick(task.id)}
 							title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
 						>
+							<td onclick={(e) => e.stopPropagation()}>
+								<input
+									type="checkbox"
+									class="checkbox checkbox-sm"
+									checked={selectedTasks.has(task.id)}
+									onchange={() => toggleTask(task.id)}
+								/>
+							</td>
 							<td>
 								<span class="font-mono text-xs text-base-content/70">{task.id}</span>
 							</td>
