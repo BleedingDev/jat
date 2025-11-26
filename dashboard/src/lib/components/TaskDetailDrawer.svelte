@@ -15,6 +15,7 @@
 
 	import { tick, onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
+	import { formatDate } from '$lib/utils/dateFormatters';
 
 	// Props
 	let { taskId = $bindable(null), mode = $bindable('view'), isOpen = $bindable(false) } = $props();
@@ -166,11 +167,6 @@
 		}
 	});
 
-	// Format date
-	function formatDate(dateString: string | null) {
-		if (!dateString) return 'N/A';
-		return new Date(dateString).toLocaleString();
-	}
 
 	// Show toast notification
 	function showToast(type: 'success' | 'error', text: string) {

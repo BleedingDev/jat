@@ -5,6 +5,7 @@
 	import { getActivityStatusConfig } from '$lib/config/activityStatusConfig';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import { getAgentStatusBadge, getAgentStatusIcon } from '$lib/utils/badgeHelpers';
+	import { formatLastActivity, getTimeSinceMs } from '$lib/utils/dateFormatters';
 
 	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = () => {}, ontaskclick = () => {}, draggedTaskId = null } = $props();
 
@@ -52,15 +53,8 @@
 		const hasActiveLocks = agent.reservation_count > 0;
 		const hasInProgressTask = agent.in_progress_tasks > 0;
 
-		// Calculate time since last activity
-		let timeSinceActive = Infinity;
-		if (agent.last_active_ts) {
-			const isoTimestamp = agent.last_active_ts.includes('T')
-				? agent.last_active_ts
-				: agent.last_active_ts.replace(' ', 'T') + 'Z';
-			const lastActivity = new Date(isoTimestamp);
-			timeSinceActive = Date.now() - lastActivity.getTime();
-		}
+		// Calculate time since last activity using shared formatter
+		const timeSinceActive = getTimeSinceMs(agent.last_active_ts);
 
 		// Priority 1: WORKING - Has active task or file locks
 		// Agent has work in progress (takes priority over recency)
@@ -115,24 +109,6 @@
 		);
 	});
 
-	// Format last activity time
-	function formatLastActivity(timestamp) {
-		if (!timestamp) return 'Never';
-		// Database timestamps are in UTC but without 'Z' suffix
-		// Append 'Z' to parse as UTC, or replace space with 'T' and add 'Z'
-		const isoTimestamp = timestamp.includes('T') ? timestamp : timestamp.replace(' ', 'T') + 'Z';
-		const date = new Date(isoTimestamp);
-		const now = new Date();
-		const diffMs = now - date;
-		const diffMins = Math.floor(diffMs / 60000);
-		const diffHours = Math.floor(diffMs / 3600000);
-		const diffDays = Math.floor(diffMs / 86400000);
-
-		if (diffMins < 1) return 'Just now';
-		if (diffMins < 60) return `${diffMins}m ago`;
-		if (diffHours < 24) return `${diffHours}h ago`;
-		return `${diffDays}d ago`;
-	}
 
 	// Calculate progress for current task (simple estimation based on time)
 	function getTaskProgress(task) {

@@ -5,6 +5,7 @@
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
+	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getTimeSinceMinutes } from '$lib/utils/dateFormatters';
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {} } = $props();
 
@@ -18,15 +19,8 @@
 		const hasActiveLocks = agent.reservation_count > 0;
 		const hasInProgressTask = agent.in_progress_tasks > 0;
 
-		let timeSinceActive = Infinity;
-		if (agent.last_active_ts) {
-			// Handle timestamp format (may or may not have T separator)
-			const isoTimestamp = agent.last_active_ts.includes('T')
-				? agent.last_active_ts
-				: agent.last_active_ts.replace(' ', 'T') + 'Z';
-			const lastActivity = new Date(isoTimestamp);
-			timeSinceActive = (Date.now() - lastActivity.getTime()) / 1000 / 60; // minutes
-		}
+		// Use shared date formatter for timestamp parsing
+		const timeSinceActive = getTimeSinceMinutes(agent.last_active_ts);
 
 		// Live: < 1 minute, Working: 1-10 minutes with activity
 		if (timeSinceActive < 1) return true; // live
@@ -236,10 +230,6 @@
 					aVal = a.assignee || '';
 					bVal = b.assignee || '';
 					break;
-				case 'created':
-					aVal = a.created_at || '';
-					bVal = b.created_at || '';
-					break;
 				case 'updated':
 					aVal = a.updated_at || '';
 					bVal = b.updated_at || '';
@@ -290,6 +280,19 @@
 			allTasks.push(...tasks);
 		}
 		return allTasks;
+	});
+
+	// Track task IDs that are shown as dependencies (to avoid duplicate rendering)
+	const shownAsDeps = $derived.by(() => {
+		const depIds = new Set();
+		for (const task of sortedTasks) {
+			if (task.depends_on && task.depends_on.length > 0) {
+				for (const dep of task.depends_on) {
+					depIds.add(dep.id);
+				}
+			}
+		}
+		return depIds;
 	});
 
 	// Derived: are all visible tasks selected?
@@ -400,23 +403,6 @@
 		}
 	}
 
-	// Format date
-	function formatDate(dateStr) {
-		if (!dateStr) return '-';
-		const date = new Date(dateStr);
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-	}
-
-	function formatDateTime(dateStr) {
-		if (!dateStr) return '-';
-		const date = new Date(dateStr);
-		return date.toLocaleDateString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
 
 	// Handle row click
 	function handleRowClick(taskId) {
@@ -863,7 +849,7 @@
 
 	<!-- Table -->
 	<div class="flex-1 overflow-x-auto overflow-y-auto">
-		<table class="table table-xs table-pin-rows table-pin-cols">
+		<table class="table table-xs table-pin-rows table-pin-cols w-full">
 			<!-- Main column headers (always pinned at top) -->
 			<thead>
 				<tr class="bg-base-200">
@@ -901,7 +887,7 @@
 							{/if}
 						</div>
 					</td>
-					<td class="cursor-pointer hover:bg-base-300 w-36" onclick={() => handleSort('status')}>
+					<td class="cursor-pointer hover:bg-base-300 whitespace-nowrap" onclick={() => handleSort('status')}>
 						<div class="flex items-center gap-1">
 							Status
 							{#if sortColumn === 'status'}
@@ -910,18 +896,10 @@
 						</div>
 					</td>
 					<td class="w-32">Labels</td>
-					<td class="w-10">Deps</td>
-					<td class="cursor-pointer hover:bg-base-300 w-24" onclick={() => handleSort('created')}>
+					<td class="w-10 whitespace-nowrap">Deps</td>
+					<td class="cursor-pointer hover:bg-base-300 w-16" onclick={() => handleSort('updated')}>
 						<div class="flex items-center gap-1">
-							Created
-							{#if sortColumn === 'created'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-							{/if}
-						</div>
-					</td>
-					<td class="cursor-pointer hover:bg-base-300 w-24" onclick={() => handleSort('updated')}>
-						<div class="flex items-center gap-1">
-							Updated
+							Age
 							{#if sortColumn === 'updated'}
 								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
@@ -934,7 +912,7 @@
 				<!-- Empty state -->
 				<tbody>
 					<tr>
-						<td colspan="9" class="text-center py-12">
+						<td colspan="8" class="text-center py-12">
 							<div class="text-base-content/50">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto mb-2 opacity-30">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
@@ -956,7 +934,7 @@
 						<!-- Type group header (pinned when scrolling) -->
 						<thead>
 							<tr>
-								<th colspan="9" class="bg-base-300 text-base-content font-bold text-sm py-2">
+								<th colspan="8" class="bg-base-300 text-base-content font-bold text-sm py-2">
 									<div class="flex items-center gap-2">
 										<span class="badge {getTypeBadge(type)} badge-sm">{type || 'no type'}</span>
 										<span class="text-base-content/60 font-normal">({typeTasks.length})</span>
@@ -966,39 +944,41 @@
 						</thead>
 						<tbody>
 							{#each typeTasks as task (task.id)}
-								{@const depStatus = analyzeDependencies(task)}
-								<tr
-									class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''}"
-									onclick={() => handleRowClick(task.id)}
-									title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
-								>
-									<th class="bg-base-100" onclick={(e) => e.stopPropagation()}>
-										<input
-											type="checkbox"
-											class="checkbox checkbox-sm"
-											checked={selectedTasks.has(task.id)}
-											onchange={() => toggleTask(task.id)}
-										/>
-									</th>
-									<th class="bg-base-100">
-										<span class="font-mono text-xs text-base-content/70">{task.id}</span>
-									</th>
-									<td>
-										<div class="max-w-md">
-											<div class="font-medium truncate" title={task.title}>{task.title}</div>
-											{#if task.description}
-												<div class="text-xs text-base-content/50 truncate" title={task.description}>
-													{task.description}
-												</div>
-											{/if}
-										</div>
-									</td>
+								<!-- Skip if this task is shown as a dependency of another -->
+								{#if !shownAsDeps.has(task.id)}
+									{@const depStatus = analyzeDependencies(task)}
+									<tr
+										class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''}"
+										onclick={() => handleRowClick(task.id)}
+										title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
+									>
+										<th class="bg-base-100" onclick={(e) => e.stopPropagation()}>
+											<input
+												type="checkbox"
+												class="checkbox checkbox-sm"
+												checked={selectedTasks.has(task.id)}
+												onchange={() => toggleTask(task.id)}
+											/>
+										</th>
+										<th class="bg-base-100">
+											<span class="font-mono text-xs text-base-content/70">{task.id}</span>
+										</th>
+										<td>
+											<div>
+												<div class="font-medium">{task.title}</div>
+												{#if task.description}
+													<div class="text-xs text-base-content/50">
+														{task.description}
+													</div>
+												{/if}
+											</div>
+										</td>
 									<td class="text-center">
 										<span class="badge badge-sm {getPriorityBadge(task.priority)}">
 											P{task.priority}
 										</span>
 									</td>
-									<td>
+									<td class="whitespace-nowrap">
 										{#if task.status === 'in_progress' && task.assignee}
 											<!-- In progress: show assignee with activity indicator instead of status badge -->
 											<span class="flex items-center gap-1.5">
@@ -1039,20 +1019,52 @@
 											<span class="text-base-content/30">-</span>
 										{/if}
 									</td>
-									<td>
+									<td class="whitespace-nowrap">
 										<DependencyIndicator {task} allTasks={allTasks.length > 0 ? allTasks : tasks} size="sm" />
 									</td>
 									<td>
-										<span class="text-xs text-base-content/60" title={task.created_at}>
-											{formatDate(task.created_at)}
-										</span>
-									</td>
-									<td>
-										<span class="text-xs text-base-content/60" title={task.updated_at}>
-											{formatDate(task.updated_at)}
+										<span class="text-xs text-base-content/60" title={formatFullDate(task.updated_at)}>
+											{formatRelativeTime(task.updated_at)}
 										</span>
 									</td>
 								</tr>
+								<!-- Render dependencies as indented child rows -->
+								{#if task.depends_on && task.depends_on.length > 0}
+									{#each task.depends_on as dep, depIndex (dep.id)}
+										<tr
+											class="hover:bg-base-200/50 cursor-pointer transition-colors opacity-50 bg-base-200/30"
+											onclick={() => handleRowClick(dep.id)}
+											title="Dependency: {dep.title}"
+										>
+											<th class="bg-base-100"></th>
+											<th class="bg-base-100">
+												<span class="flex items-center gap-1">
+													<span class="text-base-content/40 font-mono text-xs">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
+													<span class="font-mono text-xs text-base-content/50">{dep.id}</span>
+												</span>
+											</th>
+											<td>
+												<div class="pl-4">
+													<div class="text-sm text-base-content/60">{dep.title}</div>
+												</div>
+											</td>
+											<td class="text-center">
+												<span class="badge badge-sm badge-ghost {getPriorityBadge(dep.priority)}">
+													P{dep.priority}
+												</span>
+											</td>
+											<td class="whitespace-nowrap">
+												<span class="badge badge-sm badge-ghost {getTaskStatusBadge(dep.status)}">
+													{dep.status?.replace('_', ' ')}
+												</span>
+											</td>
+											<td></td>
+											<td></td>
+											<td></td>
+										</tr>
+									{/each}
+								{/if}
+								{/if}
 							{/each}
 						</tbody>
 					{/if}
