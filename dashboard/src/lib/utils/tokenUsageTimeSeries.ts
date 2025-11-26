@@ -484,6 +484,261 @@ export async function getAgentTimeSeries(
 // ============================================================================
 
 /**
+ * Options for per-agent multi-project time-series aggregation
+ */
+export interface AgentMultiProjectTimeSeriesOptions {
+	/** Agent name to filter by (required) */
+	agentName: string;
+	/** Time range filter */
+	range?: '24h' | '7d' | 'all';
+	/** Bucket size for aggregation */
+	bucketSize?: BucketSize;
+}
+
+/**
+ * Get time-series data for a specific agent across ALL projects
+ *
+ * Filters multi-project data to only include sessions belonging to the specified agent.
+ * Useful for AgentCard sparklines showing per-agent multi-project activity.
+ *
+ * @param options - Aggregation options (agentName required)
+ * @returns Multi-project time-series result filtered by agent
+ *
+ * @example
+ * const data = await getAgentMultiProjectTimeSeries({
+ *   agentName: 'WisePrairie',
+ *   range: '24h',
+ *   bucketSize: '30min'
+ * });
+ * // data.data[0].projects = [
+ * //   { project: 'jat', tokens: 50000, cost: 0.15, color: '#5588ff' },
+ * //   { project: 'chimaro', tokens: 30000, cost: 0.09, color: '#00d4aa' }
+ * // ]
+ * // Only includes sessions where this agent worked
+ */
+export async function getAgentMultiProjectTimeSeries(
+	options: AgentMultiProjectTimeSeriesOptions
+): Promise<MultiProjectTimeSeriesResult> {
+	const { agentName, range = '24h', bucketSize = '30min' } = options;
+
+	const homeDir = os.homedir();
+
+	// Get all projects from config
+	const projects = getAllProjects();
+	const projectKeys = Array.from(projects.keys());
+
+	// Build project colors map
+	const projectColors: Record<string, string> = {};
+	for (const [key, config] of projects) {
+		projectColors[key] = config.activeColor;
+	}
+
+	// Get date range boundaries
+	const { start: startTime, end: endTime } = getDateRange(range);
+
+	// Map: bucketKey -> projectKey -> { tokens, cost }
+	const bucketProjectData = new Map<string, Map<string, { tokens: number; cost: number }>>();
+
+	// Track which projects this agent actually worked on
+	const agentProjectKeys = new Set<string>();
+
+	// Process each project
+	for (const [projectKey, projectConfig] of projects) {
+		const projectPath = projectConfig.path;
+		const projectSlug = projectPath.replace(/\//g, '-');
+		const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
+
+		// Build session-agent map for this project
+		const sessionAgentMap = await buildSessionAgentMap(projectPath);
+
+		// Get all session files for this project
+		let sessionIds: string[] = [];
+		try {
+			const files = await readdir(projectsDir);
+			sessionIds = files
+				.filter((file) => file.endsWith('.jsonl'))
+				.map((file) => file.replace('.jsonl', ''));
+		} catch {
+			// Project directory doesn't exist or can't be read - skip
+			continue;
+		}
+
+		// Filter sessions to only those belonging to this agent
+		const agentSessions = sessionIds.filter((sid) => sessionAgentMap.get(sid) === agentName);
+
+		// Skip this project if agent has no sessions here
+		if (agentSessions.length === 0) {
+			continue;
+		}
+
+		// Process each session belonging to this agent
+		for (const sid of agentSessions) {
+			const jsonlPath = path.join(projectsDir, `${sid}.jsonl`);
+
+			try {
+				const content = await readFile(jsonlPath, 'utf-8');
+				const lines = content.split('\n').filter((line) => line.trim());
+
+				// Parse each JSONL line
+				for (const line of lines) {
+					try {
+						const entry = JSON.parse(line);
+
+						// Skip entries without usage data or timestamp
+						if (!entry.message?.usage || !entry.timestamp) {
+							continue;
+						}
+
+						const timestamp = new Date(entry.timestamp);
+
+						// Filter by date range
+						if (timestamp < startTime || timestamp > endTime) {
+							continue;
+						}
+
+						const usage = entry.message.usage;
+						const inputTokens = usage.input_tokens || 0;
+						const cacheCreation = usage.cache_creation_input_tokens || 0;
+						const cacheRead = usage.cache_read_input_tokens || 0;
+						const outputTokens = usage.output_tokens || 0;
+						const totalTokens = inputTokens + cacheCreation + cacheRead + outputTokens;
+
+						// Calculate cost for this entry
+						const cost = calculateCost({
+							input_tokens: inputTokens,
+							cache_creation_input_tokens: cacheCreation,
+							cache_read_input_tokens: cacheRead,
+							output_tokens: outputTokens,
+							total_tokens: totalTokens,
+							cost: 0,
+							sessionCount: 1
+						});
+
+						// Track that this agent worked on this project
+						agentProjectKeys.add(projectKey);
+
+						// Determine bucket
+						const bucketKey = getBucketKey(timestamp, bucketSize);
+
+						// Get or create bucket data
+						if (!bucketProjectData.has(bucketKey)) {
+							bucketProjectData.set(bucketKey, new Map());
+						}
+						const projectMap = bucketProjectData.get(bucketKey)!;
+
+						// Add to project data in bucket
+						if (projectMap.has(projectKey)) {
+							const existing = projectMap.get(projectKey)!;
+							existing.tokens += totalTokens;
+							existing.cost += cost;
+						} else {
+							projectMap.set(projectKey, { tokens: totalTokens, cost });
+						}
+					} catch {
+						// Skip malformed JSON lines
+						continue;
+					}
+				}
+			} catch {
+				// Skip sessions that can't be read
+				continue;
+			}
+		}
+	}
+
+	// Only include projects this agent actually worked on
+	const filteredProjectKeys = Array.from(agentProjectKeys);
+
+	// Convert to MultiProjectTimeSeriesPoint array with filled buckets
+	const result: MultiProjectTimeSeriesPoint[] = [];
+
+	if (bucketSize === 'session') {
+		// Session-based: use actual data only, no gap filling
+		const sortedKeys = Array.from(bucketProjectData.keys()).sort();
+		for (const bucketKey of sortedKeys) {
+			const projectMap = bucketProjectData.get(bucketKey)!;
+			const projectsData: ProjectTokenData[] = [];
+			let totalTokens = 0;
+			let totalCost = 0;
+
+			for (const [projectKey, data] of projectMap) {
+				projectsData.push({
+					project: projectKey,
+					tokens: data.tokens,
+					cost: data.cost,
+					color: projectColors[projectKey] || '#888888'
+				});
+				totalTokens += data.tokens;
+				totalCost += data.cost;
+			}
+
+			result.push({
+				timestamp: bucketKey,
+				totalTokens,
+				totalCost,
+				projects: projectsData
+			});
+		}
+	} else {
+		// Time-based: fill gaps with zero values
+		const bucketMs = getBucketDurationMs(bucketSize);
+		let currentBucketStart = roundToBucketStart(startTime, bucketSize);
+		const endBucketStart = roundToBucketStart(endTime, bucketSize);
+
+		while (currentBucketStart <= endBucketStart) {
+			const key = getBucketKey(currentBucketStart, bucketSize);
+			const projectMap = bucketProjectData.get(key);
+
+			const projectsData: ProjectTokenData[] = [];
+			let totalTokens = 0;
+			let totalCost = 0;
+
+			// Only include projects this agent worked on (not all projects)
+			for (const projectKey of filteredProjectKeys) {
+				const data = projectMap?.get(projectKey);
+				const tokens = data?.tokens || 0;
+				const cost = data?.cost || 0;
+
+				projectsData.push({
+					project: projectKey,
+					tokens,
+					cost,
+					color: projectColors[projectKey] || '#888888'
+				});
+				totalTokens += tokens;
+				totalCost += cost;
+			}
+
+			result.push({
+				timestamp: currentBucketStart.toISOString(),
+				totalTokens,
+				totalCost,
+				projects: projectsData
+			});
+
+			// Move to next bucket
+			currentBucketStart = new Date(currentBucketStart.getTime() + bucketMs);
+		}
+	}
+
+	// Calculate totals
+	const grandTotalTokens = result.reduce((sum, point) => sum + point.totalTokens, 0);
+	const grandTotalCost = result.reduce((sum, point) => sum + point.totalCost, 0);
+
+	return {
+		data: result,
+		totalTokens: grandTotalTokens,
+		totalCost: grandTotalCost,
+		bucketCount: result.length,
+		bucketSize,
+		startTime: startTime.toISOString(),
+		endTime: endTime.toISOString(),
+		projectKeys: filteredProjectKeys,
+		projectColors
+	};
+}
+
+/**
  * Get time-series data aggregated across ALL projects from jat config
  *
  * Scans all project paths from ~/.config/jat/projects.json and aggregates

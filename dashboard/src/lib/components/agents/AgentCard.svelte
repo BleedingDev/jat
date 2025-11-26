@@ -28,6 +28,27 @@
 		cost: number;
 	}
 
+	// Multi-project sparkline types
+	interface ProjectTokenData {
+		project: string;
+		tokens: number;
+		cost: number;
+		color: string;
+	}
+
+	interface MultiProjectSparklinePoint {
+		timestamp: string;
+		totalTokens: number;
+		totalCost: number;
+		projects: ProjectTokenData[];
+	}
+
+	interface ProjectMeta {
+		name: string;
+		color: string;
+		totalTokens: number;
+	}
+
 	// Props with types
 	interface Props {
 		agent: Agent;
@@ -82,6 +103,62 @@
 	let sparklineLoading = $state(false);
 	let sparklineError = $state<string | null>(null);
 	let sparklineInterval: ReturnType<typeof setInterval> | null = null;
+
+	// Multi-project sparkline state
+	let multiProjectData = $state<MultiProjectSparklinePoint[]>([]);
+	let projectColors = $state<Record<string, string>>({});
+	let projectKeys = $state<string[]>([]);
+
+	// Transform multi-project data into Sparkline's expected format
+	const multiSeriesData = $derived.by(() => {
+		if (!multiProjectData || multiProjectData.length === 0) return undefined;
+
+		return multiProjectData.map((point) => {
+			const projects: Record<string, { tokens: number; cost: number }> = {};
+			for (const p of point.projects) {
+				projects[p.project] = { tokens: p.tokens, cost: p.cost };
+			}
+			return {
+				timestamp: point.timestamp,
+				projects,
+				total: { tokens: point.totalTokens, cost: point.totalCost }
+			};
+		});
+	});
+
+	// Build project metadata for Sparkline (with colors and totals)
+	const projectMeta = $derived.by(() => {
+		if (!multiProjectData || multiProjectData.length === 0) return undefined;
+
+		// Sum tokens per project across all data points
+		const projectTotals = new Map<string, number>();
+		for (const point of multiProjectData) {
+			for (const p of point.projects) {
+				projectTotals.set(p.project, (projectTotals.get(p.project) || 0) + p.tokens);
+			}
+		}
+
+		// Build metadata array sorted by total tokens (descending)
+		const meta: ProjectMeta[] = [];
+		for (const [name, totalTokens] of projectTotals.entries()) {
+			meta.push({
+				name,
+				color: projectColors[name] || '#888888',
+				totalTokens
+			});
+		}
+
+		return meta.sort((a, b) => b.totalTokens - a.totalTokens);
+	});
+
+	// Get active projects (non-zero tokens) for legend display
+	const activeProjects = $derived.by(() => {
+		if (!projectMeta) return [];
+		return projectMeta.filter((p) => p.totalTokens > 0).slice(0, 3); // Limit to top 3 for compact display
+	});
+
+	// Check if we have multi-project data to display
+	const hasMultiProjectData = $derived(multiSeriesData && multiSeriesData.length > 0 && projectMeta && projectMeta.length > 0);
 
 	// Compute agent status using shared utility
 	// States: live (< 1m, truly responsive) > working (1-10m with task) > active (recent activity) > idle (within 1h) > offline (>1h)
@@ -354,25 +431,40 @@
 		}
 	}
 
-	// Fetch sparkline data for this agent
+	// Fetch sparkline data for this agent (multi-project mode)
 	async function fetchSparklineData(): Promise<void> {
 		try {
 			sparklineLoading = true;
 			sparklineError = null;
 
-			const response = await fetch(`/api/agents/sparkline?range=24h&agent=${encodeURIComponent(agent.name)}`);
+			// Fetch multi-project sparkline data filtered by this agent
+			const response = await fetch(`/api/agents/sparkline?range=24h&agent=${encodeURIComponent(agent.name)}&multiProject=true`);
 
 			if (!response.ok) {
 				throw new Error(`Failed to fetch sparkline data: ${response.statusText}`);
 			}
 
 			const data = await response.json();
-			sparklineData = data.data || [];
+
+			// Store multi-project data
+			multiProjectData = data.data || [];
+			projectColors = data.projectColors || {};
+			projectKeys = data.projectKeys || [];
+
+			// Also convert to single-series format for backward compatibility
+			sparklineData = (data.data || []).map((point: MultiProjectSparklinePoint) => ({
+				timestamp: point.timestamp,
+				tokens: point.totalTokens,
+				cost: point.totalCost
+			}));
 
 		} catch (error: unknown) {
 			console.error('Error fetching sparkline data:', error);
 			sparklineError = error instanceof Error ? error.message : 'Unknown error';
 			sparklineData = [];
+			multiProjectData = [];
+			projectColors = {};
+			projectKeys = [];
 		} finally {
 			sparklineLoading = false;
 		}
@@ -736,7 +828,7 @@
 			</button>
 		</div>
 
-		<!-- Usage Trend Sparkline (full width) -->
+		<!-- Usage Trend Sparkline (full width, multi-project) -->
 		<div class="">
 			{#if sparklineLoading && sparklineData.length === 0}
 				<!-- Placeholder line for loading -->
@@ -748,13 +840,41 @@
 				<div class="h-10 flex items-center">
 					<div class="w-full h-px bg-base-content/20"></div>
 				</div>
+			{:else if hasMultiProjectData}
+				<!-- Multi-project sparkline (shows projects this agent worked on) -->
+				<Sparkline
+					{multiSeriesData}
+					{projectMeta}
+					height={40}
+					showTooltip={true}
+					showLegend={false}
+					showStyleToolbar={false}
+				/>
+				<!-- Compact project legend below sparkline -->
+				{#if activeProjects.length > 0}
+					<div class="flex items-center gap-1.5 mt-0.5 text-[10px]">
+						{#each activeProjects as project}
+							<div class="flex items-center gap-0.5" title="{project.name}">
+								<div
+									class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+									style="background-color: {project.color};"
+								></div>
+								<span class="text-base-content/50 truncate max-w-[50px]">{project.name}</span>
+							</div>
+						{/each}
+						{#if projectMeta && projectMeta.filter(p => p.totalTokens > 0).length > 3}
+							<span class="text-base-content/30">+{projectMeta.filter(p => p.totalTokens > 0).length - 3}</span>
+						{/if}
+					</div>
+				{/if}
 			{:else}
-				<!-- Success: Show sparkline -->
+				<!-- Fallback: Single-series sparkline -->
 				<Sparkline
 					data={sparklineData}
 					height={40}
 					showTooltip={true}
 					colorMode="usage"
+					showStyleToolbar={false}
 				/>
 			{/if}
 		</div>

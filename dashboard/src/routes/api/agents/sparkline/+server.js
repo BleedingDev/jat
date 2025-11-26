@@ -3,15 +3,21 @@
  *
  * GET /api/agents/sparkline?range=24h&agent=AgentName&session=sessionId
  * GET /api/agents/sparkline?range=24h&multiProject=true
+ * GET /api/agents/sparkline?range=24h&multiProject=true&agent=AgentName  (NEW!)
  *
  * Returns time-series token usage data for sparkline visualization.
  *
  * Query Parameters:
  * - range: Time range (24h | 7d | all) - defaults to 24h
- * - agent: Agent name filter (optional)
+ * - agent: Agent name filter (optional, but required with multiProject for per-agent view)
  * - session: Session ID filter (optional)
  * - bucketSize: Time bucket size (30min | hour | session) - defaults to 30min
  * - multiProject: Return multi-project data with per-project breakdown (optional, boolean)
+ *
+ * Mode combinations:
+ * - agent only: Single-project sparkline for that agent
+ * - multiProject only: System-wide multi-project sparkline (all agents)
+ * - multiProject + agent: Per-agent multi-project sparkline (only projects this agent worked on)
  *
  * Response Format (single project / default):
  * {
@@ -49,7 +55,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { getTokenTimeSeries, getMultiProjectTimeSeries } from '$lib/utils/tokenUsageTimeSeries.js';
+import { getTokenTimeSeries, getMultiProjectTimeSeries, getAgentMultiProjectTimeSeries } from '$lib/utils/tokenUsageTimeSeries.js';
 
 // ============================================================================
 // In-Memory Cache
@@ -185,8 +191,15 @@ export async function GET({ url }) {
 
 		let result;
 
-		if (multiProject) {
-			// Multi-project mode: aggregate across all projects from jat config
+		if (multiProject && agentName) {
+			// Per-agent multi-project mode: filter multi-project data by agent's sessions
+			result = await getAgentMultiProjectTimeSeries({
+				agentName,
+				range,
+				bucketSize
+			});
+		} else if (multiProject) {
+			// System-wide multi-project mode: aggregate across all projects from jat config
 			result = await getMultiProjectTimeSeries({
 				range,
 				bucketSize
