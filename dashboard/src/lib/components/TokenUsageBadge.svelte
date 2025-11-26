@@ -185,9 +185,9 @@
 				{projectMeta}
 				width="100%"
 				height={20}
-				showTooltip={false}
+				showTooltip={true}
 				showGrid={false}
-				showStyleToolbar={false}
+				showStyleToolbar={true}
 				showLegend={false}
 			/>
 		</div>
@@ -220,9 +220,9 @@
 				width="100%"
 				height={20}
 				colorMode="usage"
-				showTooltip={false}
+				showTooltip={true}
 				showGrid={false}
-				showStyleToolbar={false}
+				showStyleToolbar={true}
 			/>
 		</div>
 	{/if}
