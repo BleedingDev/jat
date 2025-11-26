@@ -4,6 +4,7 @@
 	import { getTokenColorClass, HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
 	import { getActivityStatusConfig } from '$lib/config/activityStatusConfig';
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import { getAgentStatusBadge, getAgentStatusIcon } from '$lib/utils/badgeHelpers';
 
 	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = () => {}, ontaskclick = () => {}, draggedTaskId = null } = $props();
 
@@ -90,46 +91,6 @@
 		// Priority 5: OFFLINE - Over 1 hour or never active
 		return 'offline';
 	});
-
-	// Get status badge class
-	function getStatusBadge(status) {
-		switch (status) {
-			case 'live':
-				return 'badge-success'; // Green - truly responsive (< 1m)
-			case 'working':
-				return 'badge-warning'; // Yellow - actively coding (1-10m)
-			case 'active':
-				return 'badge-accent'; // Purple/accent - recent activity
-			case 'idle':
-				return 'badge-ghost'; // Gray - available but quiet
-			case 'blocked':
-				return 'badge-warning'; // Yellow - paused
-			case 'offline':
-				return 'badge-error'; // Red - disconnected
-			default:
-				return 'badge-ghost';
-		}
-	}
-
-	// Get status icon
-	function getStatusIcon(status) {
-		switch (status) {
-			case 'live':
-				return '●'; // Solid dot - truly live/responsive
-			case 'working':
-				return '⚙'; // Actively coding (gear will spin)
-			case 'active':
-				return '✓'; // Ready and engaged
-			case 'idle':
-				return '○'; // Available but quiet
-			case 'blocked':
-				return '⏸'; // Paused
-			case 'offline':
-				return '⏹'; // Disconnected
-			default:
-				return '?';
-		}
-	}
 
 	// Compute current task (in-progress tasks assigned to this agent)
 	const currentTask = $derived(() => {
@@ -724,13 +685,13 @@
 				</h3>
 			</div>
 			<button
-				class="badge badge-sm {getStatusBadge(agentStatus())} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'} {agentStatus() === 'live' ? 'animate-pulse' : ''}"
+				class="badge badge-sm {getAgentStatusBadge(agentStatus())} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'} {agentStatus() === 'live' ? 'animate-pulse' : ''}"
 				onclick={handleBadgeClick}
 				disabled={agentStatus() !== 'offline'}
 				title={agentStatus() === 'offline' ? 'Click to delete agent' : agentStatus() === 'live' ? 'Responsive right now (< 1 minute)' : agentStatus() === 'working' ? 'Working recently (1-10 minutes)' : ''}
 			>
 				<span class={agentStatus() === 'working' ? 'inline-block animate-spin' : ''}>
-					{getStatusIcon(agentStatus())}
+					{getAgentStatusIcon(agentStatus())}
 				</span>
 				{agentStatus().charAt(0).toUpperCase() + agentStatus().slice(1)}
 			</button>

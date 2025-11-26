@@ -4,14 +4,42 @@
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
+	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {} } = $props();
 
-	// Initialize filters from URL params (default to open tasks)
+	// Check if an agent is actively working (live or working status)
+	function isAgentWorking(agentName) {
+		if (!agentName || !agents.length) return false;
+		const agent = agents.find(a => a.name === agentName);
+		if (!agent) return false;
+
+		// Calculate agent status (same logic as AgentCard)
+		const hasActiveLocks = agent.reservation_count > 0;
+		const hasInProgressTask = agent.in_progress_tasks > 0;
+
+		let timeSinceActive = Infinity;
+		if (agent.last_active_ts) {
+			// Handle timestamp format (may or may not have T separator)
+			const isoTimestamp = agent.last_active_ts.includes('T')
+				? agent.last_active_ts
+				: agent.last_active_ts.replace(' ', 'T') + 'Z';
+			const lastActivity = new Date(isoTimestamp);
+			timeSinceActive = (Date.now() - lastActivity.getTime()) / 1000 / 60; // minutes
+		}
+
+		// Live: < 1 minute, Working: 1-10 minutes with activity
+		if (timeSinceActive < 1) return true; // live
+		if (timeSinceActive < 10 && (hasActiveLocks || hasInProgressTask)) return true; // working
+
+		return false;
+	}
+
+	// Initialize filters from URL params (default to open + in_progress tasks)
 	let searchQuery = $state('');
 	let selectedProjects = $state(new Set());
 	let selectedPriorities = $state(new Set(['0', '1', '2', '3']));
-	let selectedStatuses = $state(new Set(['open']));
+	let selectedStatuses = $state(new Set(['open', 'in_progress']));
 	let selectedTypes = $state(new Set());
 	let selectedLabels = $state(new Set());
 
@@ -69,7 +97,7 @@
 		if (statuses) {
 			selectedStatuses = new Set(statuses.split(','));
 		} else {
-			selectedStatuses = new Set(['open']);
+			selectedStatuses = new Set(['open', 'in_progress']);
 		}
 
 		const types = params.get('types');
@@ -161,9 +189,26 @@
 		return result;
 	});
 
-	// Sorted tasks
-	const sortedTasks = $derived.by(() => {
-		return [...filteredTasks].sort((a, b) => {
+	// Type order for grouping (BUG first, then features, tasks, chores, epics, no type last)
+	const typeOrder = ['bug', 'feature', 'task', 'chore', 'epic', null];
+
+	// Sort function used within each group
+	// Priority: 1) Tasks with working agents first, 2) Then by selected sort column
+	function sortTasks(tasksToSort) {
+		return [...tasksToSort].sort((a, b) => {
+			// First priority: tasks with working agents come first
+			const aWorking = isAgentWorking(a.assignee);
+			const bWorking = isAgentWorking(b.assignee);
+			if (aWorking && !bWorking) return -1;
+			if (!aWorking && bWorking) return 1;
+
+			// Second priority: tasks with any assignee come before unassigned
+			const aAssigned = !!a.assignee;
+			const bAssigned = !!b.assignee;
+			if (aAssigned && !bAssigned) return -1;
+			if (!aAssigned && bAssigned) return 1;
+
+			// Third priority: apply regular sort column
 			let aVal, bVal;
 
 			switch (sortColumn) {
@@ -210,6 +255,41 @@
 			const comparison = String(aVal).localeCompare(String(bVal));
 			return sortDirection === 'asc' ? comparison : -comparison;
 		});
+	}
+
+	// Grouped tasks by issue_type (for sticky type headers)
+	const groupedTasks = $derived.by(() => {
+		const groups = new Map();
+
+		// Initialize groups in order
+		for (const type of typeOrder) {
+			groups.set(type, []);
+		}
+
+		// Group tasks by issue_type
+		for (const task of filteredTasks) {
+			const type = task.issue_type || null;
+			if (!groups.has(type)) {
+				groups.set(type, []);
+			}
+			groups.get(type).push(task);
+		}
+
+		// Sort tasks within each group
+		for (const [type, tasks] of groups) {
+			groups.set(type, sortTasks(tasks));
+		}
+
+		return groups;
+	});
+
+	// Flattened list of all visible tasks (for select-all and backward compatibility)
+	const sortedTasks = $derived.by(() => {
+		const allTasks = [];
+		for (const [type, tasks] of groupedTasks) {
+			allTasks.push(...tasks);
+		}
+		return allTasks;
 	});
 
 	// Derived: are all visible tasks selected?
@@ -304,7 +384,7 @@
 		searchQuery = '';
 		selectedProjects = new Set();
 		selectedPriorities = new Set(['0', '1', '2', '3']);
-		selectedStatuses = new Set(['open']);
+		selectedStatuses = new Set(['open', 'in_progress']);
 		selectedTypes = new Set();
 		selectedLabels = new Set();
 		updateURL();
@@ -317,36 +397,6 @@
 		} else {
 			sortColumn = column;
 			sortDirection = 'asc';
-		}
-	}
-
-	// Badge helpers
-	function getPriorityBadge(priority) {
-		switch (priority) {
-			case 0: return 'badge-error';
-			case 1: return 'badge-warning';
-			case 2: return 'badge-info';
-			default: return 'badge-ghost';
-		}
-	}
-
-	function getStatusBadge(status) {
-		switch (status) {
-			case 'open': return 'badge-info';
-			case 'in_progress': return 'badge-warning';
-			case 'blocked': return 'badge-error';
-			case 'closed': return 'badge-success';
-			default: return 'badge-ghost';
-		}
-	}
-
-	function getTypeBadge(type) {
-		switch (type) {
-			case 'bug': return 'badge-error';
-			case 'feature': return 'badge-success';
-			case 'epic': return 'badge-primary';
-			case 'chore': return 'badge-ghost';
-			default: return 'badge-info';
 		}
 	}
 
@@ -812,11 +862,12 @@
 	{/if}
 
 	<!-- Table -->
-	<div class="flex-1 overflow-auto">
-		<table class="table table-sm table-pin-rows">
+	<div class="flex-1 overflow-x-auto overflow-y-auto">
+		<table class="table table-xs table-pin-rows table-pin-cols">
+			<!-- Main column headers (always pinned at top) -->
 			<thead>
 				<tr class="bg-base-200">
-					<th class="w-10">
+					<th class="w-10 bg-base-200">
 						<input
 							type="checkbox"
 							class="checkbox checkbox-sm"
@@ -826,7 +877,7 @@
 							onclick={(e) => e.stopPropagation()}
 						/>
 					</th>
-					<th class="cursor-pointer hover:bg-base-300 w-28" onclick={() => handleSort('id')}>
+					<th class="cursor-pointer hover:bg-base-300 w-28 bg-base-200" onclick={() => handleSort('id')}>
 						<div class="flex items-center gap-1">
 							ID
 							{#if sortColumn === 'id'}
@@ -834,70 +885,56 @@
 							{/if}
 						</div>
 					</th>
-					<th class="cursor-pointer hover:bg-base-300" onclick={() => handleSort('title')}>
+					<td class="cursor-pointer hover:bg-base-300" onclick={() => handleSort('title')}>
 						<div class="flex items-center gap-1">
 							Title
 							{#if sortColumn === 'title'}
 								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
-					</th>
-					<th class="cursor-pointer hover:bg-base-300 w-16 text-center" onclick={() => handleSort('priority')}>
+					</td>
+					<td class="cursor-pointer hover:bg-base-300 w-16 text-center" onclick={() => handleSort('priority')}>
 						<div class="flex items-center justify-center gap-1">
 							P
 							{#if sortColumn === 'priority'}
 								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
-					</th>
-					<th class="cursor-pointer hover:bg-base-300 w-28" onclick={() => handleSort('status')}>
+					</td>
+					<td class="cursor-pointer hover:bg-base-300 w-36" onclick={() => handleSort('status')}>
 						<div class="flex items-center gap-1">
 							Status
 							{#if sortColumn === 'status'}
 								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
-					</th>
-					<th class="cursor-pointer hover:bg-base-300 w-24" onclick={() => handleSort('type')}>
-						<div class="flex items-center gap-1">
-							Type
-							{#if sortColumn === 'type'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-							{/if}
-						</div>
-					</th>
-					<th class="cursor-pointer hover:bg-base-300 w-28" onclick={() => handleSort('assignee')}>
-						<div class="flex items-center gap-1">
-							Assignee
-							{#if sortColumn === 'assignee'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-							{/if}
-						</div>
-					</th>
-					<th class="w-32">Labels</th>
-					<th class="w-10">Deps</th>
-					<th class="cursor-pointer hover:bg-base-300 w-24" onclick={() => handleSort('created')}>
+					</td>
+					<td class="w-32">Labels</td>
+					<td class="w-10">Deps</td>
+					<td class="cursor-pointer hover:bg-base-300 w-24" onclick={() => handleSort('created')}>
 						<div class="flex items-center gap-1">
 							Created
 							{#if sortColumn === 'created'}
 								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
-					</th>
-					<th class="cursor-pointer hover:bg-base-300 w-24" onclick={() => handleSort('updated')}>
+					</td>
+					<td class="cursor-pointer hover:bg-base-300 w-24" onclick={() => handleSort('updated')}>
 						<div class="flex items-center gap-1">
 							Updated
 							{#if sortColumn === 'updated'}
 								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
-					</th>
+					</td>
 				</tr>
 			</thead>
-			<tbody>
-				{#if sortedTasks.length === 0}
+
+			{#if sortedTasks.length === 0}
+				<!-- Empty state -->
+				<tbody>
 					<tr>
-						<td colspan="11" class="text-center py-12">
+						<td colspan="9" class="text-center py-12">
 							<div class="text-base-content/50">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto mb-2 opacity-30">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
@@ -911,92 +948,116 @@
 							</div>
 						</td>
 					</tr>
-				{:else}
-					{#each sortedTasks as task (task.id)}
-						{@const depStatus = analyzeDependencies(task)}
-						<tr
-							class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''}"
-							onclick={() => handleRowClick(task.id)}
-							title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
-						>
-							<td onclick={(e) => e.stopPropagation()}>
-								<input
-									type="checkbox"
-									class="checkbox checkbox-sm"
-									checked={selectedTasks.has(task.id)}
-									onchange={() => toggleTask(task.id)}
-								/>
-							</td>
-							<td>
-								<span class="font-mono text-xs text-base-content/70">{task.id}</span>
-							</td>
-							<td>
-								<div class="max-w-md">
-									<div class="font-medium truncate" title={task.title}>{task.title}</div>
-									{#if task.description}
-										<div class="text-xs text-base-content/50 truncate" title={task.description}>
-											{task.description}
-										</div>
-									{/if}
-								</div>
-							</td>
-							<td class="text-center">
-								<span class="badge badge-sm {getPriorityBadge(task.priority)}">
-									P{task.priority}
-								</span>
-							</td>
-							<td>
-								<span class="badge badge-sm {getStatusBadge(task.status)}">
-									{task.status?.replace('_', ' ')}
-								</span>
-							</td>
-							<td>
-								{#if task.issue_type}
-									<span class="badge badge-sm badge-outline {getTypeBadge(task.issue_type)}">
-										{task.issue_type}
-									</span>
-								{:else}
-									<span class="text-base-content/30">-</span>
-								{/if}
-							</td>
-							<td>
-								{#if task.assignee}
-									<span class="text-sm">{task.assignee}</span>
-								{:else}
-									<span class="text-base-content/30">-</span>
-								{/if}
-							</td>
-							<td>
-								{#if task.labels && task.labels.length > 0}
-									<div class="flex flex-wrap gap-0.5">
-										{#each task.labels.slice(0, 2) as label}
-											<span class="badge badge-ghost badge-xs">{label}</span>
-										{/each}
-										{#if task.labels.length > 2}
-											<span class="badge badge-ghost badge-xs">+{task.labels.length - 2}</span>
-										{/if}
+				</tbody>
+			{:else}
+				<!-- Grouped tasks by type with sticky headers -->
+				{#each Array.from(groupedTasks.entries()) as [type, typeTasks]}
+					{#if typeTasks.length > 0}
+						<!-- Type group header (pinned when scrolling) -->
+						<thead>
+							<tr>
+								<th colspan="9" class="bg-base-300 text-base-content font-bold text-sm py-2">
+									<div class="flex items-center gap-2">
+										<span class="badge {getTypeBadge(type)} badge-sm">{type || 'no type'}</span>
+										<span class="text-base-content/60 font-normal">({typeTasks.length})</span>
 									</div>
-								{:else}
-									<span class="text-base-content/30">-</span>
-								{/if}
-							</td>
-							<td>
-								<DependencyIndicator {task} allTasks={allTasks.length > 0 ? allTasks : tasks} size="sm" />
-							</td>
-							<td>
-								<span class="text-xs text-base-content/60" title={task.created_at}>
-									{formatDate(task.created_at)}
-								</span>
-							</td>
-							<td>
-								<span class="text-xs text-base-content/60" title={task.updated_at}>
-									{formatDate(task.updated_at)}
-								</span>
-							</td>
-						</tr>
-					{/each}
-				{/if}
-			</tbody>
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each typeTasks as task (task.id)}
+								{@const depStatus = analyzeDependencies(task)}
+								<tr
+									class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''}"
+									onclick={() => handleRowClick(task.id)}
+									title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
+								>
+									<th class="bg-base-100" onclick={(e) => e.stopPropagation()}>
+										<input
+											type="checkbox"
+											class="checkbox checkbox-sm"
+											checked={selectedTasks.has(task.id)}
+											onchange={() => toggleTask(task.id)}
+										/>
+									</th>
+									<th class="bg-base-100">
+										<span class="font-mono text-xs text-base-content/70">{task.id}</span>
+									</th>
+									<td>
+										<div class="max-w-md">
+											<div class="font-medium truncate" title={task.title}>{task.title}</div>
+											{#if task.description}
+												<div class="text-xs text-base-content/50 truncate" title={task.description}>
+													{task.description}
+												</div>
+											{/if}
+										</div>
+									</td>
+									<td class="text-center">
+										<span class="badge badge-sm {getPriorityBadge(task.priority)}">
+											P{task.priority}
+										</span>
+									</td>
+									<td>
+										{#if task.status === 'in_progress' && task.assignee}
+											<!-- In progress: show assignee with activity indicator instead of status badge -->
+											<span class="flex items-center gap-1.5">
+												{#if isAgentWorking(task.assignee)}
+													<!-- Working: pulsing dot + spinning gear -->
+													<span class="relative flex h-2 w-2">
+														<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+														<span class="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+													</span>
+													<span class="text-sm font-medium text-success">{task.assignee}</span>
+													<svg class="w-3.5 h-3.5 text-success animate-spin" viewBox="0 0 24 24" fill="currentColor" title="Actively working">
+														<path d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m16.5 0H21m-1.5 0H12m-8.457 3.077l1.41-.513m14.095-5.13l1.41-.513M5.106 17.785l1.15-.964m11.49-9.642l1.149-.964M7.501 19.795l.75-1.3m7.5-12.99l.75-1.3m-6.063 16.658l.26-1.477m2.605-14.772l.26-1.477m0 17.726l-.26-1.477M10.698 4.614l-.26-1.477M16.5 19.794l-.75-1.299M7.5 4.205L12 12m0 0l4.5 7.795m-4.5-7.795L12 3" />
+													</svg>
+												{:else}
+													<!-- Assigned but not actively working -->
+													<span class="inline-flex h-2 w-2 rounded-full bg-warning"></span>
+													<span class="text-sm text-warning">{task.assignee}</span>
+												{/if}
+											</span>
+										{:else}
+											<!-- Other statuses: show regular badge -->
+											<span class="badge badge-sm {getTaskStatusBadge(task.status)}">
+												{task.status?.replace('_', ' ')}
+											</span>
+										{/if}
+									</td>
+									<td>
+										{#if task.labels && task.labels.length > 0}
+											<div class="flex flex-wrap gap-0.5">
+												{#each task.labels.slice(0, 2) as label}
+													<span class="badge badge-ghost badge-xs">{label}</span>
+												{/each}
+												{#if task.labels.length > 2}
+													<span class="badge badge-ghost badge-xs">+{task.labels.length - 2}</span>
+												{/if}
+											</div>
+										{:else}
+											<span class="text-base-content/30">-</span>
+										{/if}
+									</td>
+									<td>
+										<DependencyIndicator {task} allTasks={allTasks.length > 0 ? allTasks : tasks} size="sm" />
+									</td>
+									<td>
+										<span class="text-xs text-base-content/60" title={task.created_at}>
+											{formatDate(task.created_at)}
+										</span>
+									</td>
+									<td>
+										<span class="text-xs text-base-content/60" title={task.updated_at}>
+											{formatDate(task.updated_at)}
+										</span>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					{/if}
+				{/each}
+			{/if}
 		</table>
 	</div>
 </div>

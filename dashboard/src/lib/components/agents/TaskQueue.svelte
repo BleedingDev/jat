@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
+	import { getPriorityBadge } from '$lib/utils/badgeHelpers';
 
 	let { tasks = [], agents = [], reservations = [], selectedProject = 'All Projects', ontaskclick } = $props();
 
@@ -182,20 +183,6 @@
 		selectedTypes = new Set(); // Reset to all types
 		selectedLabels = new Set();
 		updateURL();
-	}
-
-	// Priority badge colors
-	function getPriorityBadge(priority) {
-		switch (priority) {
-			case 0:
-				return 'badge-error'; // P0 - Red
-			case 1:
-				return 'badge-warning'; // P1 - Yellow
-			case 2:
-				return 'badge-info'; // P2 - Blue
-			default:
-				return 'badge-ghost'; // P3+ - Gray
-		}
 	}
 
 	// Handle drag start - enable dragging
