@@ -30,5 +30,8 @@
     "sqlite"
   ],
   "author": "Joseph Winke <j@wn.ke>",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
 }

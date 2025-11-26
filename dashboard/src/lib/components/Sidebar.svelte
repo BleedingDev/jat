@@ -68,6 +68,14 @@
 
 	<!-- Sidebar content -->
 	<div class="flex h-screen flex-col bg-base-200 overflow-hidden is-drawer-close:w-14 is-drawer-open:w-64">
+		<!-- Logo -->
+		<div class="py-3 flex justify-center">
+			<a href="https://github.com/joewinke/jat" target="_blank" rel="noopener
+          +  noreferrer" class="hover:opacity-80 transition-opacity">
+				<kbd class="px-2 kbd kbd-lg font-mono font-bold">jat</kbd>
+			</a>
+		</div>
+
 		<!-- Main navigation items -->
 		<ul class="menu w-full p-2 flex-1 gap-1">
 			{#each unifiedNavConfig.navItems as navItem}

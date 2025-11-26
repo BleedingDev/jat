@@ -1,18 +1,48 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import * as d3 from 'd3';
+	import type { Simulation, SimulationNodeDatum, SimulationLinkDatum } from 'd3';
 	import { getProjectColor } from '$lib/utils/projectColors';
 
+	// Types
+	interface Task {
+		id: string;
+		title?: string;
+		status?: string;
+		priority?: number;
+		project?: string;
+		depends_on?: Array<{ id?: string; depends_on_id?: string; type?: string }>;
+	}
+
+	interface GraphNode extends SimulationNodeDatum {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+		project: string;
+	}
+
+	interface GraphLink extends SimulationLinkDatum<GraphNode> {
+		source: string | GraphNode;
+		target: string | GraphNode;
+		type: string;
+	}
+
+	interface Props {
+		tasks?: Task[];
+		onNodeClick?: ((taskId: string) => void) | null;
+	}
+
 	// Props
-	let { tasks = [], onNodeClick = null } = $props();
+	let { tasks = [], onNodeClick = null }: Props = $props();
 
 	// State
-	let svgElement = $state(null);
+	let svgElement = $state<SVGSVGElement | null>(null);
 	let width = $state(800);
 	let height = $state(600);
 
 	// Status color mapping (DaisyUI-compatible)
-	const statusColors = {
+	const statusColors: Record<string, string> = {
 		open: '#3b82f6',      // blue
 		in_progress: '#f59e0b', // amber
 		closed: '#10b981',     // green
@@ -20,7 +50,7 @@
 	};
 
 	// Priority stroke widths
-	const priorityStroke = {
+	const priorityStroke: Record<number, number> = {
 		0: 4,  // P0 - thickest
 		1: 3,  // P1
 		2: 2,  // P2
@@ -28,7 +58,7 @@
 		99: 1  // default
 	};
 
-	function buildGraph() {
+	function buildGraph(): void {
 		if (!svgElement) return;
 
 		// Clear previous graph
@@ -38,7 +68,7 @@
 		if (!tasks || tasks.length === 0) return;
 
 		// Build nodes and links from tasks
-		const nodes = tasks.map(task => ({
+		const nodes: GraphNode[] = tasks.map(task => ({
 			id: task.id,
 			title: task.title || task.id,
 			status: task.status || 'open',
@@ -48,13 +78,13 @@
 
 		// Build links, but only for nodes that exist in the current filtered set
 		const nodeIds = new Set(nodes.map(n => n.id));
-		const links = [];
+		const links: GraphLink[] = [];
 		tasks.forEach(task => {
 			if (task.depends_on && Array.isArray(task.depends_on)) {
-				task.depends_on.forEach(dep => {
+				task.depends_on.forEach((dep: { id?: string; depends_on_id?: string; type?: string }) => {
 					const sourceId = dep.id || dep.depends_on_id;
 					// Only create link if both source and target nodes exist
-					if (nodeIds.has(sourceId) && nodeIds.has(task.id)) {
+					if (sourceId && nodeIds.has(sourceId) && nodeIds.has(task.id)) {
 						links.push({
 							source: sourceId,
 							target: task.id,
@@ -74,18 +104,18 @@
 
 		// Add zoom behavior
 		const g = svg.append('g');
-		
-		const zoom = d3.zoom()
+
+		const zoom = d3.zoom<SVGSVGElement, unknown>()
 			.scaleExtent([0.1, 4])
-			.on('zoom', (event) => {
-				g.attr('transform', event.transform);
+			.on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+				g.attr('transform', event.transform.toString());
 			});
 
-		svg.call(zoom);
+		svg.call(zoom as unknown as (selection: d3.Selection<SVGSVGElement, unknown, null, undefined>) => void);
 
 		// Create force simulation
-		const simulation = d3.forceSimulation(nodes)
-			.force('link', d3.forceLink(links).id(d => d.id).distance(150))
+		const simulation: Simulation<GraphNode, GraphLink> = d3.forceSimulation<GraphNode>(nodes)
+			.force('link', d3.forceLink<GraphNode, GraphLink>(links).id((d: GraphNode) => d.id).distance(150))
 			.force('charge', d3.forceManyBody().strength(-400))
 			.force('center', d3.forceCenter(width / 2, height / 2))
 			.force('collision', d3.forceCollide().radius(40));
@@ -120,12 +150,12 @@
 			.data(nodes)
 			.join('circle')
 			.attr('r', 20)
-			.attr('fill', d => statusColors[d.status] || '#6b7280')
-			.attr('stroke', d => getProjectColor(d.id))
-			.attr('stroke-width', d => priorityStroke[d.priority] || 1)
+			.attr('fill', (d: GraphNode) => statusColors[d.status] || '#6b7280')
+			.attr('stroke', (d: GraphNode) => getProjectColor(d.id))
+			.attr('stroke-width', (d: GraphNode) => priorityStroke[d.priority] || 1)
 			.attr('class', 'cursor-pointer hover:opacity-80 transition-opacity')
-			.call(drag(simulation))
-			.on('click', (event, d) => {
+			.call(drag(simulation) as unknown as (selection: d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown>) => void)
+			.on('click', (event: MouseEvent, d: GraphNode) => {
 				event.stopPropagation();
 				if (onNodeClick) {
 					onNodeClick(d.id);
@@ -137,52 +167,52 @@
 			.selectAll('text')
 			.data(nodes)
 			.join('text')
-			.text(d => d.title.length > 30 ? d.title.substring(0, 27) + '...' : d.title)
+			.text((d: GraphNode) => d.title.length > 30 ? d.title.substring(0, 27) + '...' : d.title)
 			.attr('class', 'text-xs fill-base-content pointer-events-none')
 			.attr('text-anchor', 'middle')
 			.attr('dy', 35);
 
 		// Add tooltips
 		node.append('title')
-			.text(d => `${d.id}\n${d.title}\nStatus: ${d.status}\nPriority: P${d.priority}`);
+			.text((d: GraphNode) => `${d.id}\n${d.title}\nStatus: ${d.status}\nPriority: P${d.priority}`);
 
 		// Update positions on simulation tick
 		simulation.on('tick', () => {
 			link
-				.attr('x1', d => d.source.x)
-				.attr('y1', d => d.source.y)
-				.attr('x2', d => d.target.x)
-				.attr('y2', d => d.target.y);
+				.attr('x1', (d: GraphLink) => (d.source as GraphNode).x ?? 0)
+				.attr('y1', (d: GraphLink) => (d.source as GraphNode).y ?? 0)
+				.attr('x2', (d: GraphLink) => (d.target as GraphNode).x ?? 0)
+				.attr('y2', (d: GraphLink) => (d.target as GraphNode).y ?? 0);
 
 			node
-				.attr('cx', d => d.x)
-				.attr('cy', d => d.y);
+				.attr('cx', (d: GraphNode) => d.x ?? 0)
+				.attr('cy', (d: GraphNode) => d.y ?? 0);
 
 			label
-				.attr('x', d => d.x)
-				.attr('y', d => d.y);
+				.attr('x', (d: GraphNode) => d.x ?? 0)
+				.attr('y', (d: GraphNode) => d.y ?? 0);
 		});
 
 		// Drag behavior
-		function drag(simulation) {
-			function dragstarted(event) {
+		function drag(simulation: Simulation<GraphNode, GraphLink>) {
+			function dragstarted(event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>) {
 				if (!event.active) simulation.alphaTarget(0.3).restart();
 				event.subject.fx = event.subject.x;
 				event.subject.fy = event.subject.y;
 			}
 
-			function dragged(event) {
+			function dragged(event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>) {
 				event.subject.fx = event.x;
 				event.subject.fy = event.y;
 			}
 
-			function dragended(event) {
+			function dragended(event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>) {
 				if (!event.active) simulation.alphaTarget(0);
 				event.subject.fx = null;
 				event.subject.fy = null;
 			}
 
-			return d3.drag()
+			return d3.drag<SVGCircleElement, GraphNode>()
 				.on('start', dragstarted)
 				.on('drag', dragged)
 				.on('end', dragended);
