@@ -619,10 +619,9 @@
 				}, 200);
 			}}
 		>
-			<div class="p-2 bg-base-200 rounded-lg shadow-lg border border-base-300 space-y-3">
+			<div class="p-2 bg-base-200 rounded-lg shadow-lg border border-base-300 space-y-0.5">
 				<!-- Chart Type Section -->
 				<div>
-					<div class="text-xs font-semibold mb-1.5 text-base-content/70">Chart Type</div>
 					<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
 						<button
 							class="badge badge-sm transition-all duration-200 cursor-pointer {chartType === 'line' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
@@ -674,7 +673,6 @@
 				<!-- Multi-Series Mode Section (only shown when multi-series data is present) -->
 				{#if isMultiSeries}
 					<div>
-						<div class="text-xs font-semibold mb-1.5 text-base-content/70">Multi-Project View</div>
 						<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
 							<button
 								class="badge badge-sm transition-all duration-200 cursor-pointer {multiSeriesMode === 'stacked' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
@@ -704,7 +702,6 @@
 
 				<!-- Time Range Section -->
 				<div>
-					<div class="text-xs font-semibold mb-1.5 text-base-content/70">Time Range</div>
 					<div class="flex items-center gap-1 flex-wrap">
 						<button
 							class="btn btn-xs {timeRange === '1h' ? 'btn-primary' : 'btn-ghost'}"
@@ -810,7 +807,6 @@
 
 						<!-- Options Section -->
 						<div>
-							<div class="text-xs font-semibold mb-1.5 text-base-content/70">Options</div>
 							<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
 								<!-- Show Grid Toggle -->
 								<button
@@ -842,9 +838,9 @@
 								</button>
 							</div>
 
-							<!-- Color Section -->
+							<!-- Color Section (only for single-series) -->
+							{#if !isMultiSeries}
 							<div>
-								<div class="text-xs font-semibold mb-1.5 text-base-content/70">Color</div>
 								<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg items-center">
 									<!-- Auto (Percentile-based) -->
 									<button
@@ -869,6 +865,7 @@
 									{/each}
 								</div>
 							</div>
+							{/if}
 						</div>
 					</div>
 		</div>
