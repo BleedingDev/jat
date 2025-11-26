@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
-	import { getTokenColorClass, HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
+	import { HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
 	import { getTaskStatusVisual, STATUS_ICONS } from '$lib/config/statusColors';
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import TokenUsageDisplay from '$lib/components/TokenUsageDisplay.svelte';
 	import { getAgentStatusBadge, getAgentStatusIcon, getAgentStatusVisual } from '$lib/utils/badgeHelpers';
 	import { formatLastActivity } from '$lib/utils/dateFormatters';
 	import { computeAgentStatus } from '$lib/utils/agentStatusUtils';
@@ -351,20 +352,6 @@
 		if (agentStatus() === 'offline') {
 			deleteModal.open();
 		}
-	}
-
-	// Format token count with K/M suffix
-	function formatTokens(tokens: number): string {
-		if (tokens === 0) return '0';
-		if (tokens < 1000) return tokens.toLocaleString();
-		if (tokens < 1000000) return (tokens / 1000).toFixed(1) + 'K';
-		return (tokens / 1000000).toFixed(2) + 'M';
-	}
-
-	// Format cost with $ prefix
-	function formatCost(cost: number): string {
-		if (cost === 0) return '$0.00';
-		return '$' + cost.toFixed(2);
 	}
 
 	// Fetch sparkline data for this agent
@@ -774,14 +761,12 @@
 
 		<!-- Token Usage (Today) -->
 		{#if agent.usage && !usageLoading && !usageError}
-			<div class="flex items-center justify-between text-xs mb-2 -mt-1">
-				<span class="font-mono text-base-content/70">
-					{formatTokens(agent.usage.today.total_tokens)}
-				</span>
-				<span class="font-mono font-medium {getTokenColorClass(agent.usage.today.total_tokens)}">
-					{formatCost(agent.usage.today.cost)}
-				</span>
-			</div>
+			<TokenUsageDisplay
+				tokens={agent.usage.today.total_tokens}
+				cost={agent.usage.today.cost}
+				variant="inline"
+				class="mb-2 -mt-1"
+			/>
 		{/if}
 
 		<!-- Activity & History (Unified) -->
