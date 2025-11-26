@@ -124,9 +124,10 @@ launch_claude() {
     local claude_flags
     claude_flags=$(jq -r '.defaults.claude_flags // "--dangerously-skip-permissions"' "$CONFIG_FILE")
 
-    # Add /agent:start prompt unless --no-agent flag was used
+    # Build initial prompt (without -p flag which makes it non-interactive)
+    local initial_prompt=""
     if [[ "$skip_agent" != "true" ]]; then
-        claude_flags="$claude_flags -p '/agent:start'"
+        initial_prompt="/agent:start"
     fi
 
     # Launch N Claude sessions with staggered timing
@@ -140,7 +141,7 @@ launch_claude() {
             echo -e "${DIM}  → Claude Code #$i${NC}"
         fi
 
-        $TERMINAL -T "$window_title" -e bash -c "cd '$path' && $env_vars claude $claude_flags" &
+        $TERMINAL -T "$window_title" -e bash -c "cd '$path' && $env_vars claude $claude_flags '$initial_prompt'" &
 
         # Stagger launches by 0.5s to avoid race conditions
         if [[ $i -lt $count ]]; then
@@ -692,8 +693,13 @@ cleanup_agents() {
     echo -e "${BOLD}Cleaning up stale agents...${NC}"
     echo ""
 
-    local total_deleted=0
-    local total_kept=0
+    local total_session_deleted=0
+    local total_session_kept=0
+
+    # =========================================================================
+    # PART 1: Clean up session files (.claude/agent-*.txt)
+    # =========================================================================
+    echo -e "${DIM}Session files:${NC}"
 
     # Process each project
     for project in $(list_projects); do
@@ -751,15 +757,15 @@ cleanup_agents() {
 
             if [[ "$keep" == "true" ]]; then
                 project_kept=$((project_kept + 1))
-                total_kept=$((total_kept + 1))
+                total_session_kept=$((total_session_kept + 1))
                 if $dry_run; then
                     echo -e "  ${DIM}[keep]${NC} $agent_name ($keep_reason)"
                 fi
             else
                 project_deleted=$((project_deleted + 1))
-                total_deleted=$((total_deleted + 1))
+                total_session_deleted=$((total_session_deleted + 1))
                 if $dry_run; then
-                    echo -e "  ${YELLOW}[delete]${NC} $agent_name (stale, no activity)"
+                    echo -e "  ${YELLOW}[delete]${NC} $agent_name (stale session)"
                 else
                     rm -f "$agent_file"
                     echo -e "  ${RED}deleted${NC} $agent_name"
@@ -774,14 +780,134 @@ cleanup_agents() {
         fi
     done
 
+    # =========================================================================
+    # PART 2: Clean up Agent Mail database (~/.agent-mail.db)
+    # =========================================================================
+    echo ""
+    echo -e "${DIM}Agent Mail database:${NC}"
+
+    local db_path="$HOME/.agent-mail.db"
+    local total_db_deleted=0
+    local total_db_kept=0
+
+
+    if [[ ! -f "$db_path" ]]; then
+        echo -e "  ${DIM}No Agent Mail database found${NC}"
+    else
+        # Get all agents from Agent Mail database
+        local agents_json
+        agents_json=$(sqlite3 -json "$db_path" "SELECT id, name FROM agents ORDER BY name" 2>/dev/null)
+
+        if [[ -z "$agents_json" ]] || [[ "$agents_json" == "[]" ]]; then
+            echo -e "  ${DIM}No agents in database${NC}"
+        else
+            # Cache Beads tasks list once (avoid repeated calls)
+            local beads_tasks=""
+            if command -v bd &>/dev/null; then
+                beads_tasks=$(bd list --json 2>/dev/null || echo "[]")
+            fi
+
+            # Cache session files list
+            local session_agents=""
+            for project in $(list_projects); do
+                local config path
+                config=$(get_project_config "$project")
+                path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+                if [[ -d "$path/.claude" ]]; then
+                    for f in "$path/.claude"/agent-*.txt; do
+                        [[ -f "$f" ]] && session_agents+="$(cat "$f" 2>/dev/null)"$'\n'
+                    done
+                fi
+            done
+
+            # Process each agent using a for loop to avoid subshell issues
+            local agent_ids agent_names
+            agent_ids=$(echo "$agents_json" | jq -r '.[].id')
+            agent_names=$(echo "$agents_json" | jq -r '.[].name')
+
+            # Convert to arrays
+            local -a ids=()
+            local -a names=()
+            while IFS= read -r id; do ids+=("$id"); done <<< "$agent_ids"
+            while IFS= read -r name; do names+=("$name"); done <<< "$agent_names"
+
+            local i
+            for ((i=0; i<${#ids[@]}; i++)); do
+                local agent_id="${ids[$i]}"
+                local agent_name="${names[$i]}"
+
+                [[ -z "$agent_id" ]] && continue
+                [[ -z "$agent_name" ]] && continue
+
+                # Check if agent should be kept
+                local keep=false
+                local keep_reason=""
+
+                # Check 1: Does the agent have assigned tasks in Beads?
+                if [[ -n "$beads_tasks" ]] && [[ "$beads_tasks" != "[]" ]]; then
+                    local assigned_tasks
+                    assigned_tasks=$(echo "$beads_tasks" | jq -r --arg agent "$agent_name" \
+                        '[.[] | select(.assignee == $agent and (.status == "open" or .status == "in_progress"))] | length' 2>/dev/null || echo "0")
+                    if [[ "$assigned_tasks" -gt 0 ]]; then
+                        keep=true
+                        keep_reason="has $assigned_tasks assigned task(s)"
+                    fi
+                fi
+
+                # Check 2: Does the agent have active file reservations?
+                if [[ "$keep" == "false" ]]; then
+                    local active_reservations
+                    active_reservations=$(sqlite3 "$db_path" "SELECT COUNT(*) FROM file_reservations WHERE agent_id = $agent_id AND released_ts IS NULL AND expires_ts > datetime('now')" 2>/dev/null || echo "0")
+                    if [[ "$active_reservations" -gt 0 ]]; then
+                        keep=true
+                        keep_reason="has $active_reservations active reservation(s)"
+                    fi
+                fi
+
+                # Check 3: Does the agent have a session file anywhere?
+                if [[ "$keep" == "false" ]]; then
+                    if [[ -n "$session_agents" ]] && echo "$session_agents" | grep -qF "$agent_name"; then
+                        keep=true
+                        keep_reason="has active session file"
+                    fi
+                fi
+
+                if [[ "$keep" == "true" ]]; then
+                    total_db_kept=$((total_db_kept + 1))
+                    if $dry_run; then
+                        echo -e "  ${DIM}[keep]${NC} $agent_name ($keep_reason)"
+                    fi
+                else
+                    total_db_deleted=$((total_db_deleted + 1))
+                    if $dry_run; then
+                        echo -e "  ${YELLOW}[delete]${NC} $agent_name (stale, no activity)"
+                    else
+                        # Delete agent and related records from Agent Mail database
+                        sqlite3 "$db_path" "DELETE FROM message_recipients WHERE agent_id = $agent_id" 2>/dev/null
+                        sqlite3 "$db_path" "DELETE FROM file_reservations WHERE agent_id = $agent_id" 2>/dev/null
+                        sqlite3 "$db_path" "DELETE FROM agents WHERE id = $agent_id" 2>/dev/null
+                        echo -e "  ${RED}deleted${NC} $agent_name"
+                    fi
+                fi
+            done
+        fi
+    fi
+
+
+    # =========================================================================
+    # Summary
+    # =========================================================================
     echo ""
     if $dry_run; then
-        echo -e "${YELLOW}DRY RUN:${NC} Would delete $total_deleted agents, keep $total_kept"
+        echo -e "${YELLOW}DRY RUN:${NC}"
+        echo -e "  Session files: Would delete $total_session_deleted, keep $total_session_kept"
+        echo -e "  Agent Mail DB: Would delete $total_db_deleted, keep $total_db_kept"
         echo ""
         echo "Run 'jat cleanup' to actually delete stale agents"
     else
-        echo -e "${GREEN}Deleted $total_deleted stale agents${NC}"
-        echo -e "${DIM}Kept $total_kept agents with activity${NC}"
+        echo -e "${GREEN}Cleanup complete:${NC}"
+        echo -e "  Session files: Deleted $total_session_deleted, kept $total_session_kept"
+        echo -e "  Agent Mail DB: Deleted $total_db_deleted, kept $total_db_kept"
     fi
     echo ""
 }
