@@ -2,10 +2,9 @@
 	import { onMount } from 'svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { getTokenColorClass, HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
-	import { getActivityStatusConfig } from '$lib/config/activityStatusConfig';
+	import { getTaskStatusVisual, STATUS_ICONS } from '$lib/config/statusColors';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import { getAgentStatusBadge, getAgentStatusIcon, getAgentStatusVisual } from '$lib/utils/badgeHelpers';
-	import { STATUS_ICONS } from '$lib/config/statusColors';
 	import { formatLastActivity } from '$lib/utils/dateFormatters';
 	import { computeAgentStatus } from '$lib/utils/agentStatusUtils';
 
@@ -753,27 +752,29 @@
 					{@const taskId = extractTaskId(currentActivity.preview)}
 					{@const previewText = currentActivity.preview || currentActivity.content || 'Active'}
 					{@const textWithoutTaskId = taskId ? previewText.replace(/\[.*?\]\s*/, '') : previewText}
-					{@const statusConfig = getActivityStatusConfig(currentActivity.status || 'in_progress')}
+					{@const statusVisual = getTaskStatusVisual(currentActivity.status || 'in_progress')}
 					<div class="text-xs flex items-start gap-1.5 py-0.5">
-					{#if statusConfig.iconType === 'svg'}
-						{#if statusConfig.iconStyle === 'solid'}
-							<svg class="shrink-0 w-4 h-4 {statusConfig.color} {currentActivity.status === 'in_progress' ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
-								<path d={statusConfig.icon} />
+						{#if currentActivity.status === 'in_progress'}
+							<svg class="shrink-0 w-4 h-4 {statusVisual.text} animate-spin" viewBox="0 0 24 24" fill="currentColor" title={statusVisual.description}>
+								<path d={STATUS_ICONS.gear} />
+							</svg>
+						{:else if currentActivity.status === 'closed'}
+							<svg class="shrink-0 w-4 h-4 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
+								<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.check} />
+							</svg>
+						{:else if currentActivity.status === 'blocked'}
+							<svg class="shrink-0 w-4 h-4 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
+								<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.warning} />
 							</svg>
 						{:else}
-							<svg class="shrink-0 w-4 h-4 {statusConfig.color} {currentActivity.status === 'in_progress' ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusConfig.description}>
-								<path stroke-linecap="round" stroke-linejoin="round" d={statusConfig.icon} />
+							<svg class="shrink-0 w-4 h-4 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
+								<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.clock} />
 							</svg>
 						{/if}
-					{:else}
-						<span class="shrink-0 text-sm -mt-1 {statusConfig.color}" title={statusConfig.description}>
-							{statusConfig.icon}
-						</span>
-					{/if}
 						{#if taskId}
-							<span class="font-mono {statusConfig.color} shrink-0 text-[10px] font-semibold">{taskId}</span>
+							<span class="font-mono {statusVisual.text} shrink-0 text-[10px] font-semibold">{taskId}</span>
 						{/if}
-						<span class="truncate font-semibold {statusConfig.color}">
+						<span class="truncate font-semibold {statusVisual.text}">
 							{textWithoutTaskId}
 						</span>
 					</div>
@@ -787,7 +788,7 @@
 							{@const isClickable = taskId !== null}
 							{@const previewText = activity.preview || activity.content || activity.type}
 							{@const textWithoutTaskId = taskId ? previewText.replace(/\[.*?\]\s*/, '') : previewText}
-							{@const statusConfig = getActivityStatusConfig(activity.status || 'open')}
+							{@const statusVisual = getTaskStatusVisual(activity.status || 'open')}
 						<div
 							class="text-xs text-base-content/60 flex items-start gap-1.5 rounded px-1 py-0.5 {isClickable ? 'hover:bg-primary/10 cursor-pointer' : 'hover:bg-base-300 cursor-help'}"
 								title={activity.content || activity.preview}
@@ -798,21 +799,23 @@
 								<span class="text-base-content/40 shrink-0 font-mono text-[10px]">
 									{new Date(activity.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
 								</span>
-								{#if statusConfig.iconType === 'svg'}
-								{#if statusConfig.iconStyle === 'solid'}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusConfig.color} {activity.status === 'in_progress' ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
-										<path d={statusConfig.icon} />
+								{#if activity.status === 'in_progress'}
+									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text} animate-spin" viewBox="0 0 24 24" fill="currentColor" title={statusVisual.description}>
+										<path d={STATUS_ICONS.gear} />
+									</svg>
+								{:else if activity.status === 'closed'}
+									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
+										<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.check} />
+									</svg>
+								{:else if activity.status === 'blocked'}
+									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
+										<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.warning} />
 									</svg>
 								{:else}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusConfig.color} {activity.status === 'in_progress' ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusConfig.description}>
-										<path stroke-linecap="round" stroke-linejoin="round" d={statusConfig.icon} />
+									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
+										<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.clock} />
 									</svg>
 								{/if}
-							{:else}
-								<span class="shrink-0 text-xs -mt-0.5 {statusConfig.color}" title={statusConfig.description}>
-									{statusConfig.icon}
-								</span>
-							{/if}
 								{#if taskId}
 									<span class="font-mono text-info shrink-0 text-[10px]">{taskId}</span>
 								{/if}

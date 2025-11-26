@@ -7,7 +7,7 @@
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getAgeColorClass } from '$lib/utils/dateFormatters';
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
-	import { getActivityStatusConfig } from '$lib/config/activityStatusConfig';
+	import { getTaskStatusVisual, STATUS_ICONS } from '$lib/config/statusColors';
 	import { isAgentWorking as checkAgentWorking } from '$lib/utils/agentStatusUtils';
 	import {
 		bulkApiOperation,
@@ -842,11 +842,10 @@
 									</td>
 									<td class="whitespace-nowrap">
 										{#if task.status === 'in_progress' && task.assignee}
-											<!-- In progress: show assignee with spinning gear (task IS being worked on) -->
-											{@const statusConfig = getActivityStatusConfig('in_progress')}
+											<!-- In progress: show assignee with spinning gear -->
 											<span class="flex items-center gap-1.5">
-												<svg class="shrink-0 w-4 h-4 text-info animate-spin origin-center" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
-													<path d={statusConfig.icon} />
+												<svg class="shrink-0 w-4 h-4 text-info animate-spin origin-center" viewBox="0 0 24 24" fill="currentColor" title="Currently in progress">
+													<path d={STATUS_ICONS.gear} />
 												</svg>
 												<span class="text-sm font-medium text-info">{task.assignee}</span>
 											</span>

@@ -2,6 +2,7 @@
  * Sparkline API Endpoint with Caching
  *
  * GET /api/agents/sparkline?range=24h&agent=AgentName&session=sessionId
+ * GET /api/agents/sparkline?range=24h&multiProject=true
  *
  * Returns time-series token usage data for sparkline visualization.
  *
@@ -10,8 +11,9 @@
  * - agent: Agent name filter (optional)
  * - session: Session ID filter (optional)
  * - bucketSize: Time bucket size (30min | hour | session) - defaults to 30min
+ * - multiProject: Return multi-project data with per-project breakdown (optional, boolean)
  *
- * Response Format:
+ * Response Format (single project / default):
  * {
  *   data: [{ timestamp, tokens, cost, breakdown }, ...],
  *   totalTokens: number,
@@ -24,15 +26,30 @@
  *   cacheAge: number
  * }
  *
+ * Response Format (multiProject=true):
+ * {
+ *   data: [{ timestamp, totalTokens, totalCost, projects: [{ project, tokens, cost, color }] }, ...],
+ *   totalTokens: number,
+ *   totalCost: number,
+ *   bucketCount: number,
+ *   bucketSize: string,
+ *   startTime: string,
+ *   endTime: string,
+ *   projectKeys: string[],
+ *   projectColors: Record<string, string>,
+ *   cached: boolean,
+ *   cacheAge: number
+ * }
+ *
  * Caching:
  * - 30-second TTL per unique query combination
  * - In-memory Map-based cache
- * - Cache key: `${range}-${agent}-${session}-${bucketSize}`
+ * - Cache key: `${range}-${agent}-${session}-${bucketSize}-${multiProject}`
  * - Performance: <5ms (cache hit), <100ms (cache miss)
  */
 
 import { json } from '@sveltejs/kit';
-import { getTokenTimeSeries } from '$lib/utils/tokenUsageTimeSeries.js';
+import { getTokenTimeSeries, getMultiProjectTimeSeries } from '$lib/utils/tokenUsageTimeSeries.js';
 
 // ============================================================================
 // In-Memory Cache
@@ -101,11 +118,12 @@ function setCache(key, data) {
  * @param {string} [params.agent] - Agent name
  * @param {string} [params.session] - Session ID
  * @param {string} [params.bucketSize] - Bucket size
+ * @param {boolean} [params.multiProject] - Multi-project mode
  * @returns {string} Cache key
  */
 function getCacheKey(params) {
-	const { range = '24h', agent = '', session = '', bucketSize = '30min' } = params;
-	return `${range}-${agent}-${session}-${bucketSize}`;
+	const { range = '24h', agent = '', session = '', bucketSize = '30min', multiProject = false } = params;
+	return `${range}-${agent}-${session}-${bucketSize}-${multiProject}`;
 }
 
 // ============================================================================
@@ -120,6 +138,7 @@ export async function GET({ url }) {
 		const agentName = url.searchParams.get('agent') || undefined;
 		const sessionId = url.searchParams.get('session') || undefined;
 		const bucketSize = url.searchParams.get('bucketSize') || '30min';
+		const multiProject = url.searchParams.get('multiProject') === 'true';
 
 		// Validate parameters
 		if (!['24h', '7d', 'all'].includes(range)) {
@@ -145,7 +164,7 @@ export async function GET({ url }) {
 		}
 
 		// Generate cache key
-		const cacheKey = getCacheKey({ range, agent: agentName, session: sessionId, bucketSize });
+		const cacheKey = getCacheKey({ range, agent: agentName, session: sessionId, bucketSize, multiProject });
 
 		// Check cache
 		const cached = getCached(cacheKey);
@@ -164,20 +183,31 @@ export async function GET({ url }) {
 		// Fetch data (cache miss)
 		const startTime = Date.now();
 
-		// Get project path (dashboard runs from /dashboard subdirectory)
-		const projectPath = process.cwd().replace(/\/dashboard$/, '');
+		let result;
 
-		const result = await getTokenTimeSeries({
-			range,
-			agentName,
-			sessionId,
-			bucketSize,
-			projectPath
-		});
+		if (multiProject) {
+			// Multi-project mode: aggregate across all projects from jat config
+			result = await getMultiProjectTimeSeries({
+				range,
+				bucketSize
+			});
+		} else {
+			// Single-project mode: use existing logic
+			// Get project path (dashboard runs from /dashboard subdirectory)
+			const projectPath = process.cwd().replace(/\/dashboard$/, '');
+
+			result = await getTokenTimeSeries({
+				range,
+				agentName,
+				sessionId,
+				bucketSize,
+				projectPath
+			});
+		}
 
 		const fetchDuration = Date.now() - startTime;
 		console.log(
-			`[Sparkline API] Fetched ${result.bucketCount} buckets in ${fetchDuration}ms (${result.totalTokens.toLocaleString()} tokens)`
+			`[Sparkline API] Fetched ${result.bucketCount} buckets in ${fetchDuration}ms (${result.totalTokens.toLocaleString()} tokens)${multiProject ? ' [multi-project]' : ''}`
 		);
 
 		// Cache the result
