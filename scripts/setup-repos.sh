@@ -2,7 +2,7 @@
 
 # Per-Repository Setup
 # - Initialize Beads (bd init) in each project
-# - Create/update project CLAUDE.md with template
+# - Add jat shared documentation imports to project CLAUDE.md
 
 set -e
 
@@ -13,7 +13,19 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BLUE}Setting up repositories for agent tools...${NC}"
+# The imports to add to each project's CLAUDE.md
+JAT_IMPORTS='@~/code/jat/shared/overview.md
+@~/code/jat/shared/agent-mail.md
+@~/code/jat/shared/bash-patterns.md
+@~/code/jat/shared/beads.md
+@~/code/jat/shared/tools.md
+@~/code/jat/shared/workflow-commands.md
+@~/code/jat/shared/statusline.md'
+
+# Marker to detect if imports are already present
+JAT_MARKER="@~/code/jat/shared/overview.md"
+
+echo -e "${BLUE}Setting up repositories for jat (Jomarchy Agent Tools)...${NC}"
 echo ""
 
 # Check if bd command is available
@@ -38,7 +50,7 @@ echo ""
 
 REPOS_FOUND=0
 BEADS_INITIALIZED=0
-CLAUDE_MD_CREATED=0
+IMPORTS_ADDED=0
 SKIPPED=0
 
 for repo_dir in "$CODE_DIR"/*; do
@@ -48,6 +60,15 @@ for repo_dir in "$CODE_DIR"/*; do
     fi
 
     REPO_NAME=$(basename "$repo_dir")
+
+    # Skip jat itself (it has its own CLAUDE.md structure)
+    if [ "$REPO_NAME" = "jat" ] || [ "$REPO_NAME" = "jomarchy-agent-tools" ]; then
+        echo -e "${BLUE}→ ${REPO_NAME}${NC}"
+        echo -e "  ${YELLOW}⊘ Skipping jat repo (has its own structure)${NC}"
+        echo ""
+        continue
+    fi
+
     echo -e "${BLUE}→ ${REPO_NAME}${NC}"
 
     # Check if it's a git repository
@@ -66,7 +87,6 @@ for repo_dir in "$CODE_DIR"/*; do
         cd "$repo_dir"
 
         # Run bd init non-interactively
-        # Answer prompts: yes to git hooks, yes to merge driver
         echo -e "Y\nY\n" | bd init > /dev/null 2>&1 || {
             echo -e "  ${YELLOW}⚠ Beads init failed (may already be partially initialized)${NC}"
         }
@@ -79,90 +99,66 @@ for repo_dir in "$CODE_DIR"/*; do
         echo -e "  ${GREEN}✓${NC} Beads already initialized"
     fi
 
-    # Create/update CLAUDE.md
+    # Handle CLAUDE.md
     CLAUDE_MD="$repo_dir/CLAUDE.md"
 
     if [ ! -f "$CLAUDE_MD" ]; then
-        # Copy template
-        # Try jat first, then fall back to jomarchy
-        if [ -f "$HOME/code/jat/templates/project-claude.md" ]; then
-            TEMPLATE="$HOME/code/jat/templates/project-claude.md"
-        elif [ -f "$HOME/code/jomarchy/scripts/templates/project-claude.md" ]; then
-            TEMPLATE="$HOME/code/jomarchy/scripts/templates/project-claude.md"
-        else
-            TEMPLATE=""
-        fi
-        if [ -f "$TEMPLATE" ]; then
-            cp "$TEMPLATE" "$CLAUDE_MD"
-
-            # Update date in template
-            CURRENT_DATE=$(date +"%B %d, %Y")
-            sed -i "s/\[Date\]/$CURRENT_DATE/" "$CLAUDE_MD"
-
-            echo -e "  ${GREEN}✓ Created CLAUDE.md from template${NC}"
-            ((CLAUDE_MD_CREATED++))
-        else
-            echo -e "  ${YELLOW}⚠ Template not found, creating minimal CLAUDE.md${NC}"
-            cat > "$CLAUDE_MD" << EOF
+        # Create new CLAUDE.md with imports
+        echo "  → Creating CLAUDE.md with jat imports..."
+        cat > "$CLAUDE_MD" << EOF
 # $REPO_NAME
 
-## Agent Tools Configuration
+$JAT_IMPORTS
 
-**Global instructions:** See \`~/.claude/CLAUDE.md\` for Agent Mail, Beads, and bash tools documentation.
+## Project Overview
 
-**This project uses:**
-- ✅ Beads task planning (\`.beads/\` directory)
-- ✅ Agent Mail coordination (project key: \`$repo_dir\`)
-- ✅ 28 generic bash tools available globally
+[Add project-specific documentation here]
 
-**Quick start for AI assistants:**
+## Quick Start
+
 \`\`\`bash
-# See tasks ready to work
+# Start working (registers agent + picks task)
+/agent:start
+
+# See available tasks
 bd ready
-
-# Register with Agent Mail
-am-register --program claude-code --model sonnet-4.5
-
-# Reserve files before editing
-am-reserve "src/**" --agent AgentName --ttl 3600 --reason "bd-123"
 \`\`\`
 EOF
-            ((CLAUDE_MD_CREATED++))
-        fi
+        echo -e "  ${GREEN}✓ Created CLAUDE.md with jat imports${NC}"
+        ((IMPORTS_ADDED++))
     else
-        # Check if it has our marker
-        if ! grep -q "## Agent Tools Configuration" "$CLAUDE_MD"; then
-            echo "  → Appending agent tools section to CLAUDE.md..."
-
-            cat >> "$CLAUDE_MD" << EOF
-
----
-
-## Agent Tools Configuration
-
-**Global instructions:** See \`~/.claude/CLAUDE.md\` for Agent Mail, Beads, and bash tools documentation.
-
-**This project uses:**
-- ✅ Beads task planning (\`.beads/\` directory)
-- ✅ Agent Mail coordination (project key: \`$repo_dir\`)
-- ✅ 28 generic bash tools available globally
-
-**Quick start for AI assistants:**
-\`\`\`bash
-# See tasks ready to work
-bd ready
-
-# Register with Agent Mail
-am-register --program claude-code --model sonnet-4.5
-
-# Reserve files before editing
-am-reserve "src/**" --agent AgentName --ttl 3600 --reason "bd-123"
-\`\`\`
-EOF
-            echo -e "  ${GREEN}✓ Updated CLAUDE.md with agent tools section${NC}"
-            ((CLAUDE_MD_CREATED++))
+        # Check if imports are already present
+        if grep -q "$JAT_MARKER" "$CLAUDE_MD"; then
+            echo -e "  ${GREEN}✓${NC} CLAUDE.md already has jat imports"
         else
-            echo -e "  ${GREEN}✓${NC} CLAUDE.md already configured"
+            # Add imports at the top (after title if present)
+            echo "  → Adding jat imports to CLAUDE.md..."
+
+            # Read first line to check for title
+            FIRST_LINE=$(head -1 "$CLAUDE_MD")
+
+            if [[ "$FIRST_LINE" == "#"* ]]; then
+                # Has title, insert imports after first line
+                {
+                    head -1 "$CLAUDE_MD"
+                    echo ""
+                    echo "$JAT_IMPORTS"
+                    echo ""
+                    tail -n +2 "$CLAUDE_MD"
+                } > "$CLAUDE_MD.tmp"
+                mv "$CLAUDE_MD.tmp" "$CLAUDE_MD"
+            else
+                # No title, insert imports at top
+                {
+                    echo "$JAT_IMPORTS"
+                    echo ""
+                    cat "$CLAUDE_MD"
+                } > "$CLAUDE_MD.tmp"
+                mv "$CLAUDE_MD.tmp" "$CLAUDE_MD"
+            fi
+
+            echo -e "  ${GREEN}✓ Added jat imports to CLAUDE.md${NC}"
+            ((IMPORTS_ADDED++))
         fi
     fi
 
@@ -175,7 +171,7 @@ echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo "  Total repos found: $REPOS_FOUND"
 echo "  Beads initialized: $BEADS_INITIALIZED"
-echo "  CLAUDE.md created/updated: $CLAUDE_MD_CREATED"
+echo "  jat imports added: $IMPORTS_ADDED"
 echo "  Skipped (not git repos): $SKIPPED"
 echo ""
 
@@ -183,11 +179,19 @@ if [ $REPOS_FOUND -eq 0 ]; then
     echo -e "${YELLOW}  ⚠ No repositories found in ~/code/${NC}"
     echo "  Clone some projects to ~/code/ to get started"
 else
-    echo "  All repositories are now configured for AI-assisted development!"
+    echo "  All repositories now have jat multi-agent tooling!"
+    echo ""
+    echo "  Each project's CLAUDE.md imports:"
+    echo "    @~/code/jat/shared/overview.md      # System overview"
+    echo "    @~/code/jat/shared/agent-mail.md    # Agent Mail docs"
+    echo "    @~/code/jat/shared/bash-patterns.md # Bash patterns"
+    echo "    @~/code/jat/shared/beads.md         # Beads task planning"
+    echo "    @~/code/jat/shared/tools.md         # 33 bash tools"
+    echo "    @~/code/jat/shared/workflow-commands.md # /agent:* commands"
+    echo "    @~/code/jat/shared/statusline.md    # Statusline docs"
     echo ""
     echo "  Test in any project:"
     echo "    cd ~/code/<project>"
-    echo "    bd ready                    # See tasks"
-    echo "    am-register --program claude-code"
+    echo "    /agent:start                # Register + start work"
     echo ""
 fi
