@@ -41,6 +41,22 @@
 		cost: number;
 	}
 
+	/** Per-project token data from multi-project API */
+	interface ProjectTokenData {
+		project: string;
+		tokens: number;
+		cost: number;
+		color: string;
+	}
+
+	/** Multi-project time-series data point from API */
+	interface MultiProjectDataPoint {
+		timestamp: string;
+		totalTokens: number;
+		totalCost: number;
+		projects: ProjectTokenData[];
+	}
+
 	interface Props {
 		projects?: string[];
 		selectedProject?: string;
@@ -56,6 +72,10 @@
 		tokensToday?: number;
 		costToday?: number;
 		sparklineData?: DataPoint[];
+		/** Multi-project sparkline data (from ?multiProject=true API) */
+		multiProjectData?: MultiProjectDataPoint[];
+		/** Project colors map (from API response) */
+		projectColors?: Record<string, string>;
 	}
 
 	let {
@@ -72,7 +92,9 @@
 		activeAgents = [],
 		tokensToday = 0,
 		costToday = 0,
-		sparklineData = []
+		sparklineData = [],
+		multiProjectData,
+		projectColors = {}
 	}: Props = $props();
 </script>
 
@@ -153,6 +175,8 @@
 				{tokensToday}
 				{costToday}
 				{sparklineData}
+				{multiProjectData}
+				{projectColors}
 				compact={true}
 			/>
 		</div>

@@ -31,6 +31,22 @@
 	let costToday = $state(0);
 	let sparklineData = $state<Array<{ timestamp: string; tokens: number; cost: number }>>([]);
 
+	// Multi-project sparkline state
+	interface ProjectTokenData {
+		project: string;
+		tokens: number;
+		cost: number;
+		color: string;
+	}
+	interface MultiProjectDataPoint {
+		timestamp: string;
+		totalTokens: number;
+		totalCost: number;
+		projects: ProjectTokenData[];
+	}
+	let multiProjectData = $state<MultiProjectDataPoint[]>([]);
+	let projectColors = $state<Record<string, string>>({});
+
 	// Derived project data
 	const projects = $derived(getProjectsFromTasks(allTasks));
 	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
@@ -112,22 +128,40 @@
 		}
 	}
 
-	// Fetch sparkline data for TopBar
+	// Fetch sparkline data for TopBar (multi-project mode)
 	async function loadSparklineData() {
 		try {
-			const response = await fetch('/api/agents/sparkline?range=24h');
+			const response = await fetch('/api/agents/sparkline?range=24h&multiProject=true');
 			const result = await response.json();
 
 			if (result.error) {
 				console.error('Sparkline API error:', result.error);
 				sparklineData = [];
+				multiProjectData = [];
+				projectColors = {};
 				return;
 			}
 
-			sparklineData = result.data || [];
+			// Multi-project response
+			multiProjectData = result.data || [];
+			projectColors = result.projectColors || {};
+
+			// Update total tokens/cost from multi-project data
+			tokensToday = result.totalTokens || 0;
+			costToday = result.totalCost || 0;
+
+			// Also create single-series sparkline for backward compatibility
+			// (in case any component needs it)
+			sparklineData = (result.data || []).map((point: MultiProjectDataPoint) => ({
+				timestamp: point.timestamp,
+				tokens: point.totalTokens,
+				cost: point.totalCost
+			}));
 		} catch (error) {
 			console.error('Failed to fetch sparkline data:', error);
 			sparklineData = [];
+			multiProjectData = [];
+			projectColors = {};
 		}
 	}
 
@@ -198,6 +232,8 @@
 			{tokensToday}
 			{costToday}
 			{sparklineData}
+			{multiProjectData}
+			{projectColors}
 		/>
 
 		<!-- Page content -->
