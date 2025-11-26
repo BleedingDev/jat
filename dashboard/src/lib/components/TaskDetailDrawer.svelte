@@ -16,6 +16,8 @@
 	import { tick, onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { formatDate } from '$lib/utils/dateFormatters';
+	import InlineEdit from '$lib/components/InlineEdit.svelte';
+	import InlineSelect from '$lib/components/InlineSelect.svelte';
 
 	// Props
 	let { taskId = $bindable(null), mode = $bindable('view'), isOpen = $bindable(false) } = $props();
@@ -799,55 +801,141 @@
 				{:else if task && mode === 'view'}
 					<!-- View Mode -->
 					<div class="flex flex-col gap-6 h-full">
-						<!-- Title -->
+						<!-- Title (Inline Editable) -->
 						<div>
-							<h3 class="text-xl font-bold text-base-content mb-3">{task.title}</h3>
+							<InlineEdit
+								value={task.title || ''}
+								onSave={async (newValue) => {
+									await autoSave('title', newValue);
+								}}
+								type="text"
+								placeholder="Enter task title..."
+								disabled={isSaving}
+								class="text-xl font-bold"
+							/>
 						</div>
 
 						<!-- Badges (left) + Metadata (right) -->
 						<div class="flex items-start justify-between gap-4">
-							<!-- Badges -->
-							<div class="flex flex-wrap gap-2">
-								<div class="badge {statusColors[task.status] || 'badge-ghost'}">
-									{task.status || 'unknown'}
-								</div>
-								<div class="badge {priorityColors[task.priority] || 'badge-ghost'}">
-									P{task.priority ?? '?'}
-								</div>
-								<div class="badge badge-outline">{task.type || 'task'}</div>
-								{#if task.project}
-									<div class="badge badge-primary">{task.project}</div>
-								{/if}
+							<!-- Badges (Inline Editable) -->
+							<div class="flex flex-wrap gap-2 items-center">
+								<!-- Status -->
+								<InlineSelect
+									value={task.status || 'open'}
+									options={statusOptions}
+									onSave={async (newValue) => {
+										await autoSave('status', newValue);
+									}}
+									disabled={isSaving}
+								>
+									<div class="badge {statusColors[task.status] || 'badge-ghost'}">
+										{task.status || 'unknown'}
+									</div>
+								</InlineSelect>
+
+								<!-- Priority -->
+								<InlineSelect
+									value={String(task.priority ?? 1)}
+									options={priorityOptions.map(o => ({ value: String(o.value), label: o.label }))}
+									onSave={async (newValue) => {
+										await autoSave('priority', parseInt(newValue, 10));
+									}}
+									disabled={isSaving}
+								>
+									<div class="badge {priorityColors[task.priority] || 'badge-ghost'}">
+										P{task.priority ?? '?'}
+									</div>
+								</InlineSelect>
+
+								<!-- Type -->
+								<InlineSelect
+									value={task.type || 'task'}
+									options={typeOptions}
+									onSave={async (newValue) => {
+										await autoSave('type', newValue);
+									}}
+									disabled={isSaving}
+								>
+									<div class="badge badge-outline">{task.type || 'task'}</div>
+								</InlineSelect>
+
+								<!-- Project -->
+								<InlineSelect
+									value={task.project || ''}
+									options={[{ value: '', label: 'No project' }, ...projectOptions.map(p => ({ value: p, label: p }))]}
+									onSave={async (newValue) => {
+										await autoSave('project', newValue);
+									}}
+									disabled={isSaving}
+								>
+									{#if task.project}
+										<div class="badge badge-primary">{task.project}</div>
+									{:else}
+										<div class="badge badge-ghost badge-outline">No project</div>
+									{/if}
+								</InlineSelect>
 							</div>
 							<!-- Metadata (compact, right-aligned) -->
 							<div class="text-xs text-base-content/60 text-right shrink-0">
 								<div><span class="text-base-content/40">Created:</span> {formatDate(task.created_at)}</div>
 								<div><span class="text-base-content/40">Updated:</span> {formatDate(task.updated_at)}</div>
-								{#if task.assignee}
-									<div><span class="text-base-content/40">Assignee:</span> {task.assignee}</div>
-								{/if}
+								<div class="flex items-center justify-end gap-1">
+									<span class="text-base-content/40">Assignee:</span>
+									<InlineEdit
+										value={task.assignee || ''}
+										onSave={async (newValue) => {
+											await autoSave('assignee', newValue);
+										}}
+										type="text"
+										placeholder="Unassigned"
+										disabled={isSaving}
+										class="text-xs"
+									/>
+								</div>
 							</div>
 						</div>
 
-						<!-- Labels -->
-						{#if task.labels && task.labels.length > 0}
-							<div>
-								<h4 class="text-sm font-semibold mb-2 text-base-content/70">Labels</h4>
-								<div class="flex flex-wrap gap-2">
+						<!-- Labels (Inline Editable) -->
+						<div>
+							<h4 class="text-sm font-semibold mb-2 text-base-content/70">Labels</h4>
+							<InlineEdit
+								value={task.labels ? task.labels.join(', ') : ''}
+								onSave={async (newValue) => {
+									const labelsArray = newValue
+										.split(',')
+										.map((l) => l.trim())
+										.filter((l) => l.length > 0);
+									await autoSave('labels', labelsArray);
+								}}
+								type="text"
+								placeholder="Add labels (comma-separated)..."
+								disabled={isSaving}
+								class="text-sm"
+							/>
+							{#if task.labels && task.labels.length > 0}
+								<div class="flex flex-wrap gap-2 mt-2">
 									{#each task.labels as label}
 										<span class="badge badge-sm badge-outline">{label}</span>
 									{/each}
 								</div>
-							</div>
-						{/if}
+							{/if}
+						</div>
 
-						<!-- Description -->
-						{#if task.description}
-							<div>
-								<h4 class="text-sm font-semibold mb-2 text-base-content/70">Description</h4>
-								<p class="text-sm whitespace-pre-wrap text-base-content">{task.description}</p>
-							</div>
-						{/if}
+						<!-- Description (Inline Editable) -->
+						<div>
+							<h4 class="text-sm font-semibold mb-2 text-base-content/70">Description</h4>
+							<InlineEdit
+								value={task.description || ''}
+								onSave={async (newValue) => {
+									await autoSave('description', newValue);
+								}}
+								type="textarea"
+								placeholder="No description"
+								disabled={isSaving}
+								rows={4}
+								class="text-sm"
+							/>
+						</div>
 
 						<!-- Dependencies -->
 						{#if task.depends_on && task.depends_on.length > 0}
