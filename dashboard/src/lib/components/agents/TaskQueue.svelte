@@ -8,6 +8,7 @@
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { getPriorityBadge } from '$lib/utils/badgeHelpers';
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
+	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import type { Task, Agent, Reservation } from '$lib/stores/agents.svelte';
 
 	// Types
@@ -272,7 +273,7 @@
 			<!-- Priority Filter -->
 			<div class="form-control">
 				<label class="label py-1">
-					<span class="label-text text-xs">Priority ({selectedPriorities.size} selected)</span>
+					<span class="label-text text-xs flex items-center gap-0.5">Priority (<AnimatedDigits value={selectedPriorities.size.toString()} /> selected)</span>
 				</label>
 				<div class="p-2 bg-base-200 rounded-lg">
 					<FilterDropdown
@@ -288,7 +289,7 @@
 			<!-- Status Filter -->
 			<div class="form-control">
 				<label class="label py-1">
-					<span class="label-text text-xs">Status ({selectedStatuses.size} selected)</span>
+					<span class="label-text text-xs flex items-center gap-0.5">Status (<AnimatedDigits value={selectedStatuses.size.toString()} /> selected)</span>
 				</label>
 				<div class="p-2 bg-base-200 rounded-lg">
 					<FilterDropdown
@@ -305,7 +306,7 @@
 			{#if typeOptions.length > 0}
 				<div class="form-control">
 					<label class="label py-1">
-						<span class="label-text text-xs">Type ({selectedTypes.size > 0 ? selectedTypes.size : 'all'} selected)</span>
+						<span class="label-text text-xs flex items-center gap-0.5">Type (<AnimatedDigits value={selectedTypes.size > 0 ? selectedTypes.size.toString() : 'all'} /> selected)</span>
 					</label>
 					<div class="p-2 bg-base-200 rounded-lg">
 						<FilterDropdown
@@ -323,7 +324,7 @@
 			{#if labelOptions.length > 0}
 				<div class="form-control">
 					<label class="label py-1">
-						<span class="label-text text-xs">Labels ({selectedLabels.size} selected)</span>
+						<span class="label-text text-xs flex items-center gap-0.5">Labels (<AnimatedDigits value={selectedLabels.size.toString()} /> selected)</span>
 					</label>
 					<div class="p-2 bg-base-200 rounded-lg max-h-40 overflow-y-auto">
 						<FilterDropdown

@@ -3,12 +3,14 @@
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
 	import { getTaskStatusVisual, STATUS_ICONS } from '$lib/config/statusColors';
+	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import TokenUsageDisplay from '$lib/components/TokenUsageDisplay.svelte';
 	import { getAgentStatusBadge, getAgentStatusIcon, getAgentStatusVisual } from '$lib/utils/badgeHelpers';
 	import { formatLastActivity } from '$lib/utils/dateFormatters';
 	import { computeAgentStatus } from '$lib/utils/agentStatusUtils';
 	import { createModalState } from '$lib/utils/modalStateHelpers.svelte';
+	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import type { Agent, Task, Reservation } from '$lib/stores/agents.svelte';
 
 	// Extended types for inbox messages
@@ -768,7 +770,7 @@
 </script>
 
 <div
-	class="card bg-base-100 border-2 transition-all relative h-full flex flex-col {isDragOver && hasConflict ? 'border-error border-dashed bg-error/10 scale-105' : isDragOver ? 'border-success border-dashed bg-success/10 scale-105' : assignSuccess ? 'border-success bg-success/5 animate-pulse' : isHistoricalView ? 'border-info/30 border-dashed' : 'border-base-300 hover:border-primary'} {isAssigning || assignSuccess ? 'pointer-events-none' : ''} {agentStatus() === 'offline' && !isHistoricalView ? 'opacity-60 grayscale-[30%] hover:opacity-90 hover:grayscale-[5%]' : ''} {isHistoricalView && !wasActiveInRange() ? 'opacity-40 grayscale-[50%]' : ''}"
+	class="card border-2 transition-all relative h-full flex flex-col {isDragOver && hasConflict ? 'border-error border-dashed bg-error/10 scale-105' : isDragOver ? 'border-success border-dashed bg-success/10 scale-105' : assignSuccess ? 'border-success bg-success/5 animate-pulse' : isHistoricalView ? 'border-info/30 border-dashed bg-base-100' : agentStatus() === 'working' && currentTask() ? 'border-info bg-info/10 hover:border-primary' : 'border-base-300 hover:border-primary bg-base-100'} {isAssigning || assignSuccess ? 'pointer-events-none' : ''} {agentStatus() === 'offline' && !isHistoricalView ? 'opacity-60 grayscale-[30%] hover:opacity-90 hover:grayscale-[5%]' : ''} {isHistoricalView && !wasActiveInRange() ? 'opacity-40 grayscale-[50%]' : ''}"
 	role="button"
 	tabindex="0"
 	ondrop={handleDrop}
@@ -804,45 +806,59 @@
 
 	<div class="card-body p-4 flex-1 flex flex-col overflow-hidden">
 		<!-- Agent Header -->
-		<div class="flex items-start justify-between gap-2">
+		<div class="flex items-start justify-between gap-2 -mb-1">
 			<div class="flex-1 min-w-0">
 				<h3 class="font-semibold text-base text-base-content truncate" title={agent.name}>
 					{agent.name || 'Unknown Agent'}
 				</h3>
 			</div>
-			<button
-				class="badge badge-sm {statusVisual().badge} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'}"
-				onclick={handleBadgeClick}
-				disabled={agentStatus() !== 'offline'}
-				title={statusVisual().description}
-			>
-				{#if agentStatus() === 'working'}
-					<!-- Working: spinning gear SVG -->
-					<svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="currentColor">
-						<path d={STATUS_ICONS.gear} />
-					</svg>
-				{:else if agentStatus() === 'live'}
-					<!-- Live: DaisyUI loading dots (has built-in animation) -->
-					<span class="loading loading-dots loading-xs"></span>
-				{:else if agentStatus() === 'active'}
-					<!-- Active: pulsing dot -->
-					<span class="relative flex h-2 w-2">
-						<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
-						<span class="relative inline-flex rounded-full h-2 w-2 bg-current"></span>
-					</span>
-				{:else if agentStatus() === 'idle'}
-					<!-- Idle: empty circle -->
-					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<circle cx="12" cy="12" r="8" />
-					</svg>
-				{:else if agentStatus() === 'offline'}
-					<!-- Offline: power off symbol -->
-					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS['power-off']} />
-					</svg>
-				{/if}
-				<span class="ml-1">{statusVisual().label}</span>
-			</button>
+			{#if agentStatus() === 'working' && currentTask()}
+				<!-- Working with task: show TaskIdBadge instead of status badge -->
+				{@const taskProjectKey = currentTask().id.split('-')[0].toLowerCase()}
+				<TaskIdBadge
+					task={{ id: currentTask().id, status: currentTask().status, issue_type: currentTask().issue_type, title: currentTask().title }}
+					size="xs"
+					showType={false}
+					showStatus={true}
+					color={projectColors[taskProjectKey]}
+					onOpenTask={ontaskclick}
+					dropdownAlign="end"
+				/>
+			{:else}
+				<button
+					class="badge badge-sm {statusVisual().badge} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'}"
+					onclick={handleBadgeClick}
+					disabled={agentStatus() !== 'offline'}
+					title={statusVisual().description}
+				>
+					{#if agentStatus() === 'working'}
+						<!-- Working without task: spinning gear SVG -->
+						<svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="currentColor">
+							<path d={STATUS_ICONS.gear} />
+						</svg>
+					{:else if agentStatus() === 'live'}
+						<!-- Live: DaisyUI loading dots (has built-in animation) -->
+						<span class="loading loading-dots loading-xs"></span>
+					{:else if agentStatus() === 'active'}
+						<!-- Active: pulsing dot -->
+						<span class="relative flex h-2 w-2">
+							<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
+							<span class="relative inline-flex rounded-full h-2 w-2 bg-current"></span>
+						</span>
+					{:else if agentStatus() === 'idle'}
+						<!-- Idle: empty circle -->
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<circle cx="12" cy="12" r="8" />
+						</svg>
+					{:else if agentStatus() === 'offline'}
+						<!-- Offline: power off symbol -->
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS['power-off']} />
+						</svg>
+					{/if}
+					<span class="ml-1">{statusVisual().label}</span>
+				</button>
+			{/if}
 		</div>
 
 		<!-- Usage Trend Sparkline (full width, multi-project) -->
@@ -866,6 +882,8 @@
 					showTooltip={true}
 					showLegend={false}
 					showStyleToolbar={true}
+					disableAnimation={agentStatus() === 'offline'}
+					animationKey={agent.last_active_ts || ''}
 				/>
 				<!-- Compact project legend below sparkline -->
 				{#if activeProjects.length > 0}
@@ -892,6 +910,8 @@
 					showTooltip={true}
 					colorMode="usage"
 					showStyleToolbar={true}
+					disableAnimation={agentStatus() === 'offline'}
+					animationKey={agent.last_active_ts || ''}
 				/>
 			{/if}
 		</div>
@@ -1083,8 +1103,8 @@
 	-->
 	<!-- Queued Tasks / Drop Zone (Unified) -->
 		<div class="mb-3">
-			<div class="text-xs font-medium text-base-content/70 mb-1">
-				Queue ({queuedTasks().length}):
+			<div class="text-xs font-medium text-base-content/70 mb-1 flex items-center gap-0.5">
+				Queue (<AnimatedDigits value={queuedTasks().length.toString()} />):
 			</div>
 
 				<div class="space-y-1">
@@ -1116,8 +1136,8 @@
 						</div>
 					{/each}
 					{#if queuedTasks().length > 3}
-						<div class="text-xs text-base-content/50 text-center">
-							+{queuedTasks().length - 3} more
+						<div class="text-xs text-base-content/50 text-center flex items-center justify-center gap-0.5">
+							+<AnimatedDigits value={(queuedTasks().length - 3).toString()} /> more
 						</div>
 					{/if}
 				</div>
@@ -1193,8 +1213,8 @@
 					</div>
 				{/each}
 				{#if agentLocks().length > 2}
-					<div class="text-xs text-base-content/50 text-center">
-						+{agentLocks().length - 2} more
+					<div class="text-xs text-base-content/50 text-center flex items-center justify-center gap-0.5">
+						+<AnimatedDigits value={(agentLocks().length - 2).toString()} /> more
 					</div>
 				{/if}
 			</div>

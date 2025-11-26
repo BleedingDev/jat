@@ -19,6 +19,8 @@
 	import type { ClaudeUsageMetrics } from '$lib/utils/claudeUsageMetrics';
 	import { formatTokens, formatCost, getUsageColor } from '$lib/utils/numberFormat';
 	import Sparkline from './Sparkline.svelte';
+	import AnimatedDigits from './AnimatedDigits.svelte';
+	import AnimatedCost from './AnimatedCost.svelte';
 
 	// Props
 	let { mode = 'badge', agentsProp = null } = $props<{
@@ -199,26 +201,22 @@
 		metrics?.tier === 'max' ? 'badge-accent' : metrics?.tier === 'build' ? 'badge-primary' : 'badge-secondary'
 	);
 
-	// Summary badge text (e.g., "1138M $695 MAX")
-	const badgeSummary = $derived(() => {
-		// Format tokens without decimals
+	// Summary badge tokens (e.g., "1138M") - for AnimatedDigits
+	const badgeTokens = $derived(() => {
 		const tokensToday = systemStats().tokensToday;
-		let tokensStr = '0';
 		if (tokensToday >= 1_000_000) {
-			tokensStr = `${Math.round(tokensToday / 1_000_000)}M`;
+			return `${Math.round(tokensToday / 1_000_000)}M`;
 		} else if (tokensToday >= 1_000) {
-			tokensStr = `${Math.round(tokensToday / 1_000)}K`;
-		} else {
-			tokensStr = tokensToday.toString();
+			return `${Math.round(tokensToday / 1_000)}K`;
 		}
-
-		// Format cost without decimals
-		const costToday = systemStats().costToday;
-		const costStr = `$${Math.round(costToday)}`;
-
-		const tier = metrics?.tier?.toUpperCase() || 'FREE';
-		return `${tokensStr} ${costStr} ${tier}`;
+		return tokensToday.toString();
 	});
+
+	// Summary badge cost (raw number) - for AnimatedCost
+	const badgeCost = $derived(() => systemStats().costToday);
+
+	// Summary badge tier text
+	const badgeTier = $derived(() => metrics?.tier?.toUpperCase() || 'FREE');
 </script>
 
 {#if mode === 'badge'}
@@ -255,8 +253,10 @@
 			</svg>
 
 			<!-- Summary: Tokens Cost Tier -->
-			<span class="font-mono text-xs font-semibold">
-				{badgeSummary()}
+			<span class="font-mono text-xs font-semibold flex items-center gap-1">
+				<AnimatedDigits value={badgeTokens()} />
+				<AnimatedCost value={badgeCost()} format={(n) => `$${Math.round(n)}`} />
+				<span>{badgeTier()}</span>
 			</span>
 		</button>
 	{/if}
@@ -526,9 +526,7 @@
 								</svg>
 								<span class="text-sm">Tokens Today</span>
 							</div>
-							<span class="font-mono text-sm font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}">
-								{formatTokens(systemStats().tokensToday)}
-							</span>
+							<AnimatedDigits value={formatTokens(systemStats().tokensToday)} class="font-mono text-sm font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}" />
 						</div>
 
 						<div class="flex items-center justify-between">
@@ -549,9 +547,7 @@
 								</svg>
 								<span class="text-sm">Spend Today</span>
 							</div>
-							<span class="font-mono text-sm font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}">
-								{formatCost(systemStats().costToday)}
-							</span>
+							<AnimatedCost value={systemStats().costToday} format={formatCost} class="font-mono text-sm font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}" />
 						</div>
 
 						<div class="flex items-center justify-between">
@@ -572,9 +568,7 @@
 								</svg>
 								<span class="text-sm">Active Agents</span>
 							</div>
-							<span class="font-mono text-sm font-semibold text-primary">
-								{systemStats().activeAgents}
-							</span>
+							<AnimatedDigits value={systemStats().activeAgents.toString()} class="font-mono text-sm font-semibold text-primary" />
 						</div>
 
 						<!-- Token Usage Sparkline -->
@@ -607,8 +601,10 @@
 										<span class="font-medium">
 											{index + 1}. {consumer.name}
 										</span>
-										<span class="text-{getUsageColor(consumer.tokens, 'today')} font-mono text-xs">
-											{formatTokens(consumer.tokens)} · {formatCost(consumer.cost)}
+										<span class="text-{getUsageColor(consumer.tokens, 'today')} font-mono text-xs flex items-center gap-1">
+											<AnimatedDigits value={formatTokens(consumer.tokens)} />
+											<span>·</span>
+											<AnimatedCost value={consumer.cost} format={formatCost} />
 										</span>
 									</div>
 								{/each}
@@ -664,9 +660,7 @@
 					/>
 				</svg>
 				<span class="text-xs text-base-content/70">Tokens Today</span>
-				<span class="text-xs font-mono font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}">
-					{formatTokens(systemStats().tokensToday)}
-				</span>
+				<AnimatedDigits value={formatTokens(systemStats().tokensToday)} class="text-xs font-mono font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}" />
 			</div>
 
 			<!-- Spend Today -->
@@ -686,9 +680,7 @@
 					/>
 				</svg>
 				<span class="text-xs text-base-content/70">Spend Today</span>
-				<span class="text-xs font-mono font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}">
-					{formatCost(systemStats().costToday)}
-				</span>
+				<AnimatedCost value={systemStats().costToday} format={formatCost} class="text-xs font-mono font-semibold text-{getUsageColor(systemStats().tokensToday, 'today')}" />
 			</div>
 
 			<!-- Active Agents -->
@@ -708,9 +700,7 @@
 					/>
 				</svg>
 				<span class="text-xs text-base-content/70">Active Agents</span>
-				<span class="text-xs font-mono font-semibold text-primary">
-					{systemStats().activeAgents}
-				</span>
+				<AnimatedDigits value={systemStats().activeAgents.toString()} class="text-xs font-mono font-semibold text-primary" />
 			</div>
 		</div>
 
