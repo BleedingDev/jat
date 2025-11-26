@@ -1,10 +1,34 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "./.claude/statusline.sh --debug",
+    "command": "~/.claude/statusline.sh --debug",
     "padding": 1
   },
   "hooks": {
+    "PreCompact": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/pre-compact-save-agent.sh",
+            "statusMessage": "Saving agent identity..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/session-start-restore-agent.sh",
+            "statusMessage": "Restoring agent identity..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "^Bash$",
