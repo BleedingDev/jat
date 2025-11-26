@@ -681,7 +681,7 @@
 </script>
 
 <div
-	class="card bg-base-100 border-2 transition-all relative {isDragOver && hasConflict ? 'border-error border-dashed bg-error/10 scale-105' : isDragOver ? 'border-success border-dashed bg-success/10 scale-105' : assignSuccess ? 'border-success bg-success/5 animate-pulse' : 'border-base-300 hover:border-primary'} {isAssigning || assignSuccess ? 'pointer-events-none' : ''}"
+	class="card bg-base-100 border-2 transition-all relative h-full flex flex-col {isDragOver && hasConflict ? 'border-error border-dashed bg-error/10 scale-105' : isDragOver ? 'border-success border-dashed bg-success/10 scale-105' : assignSuccess ? 'border-success bg-success/5 animate-pulse' : 'border-base-300 hover:border-primary'} {isAssigning || assignSuccess ? 'pointer-events-none' : ''}"
 	role="button"
 	tabindex="0"
 	ondrop={handleDrop}
@@ -715,7 +715,7 @@
 		</div>
 	{/if}
 
-	<div class="card-body p-4">
+	<div class="card-body p-4 flex-1 flex flex-col overflow-hidden">
 		<!-- Agent Header -->
 		<div class="flex items-start justify-between gap-2">
 			<div class="flex-1 min-w-0">
@@ -777,7 +777,7 @@
 			{@const isActiveTask = firstActivity && firstActivity.status !== 'closed'}
 			{@const currentActivity = isActiveTask ? firstActivity : null}
 			{@const historyActivities = currentActivity ? agent.activities.slice(1) : agent.activities}
-			<div class="mb-3 bg-base-200 rounded px-2 py-1.5">
+			<div class="flex-1 min-h-0 mb-3 bg-base-200 rounded px-2 py-1.5 overflow-y-auto">
 				<!-- Current Activity -->
 				{#if currentActivity}
 					{@const taskId = extractTaskId(currentActivity.preview)}
