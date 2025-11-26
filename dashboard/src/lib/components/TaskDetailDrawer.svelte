@@ -17,6 +17,7 @@
 	import { formatDate, formatSavedTime, formatRelativeTimestamp } from '$lib/utils/dateFormatters';
 	import InlineEdit from '$lib/components/InlineEdit.svelte';
 	import InlineSelect from '$lib/components/InlineSelect.svelte';
+	import TaskDependencyGraph from '$lib/components/TaskDependencyGraph.svelte';
 
 	// Props
 	let { taskId = $bindable(null), isOpen = $bindable(false) } = $props();
@@ -52,6 +53,17 @@
 	let historyLoading = $state(false);
 	let historyError = $state<string | null>(null);
 
+	// Available tasks for dependencies (from same project)
+	interface AvailableTask {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+	}
+
+	let availableTasks = $state<AvailableTask[]>([]);
+	let availableTasksLoading = $state(false);
+	let showDependencyDropdown = $state(false);
 
 	// Auto-save state
 	let isSaving = $state(false);
@@ -146,8 +158,9 @@
 			task = data.task;
 			originalTask = { ...data.task };
 
-			// Fetch task history in parallel
+			// Fetch task history and available tasks in parallel
 			fetchTaskHistory(id);
+			fetchAvailableTasks(id);
 		} catch (err: any) {
 			error = err.message;
 			console.error('Error fetching task:', err);
@@ -175,6 +188,47 @@
 			console.error('Error fetching task history:', err);
 		} finally {
 			historyLoading = false;
+		}
+	}
+
+	// Fetch available tasks from same project for dependencies dropdown
+	async function fetchAvailableTasks(taskId: string) {
+		if (!taskId) return;
+
+		// Extract project from task ID (e.g., "jat-abc" -> "jat")
+		const project = taskId.split('-')[0];
+		if (!project) return;
+
+		availableTasksLoading = true;
+
+		try {
+			// Fetch open/in_progress tasks from same project
+			const response = await fetch(`/api/agents?full=true&project=${encodeURIComponent(project)}`);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch tasks: ${response.statusText}`);
+			}
+			const data = await response.json();
+
+			// Filter to open/in_progress tasks, excluding current task and existing dependencies
+			const currentDeps = task?.depends_on?.map((d: any) => d.id) || [];
+			availableTasks = (data.tasks || [])
+				.filter((t: any) =>
+					t.id !== taskId &&
+					!currentDeps.includes(t.id) &&
+					(t.status === 'open' || t.status === 'in_progress')
+				)
+				.map((t: any) => ({
+					id: t.id,
+					title: t.title,
+					status: t.status,
+					priority: t.priority
+				}))
+				.sort((a: AvailableTask, b: AvailableTask) => a.priority - b.priority);
+		} catch (err: any) {
+			console.error('Error fetching available tasks:', err);
+			availableTasks = [];
+		} finally {
+			availableTasksLoading = false;
 		}
 	}
 
@@ -275,6 +329,92 @@
 		}, 500);
 	}
 
+	// Add a dependency to the task
+	async function addDependency(depId: string) {
+		if (!task || !taskId || !depId) return;
+
+		isSaving = true;
+		isUpdatingFromServer = true;
+
+		try {
+			// Get current dependency IDs
+			const currentDeps = task.depends_on?.map((d: any) => d.id) || [];
+			const newDeps = [...currentDeps, depId];
+
+			// Update via API
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ dependencies: newDeps })
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to add dependency');
+			}
+
+			const data = await response.json();
+
+			// Update task with server response
+			task = data.task;
+			originalTask = { ...task };
+
+			// Refresh available tasks (to remove the one we just added)
+			fetchAvailableTasks(taskId);
+
+			// Hide dropdown
+			showDependencyDropdown = false;
+
+			showToast('success', `✓ Added dependency ${depId}`);
+		} catch (error: any) {
+			showToast('error', `✗ ${error.message}`);
+		} finally {
+			isSaving = false;
+			isUpdatingFromServer = false;
+		}
+	}
+
+	// Remove a dependency from the task
+	async function removeDependency(depId: string) {
+		if (!task || !taskId || !depId) return;
+
+		isSaving = true;
+		isUpdatingFromServer = true;
+
+		try {
+			// Get current dependency IDs and remove the specified one
+			const currentDeps = task.depends_on?.map((d: any) => d.id) || [];
+			const newDeps = currentDeps.filter((id: string) => id !== depId);
+
+			// Update via API
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ dependencies: newDeps })
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to remove dependency');
+			}
+
+			const data = await response.json();
+
+			// Update task with server response
+			task = data.task;
+			originalTask = { ...task };
+
+			// Refresh available tasks (to add the one we just removed)
+			fetchAvailableTasks(taskId);
+
+			showToast('success', `✓ Removed dependency ${depId}`);
+		} catch (error: any) {
+			showToast('error', `✗ ${error.message}`);
+		} finally {
+			isSaving = false;
+			isUpdatingFromServer = false;
+		}
+	}
 
 	// Delete task with confirmation
 	async function handleDelete() {
@@ -507,7 +647,7 @@
 
 							<!-- Priority (editable) -->
 							<InlineSelect
-								value={String(task.priority ?? 1)}
+								value={String(task.priority ?? 2)}
 								options={priorityOptions.map(o => ({ value: String(o.value), label: o.label }))}
 								onSave={async (newValue) => {
 									await autoSave('priority', parseInt(newValue, 10));
@@ -701,12 +841,68 @@
 						</div>
 
 						<!-- Dependencies -->
-						{#if task.depends_on && task.depends_on.length > 0}
-							<div>
-								<h4 class="text-sm font-semibold mb-2 text-base-content/70">Depends On</h4>
+						<div>
+							<div class="flex items-center justify-between mb-2">
+								<h4 class="text-sm font-semibold text-base-content/70">Depends On</h4>
+								<!-- Add dependency button -->
+								<div class="relative">
+									<button
+										class="btn btn-xs btn-ghost gap-1"
+										onclick={() => showDependencyDropdown = !showDependencyDropdown}
+										disabled={isSaving || availableTasksLoading}
+									>
+										{#if availableTasksLoading}
+											<span class="loading loading-spinner loading-xs"></span>
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+												<path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+											</svg>
+										{/if}
+										Add
+									</button>
+
+									<!-- Dropdown menu -->
+									{#if showDependencyDropdown}
+										<div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto">
+											{#if availableTasks.length === 0}
+												<div class="p-3 text-sm text-base-content/50 text-center">
+													No available tasks in this project
+												</div>
+											{:else}
+												<div class="py-1">
+													{#each availableTasks as availTask}
+														<button
+															class="w-full text-left px-3 py-2 hover:bg-base-200 flex items-center gap-2 text-sm"
+															onclick={() => addDependency(availTask.id)}
+															disabled={isSaving}
+														>
+															<span class="badge badge-xs {priorityColors[availTask.priority] || 'badge-ghost'}">
+																P{availTask.priority}
+															</span>
+															<span class="font-mono text-xs text-base-content/60">{availTask.id}</span>
+															<span class="flex-1 truncate">{availTask.title}</span>
+														</button>
+													{/each}
+												</div>
+											{/if}
+											<!-- Close button -->
+											<div class="border-t border-base-300 p-2">
+												<button
+													class="btn btn-xs btn-ghost w-full"
+													onclick={() => showDependencyDropdown = false}
+												>
+													Cancel
+												</button>
+											</div>
+										</div>
+									{/if}
+								</div>
+							</div>
+
+							{#if task.depends_on && task.depends_on.length > 0}
 								<div class="space-y-2">
 									{#each task.depends_on as dep}
-										<div class="flex items-center gap-2 text-sm p-2 bg-base-200 rounded">
+										<div class="flex items-center gap-2 text-sm p-2 bg-base-200 rounded group">
 											<span class="badge badge-sm {statusColors[dep.status] || 'badge-ghost'}">
 												{dep.status || 'unknown'}
 											</span>
@@ -714,12 +910,25 @@
 												P{dep.priority ?? '?'}
 											</span>
 											<span class="font-mono text-xs">{dep.id}</span>
-											<span class="flex-1">{dep.title || 'Untitled'}</span>
+											<span class="flex-1 truncate">{dep.title || 'Untitled'}</span>
+											<!-- Remove button -->
+											<button
+												class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-error hover:bg-error/10"
+												onclick={() => removeDependency(dep.id)}
+												disabled={isSaving}
+												title="Remove dependency"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+													<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+												</svg>
+											</button>
 										</div>
 									{/each}
 								</div>
-							</div>
-						{/if}
+							{:else}
+								<p class="text-sm text-base-content/50 italic px-2">No dependencies</p>
+							{/if}
+						</div>
 
 						<!-- Blocks (dependents) -->
 						{#if task.blocked_by && task.blocked_by.length > 0}
@@ -937,6 +1146,20 @@
 								</div>
 							{/if}
 						</div>
+
+						<!-- Dependency Graph Section -->
+						{#if task && ((task.depends_on && task.depends_on.length > 0) || (task.blocked_by && task.blocked_by.length > 0))}
+							<div class="border-t border-base-300 pt-4 mt-4">
+								<TaskDependencyGraph
+									{task}
+									onNodeClick={(nodeTaskId) => {
+										// Navigate to clicked task
+										taskId = nodeTaskId;
+									}}
+									height={220}
+								/>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
