@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
 	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
 	import LabelBadges from '$lib/components/LabelBadges.svelte';
@@ -10,7 +11,7 @@
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getAgeColorClass } from '$lib/utils/dateFormatters';
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
-	import { getTaskStatusVisual, STATUS_ICONS } from '$lib/config/statusColors';
+	import { getTaskStatusVisual, STATUS_ICONS, getIssueTypeVisual } from '$lib/config/statusColors';
 	import { isAgentWorking as checkAgentWorking } from '$lib/utils/agentStatusUtils';
 	import {
 		bulkApiOperation,
@@ -19,6 +20,7 @@
 		createPutRequest,
 		createDeleteRequest
 	} from '$lib/utils/bulkApiHelpers';
+	import { playNewTaskChime, playTaskExitSound, playTaskStartSound, playTaskCompleteSound } from '$lib/utils/soundEffects';
 
 	// Type definitions
 	interface Task {
@@ -56,6 +58,120 @@
 	}
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {} }: Props = $props();
+
+	// Track previously seen task IDs and statuses for animations
+	// Using regular variables (not $state) to avoid effect loops
+	let previousTaskIds: Set<string> = new Set();
+	let previousTasksMap: Map<string, Task> = new Map();
+	let previousStatusMap: Map<string, string> = new Map();
+	let isInitialLoad = true;
+	// Use arrays instead of Sets for better Svelte reactivity
+	let newTaskIds = $state<string[]>([]);
+	let exitingTasks = $state<Task[]>([]);
+	let startingTaskIds = $state<string[]>([]);
+	let completedTaskIds = $state<string[]>([]);
+
+	// Detect new, removed, and status-changed tasks when tasks array changes
+	// Using $effect.pre to set animation state BEFORE rendering
+	$effect.pre(() => {
+		const taskIds = tasks.map(t => t.id);
+		const currentIds = new Set(taskIds);
+
+		// Skip animation on initial load
+		if (isInitialLoad) {
+			previousTaskIds = currentIds;
+			previousTasksMap = new Map(tasks.map(t => [t.id, t]));
+			previousStatusMap = new Map(tasks.map(t => [t.id, t.status]));
+			isInitialLoad = false;
+			return;
+		}
+
+		// Find tasks that weren't in the previous set (new tasks)
+		const newIds = new Set<string>();
+		for (const id of currentIds) {
+			if (!previousTaskIds.has(id)) {
+				newIds.add(id);
+			}
+		}
+
+		// Find tasks that were removed
+		const removedTasks: Task[] = [];
+		for (const id of previousTaskIds) {
+			if (!currentIds.has(id)) {
+				const task = previousTasksMap.get(id);
+				if (task) {
+					removedTasks.push(task);
+				}
+			}
+		}
+
+		// Find tasks that changed status to in_progress (started working)
+		const startedIds: string[] = [];
+		for (const task of tasks) {
+			const prevStatus = previousStatusMap.get(task.id);
+			if (prevStatus && prevStatus !== 'in_progress' && task.status === 'in_progress') {
+				startedIds.push(task.id);
+			}
+		}
+
+		// Find tasks that changed status to closed (completed)
+		const closedIds: string[] = [];
+		for (const task of tasks) {
+			const prevStatus = previousStatusMap.get(task.id);
+			if (prevStatus && prevStatus !== 'closed' && task.status === 'closed') {
+				closedIds.push(task.id);
+			}
+		}
+
+		// Update tracking for next comparison
+		previousTaskIds = currentIds;
+		previousTasksMap = new Map(tasks.map(t => [t.id, t]));
+		previousStatusMap = new Map(tasks.map(t => [t.id, t.status]));
+
+		// If we found new tasks, trigger animation and sound
+		if (newIds.size > 0) {
+			newTaskIds = Array.from(newIds);
+			playNewTaskChime();
+
+			// Clear the new task highlight after animation completes
+			setTimeout(() => {
+				newTaskIds = [];
+			}, 1500);
+		}
+
+		// If tasks were removed, trigger exit animation and sound
+		if (removedTasks.length > 0) {
+			exitingTasks = removedTasks;
+			playTaskExitSound();
+
+			// Clear exiting tasks after animation completes
+			setTimeout(() => {
+				exitingTasks = [];
+			}, 600);
+		}
+
+		// If tasks started (status -> in_progress), play start sound
+		if (startedIds.length > 0) {
+			startingTaskIds = startedIds;
+			playTaskStartSound();
+
+			// Clear starting highlight after animation
+			setTimeout(() => {
+				startingTaskIds = [];
+			}, 1500);
+		}
+
+		// If tasks completed (status -> closed), play completion sound
+		if (closedIds.length > 0) {
+			completedTaskIds = closedIds;
+			playTaskCompleteSound();
+
+			// Clear completed highlight after animation
+			setTimeout(() => {
+				completedTaskIds = [];
+			}, 1500);
+		}
+	});
 
 	// Check if an agent is actively working (uses shared utility)
 	function isAgentWorking(agentName: string | undefined | null): boolean {
@@ -581,17 +697,48 @@
 </script>
 
 <div class="flex flex-col h-full">
-	<!-- Filter Bar -->
-	<div class="p-4 border-b border-base-300 bg-base-100 overflow-visible">
+	<!-- Filter Bar - Industrial Style -->
+	<div
+		class="p-4 overflow-visible relative"
+		style="
+			background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
+			border: 1px solid oklch(0.35 0.02 250);
+			border-left: none;
+		"
+	>
+		<!-- Left accent bar -->
+		<div
+			class="absolute left-0 top-0 bottom-0 w-1"
+			style="background: linear-gradient(180deg, oklch(0.70 0.18 240) 0%, oklch(0.70 0.18 240 / 0.3) 100%);"
+		></div>
+
 		<div class="flex flex-wrap items-center gap-3">
-			<!-- Search -->
-			<input
-				type="text"
-				placeholder="Search {sortedTasks.length} of {tasks.length} tasks..."
-				class="input input-bordered input-sm min-w-40 max-w-64 shrink"
-				bind:value={searchQuery}
-				oninput={() => updateURL()}
-			/>
+			<!-- Search - Industrial -->
+			<div class="relative">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2"
+					style="color: oklch(0.55 0.02 250);"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+				</svg>
+				<input
+					type="text"
+					placeholder="Search {sortedTasks.length} of {tasks.length} tasks..."
+					class="pl-9 pr-3 py-1.5 min-w-40 max-w-64 shrink rounded font-mono text-sm"
+					style="
+						background: oklch(0.18 0.01 250);
+						border: 1px solid oklch(0.35 0.02 250);
+						color: oklch(0.75 0.02 250);
+					"
+					bind:value={searchQuery}
+					oninput={() => updateURL()}
+				/>
+			</div>
 
 			<!-- Project Filter -->
 			{#if projectOptions.length > 0}
@@ -653,26 +800,54 @@
 				/>
 			{/if}
 
-			<!-- Clear Filters -->
+			<!-- Clear Filters - Industrial -->
 			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0}
-				<button class="btn btn-sm btn-ghost text-error" onclick={clearAllFilters}>
-					Clear filters
+				<button
+					class="px-3 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover"
+					style="
+						color: oklch(0.70 0.20 25);
+						border: 1px solid oklch(0.70 0.20 25 / 0.3);
+					"
+					onclick={clearAllFilters}
+				>
+					Clear
 				</button>
 			{/if}
 
 			<!-- Right side: Selection controls or task count -->
 			<div class="ml-auto flex items-center gap-2">
 				{#if selectedTasks.size > 0}
-					<!-- Selection mode -->
-					<span class="text-sm font-medium">{selectedTasks.size} selected</span>
+					<!-- Selection mode - Industrial -->
+					<span
+						class="font-mono text-xs tracking-wider"
+						style="color: oklch(0.70 0.18 240);"
+					>
+						{selectedTasks.size} SELECTED
+					</span>
 					<div class="dropdown dropdown-end">
-						<div tabindex="0" role="button" class="btn btn-sm btn-primary gap-1">
+						<div
+							tabindex="0"
+							role="button"
+							class="px-3 py-1.5 rounded font-mono text-xs tracking-wider uppercase cursor-pointer transition-all industrial-hover flex items-center gap-1"
+							style="
+								background: linear-gradient(135deg, oklch(0.70 0.18 240 / 0.2) 0%, oklch(0.70 0.18 240 / 0.1) 100%);
+								border: 1px solid oklch(0.70 0.18 240 / 0.4);
+								color: oklch(0.80 0.15 240);
+							"
+						>
 							Bulk Actions
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
 							</svg>
 						</div>
-						<ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-300">
+						<ul
+							tabindex="0"
+							class="dropdown-content z-50 menu p-2 shadow rounded-box w-52"
+							style="
+								background: oklch(0.20 0.01 250);
+								border: 1px solid oklch(0.35 0.02 250);
+							"
+						>
 							<li><button onclick={handleBulkAssign} class="gap-2">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -733,7 +908,11 @@
 							</button></li>
 						</ul>
 					</div>
-					<button class="btn btn-sm btn-ghost" onclick={clearSelection}>
+					<button
+						class="px-2 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover"
+						style="color: oklch(0.60 0.02 250);"
+						onclick={clearSelection}
+					>
 						Clear
 					</button>
 				{/if}
@@ -762,13 +941,13 @@
 		</div>
 	{/if}
 
-	<!-- Table -->
-	<div class="flex-1 overflow-x-auto overflow-y-auto">
+	<!-- Table - Industrial Style -->
+	<div class="flex-1 overflow-x-auto overflow-y-auto" style="background: oklch(0.16 0.01 250);">
 		<table class="table table-xs table-pin-rows table-pin-cols w-full">
-			<!-- Main column headers (always pinned at top) -->
+			<!-- Main column headers (always pinned at top) - Industrial -->
 			<thead>
-				<tr class="bg-base-200">
-					<th class="w-10 bg-base-200">
+				<tr style="background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);">
+					<th class="w-10" style="background: inherit;">
 						<input
 							type="checkbox"
 							class="checkbox checkbox-sm"
@@ -776,39 +955,60 @@
 							indeterminate={partialSelected}
 							onchange={toggleAll}
 							onclick={(e) => e.stopPropagation()}
+							style="border-color: oklch(0.45 0.02 250);"
 						/>
 					</th>
-					<th class="cursor-pointer hover:bg-base-300 w-28 bg-base-200" onclick={() => handleSort('id')}>
-						<div class="flex items-center gap-1">
+					<th
+						class="cursor-pointer w-28 industrial-hover"
+						style="background: inherit;"
+						onclick={() => handleSort('id')}
+					>
+						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
 							ID
 							{#if sortColumn === 'id'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</th>
-					<td class="cursor-pointer hover:bg-base-300" onclick={() => handleSort('title')}>
-						<div class="flex items-center gap-1">
+					<td
+						class="cursor-pointer industrial-hover"
+						style="background: inherit;"
+						onclick={() => handleSort('title')}
+					>
+						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
 							Title
 							{#if sortColumn === 'title'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</td>
-					<td class="cursor-pointer hover:bg-base-300 w-16 text-center" onclick={() => handleSort('priority')}>
-						<div class="flex items-center justify-center gap-1">
+					<td
+						class="cursor-pointer w-16 text-center industrial-hover"
+						style="background: inherit;"
+						onclick={() => handleSort('priority')}
+					>
+						<div class="flex items-center justify-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
 							P
 							{#if sortColumn === 'priority'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</td>
-					<td class="w-32">Labels</td>
-					<td class="w-10 whitespace-nowrap">Deps</td>
-					<td class="cursor-pointer hover:bg-base-300 w-16" onclick={() => handleSort('updated')}>
-						<div class="flex items-center gap-1">
+					<td class="w-32" style="background: inherit;">
+						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">Labels</span>
+					</td>
+					<td class="w-10 whitespace-nowrap" style="background: inherit;">
+						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">Deps</span>
+					</td>
+					<td
+						class="cursor-pointer w-16 industrial-hover"
+						style="background: inherit;"
+						onclick={() => handleSort('updated')}
+					>
+						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
 							Age
 							{#if sortColumn === 'updated'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</td>
@@ -816,20 +1016,134 @@
 			</thead>
 
 			{#if sortedTasks.length === 0}
-				<!-- Empty state -->
+				<!-- Empty state - Mission Control Style -->
 				<tbody>
 					<tr>
-						<td colspan="7" class="text-center py-12">
-							<div class="text-base-content/50">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto mb-2 opacity-30">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-								</svg>
-								<p>No tasks found</p>
+						<td colspan="7" class="p-0">
+							<div
+								class="relative flex flex-col items-center justify-center py-16 overflow-hidden"
+								style="
+									background:
+										radial-gradient(circle at 50% 50%, oklch(0.20 0.02 240 / 0.3) 0%, transparent 50%),
+										linear-gradient(180deg, oklch(0.14 0.01 250) 0%, oklch(0.12 0.01 250) 100%);
+								"
+							>
+								<!-- Subtle grid pattern -->
+								<div
+									class="absolute inset-0 opacity-[0.03]"
+									style="
+										background-image:
+											linear-gradient(oklch(0.70 0.18 240) 1px, transparent 1px),
+											linear-gradient(90deg, oklch(0.70 0.18 240) 1px, transparent 1px);
+										background-size: 40px 40px;
+									"
+								></div>
+
+								<!-- Radar container -->
+								<div class="relative w-32 h-32 mb-6">
+									<!-- Outer ring -->
+									<div
+										class="absolute inset-0 rounded-full"
+										style="
+											border: 1px solid oklch(0.70 0.18 240 / 0.2);
+											box-shadow: 0 0 20px oklch(0.70 0.18 240 / 0.1);
+										"
+									></div>
+
+									<!-- Middle ring -->
+									<div
+										class="absolute inset-4 rounded-full"
+										style="border: 1px solid oklch(0.70 0.18 240 / 0.15);"
+									></div>
+
+									<!-- Inner ring -->
+									<div
+										class="absolute inset-8 rounded-full"
+										style="border: 1px solid oklch(0.70 0.18 240 / 0.1);"
+									></div>
+
+									<!-- Cross hairs -->
+									<div
+										class="absolute top-1/2 left-0 right-0 h-px"
+										style="background: oklch(0.70 0.18 240 / 0.1);"
+									></div>
+									<div
+										class="absolute left-1/2 top-0 bottom-0 w-px"
+										style="background: oklch(0.70 0.18 240 / 0.1);"
+									></div>
+
+									<!-- Radar sweep -->
+									<div
+										class="absolute inset-0 rounded-full radar-sweep"
+										style="
+											background: conic-gradient(
+												from 0deg,
+												transparent 0deg,
+												oklch(0.70 0.18 240 / 0.3) 30deg,
+												transparent 60deg
+											);
+										"
+									></div>
+
+									<!-- Center dot (pulsing) -->
+									<div class="absolute inset-0 flex items-center justify-center">
+										<div
+											class="w-2 h-2 rounded-full radar-pulse"
+											style="background: oklch(0.70 0.18 240); box-shadow: 0 0 10px oklch(0.70 0.18 240);"
+										></div>
+									</div>
+								</div>
+
+								<!-- Status text -->
+								<div class="relative z-10 text-center">
+									<p
+										class="font-mono text-sm tracking-widest uppercase mb-1"
+										style="color: oklch(0.70 0.18 240);"
+									>
+										All Clear
+									</p>
+									<p
+										class="font-mono text-xs tracking-wide"
+										style="color: oklch(0.50 0.02 250);"
+									>
+										No tasks matching current filters
+									</p>
+								</div>
+
+								<!-- Action buttons -->
 								{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0}
-									<button class="btn btn-sm btn-ghost mt-2" onclick={clearAllFilters}>
-										Clear filters
+									<button
+										class="relative z-10 mt-6 px-4 py-2 rounded font-mono text-xs tracking-wider uppercase transition-all"
+										style="
+											background: oklch(0.70 0.18 240 / 0.1);
+											border: 1px solid oklch(0.70 0.18 240 / 0.3);
+											color: oklch(0.70 0.18 240);
+										"
+										onmouseenter={(e) => e.currentTarget.style.background = 'oklch(0.70 0.18 240 / 0.2)'}
+										onmouseleave={(e) => e.currentTarget.style.background = 'oklch(0.70 0.18 240 / 0.1)'}
+										onclick={clearAllFilters}
+									>
+										Clear Filters
 									</button>
 								{/if}
+
+								<!-- Decorative corner accents -->
+								<div class="absolute top-4 left-4 w-8 h-8">
+									<div class="absolute top-0 left-0 w-full h-px" style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+									<div class="absolute top-0 left-0 h-full w-px" style="background: linear-gradient(180deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+								</div>
+								<div class="absolute top-4 right-4 w-8 h-8">
+									<div class="absolute top-0 right-0 w-full h-px" style="background: linear-gradient(270deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+									<div class="absolute top-0 right-0 h-full w-px" style="background: linear-gradient(180deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+								</div>
+								<div class="absolute bottom-4 left-4 w-8 h-8">
+									<div class="absolute bottom-0 left-0 w-full h-px" style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+									<div class="absolute bottom-0 left-0 h-full w-px" style="background: linear-gradient(0deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+								</div>
+								<div class="absolute bottom-4 right-4 w-8 h-8">
+									<div class="absolute bottom-0 right-0 w-full h-px" style="background: linear-gradient(270deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+									<div class="absolute bottom-0 right-0 h-full w-px" style="background: linear-gradient(0deg, oklch(0.70 0.18 240 / 0.3), transparent);"></div>
+								</div>
 							</div>
 						</td>
 					</tr>
@@ -838,13 +1152,51 @@
 				<!-- Grouped tasks by type with sticky headers -->
 				{#each Array.from(groupedTasks.entries()) as [type, typeTasks]}
 					{#if typeTasks.length > 0}
-						<!-- Type group header (pinned when scrolling) -->
+						<!-- Type group header (pinned when scrolling) - Industrial/Terminal style -->
+						{@const typeVisual = getIssueTypeVisual(type)}
 						<thead>
 							<tr>
-								<th colspan="7" class="bg-base-300 text-base-content font-bold text-sm py-2">
-									<div class="flex items-center gap-2">
-										<span class="badge {getTypeBadge(type)} badge-sm">{type || 'no type'}</span>
-										<span class="text-base-content/60 font-normal">({typeTasks.length})</span>
+								<th
+									colspan="7"
+									class="p-0 border-b border-base-content/10"
+									style="background: linear-gradient(90deg, {typeVisual.bgTint} 0%, transparent 60%);"
+								>
+									<div class="flex items-center gap-0">
+										<!-- Bold accent bar -->
+										<div
+											class="w-1 self-stretch"
+											style="background: {typeVisual.accent};"
+										></div>
+
+										<!-- Icon container with subtle glow -->
+										<div
+											class="flex items-center justify-center w-10 h-9 text-lg"
+											style="text-shadow: 0 0 8px {typeVisual.accent};"
+										>
+											{typeVisual.icon}
+										</div>
+
+										<!-- Type label - monospace, uppercase, tracked -->
+										<span
+											class="font-mono font-bold text-xs tracking-[0.2em] uppercase"
+											style="color: {typeVisual.accent};"
+										>
+											{typeVisual.label}
+										</span>
+
+										<!-- Decorative line -->
+										<div
+											class="flex-1 h-px mx-3 opacity-30"
+											style="background: linear-gradient(90deg, {typeVisual.accent}, transparent);"
+										></div>
+
+										<!-- Count badge -->
+										<div class="pr-3 flex items-center gap-1.5">
+											<span class="font-mono text-xs text-base-content/40">{typeTasks.length}</span>
+											<span class="text-base-content/30 text-xs">
+												{typeTasks.length === 1 ? 'task' : 'tasks'}
+											</span>
+										</div>
 									</div>
 								</th>
 							</tr>
@@ -855,82 +1207,100 @@
 								{#if !shownAsDeps.has(task.id)}
 									{@const depStatus = analyzeDependencies(task)}
 									{@const taskIsActive = task.status === 'in_progress' && task.assignee}
+									{@const isNewTask = newTaskIds.includes(task.id)}
+									{@const isStarting = startingTaskIds.includes(task.id)}
+									{@const isCompleted = completedTaskIds.includes(task.id)}
 									<tr
-										class="hover:bg-base-200/50 cursor-pointer transition-colors group overflow-visible {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''} {taskIsActive ? 'bg-info/10' : ''}"
+										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-50' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''}"
+										style="
+											background: {selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : 'oklch(0.16 0.01 250)'};
+											border-bottom: 1px solid oklch(0.25 0.01 250);
+											border-left: 2px solid {selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.5)' : 'transparent'};
+										"
 										onclick={() => handleRowClick(task.id)}
 										title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
 									>
-										<th class="border-l-2 border-l-transparent group-hover:border-l-primary group-hover:bg-base-200/50 transition-colors {taskIsActive ? 'bg-info/10' : ''}" onclick={(e) => e.stopPropagation()}>
+										<th
+											style="background: inherit;"
+											onclick={(e) => e.stopPropagation()}
+										>
 											<input
 												type="checkbox"
 												class="checkbox checkbox-sm"
 												checked={selectedTasks.has(task.id)}
 												onchange={() => toggleTask(task.id)}
+												style="border-color: oklch(0.45 0.02 250);"
 											/>
 										</th>
-										<th class="group-hover:bg-base-200/50 {taskIsActive ? 'bg-info/10' : ''}">
+										<th style="background: inherit;">
 											<TaskIdBadge {task} size="xs" showType={false} showAssignee={true} copyOnly />
 										</th>
-										<td class="{taskIsActive ? 'bg-info/10' : ''}">
+										<td style="background: inherit;">
 											<div>
-												<div class="font-medium text-sm">{task.title}</div>
+												<div class="font-medium text-sm" style="color: oklch(0.85 0.02 250);">{task.title}</div>
 												{#if task.description}
-													<div class="text-xs text-base-content/50">
+													<div class="text-xs" style="color: oklch(0.55 0.02 250);">
 														{task.description}
 													</div>
 												{/if}
 											</div>
 										</td>
-									<td class="text-center {taskIsActive ? 'bg-info/10' : ''}">
+									<td class="text-center" style="background: inherit;">
 										<span class="badge badge-sm {getPriorityBadge(task.priority)}">
 											P{task.priority}
 										</span>
 									</td>
-									<td class="{taskIsActive ? 'bg-info/10' : ''}">
+									<td style="background: inherit;">
 										{#if task.labels && task.labels.length > 0}
 											<LabelBadges labels={task.labels} maxDisplay={2} />
 										{:else}
-											<span class="text-base-content/30">-</span>
+											<span style="color: oklch(0.40 0.02 250);">-</span>
 										{/if}
 									</td>
-									<td class="whitespace-nowrap {taskIsActive ? 'bg-info/10' : ''}">
+									<td class="whitespace-nowrap" style="background: inherit;">
 										<DependencyIndicator {task} allTasks={allTasks.length > 0 ? allTasks : tasks} size="sm" />
 									</td>
-									<td class="{taskIsActive ? 'bg-info/10' : ''}">
-										<span class="text-xs {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
+									<td style="background: inherit;">
+										<span class="text-xs font-mono {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
 											{formatRelativeTime(task.updated_at)}
 										</span>
 									</td>
 								</tr>
-								<!-- Render dependencies as indented child rows -->
+								<!-- Render dependencies as indented child rows - Industrial -->
 								{#if task.depends_on && task.depends_on.length > 0}
 									{#each task.depends_on as dep, depIndex (dep.id)}
 										{@const depIsActive = dep.status === 'in_progress' && dep.assignee}
 										<tr
-											class="hover:bg-base-200/50 cursor-pointer transition-colors group {depIsActive ? 'bg-info/10' : 'opacity-80 bg-base-200/20'}"
+											class="cursor-pointer group industrial-row"
+											style="
+												background: {depIsActive ? 'oklch(0.70 0.18 240 / 0.03)' : 'oklch(0.14 0.01 250)'};
+												border-bottom: 1px solid oklch(0.22 0.01 250);
+												border-left: 2px solid {depIsActive ? 'oklch(0.70 0.18 240 / 0.3)' : 'oklch(0.30 0.02 250)'};
+												opacity: 0.85;
+											"
 											onclick={() => handleRowClick(dep.id)}
 											title="Dependency: {dep.title}"
 										>
-											<th class="border-l-2 border-l-transparent group-hover:border-l-primary group-hover:bg-base-200/50 transition-colors {depIsActive ? 'bg-info/10' : ''}"></th>
-											<th class="group-hover:bg-base-200/50 {depIsActive ? 'bg-info/10' : ''}">
+											<th style="background: inherit;"></th>
+											<th style="background: inherit;">
 												<div class="flex items-center gap-1">
-													<span class="text-base-content/50 font-mono text-xs">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
+													<span class="font-mono text-xs" style="color: oklch(0.45 0.02 250);">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
 													<TaskIdBadge task={{ id: dep.id, status: dep.status, issue_type: dep.issue_type, assignee: dep.assignee }} size="xs" showType={false} showAssignee={true} copyOnly />
 												</div>
 											</th>
-											<td class="{depIsActive ? 'bg-info/10' : ''}">
+											<td style="background: inherit;">
 												<div class="pl-4">
-													<div class="text-xs text-base-content/70">{dep.title}</div>
+													<div class="text-xs" style="color: oklch(0.65 0.02 250);">{dep.title}</div>
 												</div>
 											</td>
-											<td class="text-center {depIsActive ? 'bg-info/10' : ''}">
+											<td class="text-center" style="background: inherit;">
 												<span class="badge badge-sm badge-ghost {getPriorityBadge(dep.priority)}">
 													P{dep.priority}
 												</span>
 											</td>
-											<td class="{depIsActive ? 'bg-info/10' : ''}"></td>
-											<td class="{depIsActive ? 'bg-info/10' : ''}"></td>
-											<td class="{depIsActive ? 'bg-info/10' : ''}"></td>
+											<td style="background: inherit;"></td>
+											<td style="background: inherit;"></td>
+											<td style="background: inherit;"></td>
 										</tr>
 									{/each}
 								{/if}
@@ -939,6 +1309,38 @@
 						</tbody>
 					{/if}
 				{/each}
+
+				<!-- Render exiting tasks with exit animation -->
+				{#if exitingTasks.length > 0}
+					<tbody>
+						{#each exitingTasks as task (task.id)}
+							<tr
+								class="task-exit"
+								style="
+									background: oklch(0.70 0.20 25 / 0.1);
+									border-bottom: 1px solid oklch(0.25 0.01 250);
+									border-left: 2px solid oklch(0.70 0.20 25 / 0.5);
+								"
+							>
+								<th style="background: inherit;"></th>
+								<th style="background: inherit;">
+									<TaskIdBadge {task} size="xs" showType={false} showAssignee={false} copyOnly />
+								</th>
+								<td style="background: inherit;">
+									<div class="font-medium text-sm" style="color: oklch(0.65 0.02 250);">{task.title}</div>
+								</td>
+								<td class="text-center" style="background: inherit;">
+									<span class="badge badge-sm {getPriorityBadge(task.priority)}">
+										P{task.priority}
+									</span>
+								</td>
+								<td style="background: inherit;"></td>
+								<td style="background: inherit;"></td>
+								<td style="background: inherit;"></td>
+							</tr>
+						{/each}
+					</tbody>
+				{/if}
 			{/if}
 		</table>
 	</div>
