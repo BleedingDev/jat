@@ -165,18 +165,47 @@
 		}
 	];
 
-	// Fuzzy search function
-	function fuzzyMatch(query: string, text: string): boolean {
-		const normalizedQuery = query.toLowerCase();
-		const normalizedText = text.toLowerCase();
+	// Score-based search function
+	// Higher scores = better matches, shown first
+	function scoreAction(query: string, action: Action): number {
+		const q = query.toLowerCase();
+		const label = action.label.toLowerCase();
+		const desc = action.description.toLowerCase();
 
-		// Simple substring match for now
-		if (normalizedText.includes(normalizedQuery)) {
-			return true;
+		let score = 0;
+
+		// Label matches (highest priority)
+		if (label === q) {
+			score += 100; // Exact label match
+		} else if (label.startsWith(q)) {
+			score += 80; // Label starts with query
+		} else {
+			// Check if query matches a word in the label
+			const labelWords = label.split(/\s+/);
+			if (labelWords.some(word => word === q)) {
+				score += 70; // Exact word match in label (e.g., "task" in "Create Task")
+			} else if (labelWords.some(word => word.startsWith(q))) {
+				score += 60; // Word starts with query
+			} else if (label.includes(q)) {
+				score += 40; // Substring in label
+			}
 		}
 
-		// Check keywords
-		return false;
+		// Keyword matches (medium priority)
+		if (action.keywords.some(kw => kw.toLowerCase() === q)) {
+			score += 30; // Exact keyword match
+		} else if (action.keywords.some(kw => kw.toLowerCase().startsWith(q))) {
+			score += 20; // Keyword starts with query
+		} else if (action.keywords.some(kw => kw.toLowerCase().includes(q))) {
+			score += 10; // Substring in keyword
+		}
+
+		// Description matches (lowest priority)
+		if (desc.includes(q)) {
+			score += 5; // Substring in description
+		}
+
+		return score;
 	}
 
 	function searchActions(query: string): Action[] {
@@ -184,20 +213,13 @@
 			return actions;
 		}
 
-		return actions.filter((action) => {
-			// Check label
-			if (fuzzyMatch(query, action.label)) {
-				return true;
-			}
+		// Score all actions and filter out non-matches (score 0)
+		const scored = actions
+			.map(action => ({ action, score: scoreAction(query, action) }))
+			.filter(({ score }) => score > 0)
+			.sort((a, b) => b.score - a.score); // Higher scores first
 
-			// Check description
-			if (fuzzyMatch(query, action.description)) {
-				return true;
-			}
-
-			// Check keywords
-			return action.keywords.some((keyword) => fuzzyMatch(query, keyword));
-		});
+		return scored.map(({ action }) => action);
 	}
 
 	// Filtered actions based on search
@@ -386,44 +408,74 @@
 	<kbd class="kbd kbd-xs hidden md:inline">⌘K</kbd>
 </button>
 
-<!-- Modal (stays in DOM, toggle modal-open class) -->
+<!-- Modal (stays in DOM, toggle modal-open class) - Industrial -->
 <div class="modal {isOpen ? 'modal-open' : ''}" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
 	<!-- Backdrop -->
 	<div
-		class="modal-backdrop bg-base-300/80"
+		class="modal-backdrop"
+		style="background: oklch(0.10 0.01 250 / 0.9);"
 		role="button"
 		tabindex="-1"
 		onclick={close}
 		onkeydown={(e) => e.key === 'Enter' && close()}
 	></div>
 
-	<!-- Command palette -->
-	<div class="modal-box max-w-2xl p-0 overflow-hidden">
-			<!-- Search input -->
-			<div class="p-4 border-b border-base-300">
+	<!-- Command palette - Industrial -->
+	<div
+		class="modal-box max-w-2xl p-0 overflow-hidden"
+		style="
+			background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
+			border: 1px solid oklch(0.35 0.02 250);
+			box-shadow: 0 25px 50px -12px oklch(0 0 0 / 0.5);
+		"
+	>
+			<!-- Search input - Industrial -->
+			<div
+				class="p-4 relative"
+				style="
+					background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
+					border-bottom: 1px solid oklch(0.35 0.02 250);
+				"
+			>
+				<!-- Left accent bar -->
+				<div
+					class="absolute left-0 top-0 bottom-0 w-1"
+					style="background: linear-gradient(180deg, oklch(0.70 0.18 240) 0%, oklch(0.70 0.18 240 / 0.3) 100%);"
+				></div>
 				<div class="flex items-center gap-3">
-					<span class="text-2xl">🔍</span>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="1.5"
+						stroke="currentColor"
+						class="w-5 h-5"
+						style="color: oklch(0.70 0.18 240);"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+					</svg>
 					<input
 						bind:this={searchInput}
 						bind:value={searchQuery}
 						onkeydown={handleKeyDown}
 						type="text"
 						placeholder={searchMode === 'actions' ? 'Search actions...' : 'Search tasks...'}
-						class="input input-ghost w-full focus:outline-none text-lg"
+						class="input input-ghost w-full focus:outline-none text-lg font-mono"
+						style="background: transparent; color: oklch(0.85 0.02 250);"
 						autocomplete="off"
 						aria-label={searchMode === 'actions' ? 'Search command palette' : 'Search tasks'}
 					/>
-					<kbd class="kbd kbd-sm">ESC</kbd>
+					<kbd class="kbd kbd-sm font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);">ESC</kbd>
 				</div>
 			</div>
 
-			<!-- Results list -->
-			<div class="max-h-96 overflow-y-auto" bind:this={resultsContainer}>
+			<!-- Results list - Industrial -->
+			<div class="max-h-96 overflow-y-auto" style="background: oklch(0.16 0.01 250);" bind:this={resultsContainer}>
 				{#if searchMode === 'actions'}
-					<!-- Actions list -->
+					<!-- Actions list - Industrial -->
 					{#if filteredActions.length === 0}
-						<div class="p-8 text-center text-base-content/50">
-							<p class="text-lg mb-2">No actions found</p>
+						<div class="p-8 text-center" style="color: oklch(0.50 0.02 250);">
+							<p class="text-lg mb-2 font-mono">No actions found</p>
 							<p class="text-sm">Try different search terms</p>
 						</div>
 					{:else}
@@ -432,9 +484,11 @@
 								<button
 									type="button"
 									data-index={index}
-									class="flex items-start gap-3 p-3 rounded-lg w-full {index === selectedIndex
-										? 'bg-primary text-primary-content'
-										: 'hover:bg-base-200'}"
+									class="flex items-start gap-3 p-3 rounded-lg w-full transition-all"
+									style="
+										background: {index === selectedIndex ? 'oklch(0.70 0.18 240 / 0.15)' : 'transparent'};
+										border-left: 2px solid {index === selectedIndex ? 'oklch(0.70 0.18 240)' : 'transparent'};
+									"
 									onclick={() => action.execute()}
 									onmouseenter={() => {
 										if (!isKeyboardNavigation) {
@@ -447,37 +501,36 @@
 								>
 										<span class="text-2xl flex-shrink-0">{action.icon}</span>
 										<div class="flex-1 text-left min-w-0">
-											<div class="font-medium">{action.label}</div>
+											<div class="font-medium font-mono" style="color: {index === selectedIndex ? 'oklch(0.85 0.10 240)' : 'oklch(0.80 0.02 250)'};">{action.label}</div>
 											<div
-												class="text-sm opacity-70 {index === selectedIndex
-													? 'text-primary-content/70'
-													: 'text-base-content/70'}"
+												class="text-sm"
+												style="color: oklch(0.55 0.02 250);"
 											>
 												{action.description}
 											</div>
 										</div>
 									{#if index === selectedIndex}
-										<kbd class="kbd kbd-sm flex-shrink-0 bg-primary-content/20 text-primary-content border-primary-content/30">↵</kbd>
+										<kbd class="kbd kbd-sm flex-shrink-0 font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.70 0.18 240);">↵</kbd>
 									{/if}
 								</button>
 							{/each}
 						</div>
 					{/if}
 				{:else}
-					<!-- Task search results -->
+					<!-- Task search results - Industrial -->
 					{#if isLoadingTasks}
 						<div class="p-8 text-center">
-							<span class="loading loading-spinner loading-lg text-primary"></span>
-							<p class="text-sm text-base-content/70 mt-4">Searching tasks...</p>
+							<span class="loading loading-spinner loading-lg" style="color: oklch(0.70 0.18 240);"></span>
+							<p class="text-sm mt-4 font-mono" style="color: oklch(0.55 0.02 250);">Searching tasks...</p>
 						</div>
 					{:else if !searchQuery.trim()}
-						<div class="p-8 text-center text-base-content/50">
-							<p class="text-lg mb-2">Start typing to search</p>
+						<div class="p-8 text-center" style="color: oklch(0.50 0.02 250);">
+							<p class="text-lg mb-2 font-mono">Start typing to search</p>
 							<p class="text-sm">Search by task ID, title, description, or labels</p>
 						</div>
 					{:else if tasks.length === 0}
-						<div class="p-8 text-center text-base-content/50">
-							<p class="text-lg mb-2">No tasks found</p>
+						<div class="p-8 text-center" style="color: oklch(0.50 0.02 250);">
+							<p class="text-lg mb-2 font-mono">No tasks found</p>
 							<p class="text-sm">Try different search terms</p>
 						</div>
 					{:else}
@@ -491,21 +544,26 @@
 
 						<div class="p-2">
 							{#each Object.entries(groupedTasks) as [project, projectTasks]}
-								<!-- Project header -->
-								<div class="px-3 py-1.5 text-xs font-semibold text-base-content/50 uppercase tracking-wider sticky top-0 bg-base-200/90 backdrop-blur-sm">
+								<!-- Project header - Industrial -->
+								<div
+									class="px-3 py-1.5 text-xs font-semibold font-mono uppercase tracking-wider sticky top-0 backdrop-blur-sm"
+									style="color: oklch(0.55 0.02 250); background: oklch(0.20 0.01 250 / 0.95);"
+								>
 									{project} ({projectTasks.length})
 								</div>
 
-								<!-- Tasks in this project -->
+								<!-- Tasks in this project - Industrial -->
 								<div class="mb-3 space-y-1">
 									{#each projectTasks as task}
 										{@const flatIndex = tasks.indexOf(task)}
 										<button
 											type="button"
 											data-index={flatIndex}
-											class="flex items-start gap-3 p-3 rounded-lg w-full {flatIndex === selectedIndex
-												? 'bg-primary text-primary-content'
-												: 'hover:bg-base-200'}"
+											class="flex items-start gap-3 p-3 rounded-lg w-full transition-all"
+											style="
+												background: {flatIndex === selectedIndex ? 'oklch(0.70 0.18 240 / 0.15)' : 'transparent'};
+												border-left: 2px solid {flatIndex === selectedIndex ? 'oklch(0.70 0.18 240)' : 'transparent'};
+											"
 											onclick={() => {
 												goto(`/?task=${task.id}`);
 												close();
@@ -537,13 +595,12 @@
 												<div class="flex-1 text-left min-w-0">
 													<div class="flex items-center gap-2 mb-1">
 														<TaskIdBadge {task} size="xs" minimal />
-														<span class="font-medium truncate">{task.title}</span>
+														<span class="font-medium font-mono truncate" style="color: {flatIndex === selectedIndex ? 'oklch(0.85 0.10 240)' : 'oklch(0.80 0.02 250)'};">{task.title}</span>
 													</div>
 													{#if task.description}
 														<div
-															class="text-sm opacity-70 line-clamp-1 {flatIndex === selectedIndex
-																? 'text-primary-content/70'
-																: 'text-base-content/70'}"
+															class="text-sm line-clamp-1"
+															style="color: oklch(0.55 0.02 250);"
 														>
 															{task.description}
 														</div>
@@ -560,7 +617,7 @@
 													{/if}
 												</div>
 											{#if flatIndex === selectedIndex}
-												<kbd class="kbd kbd-sm flex-shrink-0 bg-primary-content/20 text-primary-content border-primary-content/30">↵</kbd>
+												<kbd class="kbd kbd-sm flex-shrink-0 font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.70 0.18 240);">↵</kbd>
 											{/if}
 										</button>
 									{/each}
@@ -571,28 +628,34 @@
 				{/if}
 			</div>
 
-			<!-- Footer with keyboard hints -->
-			<div class="p-3 border-t border-base-300 bg-base-200 flex items-center justify-between text-xs">
+			<!-- Footer with keyboard hints - Industrial -->
+			<div
+				class="p-3 flex items-center justify-between text-xs"
+				style="
+					background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
+					border-top: 1px solid oklch(0.35 0.02 250);
+				"
+			>
 				<div class="flex gap-4">
 					<div class="flex items-center gap-1">
-						<kbd class="kbd kbd-xs">↑</kbd>
-						<kbd class="kbd kbd-xs">↓</kbd>
-						<span class="text-base-content/70">Navigate</span>
+						<kbd class="kbd kbd-xs font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);">↑</kbd>
+						<kbd class="kbd kbd-xs font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);">↓</kbd>
+						<span style="color: oklch(0.50 0.02 250);">Navigate</span>
 					</div>
 					<div class="flex items-center gap-1">
-						<kbd class="kbd kbd-xs">↵</kbd>
-						<span class="text-base-content/70">Select</span>
+						<kbd class="kbd kbd-xs font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);">↵</kbd>
+						<span style="color: oklch(0.50 0.02 250);">Select</span>
 					</div>
 					<div class="flex items-center gap-1">
-						<kbd class="kbd kbd-xs">ESC</kbd>
-						<span class="text-base-content/70">{searchMode === 'tasks' ? 'Back' : 'Close'}</span>
+						<kbd class="kbd kbd-xs font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);">ESC</kbd>
+						<span style="color: oklch(0.50 0.02 250);">{searchMode === 'tasks' ? 'Back' : 'Close'}</span>
 					</div>
 				</div>
 				<div class="flex items-center gap-1">
-					<kbd class="kbd kbd-xs">⌘</kbd>
-					<span class="text-base-content/70">+</span>
-					<kbd class="kbd kbd-xs">K</kbd>
-					<span class="text-base-content/70 ml-1">to open</span>
+					<kbd class="kbd kbd-xs font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);">⌘</kbd>
+					<span style="color: oklch(0.50 0.02 250);">+</span>
+					<kbd class="kbd kbd-xs font-mono" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);">K</kbd>
+					<span style="color: oklch(0.50 0.02 250);" class="ml-1">to open</span>
 				</div>
 			</div>
 		</div>
