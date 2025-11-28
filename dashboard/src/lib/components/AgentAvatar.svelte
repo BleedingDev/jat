@@ -25,35 +25,6 @@
 	let loadState: 'loading' | 'success' | 'error' = $state('loading');
 	let svgContent: string | null = $state(null);
 
-	// Generate initials from agent name (e.g., BlueStream -> BS, DarkBay -> DB)
-	function getInitials(agentName: string): string {
-		if (!agentName) return '??';
-		// Split on capital letters to get words
-		const words = agentName.replace(/([a-z])([A-Z])/g, '$1 $2').split(' ');
-		if (words.length >= 2) {
-			return (words[0][0] + words[1][0]).toUpperCase();
-		}
-		return agentName.slice(0, 2).toUpperCase();
-	}
-
-	// Generate consistent background color from name hash
-	function getBgColor(agentName: string): string {
-		if (!agentName) return 'oklch(0.50 0.10 250)';
-		// Simple hash function
-		let hash = 0;
-		for (let i = 0; i < agentName.length; i++) {
-			hash = ((hash << 5) - hash) + agentName.charCodeAt(i);
-			hash = hash & hash; // Convert to 32bit integer
-		}
-		// Map hash to hue (0-360)
-		const hue = Math.abs(hash) % 360;
-		// Use oklch for consistent lightness/chroma
-		return `oklch(0.55 0.15 ${hue})`;
-	}
-
-	const initials = $derived(getInitials(name));
-	const bgColor = $derived(getBgColor(name));
-
 	// Fetch avatar reactively when name changes
 	async function fetchAvatar(agentName: string) {
 		if (!agentName) {
@@ -103,12 +74,19 @@
 			{@html svgContent}
 		</div>
 	{:else}
-		<!-- Fallback: initials with colored background -->
+		<!-- Fallback: generic avatar icon -->
 		<div
-			class="w-full h-full flex items-center justify-center font-bold text-white"
-			style="background: {bgColor}; font-size: {size * 0.4}px;"
+			class="w-full h-full flex items-center justify-center"
+			style="background: oklch(0.25 0.02 250);"
 		>
-			{initials}
+			<svg
+				viewBox="0 0 24 24"
+				fill="currentColor"
+				class="text-base-content/50"
+				style="width: {size * 0.65}px; height: {size * 0.65}px;"
+			>
+				<path fill-rule="evenodd" d="M18.685 19.097A9.723 9.723 0 0021.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 003.065 7.097A9.716 9.716 0 0012 21.75a9.716 9.716 0 006.685-2.653zm-12.54-1.285A7.486 7.486 0 0112 15a7.486 7.486 0 015.855 2.812A8.224 8.224 0 0112 20.25a8.224 8.224 0 01-5.855-2.438zM15.75 9a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" clip-rule="evenodd" />
+			</svg>
 		</div>
 	{/if}
 </div>
