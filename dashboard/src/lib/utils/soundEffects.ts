@@ -275,3 +275,35 @@ function playCompleteTones(ctx: AudioContext): void {
 	playTone(ctx, 783.99, now + 0.16, 0.1, volume); // G5
 	playTone(ctx, 1046.5, now + 0.24, 0.2, volume * 1.1); // C6 - high finish
 }
+
+/**
+ * Play a welcoming sound when a new agent joins the swarm
+ * Creates an ascending arpeggio with a sparkle finish
+ */
+export function playAgentJoinSound(): void {
+	if (!soundsEnabled) return;
+
+	const ctx = getAudioContext();
+	if (!ctx) return;
+
+	if (ctx.state === 'suspended') {
+		ctx.resume().then(() => {
+			playJoinTones(ctx);
+		}).catch(() => {});
+		return;
+	}
+
+	playJoinTones(ctx);
+}
+
+function playJoinTones(ctx: AudioContext): void {
+	const now = ctx.currentTime;
+	const volume = 0.12;
+
+	// Welcoming ascending arpeggio with a "sparkle" finish
+	playTone(ctx, 523.25, now, 0.1, volume * 0.7);        // C5
+	playTone(ctx, 659.25, now + 0.08, 0.1, volume * 0.8); // E5
+	playTone(ctx, 783.99, now + 0.16, 0.1, volume * 0.9); // G5
+	playTone(ctx, 1046.5, now + 0.24, 0.12, volume);      // C6
+	playTone(ctx, 1318.5, now + 0.32, 0.18, volume * 0.6); // E6 - sparkle
+}
