@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 
 	let tasks = $state([]);
 	let allTasks = $state([]);  // Unfiltered tasks for project list calculation
@@ -16,6 +18,53 @@
 	// Drawer state for TaskDetailDrawer
 	let drawerOpen = $state(false);
 	let selectedTaskId = $state<string | null>(null);
+
+	// Resizable panel state
+	const STORAGE_KEY = 'dash-panel-split';
+	const DEFAULT_SPLIT = 40; // 40% for AgentGrid, 60% for TaskTable
+	const MIN_SPLIT = 20;
+	const MAX_SPLIT = 80;
+
+	let splitPercent = $state(DEFAULT_SPLIT);
+	let containerHeight = $state(0);
+	let containerRef: HTMLDivElement | null = null;
+
+	// Load saved split from localStorage
+	$effect(() => {
+		if (browser) {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const parsed = parseFloat(saved);
+				if (!isNaN(parsed) && parsed >= MIN_SPLIT && parsed <= MAX_SPLIT) {
+					splitPercent = parsed;
+				}
+			}
+		}
+	});
+
+	// Save split to localStorage when it changes
+	function saveSplit() {
+		if (browser) {
+			localStorage.setItem(STORAGE_KEY, splitPercent.toString());
+		}
+	}
+
+	// Handle resize from divider
+	function handleResize(deltaY: number) {
+		if (!containerHeight) return;
+
+		const deltaPercent = (deltaY / containerHeight) * 100;
+		const newSplit = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, splitPercent + deltaPercent));
+		splitPercent = newSplit;
+		saveSplit();
+	}
+
+	// Update container height on mount and resize
+	function updateContainerHeight() {
+		if (containerRef) {
+			containerHeight = containerRef.clientHeight;
+		}
+	}
 
 	// Sync selectedProject from URL params (REACTIVE using $page store)
 	$effect(() => {
@@ -144,15 +193,24 @@
 	onMount(() => {
 		fetchData();
 		fetchSparklineData();
+		updateContainerHeight();
 	});
 </script>
 
-<div class="min-h-screen bg-base-200 flex flex-col">
+<svelte:window onresize={updateContainerHeight} />
+
+<div
+	bind:this={containerRef}
+	class="h-screen bg-base-200 flex flex-col overflow-hidden"
+>
 	<!-- Agent Grid -->
-	<div class="border-b border-base-300 bg-base-100">
+	<div
+		class="overflow-hidden bg-base-100 flex flex-col"
+		style="height: {splitPercent}%;"
+	>
 		{#if isInitialLoad}
 			<!-- Loading State for Agent Grid -->
-			<div class="flex items-center justify-center h-48">
+			<div class="flex items-center justify-center flex-1">
 				<div class="text-center">
 					<span class="loading loading-bars loading-lg mb-4"></span>
 					<p class="text-sm text-base-content/60">Loading agents...</p>
@@ -163,8 +221,17 @@
 		{/if}
 	</div>
 
+	<!-- Resizable Divider -->
+	<ResizableDivider
+		onResize={handleResize}
+		class="h-2 bg-base-300 hover:bg-primary/20 border-y border-base-300 flex-shrink-0"
+	/>
+
 	<!-- Task Section -->
-	<div class="flex-1 overflow-auto bg-base-100">
+	<div
+		class="overflow-auto bg-base-100 flex-1"
+		style="height: {100 - splitPercent}%;"
+	>
 		{#if isInitialLoad}
 			<!-- Loading State -->
 			<div class="flex items-center justify-center h-48">
