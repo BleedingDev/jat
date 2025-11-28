@@ -411,37 +411,6 @@
 			class="border-t px-3 py-2"
 			style="background: oklch(0.18 0.01 250); border-color: oklch(0.30 0.02 250);"
 		>
-			<!-- Target display + Quick actions -->
-			<div class="flex items-center gap-2 mb-2">
-				<div
-					class="flex-1 px-2 py-1 rounded text-xs font-mono"
-					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.60 0.02 250);"
-				>
-					To: <span style="color: oklch(0.80 0.15 200);">{currentSession()?.agentName || 'No session'}</span>
-				</div>
-
-				<!-- Quick action buttons -->
-				<button
-					onclick={sendYes}
-					class="btn btn-xs"
-					style="background: oklch(0.30 0.10 150); border: none; color: oklch(0.95 0.02 250);"
-					title="Send '1' (Yes) to answer prompts"
-					disabled={sendingInput || !currentSession()}
-				>
-					Yes
-				</button>
-				<button
-					onclick={() => sendInput('ctrl-c')}
-					class="btn btn-xs"
-					style="background: oklch(0.30 0.10 25); border: none; color: oklch(0.95 0.02 250);"
-					title="Send Ctrl+C (interrupt)"
-					disabled={sendingInput || !currentSession()}
-				>
-					Ctrl+C
-				</button>
-			</div>
-
-			<!-- Text input -->
 			<div class="flex gap-2">
 				<input
 					type="text"
@@ -452,6 +421,24 @@
 					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
 					disabled={sendingInput || !currentSession()}
 				/>
+				<button
+					onclick={sendYes}
+					class="btn btn-xs"
+					style="background: oklch(0.30 0.10 150); border: none; color: oklch(0.95 0.02 250);"
+					title="Send '1' (Yes)"
+					disabled={sendingInput || !currentSession()}
+				>
+					Yes
+				</button>
+				<button
+					onclick={() => sendInput('ctrl-c')}
+					class="btn btn-xs"
+					style="background: oklch(0.30 0.10 25); border: none; color: oklch(0.95 0.02 250);"
+					title="Send Ctrl+C"
+					disabled={sendingInput || !currentSession()}
+				>
+					^C
+				</button>
 				<button
 					onclick={() => sendInput('text')}
 					class="btn btn-xs btn-primary"
