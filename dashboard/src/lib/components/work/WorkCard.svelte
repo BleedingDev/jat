@@ -133,7 +133,25 @@
 
 	// Auto-scroll state
 	let autoScroll = $state(true);
+	let userScrolledUp = $state(false);
 	let scrollContainerRef: HTMLDivElement | null = null;
+
+	// Detect when user manually scrolls up to disable auto-scroll
+	function handleScroll(e: Event) {
+		const el = e.target as HTMLDivElement;
+		if (!el) return;
+
+		// Check if user is near bottom (within 50px)
+		const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+
+		if (isNearBottom) {
+			// User scrolled to bottom, re-enable auto-scroll
+			userScrolledUp = false;
+		} else if (el.scrollTop < el.scrollHeight - el.clientHeight - 100) {
+			// User scrolled up significantly, disable auto-scroll temporarily
+			userScrolledUp = true;
+		}
+	}
 
 	// Control button loading states
 	let killLoading = $state(false);
@@ -191,9 +209,9 @@
 		return options;
 	});
 
-	// Scroll to bottom when output changes (if auto-scroll enabled)
+	// Scroll to bottom when output changes (if auto-scroll enabled and user hasn't scrolled up)
 	$effect(() => {
-		if (autoScroll && scrollContainerRef && output) {
+		if (autoScroll && !userScrolledUp && scrollContainerRef && output) {
 			requestAnimationFrame(() => {
 				if (scrollContainerRef) {
 					scrollContainerRef.scrollTop = scrollContainerRef.scrollHeight;
@@ -238,6 +256,9 @@
 	// Toggle auto-scroll
 	function toggleAutoScroll() {
 		autoScroll = !autoScroll;
+		if (autoScroll) {
+			userScrolledUp = false; // Reset when user enables auto-scroll
+		}
 	}
 
 	// Send a key to the session
@@ -471,7 +492,7 @@
 	<!-- Output Section -->
 	<div class="border-t border-base-300 flex-1 flex flex-col min-h-0">
 		<!-- Output Header -->
-		<div class="flex items-center justify-between px-4 py-1.5 bg-base-200/50">
+		<div class="flex items-center justify-between px-4 py-1.5 bg-base-200/50 flex-shrink-0">
 			<span class="text-xs font-mono text-base-content/60">
 				Output ({lineCount} lines)
 			</span>
@@ -493,16 +514,17 @@
 			bind:this={scrollContainerRef}
 			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed flex-1 min-h-0"
 			style="background: oklch(0.14 0.01 250);"
+			onscroll={handleScroll}
 		>
 			{#if output}
-				<pre class="whitespace-pre-wrap break-words" style="color: oklch(0.75 0.02 250);">{@html renderedOutput}</pre>
+				<pre class="whitespace-pre-wrap break-words m-0" style="color: oklch(0.75 0.02 250);">{@html renderedOutput}</pre>
 			{:else}
-				<p class="text-base-content/40 italic">No output yet...</p>
+				<p class="text-base-content/40 italic m-0">No output yet...</p>
 			{/if}
 		</div>
 
 		<!-- Input Section -->
-		<div class="border-t border-base-300 px-3 py-2 space-y-2" style="background: oklch(0.18 0.01 250);">
+		<div class="border-t border-base-300 px-3 py-2 space-y-2 flex-shrink-0" style="background: oklch(0.18 0.01 250);">
 			<!-- Quick action buttons - only show when prompt detected -->
 			{#if detectedOptions.length > 0}
 				<div class="flex gap-1.5 flex-wrap">
