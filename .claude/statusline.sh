@@ -488,6 +488,65 @@ case "$task_type" in
         ;;
 esac
 
+# ============================================================================
+# AGENT STATUS CALCULATION
+# ============================================================================
+# Matches dashboard logic from: dashboard/src/lib/utils/agentStatusUtils.ts
+# Thresholds from: dashboard/src/lib/config/constants.ts → AGENT_STATUS_THRESHOLDS
+#
+# Status priority order:
+#   1. working - Has active task OR file locks (agent is engaged)
+#   2. live    - Very recent activity (< 1 minute) without active work
+#   3. active  - Recent activity (< 10 minutes) or has locks within 1 hour
+#   4. idle    - Within 1 hour but not active
+#   5. offline - Over 1 hour or never active
+# ============================================================================
+
+# Thresholds in minutes (matching constants.ts values converted from ms)
+LIVE_THRESHOLD_MIN=1       # 60000ms = 1 minute
+WORKING_THRESHOLD_MIN=10   # 600000ms = 10 minutes
+IDLE_THRESHOLD_MIN=60      # 3600000ms = 1 hour
+
+# Compute agent status
+# Labels in CAPS to match dashboard (statusColors.ts)
+# Icons: ⚙ gear, ● dot, ◉ circle-dot, ○ circle, ⏻ power
+agent_status="OFFLINE"  # Default
+agent_status_icon="⏻"
+agent_status_color="${DIM}"
+
+has_in_progress_task=false
+has_active_locks=false
+
+[[ -n "$task_id" ]] && has_in_progress_task=true
+[[ $lock_count -gt 0 ]] && has_active_locks=true
+
+# Priority 1: WORKING - Has active task or file locks
+if [[ "$has_in_progress_task" == "true" ]] || [[ "$has_active_locks" == "true" ]]; then
+    agent_status="WORKING"
+    agent_status_icon="⚙"
+    agent_status_color="${YELLOW}"
+# Priority 2: LIVE - Very recent activity (< 1 minute) without active work
+elif [[ $last_activity_minutes -lt $LIVE_THRESHOLD_MIN ]]; then
+    agent_status="LIVE"
+    agent_status_icon="●"
+    agent_status_color="${GREEN}"
+# Priority 3: ACTIVE - Recent activity (< 10 minutes)
+elif [[ $last_activity_minutes -lt $WORKING_THRESHOLD_MIN ]]; then
+    agent_status="ACTIVE"
+    agent_status_icon="◉"
+    agent_status_color="${CYAN}"
+# Priority 4: IDLE - Within 1 hour
+elif [[ $last_activity_minutes -lt $IDLE_THRESHOLD_MIN ]]; then
+    agent_status="IDLE"
+    agent_status_icon="○"
+    agent_status_color="${GRAY}"
+# Priority 5: OFFLINE - Over 1 hour
+else
+    agent_status="OFFLINE"
+    agent_status_icon="⏻"
+    agent_status_color="${DIM}"
+fi
+
 # Build status line with all indicators
 status_line=""
 
@@ -535,8 +594,9 @@ if [[ -n "$task_id" ]]; then
     fi
 
 elif [[ -n "$agent_name" ]]; then
-    # Agent registered but no active task - show idle (dimmed)
-    status_line="${status_line} ${GRAY}·${RESET} ${GRAY}idle${RESET}"
+    # Agent registered but no active task - show computed status with icon
+    # Status matches dashboard: LIVE/ACTIVE/IDLE/OFFLINE (WORKING handled above with task)
+    status_line="${status_line} ${GRAY}·${RESET} ${agent_status_color}${agent_status_icon} ${agent_status}${RESET}"
 else
     # Fallback - use project folder name
     project_fallback=$(basename "$cwd" 2>/dev/null || echo "project")
