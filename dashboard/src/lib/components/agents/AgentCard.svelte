@@ -96,6 +96,15 @@
 	let sessionControlLoading = $state<string | null>(null); // 'kill' | 'interrupt' | 'continue' | slash command name
 	let showSlashDropdown = $state(false);
 
+	// Tab state: 'activity' | 'locks' | 'output'
+	let activeTab = $state<'activity' | 'locks' | 'output'>('activity');
+
+	// Output polling state
+	let outputContent = $state<string>('');
+	let outputLoading = $state(false);
+	let outputError = $state<string | null>(null);
+	let outputPollingInterval = $state<ReturnType<typeof setInterval> | null>(null);
+
 	// Token usage state management
 	let usageLoading = $state(false);
 	let usageError = $state<string | null>(null);
@@ -846,6 +855,85 @@
 	function closeSlashDropdown(): void {
 		showSlashDropdown = false;
 	}
+
+	// ═══════════════════════════════════════════════════════════════════════
+	// OUTPUT TAB FUNCTIONS
+	// Fetch and poll terminal output for this agent's session
+	// ═══════════════════════════════════════════════════════════════════════
+
+	// Fetch output from the agent's session
+	async function fetchOutput(): Promise<void> {
+		if (agentStatus() === 'offline') {
+			outputContent = '';
+			outputError = 'Agent is offline - no active session';
+			return;
+		}
+
+		try {
+			outputLoading = outputContent.length === 0; // Only show loading on first fetch
+			outputError = null;
+
+			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/output`);
+
+			if (!response.ok) {
+				if (response.status === 404) {
+					outputError = 'No active session found';
+				} else {
+					const data = await response.json();
+					throw new Error(data.message || 'Failed to fetch output');
+				}
+				return;
+			}
+
+			const data = await response.json();
+			outputContent = data.output || '';
+		} catch (error: unknown) {
+			console.error('Failed to fetch session output:', error);
+			outputError = error instanceof Error ? error.message : 'Unknown error';
+		} finally {
+			outputLoading = false;
+		}
+	}
+
+	// Start polling when output tab is active
+	function startOutputPolling(): void {
+		if (outputPollingInterval) return; // Already polling
+
+		// Initial fetch
+		fetchOutput();
+
+		// Poll every 500ms as specified in task description
+		outputPollingInterval = setInterval(fetchOutput, 500);
+	}
+
+	// Stop polling when leaving output tab
+	function stopOutputPolling(): void {
+		if (outputPollingInterval) {
+			clearInterval(outputPollingInterval);
+			outputPollingInterval = null;
+		}
+	}
+
+	// Handle tab change
+	function setActiveTab(tab: 'activity' | 'locks' | 'output'): void {
+		// Stop output polling when leaving output tab
+		if (activeTab === 'output' && tab !== 'output') {
+			stopOutputPolling();
+		}
+
+		activeTab = tab;
+
+		// Start output polling when entering output tab
+		if (tab === 'output') {
+			startOutputPolling();
+		}
+	}
+
+	// Clean up polling on unmount
+	import { onDestroy } from 'svelte';
+	onDestroy(() => {
+		stopOutputPolling();
+	});
 </script>
 
 <!-- Industrial/Terminal AgentCard -->
@@ -1132,83 +1220,84 @@
 		</div>
 
 		<!-- ═══════════════════════════════════════════════════════════════════════
-		     FILE LOCKS SECTION (Always visible when locks exist)
-		     Shows actual file patterns being locked by this agent
-		     ═══════════════════════════════════════════════════════════════════════ -->
-		{#if agentLocks().length > 0}
-			<div
-				class="mb-2 rounded overflow-hidden"
-				style="background: oklch(0.70 0.16 85 / 0.08); border: 1px solid oklch(0.70 0.16 85 / 0.2);"
-			>
-				<!-- Locks header -->
-				<button
-					class="w-full flex items-center gap-1.5 px-2 py-1 hover:bg-base-content/5 transition-colors"
-					onclick={viewReservations}
-					title="Click to manage file locks"
-				>
-					<svg class="w-3 h-3 shrink-0" style="color: oklch(0.70 0.16 85);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-					</svg>
-					<span class="font-mono text-[10px] tracking-widest uppercase" style="color: oklch(0.70 0.16 85);">Locks</span>
-					<span class="font-mono text-[10px] tabular-nums ml-auto" style="color: oklch(0.70 0.16 85);">
-						<AnimatedDigits value={agentLocks().length.toString()} />
-					</span>
-				</button>
-				<!-- Lock patterns list -->
-				<div class="px-2 pb-1.5 space-y-0.5">
-					{#each agentLocks().slice(0, 3) as lock}
-						<div
-							class="font-mono text-[10px] truncate px-1 py-0.5 rounded hover:bg-base-content/5 transition-colors"
-							style="color: oklch(0.75 0.14 85);"
-							title={lock.path_pattern}
-						>
-							{lock.path_pattern}
-						</div>
-					{/each}
-					{#if agentLocks().length > 3}
-						<div class="font-mono text-[9px] text-base-content/40 text-center py-0.5">
-							+{agentLocks().length - 3} more
-						</div>
-					{/if}
-				</div>
-			</div>
-		{/if}
-
-		<!-- ═══════════════════════════════════════════════════════════════════════
-		     COMPACT METRICS BAR (Queue + Cost)
-		     Shows queue count and daily cost - always visible
+		     TAB BAR
+		     Activity | Locks | Output tabs
 		     ═══════════════════════════════════════════════════════════════════════ -->
 		<div
-			class="flex items-center gap-1.5 mb-2 px-1.5 py-1 rounded"
+			class="flex items-center gap-0.5 mb-2 px-1 py-0.5 rounded"
 			style="background: oklch(0.5 0 0 / 0.06); border: 1px solid oklch(0.5 0 0 / 0.1);"
 		>
-			<!-- Queue indicator (blue) -->
-			<div
-				class="flex items-center gap-1 px-1.5 py-0.5 rounded"
-				style="background: {queuedTasks().length > 0 ? 'oklch(0.70 0.14 250 / 0.12)' : 'transparent'};"
-				title="Queued tasks: {queuedTasks().length}"
+			<!-- Activity Tab -->
+			<button
+				class="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded transition-colors font-mono text-[10px] tracking-wider uppercase
+					{activeTab === 'activity' ? 'bg-base-content/10' : 'hover:bg-base-content/5'}"
+				style="color: {activeTab === 'activity' ? statusVisual().accent : 'oklch(0.5 0 0 / 0.5)'};"
+				onclick={() => setActiveTab('activity')}
+				title="View activity and queue"
 			>
-				<svg class="w-3 h-3" style="color: {queuedTasks().length > 0 ? 'oklch(0.70 0.14 250)' : 'oklch(0.5 0 0 / 0.3)'};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+				<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
 				</svg>
-				<span class="font-mono text-[10px]" style="color: {queuedTasks().length > 0 ? 'oklch(0.70 0.14 250)' : 'oklch(0.5 0 0 / 0.4)'};">
-					Queue: <AnimatedDigits value={queuedTasks().length.toString()} />
-				</span>
-			</div>
+				<span class="hidden sm:inline">Activity</span>
+				{#if queuedTasks().length > 0}
+					<span
+						class="w-4 h-4 text-[9px] rounded-full flex items-center justify-center"
+						style="background: oklch(0.70 0.14 250 / 0.2); color: oklch(0.70 0.14 250);"
+					>
+						{queuedTasks().length}
+					</span>
+				{/if}
+			</button>
 
-			<!-- Token cost (green when low, yellow when medium, red when high) -->
+			<!-- Locks Tab -->
+			<button
+				class="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded transition-colors font-mono text-[10px] tracking-wider uppercase
+					{activeTab === 'locks' ? 'bg-base-content/10' : 'hover:bg-base-content/5'}"
+				style="color: {activeTab === 'locks' ? 'oklch(0.70 0.16 85)' : 'oklch(0.5 0 0 / 0.5)'};"
+				onclick={() => setActiveTab('locks')}
+				title="View file locks"
+			>
+				<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+				</svg>
+				<span class="hidden sm:inline">Locks</span>
+				{#if agentLocks().length > 0}
+					<span
+						class="w-4 h-4 text-[9px] rounded-full flex items-center justify-center"
+						style="background: oklch(0.70 0.16 85 / 0.2); color: oklch(0.70 0.16 85);"
+					>
+						{agentLocks().length}
+					</span>
+				{/if}
+			</button>
+
+			<!-- Output Tab -->
+			<button
+				class="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded transition-colors font-mono text-[10px] tracking-wider uppercase
+					{activeTab === 'output' ? 'bg-base-content/10' : 'hover:bg-base-content/5'}"
+				style="color: {activeTab === 'output' ? 'oklch(0.70 0.14 200)' : 'oklch(0.5 0 0 / 0.5)'};"
+				onclick={() => setActiveTab('output')}
+				title="View terminal output"
+			>
+				<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+				</svg>
+				<span class="hidden sm:inline">Output</span>
+			</button>
+
+			<!-- Token cost indicator (always visible) -->
 			{#if agent.usage}
 				{@const cost = agent.usage.today?.cost || 0}
 				{@const costColor = cost < 1 ? 'oklch(0.70 0.18 145)' : cost < 5 ? 'oklch(0.70 0.16 85)' : 'oklch(0.65 0.25 25)'}
 				<div
-					class="flex items-center gap-1 px-1.5 py-0.5 rounded ml-auto"
+					class="flex items-center gap-0.5 px-1.5 py-0.5 rounded ml-auto"
 					style="background: {cost > 0 ? `${costColor.replace(')', ' / 0.1)')}` : 'transparent'};"
 					title="Today's cost: ${cost.toFixed(2)}"
 				>
-					<span class="text-[10px]" style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};">$</span>
+					<span class="text-[9px]" style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};">$</span>
 					<AnimatedDigits
 						value={cost < 0.01 ? '0' : cost.toFixed(2)}
-						class="text-[10px]"
+						class="text-[9px]"
 						style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};"
 					/>
 				</div>
@@ -1216,15 +1305,17 @@
 		</div>
 
 		<!-- ═══════════════════════════════════════════════════════════════════════
-		     COMBINED CONTENT AREA (Activity + Queue)
-		     Single scrollable area with clear sections
+		     TAB CONTENT AREA
+		     Switches between Activity, Locks, and Output tabs
 		     ═══════════════════════════════════════════════════════════════════════ -->
 		<div
 			class="flex-1 min-h-0 mb-2 rounded overflow-y-auto relative"
 			style="background: oklch(0.5 0 0 / 0.04); border: 1px solid oklch(0.5 0 0 / 0.08);"
 		>
-			<!-- Activity Section -->
-			{#if agent.current_activity || (agent.activities && agent.activities.length > 0)}
+			<!-- ═══ ACTIVITY TAB ═══ -->
+			{#if activeTab === 'activity'}
+				<!-- Activity Section -->
+				{#if agent.current_activity || (agent.activities && agent.activities.length > 0)}
 				{@const firstActivity = agent.current_activity || (agent.activities && agent.activities.length > 0 ? agent.activities[0] : null)}
 				{@const isActiveTask = firstActivity && firstActivity.status !== 'closed'}
 				{@const currentActivity = isActiveTask ? firstActivity : null}
@@ -1366,15 +1457,131 @@
 				</div>
 			{/if}
 
-			<!-- Empty state if no activity and no queue -->
-			{#if !agent.current_activity && (!agent.activities || agent.activities.length === 0) && queuedTasks().length === 0}
-				<div class="p-3 text-center">
-					<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">Drop task to assign</p>
-				</div>
+				<!-- Empty state if no activity and no queue -->
+				{#if !agent.current_activity && (!agent.activities || agent.activities.length === 0) && queuedTasks().length === 0}
+					<div class="p-3 text-center">
+						<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">Drop task to assign</p>
+					</div>
+				{/if}
+
+			<!-- ═══ LOCKS TAB ═══ -->
+			{:else if activeTab === 'locks'}
+				{#if agentLocks().length > 0}
+					<!-- Locks header -->
+					<div
+						class="flex items-center gap-2 px-2 py-1 sticky top-0 z-10"
+						style="background: linear-gradient(90deg, oklch(0.70 0.16 85 / 0.1) 0%, oklch(0.18 0.01 250) 100%); border-bottom: 1px solid oklch(0.5 0 0 / 0.08);"
+					>
+						<svg class="w-3 h-3 shrink-0" style="color: oklch(0.70 0.16 85);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+						</svg>
+						<span class="font-mono text-[10px] tracking-widest uppercase" style="color: oklch(0.70 0.16 85);">File Locks</span>
+						<span class="font-mono text-[10px] tabular-nums ml-auto" style="color: oklch(0.70 0.16 85);">
+							<AnimatedDigits value={agentLocks().length.toString()} />
+						</span>
+						<button
+							class="btn btn-xs btn-ghost"
+							onclick={viewReservations}
+							title="Manage locks"
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+							</svg>
+						</button>
+					</div>
+
+					<!-- Lock patterns list -->
+					<div class="px-2 py-1.5 space-y-1">
+						{#each agentLocks() as lock}
+							<div
+								class="flex items-start gap-2 py-1.5 px-2 rounded"
+								style="background: oklch(0.70 0.16 85 / 0.08); border: 1px solid oklch(0.70 0.16 85 / 0.15);"
+							>
+								<svg class="w-3 h-3 shrink-0 mt-0.5" style="color: oklch(0.70 0.16 85);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+								</svg>
+								<div class="flex-1 min-w-0">
+									<p class="font-mono text-[11px] text-base-content truncate" title={lock.path_pattern}>
+										{lock.path_pattern}
+									</p>
+									{#if lock.reason}
+										<p class="text-[10px] text-base-content/50 truncate" title={lock.reason}>
+											{lock.reason}
+										</p>
+									{/if}
+									<p class="text-[9px] text-base-content/40 mt-0.5">
+										Expires: {new Date(lock.expires_ts).toLocaleTimeString()}
+									</p>
+								</div>
+								<button
+									class="btn btn-xs btn-ghost text-error hover:bg-error/20"
+									onclick={() => releaseReservation(lock.id, lock.path_pattern)}
+									title="Release lock"
+								>
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+								</button>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<!-- No locks empty state -->
+					<div class="flex flex-col items-center justify-center h-full p-4 text-center">
+						<svg class="w-8 h-8 mb-2 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+						</svg>
+						<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">No file locks</p>
+						<p class="text-[10px] text-base-content/30 mt-1">Agent has no active reservations</p>
+					</div>
+				{/if}
+
+			<!-- ═══ OUTPUT TAB ═══ -->
+			{:else if activeTab === 'output'}
+				{#if outputLoading}
+					<!-- Loading state -->
+					<div class="flex flex-col items-center justify-center h-full p-4">
+						<span class="loading loading-spinner loading-md" style="color: oklch(0.70 0.14 200);"></span>
+						<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40 mt-2">Loading output...</p>
+					</div>
+				{:else if outputError}
+					<!-- Error state -->
+					<div class="flex flex-col items-center justify-center h-full p-4 text-center">
+						<svg class="w-8 h-8 mb-2 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+						</svg>
+						<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">{outputError}</p>
+						{#if agentStatus() !== 'offline'}
+							<button
+								class="btn btn-xs btn-ghost mt-2"
+								onclick={fetchOutput}
+							>
+								Retry
+							</button>
+						{/if}
+					</div>
+				{:else if outputContent}
+					<!-- Terminal output display -->
+					<div
+						class="h-full overflow-y-auto px-2 py-1.5 font-mono text-[10px] leading-tight whitespace-pre-wrap break-all"
+						style="background: oklch(0.12 0.01 250); color: oklch(0.85 0.05 145);"
+					>
+						{outputContent}
+					</div>
+				{:else}
+					<!-- No output state -->
+					<div class="flex flex-col items-center justify-center h-full p-4 text-center">
+						<svg class="w-8 h-8 mb-2 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+						</svg>
+						<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">No output yet</p>
+						<p class="text-[10px] text-base-content/30 mt-1">Waiting for session output...</p>
+					</div>
+				{/if}
 			{/if}
 
-			<!-- Drag-over feedback (overlay on content area) -->
-			{#if isDragOver}
+			<!-- Drag-over feedback (overlay on content area - always visible on Activity tab) -->
+			{#if isDragOver && activeTab === 'activity'}
 				<div
 					class="absolute inset-0 flex items-center justify-center rounded"
 					style="background: {hasDependencyBlock || hasConflict ? 'oklch(0.65 0.25 25 / 0.15)' : 'oklch(0.75 0.20 145 / 0.15)'}; backdrop-filter: blur(2px);"
