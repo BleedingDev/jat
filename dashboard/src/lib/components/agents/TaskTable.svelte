@@ -1445,17 +1445,17 @@
 
 										<!-- Working agents avatars -->
 										{#if workingAgents.length > 0}
-											<div class="avatar-group -space-x-2 ml-3">
+											<div class="flex items-center -space-x-1 ml-3">
 												{#each workingAgents.slice(0, 4) as agentName}
-													<div class="avatar online placeholder w-6" title="{agentName} is working">
-														<div class="w-6 rounded-full ring ring-info ring-offset-base-100 ring-offset-1 animate-pulse">
-															<AgentAvatar name={agentName || ''} size={24} />
+													<div class="avatar online placeholder w-5" title="{agentName} is working">
+														<div class="w-5 rounded-full ring-2 ring-info ring-offset-base-100 ring-offset-1">
+															<AgentAvatar name={agentName || ''} size={20} />
 														</div>
 													</div>
 												{/each}
 												{#if workingAgents.length > 4}
-													<div class="avatar placeholder w-6">
-														<div class="bg-neutral text-neutral-content w-6 rounded-full text-[10px]">
+													<div class="avatar placeholder w-5">
+														<div class="bg-neutral text-neutral-content w-5 rounded-full text-[9px] font-mono">
 															+{workingAgents.length - 4}
 														</div>
 													</div>
