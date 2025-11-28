@@ -127,11 +127,15 @@ export async function POST({ request }) {
 		try {
 			await execAsync(command);
 
-			// Wait a moment for Claude to start, then send the initial prompt
+			// Wait for Claude to fully start, then send the initial prompt
+			// Claude Code needs ~5 seconds to initialize and show prompt
 			if (initialPrompt) {
-				await new Promise(resolve => setTimeout(resolve, 2000));
+				await new Promise(resolve => setTimeout(resolve, 5000));
 				const escapedPrompt = initialPrompt.replace(/"/g, '\\"');
-				await execAsync(`tmux send-keys -t "${sessionName}" "${escapedPrompt}" Enter`);
+				// Send prompt text first, then Enter separately for reliability
+				await execAsync(`tmux send-keys -t "${sessionName}" "${escapedPrompt}"`);
+				await new Promise(resolve => setTimeout(resolve, 100));
+				await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 			}
 
 			return json({
