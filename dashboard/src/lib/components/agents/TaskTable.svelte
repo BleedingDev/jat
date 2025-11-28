@@ -922,6 +922,50 @@
 				/>
 			{/if}
 
+			<!-- Grouping Mode Toggle - Industrial btn-group -->
+			<div class="join rounded" style="border: 1px solid oklch(0.35 0.02 250);">
+				<!-- Type grouping (list icon) -->
+				<button
+					class="join-item btn btn-xs px-2"
+					style={groupingMode === 'type'
+						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
+						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					onclick={() => setGroupingMode('type')}
+					title="Group by Type"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+					</svg>
+				</button>
+				<!-- Parent grouping (folder icon) -->
+				<button
+					class="join-item btn btn-xs px-2"
+					style={groupingMode === 'parent'
+						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
+						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					onclick={() => setGroupingMode('parent')}
+					title="Group by Parent Epic"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+					</svg>
+				</button>
+				<!-- Label grouping (tag icon) -->
+				<button
+					class="join-item btn btn-xs px-2"
+					style={groupingMode === 'label'
+						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
+						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					onclick={() => setGroupingMode('label')}
+					title="Group by Label"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" />
+					</svg>
+				</button>
+			</div>
+
 			<!-- Clear Filters - Industrial -->
 			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0}
 				<button
