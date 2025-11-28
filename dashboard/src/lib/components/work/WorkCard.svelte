@@ -8,6 +8,8 @@
 	 * - Focus on what work is being done, not who is doing it
 	 * - Inline output with ANSI rendering
 	 * - Kill session and control buttons
+	 * - Prompt detection with quick action buttons
+	 * - Text input for sending commands
 	 *
 	 * Props:
 	 * - sessionName: tmux session name (e.g., "jat-WisePrairie")
@@ -45,6 +47,7 @@
 		onInterrupt?: () => void;
 		onContinue?: () => void;
 		onTaskClick?: (taskId: string) => void;
+		onSendInput?: (input: string, type: 'text' | 'key') => Promise<void>;
 		class?: string;
 	}
 
@@ -60,6 +63,7 @@
 		onInterrupt,
 		onContinue,
 		onTaskClick,
+		onSendInput,
 		class: className = ''
 	}: Props = $props();
 
@@ -71,6 +75,57 @@
 	let killLoading = $state(false);
 	let interruptLoading = $state(false);
 	let continueLoading = $state(false);
+	let sendingInput = $state(false);
+
+	// Input state
+	let inputText = $state('');
+
+	// Detected Claude Code prompt options
+	interface PromptOption {
+		number: number;
+		text: string;
+		type: 'yes' | 'yes-remember' | 'custom' | 'other';
+		keySequence: string[]; // Keys to send (e.g., ['down', 'enter'])
+	}
+
+	// Parse Claude Code prompt options from output
+	const detectedOptions = $derived((): PromptOption[] => {
+		if (!output) return [];
+
+		const options: PromptOption[] = [];
+
+		// Look for "Do you want to proceed?" or similar prompts
+		// Match lines like "❯ 1. Yes" or "  2. Yes, and don't ask again..."
+		const optionRegex = /^[❯\s]+(\d+)\.\s+(.+)$/gm;
+		let match;
+
+		while ((match = optionRegex.exec(output)) !== null) {
+			const num = parseInt(match[1], 10);
+			const text = match[2].trim();
+
+			// Determine option type
+			let type: PromptOption['type'] = 'other';
+			if (/^Yes\s*$/.test(text)) {
+				type = 'yes';
+			} else if (/Yes.*don't ask again/i.test(text) || /Yes.*and don't ask/i.test(text)) {
+				type = 'yes-remember';
+			} else if (/Type here/i.test(text) || /tell Claude/i.test(text)) {
+				type = 'custom';
+			}
+
+			// Calculate key sequence: option 1 = just Enter, option 2 = Down+Enter, etc.
+			const downs = num - 1;
+			const keySequence: string[] = [];
+			for (let i = 0; i < downs; i++) {
+				keySequence.push('down');
+			}
+			keySequence.push('enter');
+
+			options.push({ number: num, text, type, keySequence });
+		}
+
+		return options;
+	});
 
 	// Scroll to bottom when output changes (if auto-scroll enabled)
 	$effect(() => {
@@ -119,6 +174,60 @@
 	// Toggle auto-scroll
 	function toggleAutoScroll() {
 		autoScroll = !autoScroll;
+	}
+
+	// Send a key to the session
+	async function sendKey(keyType: string) {
+		if (!onSendInput) return;
+		sendingInput = true;
+		try {
+			await onSendInput(keyType, 'key');
+		} finally {
+			sendingInput = false;
+		}
+	}
+
+	// Send a sequence of keys (e.g., Down then Enter for option 2)
+	async function sendKeySequence(keys: string[]) {
+		if (!onSendInput) return;
+		sendingInput = true;
+		try {
+			for (const key of keys) {
+				await onSendInput(key, 'key');
+				// Small delay between keys
+				await new Promise(r => setTimeout(r, 50));
+			}
+		} finally {
+			sendingInput = false;
+		}
+	}
+
+	// Send option by number (1-indexed)
+	function sendOptionNumber(num: number) {
+		const opt = detectedOptions.find(o => o.number === num);
+		if (opt) {
+			sendKeySequence(opt.keySequence);
+		}
+	}
+
+	// Send text input
+	async function sendTextInput() {
+		if (!inputText.trim() || !onSendInput) return;
+		sendingInput = true;
+		try {
+			await onSendInput(inputText, 'text');
+			inputText = '';
+		} finally {
+			sendingInput = false;
+		}
+	}
+
+	// Handle Enter key in input
+	function handleInputKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			sendTextInput();
+		}
 	}
 
 	// Render output with ANSI codes
@@ -264,6 +373,90 @@
 			{:else}
 				<p class="text-base-content/40 italic">No output yet...</p>
 			{/if}
+		</div>
+
+		<!-- Input Section -->
+		<div class="border-t border-base-300 px-3 py-2 space-y-2" style="background: oklch(0.18 0.01 250);">
+			<!-- Quick action buttons - only show when prompt detected -->
+			{#if detectedOptions.length > 0}
+				<div class="flex gap-1.5 flex-wrap">
+					{#each detectedOptions as opt (opt.number)}
+						{#if opt.type === 'yes'}
+							<button
+								onclick={() => sendOptionNumber(opt.number)}
+								class="btn btn-xs"
+								style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
+								title={`Option ${opt.number}: ${opt.text}`}
+								disabled={sendingInput || !onSendInput}
+							>
+								<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes
+							</button>
+						{:else if opt.type === 'yes-remember'}
+							<button
+								onclick={() => sendOptionNumber(opt.number)}
+								class="btn btn-xs"
+								style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
+								title={`Option ${opt.number}: ${opt.text}`}
+								disabled={sendingInput || !onSendInput}
+							>
+								<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes+✓
+							</button>
+						{:else if opt.type === 'custom'}
+							<button
+								onclick={() => sendOptionNumber(opt.number)}
+								class="btn btn-xs"
+								style="background: oklch(0.25 0.08 280); border: none; color: oklch(0.85 0.02 250);"
+								title={`Option ${opt.number}: ${opt.text}`}
+								disabled={sendingInput || !onSendInput}
+							>
+								<span class="opacity-60 mr-0.5">{opt.number}.</span>Custom
+							</button>
+						{/if}
+					{/each}
+					<button
+						onclick={() => sendKey('escape')}
+						class="btn btn-xs"
+						style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
+						title="Escape (cancel prompt)"
+						disabled={sendingInput || !onSendInput}
+					>
+						Esc
+					</button>
+					<button
+						onclick={() => sendKey('ctrl-c')}
+						class="btn btn-xs"
+						style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+						title="Send Ctrl+C (interrupt)"
+						disabled={sendingInput || !onSendInput}
+					>
+						^C
+					</button>
+				</div>
+			{/if}
+
+			<!-- Text input -->
+			<div class="flex gap-2">
+				<input
+					type="text"
+					bind:value={inputText}
+					onkeydown={handleInputKeydown}
+					placeholder="Type and press Enter..."
+					class="input input-xs flex-1 font-mono"
+					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
+					disabled={sendingInput || !onSendInput}
+				/>
+				<button
+					onclick={sendTextInput}
+					class="btn btn-xs btn-primary"
+					disabled={sendingInput || !inputText.trim() || !onSendInput}
+				>
+					{#if sendingInput}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						Send
+					{/if}
+				</button>
+			</div>
 		</div>
 	</div>
 </div>
