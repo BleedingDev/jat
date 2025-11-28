@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { replaceState } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
 	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
@@ -79,6 +80,32 @@
 	// 'parent' - group by parent task ID (for epic/subtask hierarchies)
 	// 'label' - group by first label
 	let groupingMode = $state<GroupingMode>('type');
+
+	// Initialize groupingMode from URL on mount
+	$effect(() => {
+		const groupByParam = $page.url.searchParams.get('groupBy');
+		if (groupByParam && ['type', 'parent', 'label'].includes(groupByParam)) {
+			groupingMode = groupByParam as GroupingMode;
+		}
+	});
+
+	/**
+	 * Set grouping mode and sync to URL
+	 * @param mode - The grouping mode to set ('type', 'parent', 'label')
+	 */
+	function setGroupingMode(mode: GroupingMode) {
+		groupingMode = mode;
+
+		// Sync to URL
+		const url = new URL(window.location.href);
+		if (mode === 'type') {
+			// 'type' is default, remove param
+			url.searchParams.delete('groupBy');
+		} else {
+			url.searchParams.set('groupBy', mode);
+		}
+		replaceState(url, {});
+	}
 
 	// Detect new, removed, and status-changed tasks when tasks array changes
 	// Using $effect.pre to set animation state BEFORE rendering

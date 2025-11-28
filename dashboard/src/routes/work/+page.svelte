@@ -3,15 +3,17 @@
 	 * Work Page
 	 * Shows active Claude Code work sessions with TaskTable below.
 	 *
-	 * Layout: WorkPanel (horizontal scroll) + TaskTable below
-	 * Similar to /dash layout pattern.
+	 * Layout: WorkPanel (horizontal scroll) + Resizable Divider + TaskTable
+	 * User can drag divider to adjust split between panels.
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
 	import WorkPanel from '$lib/components/work/WorkPanel.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import {
 		workSessionsState,
 		fetch as fetchSessions,
@@ -23,6 +25,53 @@
 		startPolling,
 		stopPolling
 	} from '$lib/stores/workSessions.svelte.js';
+
+	// Resizable panel state
+	const STORAGE_KEY = 'work-panel-split';
+	const DEFAULT_SPLIT = 60; // 60% for work panel, 40% for task table
+	const MIN_SPLIT = 20;
+	const MAX_SPLIT = 80;
+
+	let splitPercent = $state(DEFAULT_SPLIT);
+	let containerHeight = $state(0);
+	let containerRef: HTMLDivElement | null = null;
+
+	// Load saved split from localStorage
+	$effect(() => {
+		if (browser) {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const parsed = parseFloat(saved);
+				if (!isNaN(parsed) && parsed >= MIN_SPLIT && parsed <= MAX_SPLIT) {
+					splitPercent = parsed;
+				}
+			}
+		}
+	});
+
+	// Save split to localStorage when it changes
+	function saveSplit() {
+		if (browser) {
+			localStorage.setItem(STORAGE_KEY, splitPercent.toString());
+		}
+	}
+
+	// Handle resize from divider
+	function handleResize(deltaY: number) {
+		if (!containerHeight) return;
+
+		const deltaPercent = (deltaY / containerHeight) * 100;
+		const newSplit = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, splitPercent + deltaPercent));
+		splitPercent = newSplit;
+		saveSplit();
+	}
+
+	// Update container height on mount and resize
+	function updateContainerHeight() {
+		if (containerRef) {
+			containerHeight = containerRef.clientHeight;
+		}
+	}
 
 	// Task state
 	let tasks = $state<any[]>([]);
@@ -136,18 +185,31 @@
 	onMount(() => {
 		fetchTaskData();
 		startPolling(500);
+		updateContainerHeight();
+		window.addEventListener('resize', updateContainerHeight);
 	});
 
 	onDestroy(() => {
 		stopPolling();
+		if (browser) {
+			window.removeEventListener('resize', updateContainerHeight);
+		}
 	});
 </script>
 
-<div class="min-h-screen bg-base-200 flex flex-col">
+<svelte:window onresize={updateContainerHeight} />
+
+<div
+	bind:this={containerRef}
+	class="h-screen bg-base-200 flex flex-col overflow-hidden"
+>
 	<!-- Work Sessions (horizontal scroll) -->
-	<div class="border-b border-base-300 bg-base-100">
+	<div
+		class="overflow-hidden bg-base-100 flex flex-col"
+		style="height: {splitPercent}%;"
+	>
 		{#if isInitialLoad}
-			<div class="flex items-center justify-center h-48">
+			<div class="flex items-center justify-center flex-1">
 				<div class="text-center">
 					<span class="loading loading-bars loading-lg mb-4"></span>
 					<p class="text-sm text-base-content/60">Loading work sessions...</p>
@@ -162,12 +224,22 @@
 				onContinue={handleContinue}
 				onSendInput={handleSendInput}
 				onTaskClick={handleTaskClick}
+				class="flex-1"
 			/>
 		{/if}
 	</div>
 
+	<!-- Resizable Divider -->
+	<ResizableDivider
+		onResize={handleResize}
+		class="h-2 bg-base-300 hover:bg-primary/20 border-y border-base-300 flex-shrink-0"
+	/>
+
 	<!-- Task Table -->
-	<div class="flex-1 overflow-auto bg-base-100">
+	<div
+		class="overflow-auto bg-base-100 flex-1"
+		style="height: {100 - splitPercent}%;"
+	>
 		{#if isInitialLoad}
 			<div class="flex items-center justify-center h-48">
 				<div class="text-center">

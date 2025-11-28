@@ -114,7 +114,7 @@
 	}
 </script>
 
-<div class="flex flex-col h-full {className}">
+<div class="flex flex-col h-full min-h-0 {className}">
 	{#if sortedSessions.length === 0}
 		<!-- Empty State -->
 		<div class="flex-1 flex flex-col items-center justify-center p-8">
@@ -124,11 +124,11 @@
 		</div>
 	{:else}
 		<!-- WorkCards -->
-		<div class="flex-1 overflow-auto p-4">
+		<div class="flex-1 overflow-hidden p-4">
 			<!-- Horizontal scrolling row (630px per card for full terminal output) -->
-			<div class="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
+			<div class="flex gap-4 overflow-x-auto h-full pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedSessions as session (session.sessionName)}
-					<div class="flex-shrink-0" style="width: 630px;">
+					<div class="flex-shrink-0 h-full" style="width: 630px;">
 					<WorkCard
 						sessionName={session.sessionName}
 						agentName={session.agentName}

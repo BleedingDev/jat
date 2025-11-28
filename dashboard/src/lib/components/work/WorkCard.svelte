@@ -299,10 +299,9 @@
 </script>
 
 <div
-	class="card bg-base-100 shadow-lg border overflow-hidden {className}"
+	class="card bg-base-100 shadow-lg border overflow-hidden h-full flex flex-col {className}"
 	class:border-base-300={!showCompletionBanner}
 	class:border-success={showCompletionBanner}
-	style="min-height: 300px;"
 	in:fly={{ x: 50, duration: 300, delay: 50 }}
 	out:fade={{ duration: 200 }}
 >
@@ -470,7 +469,7 @@
 	</div>
 
 	<!-- Output Section -->
-	<div class="border-t border-base-300">
+	<div class="border-t border-base-300 flex-1 flex flex-col min-h-0">
 		<!-- Output Header -->
 		<div class="flex items-center justify-between px-4 py-1.5 bg-base-200/50">
 			<span class="text-xs font-mono text-base-content/60">
@@ -492,7 +491,7 @@
 		<!-- Output Content -->
 		<div
 			bind:this={scrollContainerRef}
-			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed h-144"
+			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed flex-1 min-h-0"
 			style="background: oklch(0.14 0.01 250);"
 		>
 			{#if output}
