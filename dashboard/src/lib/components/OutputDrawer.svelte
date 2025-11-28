@@ -561,10 +561,9 @@
 			class="border-t px-3 py-2 space-y-2"
 			style="background: oklch(0.18 0.01 250); border-color: oklch(0.30 0.02 250);"
 		>
-			<!-- Quick action buttons for Claude prompts - dynamic based on detected options -->
-			<div class="flex gap-1.5 flex-wrap">
-				{#if detectedOptions().length > 0}
-					<!-- Show detected prompt options with their numbers -->
+			<!-- Quick action buttons - only show when prompt detected -->
+			{#if detectedOptions().length > 0}
+				<div class="flex gap-1.5 flex-wrap">
 					{#each detectedOptions() as opt (opt.number)}
 						{#if opt.type === 'yes'}
 							<button
@@ -598,46 +597,26 @@
 							</button>
 						{/if}
 					{/each}
-				{:else}
-					<!-- Fallback buttons when no prompt detected -->
 					<button
-						onclick={sendYes}
-						class="btn btn-xs flex-1"
-						style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
-						title="Accept highlighted option (Enter)"
+						onclick={sendEscape}
+						class="btn btn-xs"
+						style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
+						title="Escape (cancel prompt)"
 						disabled={sendingInput || !currentSession()}
 					>
-						Yes
+						Esc
 					</button>
 					<button
-						onclick={sendYesRemember}
-						class="btn btn-xs flex-1"
-						style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
-						title="Yes + Don't ask again (Down, Enter)"
+						onclick={() => sendKey('ctrl-c')}
+						class="btn btn-xs"
+						style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+						title="Send Ctrl+C (interrupt)"
 						disabled={sendingInput || !currentSession()}
 					>
-						Yes+✓
+						^C
 					</button>
-				{/if}
-				<button
-					onclick={sendEscape}
-					class="btn btn-xs"
-					style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
-					title="Escape (cancel prompt)"
-					disabled={sendingInput || !currentSession()}
-				>
-					Esc
-				</button>
-				<button
-					onclick={() => sendKey('ctrl-c')}
-					class="btn btn-xs"
-					style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
-					title="Send Ctrl+C (interrupt)"
-					disabled={sendingInput || !currentSession()}
-				>
-					^C
-				</button>
-			</div>
+				</div>
+			{/if}
 
 			<!-- Text input -->
 			<div class="flex gap-2">
