@@ -118,9 +118,9 @@
 		drawerOpen = true;
 	}
 
-	// Auto-refresh data every 5 seconds using Svelte reactivity
+	// Auto-refresh data every 15 seconds (layout also polls at 30s)
 	$effect(() => {
-		const interval = setInterval(fetchData, 5000);
+		const interval = setInterval(fetchData, 15000);
 		return () => clearInterval(interval);
 	});
 
@@ -130,12 +130,15 @@
 		return () => clearInterval(interval);
 	});
 
-	// Refetch data when drawer closes (to update any changes)
+	// Track previous drawer state to detect close transition
+	let wasDrawerOpen = false;
+
+	// Refetch data when drawer closes (to update any changes made in drawer)
 	$effect(() => {
-		if (!drawerOpen && selectedTaskId) {
-			// Drawer just closed, refresh data
+		if (wasDrawerOpen && !drawerOpen) {
 			fetchData();
 		}
+		wasDrawerOpen = drawerOpen;
 	});
 
 	onMount(() => {

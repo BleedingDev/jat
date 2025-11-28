@@ -221,13 +221,30 @@
 	<div class="drawer-side">
 		<label aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
 
-		<!-- Drawer Panel -->
-		<div class="bg-base-100 min-h-full w-full max-w-2xl flex flex-col shadow-2xl">
-			<!-- Header -->
-			<div class="flex items-center justify-between p-6 border-b border-base-300">
+		<!-- Drawer Panel - Industrial -->
+		<div
+			class="min-h-full w-full max-w-2xl flex flex-col shadow-2xl"
+			style="
+				background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
+				border-left: 1px solid oklch(0.35 0.02 250);
+			"
+		>
+			<!-- Header - Industrial -->
+			<div
+				class="flex items-center justify-between p-6 relative"
+				style="
+					background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
+					border-bottom: 1px solid oklch(0.35 0.02 250);
+				"
+			>
+				<!-- Left accent bar -->
+				<div
+					class="absolute left-0 top-0 bottom-0 w-1"
+					style="background: linear-gradient(180deg, oklch(0.70 0.18 240) 0%, oklch(0.70 0.18 240 / 0.3) 100%);"
+				></div>
 				<div>
-					<h2 class="text-2xl font-bold text-base-content">Create New Task</h2>
-					<p class="text-sm text-base-content/70 mt-1">
+					<h2 class="text-xl font-bold font-mono uppercase tracking-wider" style="color: oklch(0.85 0.02 250);">Create New Task</h2>
+					<p class="text-sm mt-1" style="color: oklch(0.55 0.02 250);">
 						Fill in the details below to create a new task
 					</p>
 				</div>
@@ -241,13 +258,13 @@
 				</button>
 			</div>
 
-			<!-- Form -->
-			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-6">
+			<!-- Form - Industrial -->
+			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-6" style="background: oklch(0.16 0.01 250);">
 				<div class="space-y-6">
-					<!-- Title (Required) -->
+					<!-- Title (Required) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-title">
-							<span class="label-text font-semibold">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 								Title
 								<span class="text-error">*</span>
 							</span>
@@ -256,9 +273,8 @@
 							id="task-title"
 							type="text"
 							placeholder="Enter task title..."
-							class="input input-bordered w-full {validationErrors.title
-								? 'input-error'
-								: ''}"
+							class="input w-full font-mono {validationErrors.title ? 'input-error' : ''}"
+							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 							bind:this={titleInput}
 							bind:value={formData.title}
 							disabled={isSubmitting}
@@ -272,38 +288,40 @@
 						{/if}
 					</div>
 
-					<!-- Description (Optional) -->
+					<!-- Description (Optional) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-description">
-							<span class="label-text font-semibold">Description</span>
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Description</span>
 						</label>
 						<textarea
 							id="task-description"
 							placeholder="Enter task description (optional)..."
-							class="textarea textarea-bordered w-full h-32"
+							class="textarea w-full h-32 font-mono"
+							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 							bind:value={formData.description}
 							disabled={isSubmitting}
 						></textarea>
 						<label class="label">
-							<span class="label-text-alt text-base-content/60">
+							<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 								Supports markdown formatting
 							</span>
 						</label>
 					</div>
 
-					<!-- Priority & Type Row -->
+					<!-- Priority & Type Row - Industrial -->
 					<div class="grid grid-cols-2 gap-4">
-						<!-- Priority (Required) -->
+						<!-- Priority (Required) - Industrial -->
 						<div class="form-control">
 							<label class="label" for="task-priority">
-								<span class="label-text font-semibold">
+								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 									Priority
 									<span class="text-error">*</span>
 								</span>
 							</label>
 							<select
 								id="task-priority"
-								class="select select-bordered w-full"
+								class="select w-full font-mono"
+								style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 								bind:value={formData.priority}
 								disabled={isSubmitting}
 								required
@@ -314,19 +332,18 @@
 							</select>
 						</div>
 
-						<!-- Type (Required) -->
+						<!-- Type (Required) - Industrial -->
 						<div class="form-control">
 							<label class="label" for="task-type">
-								<span class="label-text font-semibold">
+								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 									Type
 									<span class="text-error">*</span>
 								</span>
 							</label>
 							<select
 								id="task-type"
-								class="select select-bordered w-full {validationErrors.type
-									? 'select-error'
-									: ''}"
+								class="select w-full font-mono {validationErrors.type ? 'select-error' : ''}"
+								style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 								bind:value={formData.type}
 								disabled={isSubmitting}
 								required
@@ -343,14 +360,15 @@
 						</div>
 					</div>
 
-					<!-- Project (Optional) -->
+					<!-- Project (Optional) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-project">
-							<span class="label-text font-semibold">Project</span>
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Project</span>
 						</label>
 						<select
 							id="task-project"
-							class="select select-bordered w-full"
+							class="select w-full font-mono"
+							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 							bind:value={formData.project}
 							disabled={isSubmitting}
 						>
@@ -360,55 +378,60 @@
 							{/each}
 						</select>
 						<label class="label">
-							<span class="label-text-alt text-base-content/60">
+							<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 								Leave empty for auto-assignment
 							</span>
 						</label>
 					</div>
 
-					<!-- Labels (Optional) -->
+					<!-- Labels (Optional) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-labels">
-							<span class="label-text font-semibold">Labels</span>
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Labels</span>
 						</label>
 						<input
 							id="task-labels"
 							type="text"
 							placeholder="e.g., frontend, urgent, bug-fix"
-							class="input input-bordered w-full"
+							class="input w-full font-mono"
+							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 							bind:value={formData.labels}
 							disabled={isSubmitting}
 						/>
 						<label class="label">
-							<span class="label-text-alt text-base-content/60">
+							<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 								Comma-separated list of labels
 							</span>
 						</label>
 					</div>
 
-					<!-- Dependencies (Optional) -->
+					<!-- Dependencies (Optional) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-dependencies">
-							<span class="label-text font-semibold">Dependencies</span>
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Dependencies</span>
 						</label>
 						<input
 							id="task-dependencies"
 							type="text"
 							placeholder="e.g., jat-abc, jat-xyz"
-							class="input input-bordered w-full"
+							class="input w-full font-mono"
+							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 							bind:value={formData.dependencies}
 							disabled={isSubmitting}
 						/>
 						<label class="label">
-							<span class="label-text-alt text-base-content/60">
+							<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 								Comma-separated list of task IDs this task depends on
 							</span>
 						</label>
 					</div>
 
-					<!-- Error Message -->
+					<!-- Error Message - Industrial -->
 					{#if submitError}
-						<div class="alert alert-error">
+						<div
+							class="alert font-mono text-sm"
+							style="background: oklch(0.35 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
+						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								class="stroke-current shrink-0 h-6 w-6"
@@ -426,9 +449,12 @@
 						</div>
 					{/if}
 
-					<!-- Success Message -->
+					<!-- Success Message - Industrial -->
 					{#if successMessage}
-						<div class="alert alert-success">
+						<div
+							class="alert font-mono text-sm"
+							style="background: oklch(0.35 0.15 150); border: 1px solid oklch(0.50 0.18 150); color: oklch(0.95 0.02 250);"
+						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								class="stroke-current shrink-0 h-6 w-6"
@@ -448,8 +474,14 @@
 				</div>
 			</form>
 
-			<!-- Footer Actions -->
-			<div class="p-6 border-t border-base-300 bg-base-200">
+			<!-- Footer Actions - Industrial -->
+			<div
+				class="p-6"
+				style="
+					background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
+					border-top: 1px solid oklch(0.35 0.02 250);
+				"
+			>
 				<div class="flex justify-end gap-3">
 					<button
 						type="button"
@@ -461,7 +493,7 @@
 					</button>
 					<button
 						type="submit"
-						class="btn btn-primary"
+						class="btn btn-primary font-mono"
 						onclick={handleSubmit}
 						disabled={isSubmitting}
 					>

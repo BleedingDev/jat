@@ -152,34 +152,49 @@
 	);
 </script>
 
+<!-- Industrial Token Usage Badge -->
 <div class="flex items-center gap-2" title={tooltipText}>
-	<!-- Tokens Badge - use outline for better readability -->
-	<span class="badge badge-sm badge-outline border-{tokenColor} text-{tokenColor} gap-1 font-mono">
+	<!-- Tokens Badge - Industrial -->
+	<span
+		class="px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1"
+		style="
+			background: oklch(0.18 0.01 250);
+			border: 1px solid oklch(0.35 0.02 250);
+			color: oklch(0.70 0.18 240);
+		"
+	>
 		{#if !compact}
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.18 240);">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
 			</svg>
 		{/if}
 		<AnimatedDigits value={formatTokensCompact(tokensToday)} class="font-medium" />
 	</span>
 
-	<!-- Separator -->
-	<span class="text-base-content/30">|</span>
+	<!-- Separator - Industrial -->
+	<span style="color: oklch(0.35 0.02 250);">|</span>
 
-	<!-- Cost Badge - use outline for better readability -->
-	<span class="badge badge-sm badge-outline border-{tokenColor} text-{tokenColor} gap-1 font-mono">
+	<!-- Cost Badge - Industrial -->
+	<span
+		class="px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1"
+		style="
+			background: oklch(0.18 0.01 250);
+			border: 1px solid oklch(0.35 0.02 250);
+			color: oklch(0.70 0.15 150);
+		"
+	>
 		{#if !compact}
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.15 150);">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 		{/if}
 		<AnimatedCost value={costToday} format={formatCostCompact} class="font-medium" />
 	</span>
 
-	<!-- Sparkline (multi-project or single-project) -->
+	<!-- Sparkline (multi-project or single-project) - Industrial -->
 	{#if isMultiProject}
 		<!-- Multi-project sparkline with stacked/overlay chart -->
-		<span class="text-base-content/30">|</span>
+		<span style="color: oklch(0.35 0.02 250);">|</span>
 
 		<div class="hidden sm:block flex-shrink w-[120px] min-w-[60px] h-[20px]">
 			<Sparkline
@@ -194,27 +209,27 @@
 			/>
 		</div>
 
-		<!-- Compact Legend (only show active projects with color dots) -->
+		<!-- Compact Legend (only show active projects with color dots) - Industrial -->
 		{#if showLegend && activeProjects.length > 0}
-			<span class="text-base-content/30">|</span>
-			<div class="hidden lg:flex items-center gap-1.5 text-xs">
+			<span style="color: oklch(0.35 0.02 250);">|</span>
+			<div class="hidden lg:flex items-center gap-1.5 text-xs font-mono">
 				{#each activeProjects as project}
 					<div class="flex items-center gap-0.5" title="{project.name}: {formatTokensCompact(project.totalTokens)} tokens">
 						<div
 							class="w-2 h-2 rounded-full flex-shrink-0"
 							style="background-color: {project.color};"
 						></div>
-						<span class="text-base-content/60 truncate max-w-[60px]">{project.name}</span>
+						<span style="color: oklch(0.55 0.02 250);" class="truncate max-w-[60px]">{project.name}</span>
 					</div>
 				{/each}
 				{#if projectMeta && projectMeta.filter(p => p.totalTokens > 0).length > 5}
-					<span class="text-base-content/40">+{projectMeta.filter(p => p.totalTokens > 0).length - 5}</span>
+					<span style="color: oklch(0.45 0.02 250);">+{projectMeta.filter(p => p.totalTokens > 0).length - 5}</span>
 				{/if}
 			</div>
 		{/if}
 	{:else if sparklineData && sparklineData.length > 0}
-		<!-- Single-project sparkline (original behavior) -->
-		<span class="text-base-content/30">|</span>
+		<!-- Single-project sparkline (original behavior) - Industrial -->
+		<span style="color: oklch(0.35 0.02 250);">|</span>
 
 		<div class="hidden sm:block flex-shrink w-[120px] min-w-[60px] h-[20px]">
 			<Sparkline

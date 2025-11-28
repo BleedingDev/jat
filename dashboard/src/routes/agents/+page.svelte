@@ -48,21 +48,22 @@
 		fetchData();
 	}
 
-	// Sync selectedProject from URL params (REACTIVE using $page store)
+	// Track previous project to detect actual changes (not initial render)
+	let previousProject: string | null = null;
+
+	// Sync selectedProject from URL params AND fetch when project actually changes
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
-		if (projectParam && projectParam !== 'All Projects') {
-			selectedProject = projectParam;
-		} else {
-			selectedProject = 'All Projects';
-		}
-	});
+		const newProject = (projectParam && projectParam !== 'All Projects') ? projectParam : 'All Projects';
 
-	// Refetch data whenever selectedProject changes (triggered by URL or dropdown)
-	$effect(() => {
-		// This effect depends on selectedProject, so it re-runs when it changes
-		selectedProject; // Read selectedProject to create dependency
-		fetchData();
+		// Update selectedProject
+		selectedProject = newProject;
+
+		// Only fetch if project actually changed (not on initial render - onMount handles that)
+		if (previousProject !== null && previousProject !== newProject) {
+			fetchData();
+		}
+		previousProject = newProject;
 	});
 
 	// Fetch agent data from unified API
@@ -151,9 +152,9 @@
 		drawerOpen = true;
 	}
 
-	// Auto-refresh data every 5 seconds using Svelte reactivity
+	// Auto-refresh data every 15 seconds (layout also polls at 30s, so total coverage is good)
 	$effect(() => {
-		const interval = setInterval(fetchData, 5000);
+		const interval = setInterval(fetchData, 15000);
 		return () => clearInterval(interval);
 	});
 

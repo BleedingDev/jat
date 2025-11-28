@@ -31,17 +31,25 @@
 	);
 </script>
 
+<!-- Industrial Agent Count Badge -->
 <div class="flex items-center gap-2" title={activeTooltip}>
-	<!-- Active Count (green badge with pulsing dot) -->
+	<!-- Active Count (green badge with pulsing dot) - Industrial -->
 	<div class="flex items-center gap-1.5">
 		{#if activeCount > 0}
-			<!-- Pulsing live indicator -->
+			<!-- Pulsing live indicator - Industrial green -->
 			<span class="relative flex h-2 w-2">
-				<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-				<span class="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+				<span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background: oklch(0.70 0.18 150);"></span>
+				<span class="relative inline-flex rounded-full h-2 w-2" style="background: oklch(0.70 0.18 150);"></span>
 			</span>
 		{/if}
-		<span class="badge badge-sm {activeCount > 0 ? 'badge-success' : 'badge-ghost'} gap-1">
+		<span
+			class="px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1"
+			style="
+				background: oklch(0.18 0.01 250);
+				border: 1px solid {activeCount > 0 ? 'oklch(0.50 0.15 150)' : 'oklch(0.35 0.02 250)'};
+				color: {activeCount > 0 ? 'oklch(0.70 0.18 150)' : 'oklch(0.55 0.02 250)'};
+			"
+		>
 			{#if !compact}
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -49,16 +57,23 @@
 			{/if}
 			<AnimatedDigits value={activeCount.toString()} class="font-medium" />
 			{#if !compact}
-				<span class="opacity-70">active</span>
+				<span style="color: oklch(0.50 0.02 250);">active</span>
 			{/if}
 		</span>
 	</div>
 
-	<!-- Divider -->
-	<span class="text-base-content/30">|</span>
+	<!-- Divider - Industrial -->
+	<span style="color: oklch(0.35 0.02 250);">|</span>
 
-	<!-- Total Count (gray badge) -->
-	<span class="badge badge-sm badge-ghost gap-1">
+	<!-- Total Count - Industrial -->
+	<span
+		class="px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1"
+		style="
+			background: oklch(0.18 0.01 250);
+			border: 1px solid oklch(0.35 0.02 250);
+			color: oklch(0.55 0.02 250);
+		"
+	>
 		{#if !compact}
 			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
@@ -66,7 +81,7 @@
 		{/if}
 		<AnimatedDigits value={totalCount.toString()} class="font-medium" />
 		{#if !compact}
-			<span class="opacity-70">total</span>
+			<span style="color: oklch(0.45 0.02 250);">total</span>
 		{/if}
 	</span>
 </div>

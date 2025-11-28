@@ -315,3 +315,43 @@ export function formatRelativeTimestamp(timestamp: string | null | undefined): s
 
 	return formatSavedTime(date);
 }
+
+/**
+ * Format activity timestamp for agent activity feeds.
+ * Shows time (HH:MM) for today, date (Nov 25) for older entries.
+ * Compact format suitable for activity log displays.
+ *
+ * @param timestamp - Timestamp string (ISO format or database format)
+ * @returns Formatted time (today) or date (older) string
+ *
+ * @example
+ * formatActivityTimestamp("2024-11-27T15:30:00Z") // → "15:30" (if today)
+ * formatActivityTimestamp("2024-11-25T10:00:00Z") // → "Nov 25" (if not today)
+ */
+export function formatActivityTimestamp(timestamp: string | null | undefined): string {
+	if (!timestamp) return '';
+
+	const date = parseTimestamp(timestamp);
+	if (!date) return '';
+
+	const now = new Date();
+	const isToday =
+		date.getDate() === now.getDate() &&
+		date.getMonth() === now.getMonth() &&
+		date.getFullYear() === now.getFullYear();
+
+	if (isToday) {
+		// Today: show time in 24h format
+		return date.toLocaleTimeString('en-US', {
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false
+		});
+	} else {
+		// Older: show short date
+		return date.toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+}

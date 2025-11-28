@@ -25,6 +25,24 @@ JAT_IMPORTS='@~/code/jat/shared/overview.md
 # Marker to detect if imports are already present
 JAT_MARKER="@~/code/jat/shared/overview.md"
 
+# Standard gitignore patterns for JAT projects
+# These should be ignored (per-developer/session-specific):
+#   - .claude/agent-*.txt (session files)
+#   - .mcp.json (may contain API keys)
+# These should be committed:
+#   - .claude/settings.json (team config)
+#   - .beads/*.jsonl (task data - source of truth)
+#   - .beads/config.yaml, metadata.json
+JAT_GITIGNORE_PATTERNS='# Claude Code session-specific files (per-developer, do not commit)
+.claude/agent-*.txt
+.claude/agent-*-activity.jsonl
+
+# MCP server configuration (may contain sensitive API keys)
+.mcp.json'
+
+# Marker to detect if JAT gitignore patterns already present
+JAT_GITIGNORE_MARKER=".claude/agent-*.txt"
+
 echo -e "${BLUE}Setting up repositories for jat (Jomarchy Agent Tools)...${NC}"
 echo ""
 
@@ -50,6 +68,7 @@ echo ""
 
 REPOS_FOUND=0
 BEADS_INITIALIZED=0
+GITIGNORE_UPDATED=0
 HOOKS_INSTALLED=0
 IMPORTS_ADDED=0
 SKIPPED=0
@@ -98,6 +117,29 @@ for repo_dir in "$CODE_DIR"/*; do
         fi
     else
         echo -e "  ${GREEN}✓${NC} Beads already initialized"
+    fi
+
+    # Update .gitignore with JAT patterns
+    GITIGNORE_FILE="$repo_dir/.gitignore"
+
+    if [ -f "$GITIGNORE_FILE" ]; then
+        # Check if JAT patterns already present
+        if grep -q "$JAT_GITIGNORE_MARKER" "$GITIGNORE_FILE"; then
+            echo -e "  ${GREEN}✓${NC} .gitignore already has JAT patterns"
+        else
+            # Append JAT patterns to existing .gitignore
+            echo "  → Adding JAT patterns to .gitignore..."
+            echo "" >> "$GITIGNORE_FILE"
+            echo "$JAT_GITIGNORE_PATTERNS" >> "$GITIGNORE_FILE"
+            echo -e "  ${GREEN}✓ Added JAT patterns to .gitignore${NC}"
+            ((GITIGNORE_UPDATED++))
+        fi
+    else
+        # Create new .gitignore with JAT patterns
+        echo "  → Creating .gitignore with JAT patterns..."
+        echo "$JAT_GITIGNORE_PATTERNS" > "$GITIGNORE_FILE"
+        echo -e "  ${GREEN}✓ Created .gitignore with JAT patterns${NC}"
+        ((GITIGNORE_UPDATED++))
     fi
 
     # Install git hooks
@@ -191,6 +233,7 @@ echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo "  Total repos found: $REPOS_FOUND"
 echo "  Beads initialized: $BEADS_INITIALIZED"
+echo "  .gitignore updated: $GITIGNORE_UPDATED"
 echo "  Git hooks installed: $HOOKS_INSTALLED"
 echo "  jat imports added: $IMPORTS_ADDED"
 echo "  Skipped (not git repos): $SKIPPED"

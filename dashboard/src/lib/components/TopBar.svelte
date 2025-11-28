@@ -5,7 +5,6 @@
 	 * Simplified navigation bar containing only utility components:
 	 * - Hamburger toggle (mobile only, for sidebar)
 	 * - ProjectSelector
-	 * - DateRangePicker
 	 * - AgentCountBadge
 	 * - TokenUsageBadge (tokens today, cost, sparkline)
 	 * - CommandPalette
@@ -18,17 +17,12 @@
 	 * - selectedProject: string (current project selection)
 	 * - onProjectChange: (project: string) => void
 	 * - taskCounts: Map<string, number> (optional task counts per project)
-	 * - selectedDateRange: string (for date range picker)
-	 * - customDateFrom: string | null (for custom date range)
-	 * - customDateTo: string | null (for custom date range)
-	 * - onDateRangeChange: (range, from?, to?) => void
 	 * - tokensToday: number (total tokens consumed today)
 	 * - costToday: number (total cost today in USD)
 	 * - sparklineData: DataPoint[] (24h sparkline data)
 	 */
 
 	import ProjectSelector from './ProjectSelector.svelte';
-	import DateRangePicker from './DateRangePicker.svelte';
 	import AgentCountBadge from './AgentCountBadge.svelte';
 	import TokenUsageBadge from './TokenUsageBadge.svelte';
 	import UserProfile from './UserProfile.svelte';
@@ -62,10 +56,6 @@
 		selectedProject?: string;
 		onProjectChange?: (project: string) => void;
 		taskCounts?: Map<string, number> | null;
-		selectedDateRange?: string;
-		customDateFrom?: string | null;
-		customDateTo?: string | null;
-		onDateRangeChange?: (range: string, from?: string, to?: string) => void;
 		activeAgentCount?: number;
 		totalAgentCount?: number;
 		activeAgents?: string[];
@@ -83,10 +73,6 @@
 		selectedProject = 'All Projects',
 		onProjectChange = () => {},
 		taskCounts = null,
-		selectedDateRange = 'all',
-		customDateFrom = null,
-		customDateTo = null,
-		onDateRangeChange = () => {},
 		activeAgentCount = 0,
 		totalAgentCount = 0,
 		activeAgents = [],
@@ -98,9 +84,21 @@
 	}: Props = $props();
 </script>
 
-<nav class="navbar w-full bg-base-100 border-b border-base-300">
-	<!-- Sidebar toggle icon -->
-	<label for="main-drawer" aria-label="open sidebar" class="btn btn-square btn-ghost">
+<!-- Industrial/Terminal TopBar -->
+<nav
+	class="w-full h-12 flex items-center relative"
+	style="
+		background: linear-gradient(180deg, oklch(0.25 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
+		border-bottom: 1px solid oklch(0.35 0.02 250);
+	"
+>
+	<!-- Sidebar toggle (industrial) -->
+	<label
+		for="main-drawer"
+		aria-label="open sidebar"
+		class="flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105"
+		style="background: oklch(0.30 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
+	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 24 24"
@@ -109,7 +107,8 @@
 			stroke-width="2"
 			fill="none"
 			stroke="currentColor"
-			class="my-1.5 inline-block size-4"
+			class="w-4 h-4"
+			style="color: oklch(0.70 0.18 240);"
 		>
 			<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"></path>
 			<path d="M9 4v16"></path>
@@ -117,8 +116,11 @@
 		</svg>
 	</label>
 
+	<!-- Vertical separator -->
+	<div class="w-px h-6 mx-2" style="background: linear-gradient(180deg, transparent, oklch(0.45 0.02 250), transparent);"></div>
+
 	<!-- Left side utilities -->
-	<div class="flex-1 flex items-center gap-2 px-4">
+	<div class="flex-1 flex items-center gap-3 px-2">
 		{#if projects.length > 0}
 			<div class="w-36 sm:w-40 md:w-48">
 				<ProjectSelector
@@ -131,21 +133,21 @@
 			</div>
 		{/if}
 
-		<!-- Date Range Picker -->
-		<DateRangePicker
-			{selectedDateRange}
-			{customDateFrom}
-			{customDateTo}
-			onRangeChange={onDateRangeChange}
-			compact={true}
-		/>
-
-		<!-- Add Task Button -->
-		<button class="btn btn-sm btn-primary gap-1" onclick={openTaskDrawer}>
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+		<!-- Add Task Button (Industrial) -->
+		<button
+			class="flex items-center gap-1.5 px-3 py-1.5 rounded font-mono text-xs tracking-wider uppercase transition-all hover:scale-105"
+			style="
+				background: linear-gradient(135deg, oklch(0.75 0.20 145 / 0.2) 0%, oklch(0.75 0.20 145 / 0.1) 100%);
+				border: 1px solid oklch(0.75 0.20 145 / 0.4);
+				color: oklch(0.80 0.18 145);
+				text-shadow: 0 0 10px oklch(0.75 0.20 145 / 0.5);
+			"
+			onclick={openTaskDrawer}
+		>
+			<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 			</svg>
-			<span class="hidden sm:inline">Task</span>
+			<span class="hidden sm:inline">New</span>
 		</button>
 	</div>
 
@@ -154,8 +156,11 @@
 		<CommandPalette />
 	</div>
 
-	<!-- Right side: Stats + User Profile -->
-	<div class="flex-none flex items-center gap-2 font-mono text-xs">
+	<!-- Vertical separator -->
+	<div class="w-px h-6 mx-3" style="background: linear-gradient(180deg, transparent, oklch(0.45 0.02 250), transparent);"></div>
+
+	<!-- Right side: Stats + User Profile (Industrial) -->
+	<div class="flex-none flex items-center gap-3 pr-3">
 		<!-- Agent Count Badge -->
 		<div class="hidden sm:flex">
 			<AgentCountBadge
@@ -166,8 +171,8 @@
 			/>
 		</div>
 
-		<!-- Separator -->
-		<span class="hidden sm:block text-base-content/20">|</span>
+		<!-- Industrial separator dot -->
+		<div class="hidden sm:block w-1 h-1 rounded-full" style="background: oklch(0.50 0.02 250);"></div>
 
 		<!-- Token Usage Badge -->
 		<div class="hidden sm:flex">
@@ -180,6 +185,9 @@
 				compact={true}
 			/>
 		</div>
+
+		<!-- Industrial separator dot -->
+		<div class="hidden sm:block w-1 h-1 rounded-full" style="background: oklch(0.50 0.02 250);"></div>
 
 		<!-- User Profile -->
 		<UserProfile />

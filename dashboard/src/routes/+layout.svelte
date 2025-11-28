@@ -9,17 +9,13 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import { getProjectsFromTasks, getTaskCountByProject } from '$lib/utils/projectUtils';
+	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds } from '$lib/utils/soundEffects';
 
 	let { children } = $props();
 
 	// Shared project state for entire app
 	let selectedProject = $state('All Projects');
 	let allTasks = $state([]);
-
-	// Date range state
-	let selectedDateRange = $state('all');
-	let customDateFrom = $state<string | null>(null);
-	let customDateTo = $state<string | null>(null);
 
 	// Agent count state
 	let activeAgentCount = $state(0);
@@ -58,27 +54,48 @@
 		selectedProject = projectParam || 'All Projects';
 	});
 
-	// Sync date range from URL parameter
-	$effect(() => {
-		const params = new URLSearchParams($page.url.searchParams);
-		const rangeParam = params.get('range');
-		const fromParam = params.get('from');
-		const toParam = params.get('to');
+	// Track if audio has been initialized and permission prompt state
+	let audioInitialized = false;
+	let showSoundPrompt = $state(false);
+	let soundsEnabledState = $state(false);
 
-		if (fromParam || toParam) {
-			selectedDateRange = 'custom';
-			customDateFrom = fromParam;
-			customDateTo = toParam;
-		} else if (rangeParam) {
-			selectedDateRange = rangeParam;
-			customDateFrom = null;
-			customDateTo = null;
-		} else {
-			selectedDateRange = 'all';
-			customDateFrom = null;
-			customDateTo = null;
+	// Check sound preference on mount
+	$effect(() => {
+		if (typeof window !== 'undefined') {
+			const preference = localStorage.getItem('dashboard-sounds-enabled');
+			// Show prompt only if user hasn't made a choice yet
+			if (preference === null) {
+				showSoundPrompt = true;
+			}
+			soundsEnabledState = preference === 'true';
 		}
 	});
+
+	// Handle user enabling sounds
+	function handleEnableSounds() {
+		enableSounds();
+		soundsEnabledState = true;
+		showSoundPrompt = false;
+		// Play a test chime so user knows it works
+		import('$lib/utils/soundEffects').then(({ playNewTaskChime }) => {
+			playNewTaskChime();
+		});
+	}
+
+	// Handle user dismissing sounds
+	function handleDismissSounds() {
+		disableSounds();
+		soundsEnabledState = false;
+		showSoundPrompt = false;
+	}
+
+	// Initialize audio on first user click (browser requirement)
+	function handleFirstInteraction() {
+		if (!audioInitialized) {
+			initAudioOnInteraction();
+			audioInitialized = true;
+		}
+	}
 
 	// Initialize theme-change and load all tasks
 	onMount(() => {
@@ -179,30 +196,6 @@
 		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
-	// Handle date range selection change
-	function handleDateRangeChange(range: string, from?: string, to?: string) {
-		selectedDateRange = range;
-		customDateFrom = from || null;
-		customDateTo = to || null;
-
-		// Update URL parameters
-		const url = new URL(window.location.href);
-
-		// Clear existing date params
-		url.searchParams.delete('range');
-		url.searchParams.delete('from');
-		url.searchParams.delete('to');
-
-		// Set new params based on selection
-		if (range === 'custom') {
-			if (from) url.searchParams.set('from', from);
-			if (to) url.searchParams.set('to', to);
-		} else if (range !== 'all') {
-			url.searchParams.set('range', range);
-		}
-
-		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
-	}
 </script>
 
 <svelte:head>
@@ -210,7 +203,8 @@
 </svelte:head>
 
 <!-- Drawer Structure -->
-<div class="drawer lg:drawer-open">
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+<div class="drawer lg:drawer-open" onclick={handleFirstInteraction}>
 	<!-- Drawer toggle (hidden checkbox for mobile sidebar) -->
 	<input id="main-drawer" type="checkbox" class="drawer-toggle" />
 
@@ -222,10 +216,6 @@
 			{selectedProject}
 			onProjectChange={handleProjectChange}
 			{taskCounts}
-			{selectedDateRange}
-			{customDateFrom}
-			{customDateTo}
-			onDateRangeChange={handleDateRangeChange}
 			{activeAgentCount}
 			{totalAgentCount}
 			{activeAgents}
@@ -248,3 +238,26 @@
 	<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
 	<Sidebar />
 </div>
+
+<!-- Sound Permission Toast -->
+{#if showSoundPrompt}
+	<div class="toast toast-end toast-bottom z-50">
+		<div class="alert shadow-lg" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.35 0.02 250);">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6" style="color: oklch(0.70 0.18 240);">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+			</svg>
+			<div>
+				<h3 class="font-bold text-sm" style="color: oklch(0.85 0.02 250);">Enable Sound Notifications?</h3>
+				<p class="text-xs" style="color: oklch(0.60 0.02 250);">Play chimes when tasks are added/removed</p>
+			</div>
+			<div class="flex gap-2">
+				<button class="btn btn-sm btn-ghost" onclick={handleDismissSounds}>
+					No thanks
+				</button>
+				<button class="btn btn-sm btn-primary" onclick={handleEnableSounds}>
+					Enable
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

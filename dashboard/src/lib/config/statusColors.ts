@@ -25,6 +25,10 @@ export interface AgentStatusVisual {
 	animation?: string;   // Tailwind animation class (animate-spin, animate-pulse)
 	label: string;        // Human-readable label
 	description: string;  // Tooltip description
+	// Industrial theme colors (oklch for modern color handling)
+	accent: string;       // Vibrant accent color for bars/highlights
+	bgTint: string;       // Subtle background tint
+	glow: string;         // Glow effect color (for active states)
 }
 
 export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
@@ -36,7 +40,10 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		iconType: 'svg',
 		animation: 'animate-spin',
 		label: 'Working',
-		description: 'Actively working on a task'
+		description: 'Actively working on a task',
+		accent: 'oklch(0.70 0.18 240)',       // Electric blue
+		bgTint: 'oklch(0.70 0.18 240 / 0.08)',
+		glow: 'oklch(0.70 0.18 240 / 0.4)'
 	},
 
 	// LIVE: Very recent activity (< 1 min) but no formal task
@@ -47,7 +54,10 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		iconType: 'daisyui',
 		animation: undefined,  // loading-dots has built-in animation
 		label: 'Live',
-		description: 'Responsive and active (< 1 minute)'
+		description: 'Responsive and active (< 1 minute)',
+		accent: 'oklch(0.75 0.20 145)',       // Vibrant green
+		bgTint: 'oklch(0.75 0.20 145 / 0.08)',
+		glow: 'oklch(0.75 0.20 145 / 0.4)'
 	},
 
 	// ACTIVE: Recent activity (1-10 min), probably still around
@@ -58,7 +68,10 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		iconType: 'svg',
 		animation: 'animate-pulse',
 		label: 'Active',
-		description: 'Recently active (< 10 minutes)'
+		description: 'Recently active (< 10 minutes)',
+		accent: 'oklch(0.75 0.18 70)',        // Warm amber
+		bgTint: 'oklch(0.75 0.18 70 / 0.08)',
+		glow: 'oklch(0.75 0.18 70 / 0.4)'
 	},
 
 	// IDLE: Within 1 hour but quiet
@@ -69,7 +82,10 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		iconType: 'svg',
 		animation: undefined,
 		label: 'Idle',
-		description: 'Available but quiet (< 1 hour)'
+		description: 'Available but quiet (< 1 hour)',
+		accent: 'oklch(0.60 0.03 250)',       // Muted slate
+		bgTint: 'oklch(0.60 0.03 250 / 0.04)',
+		glow: 'oklch(0.60 0.03 250 / 0.2)'
 	},
 
 	// OFFLINE: Gone for > 1 hour
@@ -80,7 +96,10 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		iconType: 'svg',
 		animation: undefined,
 		label: 'Offline',
-		description: 'Not active for over 1 hour'
+		description: 'Not active for over 1 hour',
+		accent: 'oklch(0.55 0.15 25)',        // Dim red
+		bgTint: 'oklch(0.55 0.15 25 / 0.05)',
+		glow: 'oklch(0.55 0.15 25 / 0.2)'
 	}
 };
 
@@ -245,4 +264,98 @@ export function getPriorityVisual(priority: number | null | undefined): Priority
  */
 export function getStatusIcon(name: string): string {
 	return STATUS_ICONS[name as keyof typeof STATUS_ICONS] || STATUS_ICONS.circle;
+}
+
+// =============================================================================
+// ISSUE TYPE VISUAL CONFIG
+// =============================================================================
+
+export interface IssueTypeVisual {
+	icon: string;
+	label: string;
+	/** Accent color for industrial theme headers */
+	accent: string;
+	/** Background tint for the header */
+	bgTint: string;
+}
+
+const ISSUE_TYPE_VISUALS: Record<string, IssueTypeVisual> = {
+	bug: {
+		icon: '🐛',
+		label: 'BUG',
+		accent: 'oklch(0.65 0.25 25)',      // Vibrant red-orange
+		bgTint: 'oklch(0.65 0.25 25 / 0.08)'
+	},
+	feature: {
+		icon: '✨',
+		label: 'FEATURE',
+		accent: 'oklch(0.75 0.18 145)',     // Fresh green
+		bgTint: 'oklch(0.75 0.18 145 / 0.08)'
+	},
+	task: {
+		icon: '📋',
+		label: 'TASK',
+		accent: 'oklch(0.70 0.14 250)',     // Cool blue
+		bgTint: 'oklch(0.70 0.14 250 / 0.08)'
+	},
+	chore: {
+		icon: '🔧',
+		label: 'CHORE',
+		accent: 'oklch(0.65 0.05 250)',     // Muted slate
+		bgTint: 'oklch(0.65 0.05 250 / 0.06)'
+	},
+	epic: {
+		icon: '🏔️',
+		label: 'EPIC',
+		accent: 'oklch(0.70 0.20 300)',     // Royal purple
+		bgTint: 'oklch(0.70 0.20 300 / 0.08)'
+	},
+	docs: {
+		icon: '📄',
+		label: 'DOCS',
+		accent: 'oklch(0.72 0.12 200)',     // Soft cyan
+		bgTint: 'oklch(0.72 0.12 200 / 0.06)'
+	},
+	refactor: {
+		icon: '♻️',
+		label: 'REFACTOR',
+		accent: 'oklch(0.70 0.16 85)',      // Amber/yellow
+		bgTint: 'oklch(0.70 0.16 85 / 0.08)'
+	},
+	test: {
+		icon: '🧪',
+		label: 'TEST',
+		accent: 'oklch(0.68 0.18 180)',     // Teal
+		bgTint: 'oklch(0.68 0.18 180 / 0.08)'
+	},
+	style: {
+		icon: '🎨',
+		label: 'STYLE',
+		accent: 'oklch(0.70 0.22 330)',     // Pink/magenta
+		bgTint: 'oklch(0.70 0.22 330 / 0.08)'
+	},
+	perf: {
+		icon: '⚡',
+		label: 'PERF',
+		accent: 'oklch(0.78 0.18 70)',      // Electric yellow
+		bgTint: 'oklch(0.78 0.18 70 / 0.08)'
+	}
+};
+
+const DEFAULT_TYPE_VISUAL: IssueTypeVisual = {
+	icon: '📋',
+	label: 'UNTYPED',
+	accent: 'oklch(0.60 0.02 250)',
+	bgTint: 'oklch(0.60 0.02 250 / 0.05)'
+};
+
+/**
+ * Get issue type visual config with fallback
+ */
+export function getIssueTypeVisual(issueType: string | undefined | null): IssueTypeVisual {
+	if (!issueType) return DEFAULT_TYPE_VISUAL;
+	return ISSUE_TYPE_VISUALS[issueType] || {
+		...DEFAULT_TYPE_VISUAL,
+		label: issueType.toUpperCase()
+	};
 }

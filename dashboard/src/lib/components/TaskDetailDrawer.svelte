@@ -575,10 +575,27 @@
 			onclick={handleClose}
 		></label>
 
-		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) -->
-		<div class="bg-base-100 h-full w-full max-w-2xl flex flex-col shadow-2xl">
-			<!-- Header -->
-			<div class="flex items-center justify-between p-6 border-b border-base-300">
+		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
+		<div
+			class="h-full w-full max-w-2xl flex flex-col shadow-2xl"
+			style="
+				background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
+				border-left: 1px solid oklch(0.35 0.02 250);
+			"
+		>
+			<!-- Header - Industrial -->
+			<div
+				class="flex items-center justify-between p-6 relative"
+				style="
+					background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
+					border-bottom: 1px solid oklch(0.35 0.02 250);
+				"
+			>
+				<!-- Left accent bar -->
+				<div
+					class="absolute left-0 top-0 bottom-0 w-1"
+					style="background: linear-gradient(180deg, oklch(0.70 0.18 240) 0%, oklch(0.70 0.18 240 / 0.3) 100%);"
+				></div>
 				<div class="flex-1 min-w-0">
 					<!-- Task Title (Inline Editable, truncated with tooltip) -->
 					{#if task}
@@ -745,8 +762,11 @@
 				</button>
 			</div>
 
-			<!-- Content (scrollable area between sticky header and footer) -->
-			<div class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0">
+			<!-- Content (scrollable area between sticky header and footer) - Industrial -->
+			<div
+				class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0"
+				style="background: oklch(0.16 0.01 250);"
+			>
 				{#if loading}
 					<!-- Loading state -->
 					<div class="flex items-center justify-center py-12">
@@ -778,14 +798,15 @@
 				{:else if task}
 					<!-- View Mode -->
 					<div class="flex flex-col gap-6 h-full">
-						<!-- Labels (badges, click to edit) -->
+						<!-- Labels (badges, click to edit) - Industrial -->
 						<div>
-							<h4 class="text-sm font-semibold mb-2 text-base-content/70">Labels</h4>
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Labels</h4>
 							{#if editingLabels}
-								<!-- Edit mode: text input -->
+								<!-- Edit mode: text input - Industrial -->
 								<input
 									type="text"
-									class="input input-bordered input-sm w-full text-sm"
+									class="input input-sm w-full text-sm font-mono"
+									style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 									value={task.labels ? task.labels.join(', ') : ''}
 									placeholder="label1, label2, label3..."
 									onblur={async (e) => {
@@ -807,9 +828,10 @@
 									use:autofocusAction
 								/>
 							{:else}
-								<!-- Display mode: badges -->
+								<!-- Display mode: badges - Industrial -->
 								<button
-									class="flex flex-wrap gap-2 items-center cursor-pointer rounded px-2 py-1 hover:bg-base-200 transition-colors w-full text-left"
+									class="flex flex-wrap gap-2 items-center cursor-pointer rounded px-2 py-1 transition-colors w-full text-left industrial-hover"
+									style="background: oklch(0.18 0.01 250);"
 									onclick={() => (editingLabels = true)}
 									type="button"
 								>
@@ -824,9 +846,9 @@
 							{/if}
 						</div>
 
-						<!-- Description (Inline Editable) -->
+						<!-- Description (Inline Editable) - Industrial -->
 						<div>
-							<h4 class="text-sm font-semibold mb-2 text-base-content/70">Description</h4>
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Description</h4>
 							<InlineEdit
 								value={task.description || ''}
 								onSave={async (newValue) => {
@@ -840,10 +862,10 @@
 							/>
 						</div>
 
-						<!-- Dependencies -->
+						<!-- Dependencies - Industrial -->
 						<div>
 							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-sm font-semibold text-base-content/70">Depends On</h4>
+								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Depends On</h4>
 								<!-- Add dependency button -->
 								<div class="relative">
 									<button
@@ -861,9 +883,12 @@
 										Add
 									</button>
 
-									<!-- Dropdown menu -->
+									<!-- Dropdown menu - Industrial -->
 									{#if showDependencyDropdown}
-										<div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto">
+										<div
+											class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto"
+											style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+										>
 											{#if availableTasks.length === 0}
 												<div class="p-3 text-sm text-base-content/50 text-center">
 													No available tasks in this project
@@ -872,7 +897,7 @@
 												<div class="py-1">
 													{#each availableTasks as availTask}
 														<button
-															class="w-full text-left px-3 py-2 hover:bg-base-200 flex items-center gap-2 text-sm"
+															class="w-full text-left px-3 py-2 flex items-center gap-2 text-sm industrial-hover"
 															onclick={() => addDependency(availTask.id)}
 															disabled={isSaving}
 														>
@@ -885,8 +910,8 @@
 													{/each}
 												</div>
 											{/if}
-											<!-- Close button -->
-											<div class="border-t border-base-300 p-2">
+											<!-- Close button - Industrial -->
+											<div class="p-2" style="border-top: 1px solid oklch(0.35 0.02 250);">
 												<button
 													class="btn btn-xs btn-ghost w-full"
 													onclick={() => showDependencyDropdown = false}
@@ -902,7 +927,10 @@
 							{#if task.depends_on && task.depends_on.length > 0}
 								<div class="space-y-2">
 									{#each task.depends_on as dep}
-										<div class="flex items-center gap-2 text-sm p-2 bg-base-200 rounded group">
+										<div
+											class="flex items-center gap-2 text-sm p-2 rounded group"
+											style="background: oklch(0.20 0.01 250); border-left: 2px solid oklch(0.70 0.18 240 / 0.3);"
+										>
 											<span class="badge badge-sm {statusColors[dep.status] || 'badge-ghost'}">
 												{dep.status || 'unknown'}
 											</span>
@@ -930,13 +958,16 @@
 							{/if}
 						</div>
 
-						<!-- Blocks (dependents) -->
+						<!-- Blocks (dependents) - Industrial -->
 						{#if task.blocked_by && task.blocked_by.length > 0}
 							<div>
-								<h4 class="text-sm font-semibold mb-2 text-base-content/70">Blocks</h4>
+								<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Blocks</h4>
 								<div class="space-y-2">
 									{#each task.blocked_by as dep}
-										<div class="flex items-center gap-2 text-sm p-2 bg-base-200 rounded">
+										<div
+											class="flex items-center gap-2 text-sm p-2 rounded"
+											style="background: oklch(0.20 0.01 250); border-left: 2px solid oklch(0.70 0.18 240 / 0.3);"
+										>
 											<span class="badge badge-sm {statusColors[dep.status] || 'badge-ghost'}">
 												{dep.status || 'unknown'}
 											</span>
@@ -951,14 +982,14 @@
 							</div>
 						{/if}
 
-						<!-- Activity Timeline (Task Events on Left, Messages on Right) -->
-						<div class="border-t border-base-300 pt-4 flex-1 flex flex-col min-h-0">
+						<!-- Activity Timeline (Task Events on Left, Messages on Right) - Industrial -->
+						<div class="pt-4 flex-1 flex flex-col min-h-0" style="border-top: 1px solid oklch(0.35 0.02 250);">
 							<!-- Header with filter tabs -->
 							<div class="flex items-center justify-between mb-3">
-								<h4 class="text-sm font-semibold text-base-content/70">Activity Timeline</h4>
+								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Activity Timeline</h4>
 
-								<!-- Filter tabs -->
-								<div class="tabs tabs-boxed tabs-xs bg-base-200">
+								<!-- Filter tabs - Industrial -->
+								<div class="tabs tabs-boxed tabs-xs" style="background: oklch(0.20 0.01 250);">
 									<button
 										class="tab {timelineFilter === 'all' ? 'tab-active' : ''}"
 										onclick={() => timelineFilter = 'all'}
@@ -1147,9 +1178,9 @@
 							{/if}
 						</div>
 
-						<!-- Dependency Graph Section -->
+						<!-- Dependency Graph Section - Industrial -->
 						{#if task && ((task.depends_on && task.depends_on.length > 0) || (task.blocked_by && task.blocked_by.length > 0))}
-							<div class="border-t border-base-300 pt-4 mt-4">
+							<div class="pt-4 mt-4" style="border-top: 1px solid oklch(0.35 0.02 250);">
 								<TaskDependencyGraph
 									{task}
 									onNodeClick={(nodeTaskId) => {
@@ -1163,10 +1194,13 @@
 					</div>
 				{/if}
 
-				<!-- Keyboard Shortcuts Help Panel -->
+				<!-- Keyboard Shortcuts Help Panel - Industrial -->
 				{#if showHelp}
-					<div class="mt-6 p-4 bg-base-200 border border-base-300 rounded-lg">
-						<h4 class="text-sm font-semibold mb-3 text-base-content flex items-center gap-2">
+					<div
+						class="mt-6 p-4 rounded-lg"
+						style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+					>
+						<h4 class="text-xs font-semibold mb-3 font-mono uppercase tracking-wider flex items-center gap-2" style="color: oklch(0.70 0.18 240);">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								class="h-4 w-4"
@@ -1223,9 +1257,15 @@
 				{/if}
 			</div>
 
-			<!-- Footer Actions -->
+			<!-- Footer Actions - Industrial -->
 			{#if !loading && !error && task}
-				<div class="p-6 border-t border-base-300 bg-base-200">
+				<div
+					class="p-6"
+					style="
+						background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
+						border-top: 1px solid oklch(0.35 0.02 250);
+					"
+				>
 					<div class="flex justify-between items-center">
 						<!-- Delete button (left) -->
 						<button
@@ -1283,10 +1323,17 @@
 		</div>
 	</div>
 
-	<!-- Toast Notification (Fixed position, bottom-right) -->
+	<!-- Toast Notification (Fixed position, bottom-right) - Industrial -->
 	{#if toastMessage}
 		<div class="toast toast-end toast-bottom z-[60]">
-			<div class="alert {toastMessage.type === 'success' ? 'alert-success' : 'alert-error'}">
+			<div
+				class="alert font-mono text-sm"
+				style="
+					background: {toastMessage.type === 'success' ? 'oklch(0.35 0.15 150)' : 'oklch(0.35 0.15 25)'};
+					border: 1px solid {toastMessage.type === 'success' ? 'oklch(0.50 0.18 150)' : 'oklch(0.50 0.18 25)'};
+					color: oklch(0.95 0.02 250);
+				"
+			>
 				<span>{toastMessage.text}</span>
 			</div>
 		</div>

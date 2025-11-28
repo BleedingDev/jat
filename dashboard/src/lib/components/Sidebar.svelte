@@ -62,74 +62,150 @@
 	}
 </script>
 
+<!-- Industrial/Terminal Sidebar -->
 <div class="drawer-side is-drawer-close:overflow-visible">
 	<!-- Drawer overlay -->
 	<label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
 
 	<!-- Sidebar content -->
-	<div class="flex h-screen flex-col bg-base-200 overflow-hidden is-drawer-close:w-14 is-drawer-open:w-64">
-		<!-- Logo -->
-		<div class="py-3 flex justify-center">
-			<a href="https://github.com/joewinke/jat" target="_blank" rel="noopener
-          +  noreferrer" class="hover:opacity-80 transition-opacity">
-				<kbd class="px-2 kbd kbd-lg font-mono font-bold">jat</kbd>
+	<div
+		class="flex h-screen flex-col overflow-hidden is-drawer-close:w-14 is-drawer-open:w-64 relative"
+		style="
+			background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
+		"
+	>
+		<!-- Right accent bar (acts as border) -->
+		<div
+			class="absolute right-0 top-0 bottom-0 w-px"
+			style="background: oklch(0.35 0.02 250);"
+		></div>
+
+		<!-- Logo (Industrial) -->
+		<div class="py-4 flex justify-center relative">
+			<a
+				href="https://github.com/joewinke/jat"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="group transition-all duration-200 hover:scale-105"
+			>
+				<div
+					class="px-1.5 py-1.5 rounded font-mono font-bold text-sm tracking-widest"
+					style="
+						background: linear-gradient(135deg, oklch(0.70 0.18 240 / 0.15) 0%, oklch(0.70 0.18 240 / 0.05) 100%);
+						border: 1px solid oklch(0.70 0.18 240 / 0.3);
+						color: oklch(0.75 0.16 240);
+						text-shadow: 0 0 15px oklch(0.70 0.18 240 / 0.5);
+					"
+				>
+					JAT
+				</div>
 			</a>
+			<!-- Decorative line under logo -->
+			<div
+				class="absolute bottom-0 left-3 right-3 h-px"
+				style="background: linear-gradient(90deg, transparent, oklch(0.45 0.02 250), transparent);"
+			></div>
 		</div>
 
 		<!-- Main navigation items -->
-		<ul class="menu w-full p-2 flex-1 gap-1">
-			{#each unifiedNavConfig.navItems as navItem}
-				<li>
-					<button
-						onclick={() => handleNavClick(navItem.href)}
-						class="mt-3 is-drawer-close:tooltip is-drawer-close:tooltip-right transition-all duration-200 {isActive(
-							navItem.href
-						)
-							? 'active bg-primary text-primary-content'
-							: ''}"
-						data-tip={navItem.label}
+		<nav class="flex-1 px-2 py-3 space-y-1">
+			{#each unifiedNavConfig.navItems as navItem, index}
+				{@const active = isActive(navItem.href)}
+				<button
+					onclick={() => handleNavClick(navItem.href)}
+					class="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-all duration-200 group
+						is-drawer-close:justify-center is-drawer-close:tooltip is-drawer-close:tooltip-right
+						{active ? '' : 'industrial-hover'}"
+					style="
+						background: {active ? 'linear-gradient(90deg, oklch(0.70 0.18 240 / 0.2) 0%, transparent 100%)' : 'transparent'};
+						border-left: 2px solid {active ? 'oklch(0.70 0.18 240)' : 'transparent'};
+						color: {active ? 'oklch(0.80 0.15 240)' : 'oklch(0.65 0.02 250)'};
+					"
+					data-tip={navItem.label}
+				>
+					<!-- Icon with glow on active -->
+					<div
+						class="flex items-center justify-center w-6 h-6 rounded transition-all"
+						style="
+							background: {active ? 'oklch(0.70 0.18 240 / 0.15)' : 'transparent'};
+							box-shadow: {active ? '0 0 10px oklch(0.70 0.18 240 / 0.3)' : 'none'};
+						"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
 							viewBox="0 0 24 24"
-							stroke-width="1.5"
+							stroke-width={active ? 2 : 1.5}
 							stroke="currentColor"
-							class="w-5 h-5 flex-shrink-0"
+							class="w-4.5 h-4.5 transition-all {active ? '' : 'group-hover:scale-110'}"
+							style="color: {active ? 'oklch(0.75 0.16 240)' : 'oklch(0.55 0.02 250)'};"
 						>
 							<path stroke-linecap="round" stroke-linejoin="round" d={icons[navItem.icon]} />
 						</svg>
-						<span class="is-drawer-close:hidden">{navItem.label}</span>
-					</button>
-				</li>
+					</div>
+
+					<!-- Label (hidden when collapsed) -->
+					<span
+						class="font-mono text-xs tracking-wider uppercase is-drawer-close:hidden transition-colors
+							{active ? '' : 'group-hover:text-base-content/80'}"
+						style="text-shadow: {active ? '0 0 10px oklch(0.70 0.18 240 / 0.4)' : 'none'};"
+					>
+						{navItem.label}
+					</span>
+
+					<!-- Active indicator line (extended) -->
+					{#if active}
+						<div
+							class="flex-1 h-px is-drawer-close:hidden"
+							style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.4), transparent);"
+						></div>
+					{/if}
+				</button>
 			{/each}
-		</ul>
+		</nav>
 
 		<!-- Bottom utilities -->
-		<ul class="menu w-full p-2 gap-1">
-			<!-- Help button -->
-			<li>
-				<button
-					class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
-					data-tip="Help & Shortcuts"
-					onclick={toggleHelp}
-					aria-label="Show help guide"
-				>
+		<div class="px-2 py-3 space-y-1">
+			<!-- Separator -->
+			<div
+				class="h-px mx-2 mb-3"
+				style="background: linear-gradient(90deg, transparent, oklch(0.45 0.02 250), transparent);"
+			></div>
+
+			<!-- Help button (Industrial) -->
+			<button
+				onclick={toggleHelp}
+				aria-label="Show help guide"
+				class="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-all duration-200 group
+					is-drawer-close:justify-center is-drawer-close:tooltip is-drawer-close:tooltip-right
+					industrial-hover"
+				style="color: oklch(0.60 0.02 250);"
+				data-tip="Help & Shortcuts"
+			>
+				<div class="flex items-center justify-center w-6 h-6">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke-width="1.5"
 						stroke="currentColor"
-						class="w-5 h-5 flex-shrink-0"
+						class="w-4.5 h-4.5 group-hover:scale-110 transition-transform"
+						style="color: oklch(0.55 0.02 250);"
 					>
 						<path stroke-linecap="round" stroke-linejoin="round" d={icons.help} />
 					</svg>
-					<span class="is-drawer-close:hidden">Help</span>
-				</button>
-			</li>
+				</div>
+				<span class="font-mono text-xs tracking-wider uppercase is-drawer-close:hidden group-hover:text-base-content/70">
+					Help
+				</span>
+			</button>
+		</div>
 
-		</ul>
+		<!-- Bottom glow accent -->
+		<div
+			class="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
+			style="background: linear-gradient(180deg, transparent, oklch(0.70 0.18 240 / 0.05));"
+		></div>
 	</div>
 </div>
 
