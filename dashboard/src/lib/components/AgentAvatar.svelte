@@ -6,9 +6,10 @@
 	 * Features:
 	 * - Fetches SVG from /api/avatar/{name}
 	 * - Caches results to avoid refetching on re-renders
-	 * - Fallback to initials with hash-based background color
+	 * - Fallback to generic avatar icon
 	 * - Uses oklch color space for theme consistency
 	 * - Handles loading, success, and error states
+	 * - Properly reactive to name prop changes
 	 */
 
 	interface Props {
@@ -25,31 +26,29 @@
 
 	let loadState: 'loading' | 'success' | 'error' = $state('loading');
 	let svgContent: string | null = $state(null);
+	let currentFetchedName = $state<string | null>(null);
 
 	// Cache for avatar SVGs (module-level to persist across instances)
 	const avatarCache = new Map<string, string>();
 
-	// Track the last fetched name to avoid redundant fetches
-	let lastFetchedName: string | null = null;
+	// Cache version - increment to bust all avatar caches
+	const CACHE_VERSION = 2;
 
-	// Fetch avatar only when name actually changes
-	async function fetchAvatar(agentName: string) {
+	// Fetch avatar - called by effect when name changes
+	async function fetchAvatar(agentName: string): Promise<void> {
 		if (!agentName) {
 			loadState = 'error';
+			svgContent = null;
 			return;
 		}
 
-		// Skip if we already fetched this name
-		if (lastFetchedName === agentName && loadState !== 'loading') {
-			return;
-		}
-
-		// Check cache first
-		const cached = avatarCache.get(agentName);
+		// Check cache first (with version key)
+		const cacheKey = `${agentName}:v${CACHE_VERSION}`;
+		const cached = avatarCache.get(cacheKey);
 		if (cached) {
 			svgContent = cached;
 			loadState = 'success';
-			lastFetchedName = agentName;
+			currentFetchedName = agentName;
 			return;
 		}
 
@@ -57,10 +56,15 @@
 		svgContent = null;
 
 		try {
-			const response = await fetch(`/api/avatar/${encodeURIComponent(agentName)}`);
+			// Add cache-busting query param to force fresh fetch from browser
+			const response = await fetch(`/api/avatar/${encodeURIComponent(agentName)}?v=${CACHE_VERSION}`);
 			if (response.ok) {
 				const svg = await response.text();
-				avatarCache.set(agentName, svg);
+				// Only cache if it looks like a real avatar (has multiple elements, not just initials)
+				const isRealAvatar = svg.includes('circle') || svg.includes('path') || svg.split('<').length > 5;
+				if (isRealAvatar) {
+					avatarCache.set(cacheKey, svg);
+				}
 				svgContent = svg;
 				loadState = 'success';
 			} else {
@@ -70,14 +74,17 @@
 			loadState = 'error';
 		}
 
-		lastFetchedName = agentName;
+		currentFetchedName = agentName;
 	}
 
-	// React to name changes only
+	// React to name prop changes - this is the reactive trigger
 	$effect(() => {
-		const currentName = name;
-		if (currentName !== lastFetchedName) {
-			fetchAvatar(currentName);
+		// Capture the current name value to create a dependency
+		const targetName = name;
+
+		// Only fetch if name changed or we haven't fetched yet
+		if (targetName && targetName !== currentFetchedName) {
+			fetchAvatar(targetName);
 		}
 	});
 </script>

@@ -1191,7 +1191,7 @@
 						/>
 					</th>
 					<th
-						class="cursor-pointer w-28 industrial-hover"
+						class="cursor-pointer w-auto min-w-32 industrial-hover"
 						style="background: inherit;"
 						onclick={() => handleSort('id')}
 					>
