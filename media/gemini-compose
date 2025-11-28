@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Compose multiple images with instruction using Gemini API
+# Usage: gemini-compose IMAGE1 IMAGE2 [...] "INSTRUCTION" [options]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/gemini-lib.sh"
+
+show_help() {
+    cat <<'EOF'
+Usage: gemini-compose IMAGE1 IMAGE2 [...] "INSTRUCTION" [options]
+
+Combine multiple images using a text instruction with Gemini.
+
+Arguments:
+  IMAGE1, IMAGE2, ...   Input image files (2-14 images required)
+  INSTRUCTION           Text instruction for composition (required)
+
+Options:
+  --output PATH         Output file path (default: /tmp/gemini-compose-TIMESTAMP.png)
+  --model MODEL         Model to use (default: gemini-2.5-flash-image)
+  --help, -h            Show this help
+
+Detection:
+  Arguments that exist as files on disk are treated as images.
+  The first argument that doesn't exist as a file is the instruction.
+
+Examples:
+  gemini-compose bg.png person.png "Place person on background"
+  gemini-compose style.jpg photo.jpg "Apply art style" --output styled.png
+  gemini-compose a.png b.png c.png "Combine into collage"
+
+Environment:
+  GEMINI_API_KEY        Required. Your Gemini API key.
+EOF
+}
+
+# Defaults
+declare -a IMAGES=()
+INSTRUCTION=""
+OUTPUT=""
+MODEL="$GEMINI_DEFAULT_MODEL"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --output)
+            OUTPUT="$2"
+            shift 2
+            ;;
+        --model)
+            MODEL="$2"
+            shift 2
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --*)
+            gemini_error "Unknown option: $1"
+            ;;
+        *)
+            # Detect file vs instruction: files exist on disk
+            if [[ -f "$1" ]]; then
+                IMAGES+=("$1")
+            elif [[ -z "$INSTRUCTION" ]]; then
+                INSTRUCTION="$1"
+            else
+                gemini_error "Unexpected argument after instruction: $1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate image count
+if [[ ${#IMAGES[@]} -lt 2 ]]; then
+    gemini_error "At least 2 images required. Got: ${#IMAGES[@]}"
+fi
+
+if [[ ${#IMAGES[@]} -gt 14 ]]; then
+    gemini_error "Maximum 14 images allowed. Got: ${#IMAGES[@]}"
+fi
+
+if [[ -z "$INSTRUCTION" ]]; then
+    gemini_error "Instruction required. Usage: gemini-compose IMAGE1 IMAGE2 \"INSTRUCTION\""
+fi
+
+gemini_check_api_key
+gemini_check_deps
+
+# Default output path
+if [[ -z "$OUTPUT" ]]; then
+    OUTPUT="/tmp/gemini-compose-$(date +%Y%m%d-%H%M%S).png"
+fi
+
+# Build parts array: instruction first, then all images
+# Start with text part
+PARTS=$(jq -n --arg t "$INSTRUCTION" '[{text: $t}]')
+
+# Add each image
+for img in "${IMAGES[@]}"; do
+    MIME=$(gemini_mime_type "$img")
+    DATA=$(gemini_encode_image "$img")
+    PARTS=$(echo "$PARTS" | jq --arg m "$MIME" --arg d "$DATA" \
+        '. + [{inlineData: {mimeType: $m, data: $d}}]')
+done
+
+# Build full payload
+PAYLOAD=$(echo "$PARTS" | jq '{
+    contents: [{parts: .}],
+    generationConfig: {responseModalities: ["IMAGE", "TEXT"]}
+}')
+
+echo "Composing ${#IMAGES[@]} images with $MODEL..."
+RESPONSE=$(gemini_request "$MODEL" "$PAYLOAD")
+gemini_save_image "$RESPONSE" "$OUTPUT"
+
+# Show any text response
+TEXT=$(gemini_get_text "$RESPONSE")
+if [[ -n "$TEXT" ]]; then
+    echo "Model response: $TEXT"
+fi
+
+gemini_success "Saved: $OUTPUT"
