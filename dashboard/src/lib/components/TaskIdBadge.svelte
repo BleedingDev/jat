@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { getProjectColor as getProjectColorFromHash } from '$lib/utils/projectColors';
 	import { TASK_STATUS_VISUALS, STATUS_ICONS, getIssueTypeVisual } from '$lib/config/statusColors';
-	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
 
 	/** Dependency task info */
 	interface DepTask {
@@ -11,7 +11,7 @@
 	}
 
 	interface Props {
-		task: { id: string; status: string; issue_type?: string; assignee?: string; title?: string };
+		task: { id: string; status: string; issue_type?: string; assignee?: string; title?: string; updated_at?: string };
 		size?: 'xs' | 'sm' | 'md';
 		showStatus?: boolean;
 		showType?: boolean;
@@ -175,15 +175,13 @@
 		</button>
 
 		{#if shouldShowAssignee}
-			<div class="inline-flex items-center gap-1.5 text-xs">
-				<!-- Avatar with animated working indicator ring -->
-				<div class="avatar online placeholder w-4">
-					<div class="w-4 rounded-full ring ring-info ring-offset-base-100 ring-offset-1 animate-pulse">
-						<AgentAvatar name={task.assignee || ''} size={16} />
-					</div>
-				</div>
-				<span class="font-medium" style="color: oklch(0.70 0.12 220);">{task.assignee}</span>
-			</div>
+			<WorkingAgentBadge
+				name={task.assignee || ''}
+				size={16}
+				isWorking={true}
+				startTime={task.updated_at}
+				variant="timer"
+			/>
 		{/if}
 
 		<!-- Blocks (BELOW badge) -->
@@ -319,15 +317,13 @@
 		</div>
 
 		{#if shouldShowAssignee}
-			<div class="inline-flex items-center gap-1.5 text-xs">
-				<!-- Avatar with animated working indicator ring -->
-				<div class="avatar online placeholder w-4">
-					<div class="w-4 rounded-full ring ring-info ring-offset-base-100 ring-offset-1 animate-pulse">
-						<AgentAvatar name={task.assignee || ''} size={16} />
-					</div>
-				</div>
-				<span class="font-medium" style="color: oklch(0.70 0.12 220);">{task.assignee}</span>
-			</div>
+			<WorkingAgentBadge
+				name={task.assignee || ''}
+				size={16}
+				isWorking={true}
+				startTime={task.updated_at}
+				variant="timer"
+			/>
 		{/if}
 
 		<!-- Blocks (BELOW badge) -->

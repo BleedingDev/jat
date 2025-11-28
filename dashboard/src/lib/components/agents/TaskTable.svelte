@@ -2,8 +2,8 @@
 	import { page } from '$app/stores';
 	import { replaceState } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
+	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
 	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
 	import LabelBadges from '$lib/components/LabelBadges.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
@@ -1447,11 +1447,12 @@
 										{#if workingAgents.length > 0}
 											<div class="flex items-center -space-x-1 ml-3">
 												{#each workingAgents.slice(0, 4) as agentName}
-													<div class="avatar online placeholder w-5" title="{agentName} is working">
-														<div class="w-5 rounded-full ring-2 ring-info ring-offset-base-100 ring-offset-1">
-															<AgentAvatar name={agentName || ''} size={20} />
-														</div>
-													</div>
+													<WorkingAgentBadge
+														name={agentName || ''}
+														size={20}
+														isWorking={true}
+														variant="avatar"
+													/>
 												{/each}
 												{#if workingAgents.length > 4}
 													<div class="avatar placeholder w-5">
