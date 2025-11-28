@@ -38,6 +38,21 @@ export async function POST({ params, request }) {
 				command = `tmux send-keys -t "${sessionName}" Enter`;
 				break;
 
+			case 'down':
+				// Send Down arrow
+				command = `tmux send-keys -t "${sessionName}" Down`;
+				break;
+
+			case 'up':
+				// Send Up arrow
+				command = `tmux send-keys -t "${sessionName}" Up`;
+				break;
+
+			case 'escape':
+				// Send Escape key
+				command = `tmux send-keys -t "${sessionName}" Escape`;
+				break;
+
 			case 'ctrl-c':
 				// Send Ctrl+C (interrupt signal)
 				command = `tmux send-keys -t "${sessionName}" C-c`;

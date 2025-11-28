@@ -250,27 +250,55 @@
 		}
 	}
 
-	// Quick send Enter (accept highlighted option in Claude Code prompts)
-	async function sendYes() {
+	// Send a special key to the session
+	async function sendKey(keyType: string) {
 		const target = currentSession();
 		if (!target) return;
 
 		sendingInput = true;
 		try {
-			// Send just Enter to accept the highlighted option
 			const response = await fetch(`/api/sessions/${target.name}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type: 'enter' })
+				body: JSON.stringify({ type: keyType })
 			});
 			const result = await response.json();
-			console.log('[OutputDrawer] Yes/Enter response:', result);
+			console.log(`[OutputDrawer] ${keyType} response:`, result);
 		} catch (e) {
-			console.error('[OutputDrawer] Failed to send Enter:', e);
+			console.error(`[OutputDrawer] Failed to send ${keyType}:`, e);
 		} finally {
 			sendingInput = false;
 		}
 	}
+
+	// Send a sequence of keys (e.g., Down then Enter for option 2)
+	async function sendKeySequence(keys: string[]) {
+		const target = currentSession();
+		if (!target) return;
+
+		sendingInput = true;
+		try {
+			for (const key of keys) {
+				await fetch(`/api/sessions/${target.name}/input`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ type: key })
+				});
+				// Small delay between keys
+				await new Promise(r => setTimeout(r, 50));
+			}
+			console.log(`[OutputDrawer] Sent sequence:`, keys);
+		} catch (e) {
+			console.error(`[OutputDrawer] Failed to send sequence:`, e);
+		} finally {
+			sendingInput = false;
+		}
+	}
+
+	// Quick actions for Claude Code prompts
+	function sendYes() { sendKey('enter'); }
+	function sendYesRemember() { sendKeySequence(['down', 'enter']); }
+	function sendEscape() { sendKey('escape'); }
 
 	// Handle Enter key in input
 	function handleInputKeydown(e: KeyboardEvent) {
@@ -439,37 +467,60 @@
 
 		<!-- Input Section -->
 		<div
-			class="border-t px-3 py-2"
+			class="border-t px-3 py-2 space-y-2"
 			style="background: oklch(0.18 0.01 250); border-color: oklch(0.30 0.02 250);"
 		>
-			<div class="flex gap-2">
-				<input
-					type="text"
-					bind:value={inputText}
-					onkeydown={handleInputKeydown}
-					placeholder="Type message and press Enter..."
-					class="input input-xs flex-1 font-mono"
-					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
-					disabled={sendingInput || !currentSession()}
-				/>
+			<!-- Quick action buttons for Claude prompts -->
+			<div class="flex gap-1.5">
 				<button
 					onclick={sendYes}
-					class="btn btn-xs"
-					style="background: oklch(0.30 0.10 150); border: none; color: oklch(0.95 0.02 250);"
-					title="Send '1' (Yes)"
+					class="btn btn-xs flex-1"
+					style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
+					title="Accept highlighted option (Enter)"
 					disabled={sendingInput || !currentSession()}
 				>
 					Yes
 				</button>
 				<button
-					onclick={() => sendInput('ctrl-c')}
+					onclick={sendYesRemember}
+					class="btn btn-xs flex-1"
+					style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
+					title="Yes + Don't ask again (Down, Enter)"
+					disabled={sendingInput || !currentSession()}
+				>
+					Yes+✓
+				</button>
+				<button
+					onclick={sendEscape}
 					class="btn btn-xs"
-					style="background: oklch(0.30 0.10 25); border: none; color: oklch(0.95 0.02 250);"
-					title="Send Ctrl+C"
+					style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
+					title="Escape (cancel prompt)"
+					disabled={sendingInput || !currentSession()}
+				>
+					Esc
+				</button>
+				<button
+					onclick={() => sendKey('ctrl-c')}
+					class="btn btn-xs"
+					style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+					title="Send Ctrl+C (interrupt)"
 					disabled={sendingInput || !currentSession()}
 				>
 					^C
 				</button>
+			</div>
+
+			<!-- Text input -->
+			<div class="flex gap-2">
+				<input
+					type="text"
+					bind:value={inputText}
+					onkeydown={handleInputKeydown}
+					placeholder="Type and press Enter..."
+					class="input input-xs flex-1 font-mono"
+					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
+					disabled={sendingInput || !currentSession()}
+				/>
 				<button
 					onclick={() => sendInput('text')}
 					class="btn btn-xs btn-primary"
