@@ -51,6 +51,7 @@
 		onKillSession?: () => void;
 		onInterrupt?: () => void;
 		onContinue?: () => void;
+		onAttachTerminal?: () => void; // Open tmux session in terminal
 		onTaskClick?: (taskId: string) => void;
 		onSendInput?: (input: string, type: 'text' | 'key') => Promise<void>;
 		onDismiss?: () => void; // Called when completion banner auto-dismisses
@@ -72,6 +73,7 @@
 		onKillSession,
 		onInterrupt,
 		onContinue,
+		onAttachTerminal,
 		onTaskClick,
 		onSendInput,
 		onDismiss,
@@ -505,90 +507,32 @@
 	<!-- Header: Task-first design -->
 	<div class="pl-3 pr-3 pt-3 pb-2 flex-shrink-0 flex-grow-0">
 		<!-- Task Title (Primary) -->
-		<div class="flex items-start justify-between gap-3">
-			<div class="flex-1 min-w-0">
-				{#if task}
-					<div class="flex items-center gap-2 mb-1">
-						<TaskIdBadge
-							task={{ id: task.id, status: task.status, issue_type: task.issue_type, title: task.title }}
-							size="sm"
-							showType={true}
-							showStatus={true}
-							onOpenTask={onTaskClick}
-						/>
-						<span
-							class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded"
-							style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
-						>
-							P{task.priority ?? 2}
-						</span>
-					</div>
-					<h3 class="font-mono font-bold text-sm tracking-wide truncate" style="color: oklch(0.90 0.02 250);" title={task.title}>
-						{task.title}
-					</h3>
-				{:else}
-					<div class="flex items-center gap-2">
-						<span class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded" style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.5 0 0 / 0.5);">No task</span>
-					</div>
-					<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
-						Idle session
-					</h3>
-				{/if}
+		{#if task}
+			<div class="flex items-center gap-2 mb-1">
+				<TaskIdBadge
+					task={{ id: task.id, status: task.status, issue_type: task.issue_type, title: task.title }}
+					size="sm"
+					showType={true}
+					showStatus={true}
+					onOpenTask={onTaskClick}
+				/>
+				<span
+					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded"
+					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
+				>
+					P{task.priority ?? 2}
+				</span>
 			</div>
+			<h3 class="font-mono font-bold text-sm tracking-wide truncate" style="color: oklch(0.90 0.02 250);" title={task.title}>
+				{task.title}
+			</h3>
+		{:else}
+			<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
+				Idle session
+			</h3>
+		{/if}
 
-			<!-- Control Buttons -->
-			<div class="flex items-center gap-1 shrink-0">
-				<!-- Interrupt (Ctrl+C) -->
-				<button
-					class="btn btn-xs btn-ghost hover:btn-warning"
-					onclick={handleInterrupt}
-					disabled={interruptLoading || !onInterrupt}
-					title="Send Ctrl+C (interrupt)"
-				>
-					{#if interruptLoading}
-						<span class="loading loading-spinner loading-xs"></span>
-					{:else}
-						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-						</svg>
-					{/if}
-				</button>
-
-				<!-- Continue -->
-				<button
-					class="btn btn-xs btn-ghost hover:btn-success"
-					onclick={handleContinue}
-					disabled={continueLoading || !onContinue}
-					title="Send 'continue'"
-				>
-					{#if continueLoading}
-						<span class="loading loading-spinner loading-xs"></span>
-					{:else}
-						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-						</svg>
-					{/if}
-				</button>
-
-				<!-- Kill Session -->
-				<button
-					class="btn btn-xs btn-ghost hover:btn-error"
-					onclick={handleKill}
-					disabled={killLoading || !onKillSession}
-					title="Kill session"
-				>
-					{#if killLoading}
-						<span class="loading loading-spinner loading-xs"></span>
-					{:else}
-						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					{/if}
-				</button>
-			</div>
-		</div>
-
-		<!-- Agent Badge + Token Usage (Secondary Metadata) -->
+		<!-- Agent Badge + Token Usage + Control Buttons -->
 		<div class="flex items-center justify-between mt-2 pt-2" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
 			<!-- Agent Info -->
 			<div class="flex items-center gap-2">
@@ -600,30 +544,85 @@
 				<span class="font-mono text-[10px] tracking-wider" style="color: oklch(0.65 0.02 250);">{agentName}</span>
 			</div>
 
-			<!-- Token Usage -->
-			<TokenUsageDisplay
-				{tokens}
-				{cost}
-				timeRange="today"
-				variant="compact"
-				showTokens={true}
-				showCost={true}
-				colorCoded={true}
-			/>
+			<!-- Token Usage + Control Buttons -->
+			<div class="flex items-center gap-2">
+				<TokenUsageDisplay
+					{tokens}
+					{cost}
+					timeRange="today"
+					variant="compact"
+					showTokens={true}
+					showCost={true}
+					colorCoded={true}
+				/>
+
+				<!-- Control Buttons -->
+				<div class="flex items-center gap-0.5">
+					<button
+						class="btn btn-xs btn-ghost hover:btn-warning"
+						onclick={handleInterrupt}
+						disabled={interruptLoading || !onInterrupt}
+						title="Send Ctrl+C (interrupt)"
+					>
+						{#if interruptLoading}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+							</svg>
+						{/if}
+					</button>
+					<button
+						class="btn btn-xs btn-ghost hover:btn-success"
+						onclick={handleContinue}
+						disabled={continueLoading || !onContinue}
+						title="Send 'continue'"
+					>
+						{#if continueLoading}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+							</svg>
+						{/if}
+					</button>
+					<button
+						class="btn btn-xs btn-ghost hover:btn-error"
+						onclick={handleKill}
+						disabled={killLoading || !onKillSession}
+						title="Kill session"
+					>
+						{#if killLoading}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						{/if}
+					</button>
+				</div>
+			</div>
 		</div>
 	</div>
 
 	<!-- Output Section -->
 	<div class="flex-1 flex flex-col min-h-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
+		<!-- Output Header -->
+		<div
+			class="px-3 py-1.5 flex items-center justify-between flex-shrink-0"
+			style="background: linear-gradient(90deg, oklch(0.60 0.14 250 / 0.1) 0%, oklch(0.18 0.01 250) 100%);"
+		>
+			<span class="font-mono text-[10px] tracking-wider uppercase" style="color: oklch(0.55 0.02 250);">Output</span>
+		</div>
 		<!-- Output Content -->
 		<div
 			bind:this={scrollContainerRef}
 			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed flex-1 min-h-0"
-			style="background: oklch(0.14 0.01 250);"
+			style="background: oklch(0.12 0.01 250);"
 			onscroll={handleScroll}
 		>
 			{#if output}
-				<pre class="whitespace-pre-wrap break-words m-0" style="color: oklch(0.75 0.02 250);">{@html renderedOutput}</pre>
+				<pre class="whitespace-pre-wrap break-words m-0" style="color: oklch(0.85 0.05 145);">{@html renderedOutput}</pre>
 			{:else}
 				<p class="text-base-content/40 italic m-0">No output yet...</p>
 			{/if}
@@ -640,7 +639,7 @@
 							{#if opt.type === 'yes'}
 								<button
 									onclick={() => sendOptionNumber(opt.number)}
-									class="btn btn-xs"
+									class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 									style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
 									title={`Option ${opt.number}: ${opt.text}`}
 									disabled={sendingInput || !onSendInput}
@@ -650,7 +649,7 @@
 							{:else if opt.type === 'yes-remember'}
 								<button
 									onclick={() => sendOptionNumber(opt.number)}
-									class="btn btn-xs"
+									class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 									style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
 									title={`Option ${opt.number}: ${opt.text}`}
 									disabled={sendingInput || !onSendInput}
@@ -660,7 +659,7 @@
 							{:else if opt.type === 'custom'}
 								<button
 									onclick={() => sendOptionNumber(opt.number)}
-									class="btn btn-xs"
+									class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 									style="background: oklch(0.25 0.08 280); border: none; color: oklch(0.85 0.02 250);"
 									title={`Option ${opt.number}: ${opt.text}`}
 									disabled={sendingInput || !onSendInput}
@@ -671,7 +670,7 @@
 						{/each}
 						<button
 							onclick={() => sendKey('escape')}
-							class="btn btn-xs"
+							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 							style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
 							title="Escape (cancel prompt)"
 							disabled={sendingInput || !onSendInput}
@@ -680,7 +679,7 @@
 						</button>
 						<button
 							onclick={() => sendKey('ctrl-c')}
-							class="btn btn-xs"
+							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
 							title="Send Ctrl+C (interrupt)"
 							disabled={sendingInput || !onSendInput}
