@@ -167,8 +167,8 @@
 				class="mb-4 min-h-[80px]"
 			/>
 
-			<!-- Responsive Grid -->
-			<div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+			<!-- Fixed-width Grid (630px per card for full terminal output) -->
+			<div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, 630px);">
 				{#each sortedSessions as session (session.sessionName)}
 					<WorkCard
 						sessionName={session.sessionName}
