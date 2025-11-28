@@ -7,7 +7,7 @@
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import TokenUsageDisplay from '$lib/components/TokenUsageDisplay.svelte';
 	import { getAgentStatusBadge, getAgentStatusIcon, getAgentStatusVisual } from '$lib/utils/badgeHelpers';
-	import { formatLastActivity } from '$lib/utils/dateFormatters';
+	import { formatLastActivity, formatActivityTimestamp } from '$lib/utils/dateFormatters';
 	import { computeAgentStatus } from '$lib/utils/agentStatusUtils';
 	import { createModalState } from '$lib/utils/modalStateHelpers.svelte';
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
@@ -60,13 +60,9 @@
 		onTaskAssign?: (taskId: string, agentName: string) => Promise<void>;
 		ontaskclick?: (taskId: string) => void;
 		draggedTaskId?: string | null;
-		selectedDateRange?: string;
-		customDateFrom?: string | null;
-		customDateTo?: string | null;
-		isHistoricalView?: boolean;
 	}
 
-	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = async () => {}, ontaskclick = () => {}, draggedTaskId = null, selectedDateRange = 'all', customDateFrom = null, customDateTo = null, isHistoricalView = false }: Props = $props();
+	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = async () => {}, ontaskclick = () => {}, draggedTaskId = null }: Props = $props();
 
 	let isDragOver = $state(false);
 	let isAssigning = $state(false);
@@ -101,10 +97,11 @@
 	let usageRetryCount = $state(0);
 
 	// Sparkline state management
+	// NOTE: Sparkline is fetched once on mount, not polled.
+	// With 57 agents, polling every 30s would be 114 API calls/minute!
 	let sparklineData = $state<SparklinePoint[]>([]);
 	let sparklineLoading = $state(false);
 	let sparklineError = $state<string | null>(null);
-	let sparklineInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Multi-project sparkline state
 	let multiProjectData = $state<MultiProjectSparklinePoint[]>([]);
@@ -472,20 +469,9 @@
 		}
 	}
 
-	// Setup sparkline auto-refresh on mount
+	// Fetch sparkline once on mount (no polling - saves API calls with many agents)
 	onMount(() => {
-		// Initial fetch
 		fetchSparklineData();
-
-		// Setup 30-second polling interval
-		sparklineInterval = setInterval(fetchSparklineData, 30000);
-
-		// Cleanup on unmount
-		return () => {
-			if (sparklineInterval) {
-				clearInterval(sparklineInterval);
-			}
-		};
 	});
 
 	// Handle right-click to show quick actions menu
@@ -716,32 +702,6 @@
 		return match ? match[1] : null;
 	}
 
-	// Format date range for historical view display
-	function formatDateRangeLabel(): string {
-		if (selectedDateRange === 'today') return 'Today';
-		if (selectedDateRange === 'week') return 'This Week';
-		if (selectedDateRange === 'month') return 'This Month';
-		if (selectedDateRange === 'custom' && customDateFrom && customDateTo) {
-			const from = new Date(customDateFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-			const to = new Date(customDateTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-			return `${from} - ${to}`;
-		}
-		if (selectedDateRange === 'custom' && customDateFrom) {
-			return `From ${new Date(customDateFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-		}
-		if (selectedDateRange === 'custom' && customDateTo) {
-			return `Until ${new Date(customDateTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-		}
-		return null;
-	}
-
-	// Check if agent was active in the selected date range
-	const wasActiveInRange = $derived(() => {
-		// If we have activities, agent was active in the range
-		if (agent.activities && agent.activities.length > 0) return true;
-		if (agent.current_activity) return true;
-		return false;
-	});
 
 	// Handle activity item click
 	// If the activity contains a task ID, call the parent's ontaskclick handler
@@ -769,8 +729,17 @@
 	}
 </script>
 
+<!-- Industrial/Terminal AgentCard -->
 <div
-	class="card border-2 transition-all relative h-full flex flex-col {isDragOver && hasConflict ? 'border-error border-dashed bg-error/10 scale-105' : isDragOver ? 'border-success border-dashed bg-success/10 scale-105' : assignSuccess ? 'border-success bg-success/5 animate-pulse' : isHistoricalView ? 'border-info/30 border-dashed bg-base-100' : agentStatus() === 'working' && currentTask() ? 'border-info bg-info/10 hover:border-primary' : 'border-base-300 hover:border-primary bg-base-100'} {isAssigning || assignSuccess ? 'pointer-events-none' : ''} {agentStatus() === 'offline' && !isHistoricalView ? 'opacity-60 grayscale-[30%] hover:opacity-90 hover:grayscale-[5%]' : ''} {isHistoricalView && !wasActiveInRange() ? 'opacity-40 grayscale-[50%]' : ''}"
+	class="ml-0.5 mt-0.5 relative h-full flex flex-col rounded-lg overflow-hidden transition-all duration-200
+		{isDragOver && hasConflict ? 'scale-[1.02]' : isDragOver ? 'scale-[1.02]' : ''}
+		{isAssigning || assignSuccess ? 'pointer-events-none' : ''}
+		{agentStatus() === 'offline' ? 'opacity-50 hover:opacity-90' : ''}"
+	style="
+		background: linear-gradient(135deg, {statusVisual().bgTint} 0%, transparent 50%);
+		border: 1px solid oklch(0.5 0 0 / 0.15);
+		box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1);
+	"
 	role="button"
 	tabindex="0"
 	ondrop={handleDrop}
@@ -778,11 +747,25 @@
 	ondragleave={handleDragLeave}
 	oncontextmenu={handleContextMenu}
 >
+	<!-- Status accent bar (left edge) -->
+	<div
+		class="absolute left-0 top-0 bottom-0 w-1 transition-all duration-300"
+		style="background: {statusVisual().accent}; box-shadow: 0 0 12px {statusVisual().glow};"
+	></div>
+
+	<!-- Drag-over border overlay -->
+	{#if isDragOver}
+		<div
+			class="absolute inset-0 pointer-events-none rounded-lg border-2 border-dashed transition-all z-10
+				{hasConflict || hasDependencyBlock ? 'border-error bg-error/5' : 'border-success bg-success/5'}"
+		></div>
+	{/if}
+
 	<!-- Loading Overlay -->
 	{#if isAssigning}
 		<div class="absolute inset-0 bg-base-300/80 backdrop-blur-sm rounded-lg z-50 flex items-center justify-center">
 			<div class="text-center">
-				<span class="loading loading-spinner loading-lg text-primary"></span>
+				<span class="loading loading-spinner loading-lg" style="color: {statusVisual().accent};"></span>
 				<p class="text-sm font-medium text-base-content mt-2">Assigning task...</p>
 			</div>
 		</div>
@@ -792,28 +775,62 @@
 	{#if assignSuccess}
 		<div class="absolute inset-0 bg-success/20 backdrop-blur-sm rounded-lg z-50 flex items-center justify-center animate-in fade-in duration-300">
 			<div class="text-center animate-in zoom-in duration-500">
-				<!-- Large checkmark circle -->
-				<div class="mx-auto w-20 h-20 bg-success rounded-full flex items-center justify-center mb-3 animate-bounce">
-					<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+				<div class="mx-auto w-16 h-16 bg-success rounded-full flex items-center justify-center mb-3 animate-bounce">
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 					</svg>
 				</div>
-				<p class="text-lg font-bold text-success">Task Assigned!</p>
-				<p class="text-sm text-success-content/80 mt-1">Successfully added to queue</p>
+				<p class="text-lg font-bold text-success font-mono tracking-wide">ASSIGNED</p>
 			</div>
 		</div>
 	{/if}
 
-	<div class="card-body p-4 flex-1 flex flex-col overflow-hidden">
-		<!-- Agent Header -->
-		<div class="flex items-start justify-between gap-2 -mb-1">
+	<div class="flex-1 flex flex-col overflow-hidden pl-3 pr-3 pt-3 pb-3">
+		<!-- ═══════════════════════════════════════════════════════════════════════
+		     INDUSTRIAL HEADER
+		     ═══════════════════════════════════════════════════════════════════════ -->
+		<div class="flex items-center gap-2 mb-2">
+			<!-- Status indicator (inline with name) -->
+			<div
+				class="flex items-center justify-center w-6 h-6 rounded shrink-0"
+				style="background: {statusVisual().bgTint}; box-shadow: 0 0 8px {statusVisual().glow};"
+				title={statusVisual().description}
+			>
+				{#if agentStatus() === 'working'}
+					<svg class="w-3.5 h-3.5 animate-spin" style="color: {statusVisual().accent};" viewBox="0 0 24 24" fill="currentColor">
+						<path d={STATUS_ICONS.gear} />
+					</svg>
+				{:else if agentStatus() === 'live'}
+					<span class="loading loading-dots loading-xs" style="color: {statusVisual().accent};"></span>
+				{:else if agentStatus() === 'active'}
+					<span class="relative flex h-2 w-2">
+						<span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background: {statusVisual().accent};"></span>
+						<span class="relative inline-flex rounded-full h-2 w-2" style="background: {statusVisual().accent};"></span>
+					</span>
+				{:else if agentStatus() === 'idle'}
+					<svg class="w-3.5 h-3.5" style="color: {statusVisual().accent};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="6" />
+					</svg>
+				{:else if agentStatus() === 'offline'}
+					<svg class="w-3.5 h-3.5" style="color: {statusVisual().accent};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS['power-off']} />
+					</svg>
+				{/if}
+			</div>
+
+			<!-- Agent name (monospace, industrial) -->
 			<div class="flex-1 min-w-0">
-				<h3 class="font-semibold text-base text-base-content truncate" title={agent.name}>
-					{agent.name || 'Unknown Agent'}
+				<h3
+					class="font-mono font-bold text-sm tracking-wide truncate"
+					style="color: {statusVisual().accent}; text-shadow: 0 0 20px {statusVisual().glow};"
+					title={agent.name}
+				>
+					{agent.name?.toUpperCase() || 'UNKNOWN'}
 				</h3>
 			</div>
+
+			<!-- Task badge or status label -->
 			{#if agentStatus() === 'working' && currentTask()}
-				<!-- Working with task: show TaskIdBadge instead of status badge -->
 				{@const taskProjectKey = currentTask().id.split('-')[0].toLowerCase()}
 				<TaskIdBadge
 					task={{ id: currentTask().id, status: currentTask().status, issue_type: currentTask().issue_type, title: currentTask().title }}
@@ -826,37 +843,14 @@
 				/>
 			{:else}
 				<button
-					class="badge badge-sm {statusVisual().badge} {agentStatus() === 'offline' ? 'cursor-pointer hover:badge-error hover:scale-110 transition-all' : 'cursor-default'}"
+					class="font-mono text-[10px] tracking-widest uppercase px-2 py-0.5 rounded transition-all
+						{agentStatus() === 'offline' ? 'cursor-pointer hover:scale-105' : 'cursor-default'}"
+					style="color: {statusVisual().accent}; background: {statusVisual().bgTint};"
 					onclick={handleBadgeClick}
 					disabled={agentStatus() !== 'offline'}
 					title={statusVisual().description}
 				>
-					{#if agentStatus() === 'working'}
-						<!-- Working without task: spinning gear SVG -->
-						<svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="currentColor">
-							<path d={STATUS_ICONS.gear} />
-						</svg>
-					{:else if agentStatus() === 'live'}
-						<!-- Live: DaisyUI loading dots (has built-in animation) -->
-						<span class="loading loading-dots loading-xs"></span>
-					{:else if agentStatus() === 'active'}
-						<!-- Active: pulsing dot -->
-						<span class="relative flex h-2 w-2">
-							<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
-							<span class="relative inline-flex rounded-full h-2 w-2 bg-current"></span>
-						</span>
-					{:else if agentStatus() === 'idle'}
-						<!-- Idle: empty circle -->
-						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<circle cx="12" cy="12" r="8" />
-						</svg>
-					{:else if agentStatus() === 'offline'}
-						<!-- Offline: power off symbol -->
-						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS['power-off']} />
-						</svg>
-					{/if}
-					<span class="ml-1">{statusVisual().label}</span>
+					{statusVisual().label}
 				</button>
 			{/if}
 		</div>
@@ -885,23 +879,6 @@
 					disableAnimation={agentStatus() === 'offline'}
 					animationKey={agent.last_active_ts || ''}
 				/>
-				<!-- Compact project legend below sparkline -->
-				{#if activeProjects.length > 0}
-					<div class="flex items-center gap-1.5 mt-0.5 text-[10px]">
-						{#each activeProjects as project}
-							<div class="flex items-center gap-0.5" title="{project.name}">
-								<div
-									class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-									style="background-color: {project.color};"
-								></div>
-								<span class="text-base-content/50 truncate max-w-[50px]">{project.name}</span>
-							</div>
-						{/each}
-						{#if projectMeta && projectMeta.filter(p => p.totalTokens > 0).length > 3}
-							<span class="text-base-content/30">+{projectMeta.filter(p => p.totalTokens > 0).length - 3}</span>
-						{/if}
-					</div>
-				{/if}
 			{:else}
 				<!-- Fallback: Single-series sparkline -->
 				<Sparkline
@@ -916,318 +893,311 @@
 			{/if}
 		</div>
 
-		<!-- Token Usage (Today) -->
-		{#if agent.usage && !usageLoading && !usageError}
-			<TokenUsageDisplay
-				tokens={agent.usage.today.total_tokens}
-				cost={agent.usage.today.cost}
-				variant="inline"
-				class="mb-2 -mt-1"
-			/>
-		{/if}
-
-		<!-- Activity & History (Unified) -->
-		{#if agent.current_activity || (agent.activities && agent.activities.length > 0)}
-			{@const firstActivity = agent.current_activity || (agent.activities && agent.activities.length > 0 ? agent.activities[0] : null)}
-			{@const isActiveTask = firstActivity && firstActivity.status !== 'closed'}
-			{@const currentActivity = isHistoricalView ? null : (isActiveTask ? firstActivity : null)}
-			{@const historyActivities = currentActivity ? agent.activities.slice(1) : agent.activities}
-			{@const dateRangeLabel = formatDateRangeLabel()}
-			<div class="flex-1 min-h-0 mb-3 bg-base-200 rounded px-2 py-1.5 overflow-y-auto {isHistoricalView ? 'border border-base-300' : ''}">
-				<!-- Historical View Indicator -->
-				{#if isHistoricalView || (dateRangeLabel && selectedDateRange !== 'all')}
-					<div class="flex items-center gap-1.5 mb-1.5 pb-1.5 border-b border-base-300">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 text-info">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-						</svg>
-						<span class="text-[10px] font-medium text-info">
-							{#if isHistoricalView}
-								Was active on {dateRangeLabel}
-							{:else}
-								Activity: {dateRangeLabel}
-							{/if}
-						</span>
-					</div>
-				{/if}
-				<!-- Current Activity -->
-				{#if currentActivity}
-					{@const taskId = extractTaskId(currentActivity.preview)}
-					{@const previewText = currentActivity.preview || currentActivity.content || 'Active'}
-					{@const textWithoutTaskId = taskId ? previewText.replace(/\[.*?\]\s*/, '') : previewText}
-					{@const statusVisual = getTaskStatusVisual(currentActivity.status || 'in_progress')}
-					<div class="text-xs flex items-start gap-1.5 py-0.5">
-						{#if currentActivity.status === 'in_progress'}
-							<svg class="shrink-0 w-4 h-4 {statusVisual.text} animate-spin" viewBox="0 0 24 24" fill="currentColor" title={statusVisual.description}>
-								<path d={STATUS_ICONS.gear} />
-							</svg>
-						{:else if currentActivity.status === 'closed'}
-							<svg class="shrink-0 w-4 h-4 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
-								<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.check} />
-							</svg>
-						{:else if currentActivity.status === 'blocked'}
-							<svg class="shrink-0 w-4 h-4 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
-								<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.warning} />
-							</svg>
-						{:else}
-							<svg class="shrink-0 w-4 h-4 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
-								<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.clock} />
-							</svg>
-						{/if}
-						{#if taskId}
-							<span class="font-mono {statusVisual.text} shrink-0 text-[10px] font-semibold">{taskId}</span>
-						{/if}
-						<span class="truncate font-semibold {statusVisual.text}">
-							{textWithoutTaskId}
-						</span>
-					</div>
-				{/if}
-
-				<!-- History -->
-				{#if historyActivities && historyActivities.length > 0}
-					<div class="{currentActivity ? 'mt-2 pt-2 border-t border-base-300' : ''} space-y-1">
-						{#each historyActivities as activity}
-							{@const taskId = extractTaskId(activity.preview)}
-							{@const isClickable = taskId !== null}
-							{@const previewText = activity.preview || activity.content || activity.type}
-							{@const textWithoutTaskId = taskId ? previewText.replace(/\[.*?\]\s*/, '') : previewText}
-							{@const statusVisual = getTaskStatusVisual(activity.status || 'open')}
+		<!-- ═══════════════════════════════════════════════════════════════════════
+		     FILE LOCKS SECTION (Always visible when locks exist)
+		     Shows actual file patterns being locked by this agent
+		     ═══════════════════════════════════════════════════════════════════════ -->
+		{#if agentLocks().length > 0}
+			<div
+				class="mb-2 rounded overflow-hidden"
+				style="background: oklch(0.70 0.16 85 / 0.08); border: 1px solid oklch(0.70 0.16 85 / 0.2);"
+			>
+				<!-- Locks header -->
+				<button
+					class="w-full flex items-center gap-1.5 px-2 py-1 hover:bg-base-content/5 transition-colors"
+					onclick={viewReservations}
+					title="Click to manage file locks"
+				>
+					<svg class="w-3 h-3 shrink-0" style="color: oklch(0.70 0.16 85);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+					</svg>
+					<span class="font-mono text-[10px] tracking-widest uppercase" style="color: oklch(0.70 0.16 85);">Locks</span>
+					<span class="font-mono text-[10px] tabular-nums ml-auto" style="color: oklch(0.70 0.16 85);">
+						<AnimatedDigits value={agentLocks().length.toString()} />
+					</span>
+				</button>
+				<!-- Lock patterns list -->
+				<div class="px-2 pb-1.5 space-y-0.5">
+					{#each agentLocks().slice(0, 3) as lock}
 						<div
-							class="text-xs text-base-content/60 flex items-start gap-1.5 rounded px-1 py-0.5 {isClickable ? 'hover:bg-primary/10 cursor-pointer' : 'hover:bg-base-300 cursor-help'}"
-								title={activity.content || activity.preview}
-								onclick={isClickable ? () => handleActivityClick(activity) : undefined}
-								role={isClickable ? 'button' : undefined}
-								tabindex={isClickable ? 0 : undefined}
-							>
-								<span class="text-base-content/40 shrink-0 font-mono text-[10px]">
-									{new Date(activity.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-								</span>
-								{#if activity.status === 'in_progress'}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text} animate-spin" viewBox="0 0 24 24" fill="currentColor" title={statusVisual.description}>
-										<path d={STATUS_ICONS.gear} />
-									</svg>
-								{:else if activity.status === 'closed'}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
-										<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.check} />
-									</svg>
-								{:else if activity.status === 'blocked'}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
-										<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.warning} />
-									</svg>
-								{:else}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusVisual.description}>
-										<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.clock} />
-									</svg>
-								{/if}
-								{#if taskId}
-									<span class="font-mono text-info shrink-0 text-[10px]">{taskId}</span>
-								{/if}
-								<span class="truncate">
-									{textWithoutTaskId}
-								</span>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<!-- Empty state: Drop zone -->
-			<div class="mb-3 bg-base-200 rounded p-2 text-center">
-				<p class="text-xs text-base-content/50 italic">Drop task here to assign</p>
-			</div>
-		{/if}
-
-		{#if queuedTasks().length > 0}
-		<!--
-		╔════════════════════════════════════════════════════════════════════════════╗
-		║ UNIFIED QUEUE / DROP ZONE PATTERN                                         ║
-		╚════════════════════════════════════════════════════════════════════════════╝
-
-		DESIGN DECISION: Queue and Drop Zone are merged into a single section
-
-		WHY THIS PATTERN?
-		• Reduces visual redundancy (one section instead of two)
-		• Lowers cognitive load (clearer UX with less clutter)
-		• Better space utilization on agent cards
-		• Natural drop target (entire queue section is droppable)
-
-		VISUAL STATES (5 states):
-
-		1. DEFAULT (has queued tasks):
-		   - Solid border (border-base-300)
-		   - Shows list of queued tasks (up to 3 visible)
-		   - "+N more" indicator if > 3 tasks
-
-		2. DRAG OVER + SUCCESS:
-		   - Dashed green border (border-success border-dashed)
-		   - Green background tint (bg-success/10)
-		   - Checkmark icon + "Drop to assign to {agent}" message
-		   - Scale up effect (scale-105)
-
-		3. DRAG OVER + DEPENDENCY BLOCK:
-		   - Dashed red border (border-error border-dashed)
-		   - Red background tint (bg-error/10)
-		   - X icon + "Dependency Block!" header
-		   - Shows specific blocking reason
-		   - Drop is prevented (cursor: not-allowed)
-
-		4. DRAG OVER + FILE CONFLICT:
-		   - Dashed red border (border-error border-dashed)
-		   - Red background tint (bg-error/10)
-		   - Warning icon + "File Conflict!" header
-		   - Lists conflicting file patterns
-		   - Drop is prevented (cursor: not-allowed)
-
-		5. ASSIGNING (loading):
-		   - Loading spinner
-		   - "Assigning task..." message
-		   - Disabled pointer events during assignment
-
-		DRAG-DROP INTERACTION:
-		• Entire section is a drop target (not just empty space)
-		• Parent card handles drop logic (lines 183-235)
-		• Conflict detection runs on dragover (lines 322-344)
-		• New tasks are added to top of queue after assignment
-		• Visual feedback is immediate and clear
-
-		USER PREFERENCES THAT INFORMED THIS DESIGN:
-		• Users preferred cleaner, less busy interface
-		• Separate drop zone felt redundant when queue exists
-		• Visual feedback should be inline (not modal/toast)
-		• Error messages should be detailed and actionable
-
-		IMPLEMENTATION NOTES:
-		• State management: isDragOver, hasConflict, hasDependencyBlock
-		• Border and background change reactively based on drag state
-		• Drop handler validates dependencies + conflicts before assignment
-		• Entire section scales on hover for clear drop affordance
-	-->
-	<!-- Queued Tasks / Drop Zone (Unified) -->
-		<div class="mb-3">
-			<div class="text-xs font-medium text-base-content/70 mb-1 flex items-center gap-0.5">
-				Queue (<AnimatedDigits value={queuedTasks().length.toString()} />):
-			</div>
-
-				<div class="space-y-1">
-					{#each queuedTasks().slice(0, 3) as task}
-						<div class="bg-base-200 rounded px-2 py-1 group/queueitem">
-							<div class="flex items-center gap-2">
-								<div class="flex items-center gap-0.5">
-									<span class="text-xs font-mono text-base-content/50 truncate max-w-[100px] inline-block" title={task.id}>{task.id}</span>
-									<button
-										class="opacity-0 group-hover/queueitem:opacity-100 transition-opacity btn btn-xs btn-ghost btn-square p-0 h-4 w-4 min-h-0"
-										title="Copy task ID"
-										onclick={(e) => copyTaskId(task.id, e)}
-									>
-										{#if copiedTaskId === task.id}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 text-success">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-											</svg>
-										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-											</svg>
-										{/if}
-									</button>
-								</div>
-								<p class="text-xs text-base-content truncate flex-1" title={task.title}>
-									{task.title}
-								</p>
-							</div>
+							class="font-mono text-[10px] truncate px-1 py-0.5 rounded hover:bg-base-content/5 transition-colors"
+							style="color: oklch(0.75 0.14 85);"
+							title={lock.path_pattern}
+						>
+							{lock.path_pattern}
 						</div>
 					{/each}
-					{#if queuedTasks().length > 3}
-						<div class="text-xs text-base-content/50 text-center flex items-center justify-center gap-0.5">
-							+<AnimatedDigits value={(queuedTasks().length - 3).toString()} /> more
+					{#if agentLocks().length > 3}
+						<div class="font-mono text-[9px] text-base-content/40 text-center py-0.5">
+							+{agentLocks().length - 3} more
 						</div>
 					{/if}
 				</div>
+			</div>
+		{/if}
 
-				<!-- Drag-over feedback when has tasks -->
-				{#if isDragOver}
-					<div class="mt-2 pt-2 border-t border-base-300 text-center">
-						{#if isAssigning}
-							<div class="flex items-center justify-center gap-2">
-								<span class="loading loading-spinner loading-xs"></span>
-								<p class="text-xs text-base-content/70">Assigning task...</p>
-							</div>
-						{:else if hasDependencyBlock}
-							<div class="space-y-1">
-								<p class="text-xs text-error font-medium flex items-center justify-center gap-1">
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-									</svg>
-									Dependency Block!
-								</p>
-								<div class="text-xs text-error/80">
-									<p>🚫 {dependencyBlockReason}</p>
-									<p class="mt-1 text-base-content/60">Complete blocking tasks first</p>
-								</div>
-							</div>
-						{:else if hasConflict}
-							<div class="space-y-1">
-								<p class="text-xs text-error font-medium flex items-center justify-center gap-1">
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-									</svg>
-									File Conflict!
-								</p>
-								<div class="text-xs text-error/80 max-h-20 overflow-y-auto">
-									{#each conflictReasons as reason}
-										<p class="truncate" title={reason}>• {reason}</p>
-									{/each}
-								</div>
-							</div>
-						{:else}
-							<p class="text-xs text-success font-medium flex items-center justify-center gap-1">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+		<!-- ═══════════════════════════════════════════════════════════════════════
+		     COMPACT METRICS BAR (Queue + Cost)
+		     Shows queue count and daily cost - always visible
+		     ═══════════════════════════════════════════════════════════════════════ -->
+		<div
+			class="flex items-center gap-1.5 mb-2 px-1.5 py-1 rounded"
+			style="background: oklch(0.5 0 0 / 0.06); border: 1px solid oklch(0.5 0 0 / 0.1);"
+		>
+			<!-- Queue indicator (blue) -->
+			<div
+				class="flex items-center gap-1 px-1.5 py-0.5 rounded"
+				style="background: {queuedTasks().length > 0 ? 'oklch(0.70 0.14 250 / 0.12)' : 'transparent'};"
+				title="Queued tasks: {queuedTasks().length}"
+			>
+				<svg class="w-3 h-3" style="color: {queuedTasks().length > 0 ? 'oklch(0.70 0.14 250)' : 'oklch(0.5 0 0 / 0.3)'};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+				</svg>
+				<span class="font-mono text-[10px]" style="color: {queuedTasks().length > 0 ? 'oklch(0.70 0.14 250)' : 'oklch(0.5 0 0 / 0.4)'};">
+					Queue: <AnimatedDigits value={queuedTasks().length.toString()} />
+				</span>
+			</div>
+
+			<!-- Token cost (green when low, yellow when medium, red when high) -->
+			{#if agent.usage}
+				{@const cost = agent.usage.today?.cost || 0}
+				{@const costColor = cost < 1 ? 'oklch(0.70 0.18 145)' : cost < 5 ? 'oklch(0.70 0.16 85)' : 'oklch(0.65 0.25 25)'}
+				<div
+					class="flex items-center gap-1 px-1.5 py-0.5 rounded ml-auto"
+					style="background: {cost > 0 ? `${costColor.replace(')', ' / 0.1)')}` : 'transparent'};"
+					title="Today's cost: ${cost.toFixed(2)}"
+				>
+					<span class="font-mono text-[10px]" style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};">
+						${cost < 0.01 ? '0' : cost.toFixed(2)}
+					</span>
+				</div>
+			{/if}
+		</div>
+
+		<!-- ═══════════════════════════════════════════════════════════════════════
+		     COMBINED CONTENT AREA (Activity + Queue)
+		     Single scrollable area with clear sections
+		     ═══════════════════════════════════════════════════════════════════════ -->
+		<div
+			class="flex-1 min-h-0 mb-2 rounded overflow-y-auto relative"
+			style="background: oklch(0.5 0 0 / 0.04); border: 1px solid oklch(0.5 0 0 / 0.08);"
+		>
+			<!-- Activity Section -->
+			{#if agent.current_activity || (agent.activities && agent.activities.length > 0)}
+				{@const firstActivity = agent.current_activity || (agent.activities && agent.activities.length > 0 ? agent.activities[0] : null)}
+				{@const isActiveTask = firstActivity && firstActivity.status !== 'closed'}
+				{@const currentActivity = isActiveTask ? firstActivity : null}
+				{@const historyActivities = currentActivity ? agent.activities.slice(1) : agent.activities}
+
+				<!-- Activity header -->
+				<div
+					class="flex items-center gap-2 px-2 py-1 sticky top-0 z-10"
+					style="background: linear-gradient(90deg, {statusVisual().bgTint} 0%, oklch(0.18 0.01 250) 100%); border-bottom: 1px solid oklch(0.5 0 0 / 0.08);"
+				>
+					<div class="w-0.5 h-3 rounded-full" style="background: {statusVisual().accent};"></div>
+					<span class="font-mono text-[10px] tracking-widest uppercase text-base-content/50">Activity</span>
+				</div>
+
+				<div class="px-2 py-1.5">
+					<!-- Current Activity (highlighted) -->
+					{#if currentActivity}
+						{@const taskId = extractTaskId(currentActivity.preview)}
+						{@const previewText = currentActivity.preview || currentActivity.content || 'Active'}
+						{@const textWithoutTaskId = taskId ? previewText.replace(/\[.*?\]\s*/, '') : previewText}
+						{@const activityStatusVisual = getTaskStatusVisual(currentActivity.status || 'in_progress')}
+						<div
+							class="flex items-start gap-2 py-1.5 px-2 rounded mb-1"
+							style="background: {statusVisual().bgTint}; border-left: 2px solid {statusVisual().accent};"
+						>
+							{#if currentActivity.status === 'in_progress'}
+								<svg class="shrink-0 w-4 h-4 animate-spin mt-0.5" style="color: {statusVisual().accent};" viewBox="0 0 24 24" fill="currentColor">
+									<path d={STATUS_ICONS.gear} />
 								</svg>
-								Drop to assign to {agent.name}
-							</p>
+							{:else if currentActivity.status === 'closed'}
+								<svg class="shrink-0 w-4 h-4 {activityStatusVisual.text} mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.check} />
+								</svg>
+							{:else if currentActivity.status === 'blocked'}
+								<svg class="shrink-0 w-4 h-4 {activityStatusVisual.text} mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.warning} />
+								</svg>
+							{:else}
+								<svg class="shrink-0 w-4 h-4 {activityStatusVisual.text} mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.clock} />
+								</svg>
+							{/if}
+							<div class="flex-1 min-w-0">
+								{#if taskId}
+									<span class="font-mono text-[10px] font-bold" style="color: {statusVisual().accent};">{taskId}</span>
+								{/if}
+								<p class="text-xs font-medium text-base-content truncate">{textWithoutTaskId}</p>
+							</div>
+						</div>
+					{/if}
+
+					<!-- History (terminal log style - limited to 3 items) -->
+					{#if historyActivities && historyActivities.length > 0}
+						<div class="space-y-0.5 {currentActivity ? 'pt-1 border-t border-base-content/5' : ''}">
+							{#each historyActivities.slice(0, 3) as activity}
+								{@const taskId = extractTaskId(activity.preview)}
+								{@const isClickable = taskId !== null}
+								{@const previewText = activity.preview || activity.content || activity.type}
+								{@const textWithoutTaskId = taskId ? previewText.replace(/\[.*?\]\s*/, '') : previewText}
+								{@const activityStatusVisual = getTaskStatusVisual(activity.status || 'open')}
+								<div
+									class="text-xs flex items-start gap-1.5 rounded px-1.5 py-0.5 transition-colors
+										{isClickable ? 'hover:bg-primary/10 cursor-pointer' : 'hover:bg-base-content/5 cursor-default'}"
+									title={activity.content || activity.preview}
+									onclick={isClickable ? () => handleActivityClick(activity) : undefined}
+									role={isClickable ? 'button' : undefined}
+									tabindex={isClickable ? 0 : undefined}
+								>
+									<span class="font-mono text-[9px] text-base-content/30 shrink-0 tabular-nums">
+										{formatActivityTimestamp(activity.ts)}
+									</span>
+									{#if activity.status === 'in_progress'}
+										<svg class="shrink-0 w-2.5 h-2.5 {activityStatusVisual.text} animate-spin" viewBox="0 0 24 24" fill="currentColor">
+											<path d={STATUS_ICONS.gear} />
+										</svg>
+									{:else if activity.status === 'closed'}
+										<svg class="shrink-0 w-2.5 h-2.5 {activityStatusVisual.text}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS.check} />
+										</svg>
+									{:else}
+										<svg class="shrink-0 w-2.5 h-2.5 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+											<circle cx="12" cy="12" r="3" />
+										</svg>
+									{/if}
+									{#if taskId}
+										<span class="font-mono text-[9px] text-info shrink-0">{taskId}</span>
+									{/if}
+									<span class="truncate text-base-content/60 text-[11px]">{textWithoutTaskId}</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Queue Section (inline if has items) -->
+			{#if queuedTasks().length > 0}
+				<div style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
+					<!-- Queue header -->
+					<div
+						class="flex items-center gap-2 px-2 py-1 sticky top-0 z-10"
+						style="background: linear-gradient(90deg, oklch(0.70 0.14 250 / 0.1) 0%, oklch(0.18 0.01 250) 100%);"
+					>
+						<div class="w-0.5 h-3 rounded-full" style="background: oklch(0.70 0.14 250);"></div>
+						<span class="font-mono text-[10px] tracking-widest uppercase text-base-content/50">Queue</span>
+						<span class="font-mono text-[10px] tabular-nums ml-auto" style="color: oklch(0.70 0.14 250);">
+							<AnimatedDigits value={queuedTasks().length.toString()} />
+						</span>
+					</div>
+
+					<div class="px-2 py-1 space-y-0.5">
+						{#each queuedTasks().slice(0, 2) as task}
+							<div class="flex items-center gap-2 group/queueitem rounded px-1.5 py-0.5 hover:bg-base-content/5 transition-colors">
+								<span class="font-mono text-[9px] text-base-content/40 truncate max-w-[70px]" title={task.id}>{task.id}</span>
+								<button
+									class="opacity-0 group-hover/queueitem:opacity-100 transition-opacity p-0.5 rounded hover:bg-base-content/10"
+									title="Copy task ID"
+									onclick={(e) => copyTaskId(task.id, e)}
+								>
+									{#if copiedTaskId === task.id}
+										<svg class="w-2 h-2 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+										</svg>
+									{:else}
+										<svg class="w-2 h-2 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+										</svg>
+									{/if}
+								</button>
+								<p class="text-[11px] text-base-content/70 truncate flex-1" title={task.title}>{task.title}</p>
+							</div>
+						{/each}
+						{#if queuedTasks().length > 2}
+							<div class="font-mono text-[9px] text-base-content/30 text-center py-0.5 flex items-center justify-center gap-1">
+								<span>+</span><AnimatedDigits value={(queuedTasks().length - 2).toString()} /><span>more</span>
+							</div>
 						{/if}
 					</div>
-				{/if}
-			</div>
-		{/if}
-
-		<!-- Assignment Error Alert -->
-		{#if assignError}
-			<div class="mb-3">
-				<div class="alert alert-error text-xs py-2">
-					<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-					<span>{assignError}</span>
 				</div>
+			{/if}
+
+			<!-- Empty state if no activity and no queue -->
+			{#if !agent.current_activity && (!agent.activities || agent.activities.length === 0) && queuedTasks().length === 0}
+				<div class="p-3 text-center">
+					<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">Drop task to assign</p>
+				</div>
+			{/if}
+
+			<!-- Drag-over feedback (overlay on content area) -->
+			{#if isDragOver}
+				<div
+					class="absolute inset-0 flex items-center justify-center rounded"
+					style="background: {hasDependencyBlock || hasConflict ? 'oklch(0.65 0.25 25 / 0.15)' : 'oklch(0.75 0.20 145 / 0.15)'}; backdrop-filter: blur(2px);"
+				>
+					{#if isAssigning}
+						<div class="flex items-center gap-2">
+							<span class="loading loading-spinner loading-sm" style="color: {statusVisual().accent};"></span>
+							<p class="font-mono text-xs tracking-wider uppercase text-base-content/80">Assigning...</p>
+						</div>
+					{:else if hasDependencyBlock}
+						<div class="text-center px-4">
+							<svg class="w-6 h-6 mx-auto mb-1 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+							</svg>
+							<p class="font-mono text-[10px] tracking-wider uppercase text-error">Blocked</p>
+							<p class="text-[10px] text-error/70 mt-0.5">{dependencyBlockReason}</p>
+						</div>
+					{:else if hasConflict}
+						<div class="text-center px-4">
+							<svg class="w-6 h-6 mx-auto mb-1 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+							</svg>
+							<p class="font-mono text-[10px] tracking-wider uppercase text-error">File Conflict</p>
+						</div>
+					{:else}
+						<div class="text-center">
+							<svg class="w-6 h-6 mx-auto mb-1" style="color: oklch(0.75 0.20 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+							</svg>
+							<p class="font-mono text-[10px] tracking-wider uppercase" style="color: oklch(0.75 0.20 145);">Drop to assign</p>
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</div>
+
+		<!-- Assignment Error Alert (Industrial) -->
+		{#if assignError}
+			<div
+				class="mb-2 rounded px-2 py-1.5 flex items-start gap-2"
+				style="background: oklch(0.65 0.25 25 / 0.1); border: 1px solid oklch(0.65 0.25 25 / 0.3); border-left: 2px solid oklch(0.65 0.25 25);"
+			>
+				<svg class="w-3.5 h-3.5 shrink-0 mt-0.5" style="color: oklch(0.65 0.25 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+				</svg>
+				<span class="text-xs text-error">{assignError}</span>
 			</div>
 		{/if}
 
-		<!-- File Locks -->
-		{#if agentLocks().length > 0}
-			<div class="space-y-1 mb-3">
-				{#each agentLocks().slice(0, 2) as lock}
-					<div class="bg-warning/10 rounded px-2 py-1">
-						<p class="text-xs text-warning truncate" title={lock.path_pattern}>
-							🔒 {lock.path_pattern}
-						</p>
-					</div>
-				{/each}
-				{#if agentLocks().length > 2}
-					<div class="text-xs text-base-content/50 text-center flex items-center justify-center gap-0.5">
-						+<AnimatedDigits value={(agentLocks().length - 2).toString()} /> more
-					</div>
-				{/if}
-			</div>
-		{/if}
-
-		<!-- Last Seen & Model Info -->
-		<div class="flex items-center justify-between text-xs">
-			<span class="font-medium {agentStatus() === 'live' ? 'text-success' : agentStatus() === 'working' ? 'text-info' : 'text-base-content/50'}">
+		<!-- ═══════════════════════════════════════════════════════════════════════
+		     FOOTER (Industrial)
+		     ═══════════════════════════════════════════════════════════════════════ -->
+		<div
+			class="flex items-center justify-between mt-auto pt-2"
+			style="border-top: 1px solid oklch(0.5 0 0 / 0.08);"
+		>
+			<span
+				class="font-mono text-[10px] tabular-nums"
+				style="color: {statusVisual().accent};"
+			>
 				{formatLastActivity(agent.current_activity?.ts || agent.last_active_ts)}
 			</span>
-			<span class="text-base-content/50 font-mono truncate ml-1 text-xxs">
+			<span class="font-mono text-[10px] text-base-content/30 truncate ml-2">
 				{agent.program || 'unknown'}
-				<!-- {agent.model || 'unknown'} -->
 			</span>
 		</div>
 
