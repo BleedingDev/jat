@@ -492,7 +492,7 @@
 		<!-- Output Content -->
 		<div
 			bind:this={scrollContainerRef}
-			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed h-108"
+			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed h-144"
 			style="background: oklch(0.14 0.01 250);"
 		>
 			{#if output}
