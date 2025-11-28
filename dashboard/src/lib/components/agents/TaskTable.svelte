@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { replaceState } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
 	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
 	import LabelBadges from '$lib/components/LabelBadges.svelte';
@@ -1390,6 +1391,7 @@
 						{@const typeVisual = getGroupHeaderInfo(groupingMode, groupKey)}
 						{@const parentTask = groupingMode === 'parent' && groupKey ? [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === groupKey) : null}
 						{@const isCollapsed = collapsedGroups.has(groupKey)}
+						{@const workingAgents = [...new Set(typeTasks.filter(t => t.status === 'in_progress' && t.assignee).map(t => t.assignee))]}
 						<thead>
 							<tr
 								class="cursor-pointer select-none hover:brightness-110 transition-all"
@@ -1439,6 +1441,26 @@
 											<span class="ml-2 text-sm text-base-content/70 truncate max-w-md" title={parentTask.title}>
 												{parentTask.title}
 											</span>
+										{/if}
+
+										<!-- Working agents avatars -->
+										{#if workingAgents.length > 0}
+											<div class="avatar-group -space-x-2 ml-3">
+												{#each workingAgents.slice(0, 4) as agentName}
+													<div class="avatar online placeholder w-6" title="{agentName} is working">
+														<div class="w-6 rounded-full ring ring-info ring-offset-base-100 ring-offset-1 animate-pulse">
+															<AgentAvatar name={agentName || ''} size={24} />
+														</div>
+													</div>
+												{/each}
+												{#if workingAgents.length > 4}
+													<div class="avatar placeholder w-6">
+														<div class="bg-neutral text-neutral-content w-6 rounded-full text-[10px]">
+															+{workingAgents.length - 4}
+														</div>
+													</div>
+												{/if}
+											</div>
 										{/if}
 
 										<!-- Decorative line -->

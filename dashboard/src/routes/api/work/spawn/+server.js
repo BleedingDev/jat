@@ -117,9 +117,10 @@ export async function POST({ request }) {
 			}, { status: 500 });
 		}
 
-		// Step 4: Wait for Claude to initialize, then send /jat:start auto
-		// The agent will pick up the task we already assigned
-		const initialPrompt = '/jat:start auto';
+		// Step 4: Wait for Claude to initialize, then send /jat:start {agentName}
+		// Pass the agent name explicitly so /jat:start resumes the existing agent
+		// instead of creating a new one with a different name
+		const initialPrompt = `/jat:start ${agentName}`;
 
 		await new Promise(resolve => setTimeout(resolve, 5000));
 

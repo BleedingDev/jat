@@ -248,7 +248,7 @@
 <!-- Industrial Agent Grid -->
 <div class="flex flex-col h-full">
 	<!-- Agent Grid - Horizontal Scrolling Row - Industrial -->
-	<div class="p-4" style="background: oklch(0.14 0.01 250);">
+	<div class="p-4 h-full" style="background: oklch(0.14 0.01 250);">
 		{#if sortedAgents.length === 0}
 			<!-- Empty State - Industrial -->
 			<div
@@ -286,10 +286,10 @@
 			</div>
 		{:else}
 			<!-- Horizontal Scrolling Row - Industrial -->
-			<div class="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
+			<div class="flex gap-4 overflow-x-auto pb-2 h-full scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedAgents as agent (agent.id || agent.name)}
 					<div
-						class="flex-shrink-0 w-80 h-72 {newAgentNames.includes(agent.name) ? 'agent-new-entrance' : ''}"
+						class="flex-shrink-0 w-80 h-full {newAgentNames.includes(agent.name) ? 'agent-new-entrance' : ''}"
 						animate:flip={{ duration: 300 }}
 						in:fly={{ x: -50, duration: 400, delay: 100 }}
 					>
@@ -298,7 +298,7 @@
 				{/each}
 				<!-- Offline count indicator -->
 				{#if offlineCount > 0}
-					<div class="flex-shrink-0 w-48 h-72 flex items-center justify-center">
+					<div class="flex-shrink-0 w-48 h-full flex items-center justify-center">
 						<div class="text-center p-4 rounded-lg" style="background: oklch(0.16 0.01 250); border: 1px dashed oklch(0.25 0.02 250);">
 							<p class="font-mono text-2xl mb-1" style="color: oklch(0.40 0.02 250);">{offlineCount}</p>
 							<p class="font-mono text-xs uppercase tracking-wider" style="color: oklch(0.35 0.02 250);">offline</p>

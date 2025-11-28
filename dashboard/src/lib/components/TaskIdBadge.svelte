@@ -177,9 +177,10 @@
 		{#if shouldShowAssignee}
 			<div class="inline-flex items-center gap-1.5 text-xs">
 				<!-- Avatar with animated working indicator ring -->
-				<div class="relative">
-					<div class="absolute -inset-0.5 rounded-full animate-pulse" style="background: oklch(0.70 0.15 220 / 0.3);"></div>
-					<AgentAvatar name={task.assignee || ''} size={16} class="relative rounded-full ring-1 ring-info/50" />
+				<div class="avatar online placeholder w-4">
+					<div class="w-4 rounded-full ring ring-info ring-offset-base-100 ring-offset-1 animate-pulse">
+						<AgentAvatar name={task.assignee || ''} size={16} />
+					</div>
 				</div>
 				<span class="font-medium" style="color: oklch(0.70 0.12 220);">{task.assignee}</span>
 			</div>
@@ -320,9 +321,10 @@
 		{#if shouldShowAssignee}
 			<div class="inline-flex items-center gap-1.5 text-xs">
 				<!-- Avatar with animated working indicator ring -->
-				<div class="relative">
-					<div class="absolute -inset-0.5 rounded-full animate-pulse" style="background: oklch(0.70 0.15 220 / 0.3);"></div>
-					<AgentAvatar name={task.assignee || ''} size={16} class="relative rounded-full ring-1 ring-info/50" />
+				<div class="avatar online placeholder w-4">
+					<div class="w-4 rounded-full ring ring-info ring-offset-base-100 ring-offset-1 animate-pulse">
+						<AgentAvatar name={task.assignee || ''} size={16} />
+					</div>
 				</div>
 				<span class="font-medium" style="color: oklch(0.70 0.12 220);">{task.assignee}</span>
 			</div>
