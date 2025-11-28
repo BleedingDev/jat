@@ -503,7 +503,7 @@
 	{/if}
 
 	<!-- Header: Task-first design -->
-	<div class="p-4 pb-2 flex-shrink-0 flex-grow-0">
+	<div class="pl-3 pr-3 pt-3 pb-2 flex-shrink-0 flex-grow-0">
 		<!-- Task Title (Primary) -->
 		<div class="flex items-start justify-between gap-3">
 			<div class="flex-1 min-w-0">
@@ -516,18 +516,21 @@
 							showStatus={true}
 							onOpenTask={onTaskClick}
 						/>
-						<span class="badge badge-sm badge-outline" style="opacity: 0.7;">
+						<span
+							class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded"
+							style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
+						>
 							P{task.priority ?? 2}
 						</span>
 					</div>
-					<h3 class="font-semibold text-base truncate" title={task.title}>
+					<h3 class="font-mono font-bold text-sm tracking-wide truncate" style="color: oklch(0.90 0.02 250);" title={task.title}>
 						{task.title}
 					</h3>
 				{:else}
 					<div class="flex items-center gap-2">
-						<span class="badge badge-sm badge-ghost">No task</span>
+						<span class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded" style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.5 0 0 / 0.5);">No task</span>
 					</div>
-					<h3 class="font-semibold text-base text-base-content/50">
+					<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
 						Idle session
 					</h3>
 				{/if}
@@ -594,7 +597,7 @@
 						<AgentAvatar name={agentName} size={20} />
 					</div>
 				</div>
-				<span class="text-sm font-mono text-base-content/70">{agentName}</span>
+				<span class="font-mono text-[10px] tracking-wider" style="color: oklch(0.65 0.02 250);">{agentName}</span>
 			</div>
 
 			<!-- Token Usage -->
@@ -612,24 +615,6 @@
 
 	<!-- Output Section -->
 	<div class="flex-1 flex flex-col min-h-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
-		<!-- Output Header -->
-		<div class="flex items-center justify-between px-4 py-1.5 bg-base-200/50 flex-shrink-0">
-			<span class="text-xs font-mono text-base-content/60">
-				Output ({lineCount} lines)
-			</span>
-			<button
-				class="btn btn-xs"
-				class:btn-primary={autoScroll}
-				class:btn-ghost={!autoScroll}
-				onclick={toggleAutoScroll}
-				title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
-			>
-				<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
-				</svg>
-			</button>
-		</div>
-
 		<!-- Output Content -->
 		<div
 			bind:this={scrollContainerRef}
@@ -646,121 +631,141 @@
 
 		<!-- Input Section -->
 		<div class="px-3 py-2 space-y-2 flex-shrink-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);">
-			<!-- Quick action buttons - only show when prompt detected -->
-			{#if detectedOptions.length > 0}
-				<div class="flex gap-1.5 flex-wrap">
-					{#each detectedOptions as opt (opt.number)}
-						{#if opt.type === 'yes'}
-							<button
-								onclick={() => sendOptionNumber(opt.number)}
-								class="btn btn-xs"
-								style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
-								title={`Option ${opt.number}: ${opt.text}`}
-								disabled={sendingInput || !onSendInput}
-							>
-								<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes
-							</button>
-						{:else if opt.type === 'yes-remember'}
-							<button
-								onclick={() => sendOptionNumber(opt.number)}
-								class="btn btn-xs"
-								style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
-								title={`Option ${opt.number}: ${opt.text}`}
-								disabled={sendingInput || !onSendInput}
-							>
-								<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes+✓
-							</button>
-						{:else if opt.type === 'custom'}
-							<button
-								onclick={() => sendOptionNumber(opt.number)}
-								class="btn btn-xs"
-								style="background: oklch(0.25 0.08 280); border: none; color: oklch(0.85 0.02 250);"
-								title={`Option ${opt.number}: ${opt.text}`}
-								disabled={sendingInput || !onSendInput}
-							>
-								<span class="opacity-60 mr-0.5">{opt.number}.</span>Custom
-							</button>
-						{/if}
-					{/each}
-					<button
-						onclick={() => sendKey('escape')}
-						class="btn btn-xs"
-						style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
-						title="Escape (cancel prompt)"
-						disabled={sendingInput || !onSendInput}
-					>
-						Esc
-					</button>
-					<button
-						onclick={() => sendKey('ctrl-c')}
-						class="btn btn-xs"
-						style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
-						title="Send Ctrl+C (interrupt)"
-						disabled={sendingInput || !onSendInput}
-					>
-						^C
-					</button>
+			<!-- Combined control row: Quick actions | Line count + auto-scroll | Workflow buttons -->
+			<div class="flex items-center justify-between gap-2">
+				<!-- Left: Quick action buttons (when prompt detected) -->
+				<div class="flex items-center gap-1.5">
+					{#if detectedOptions.length > 0}
+						{#each detectedOptions as opt (opt.number)}
+							{#if opt.type === 'yes'}
+								<button
+									onclick={() => sendOptionNumber(opt.number)}
+									class="btn btn-xs"
+									style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
+									title={`Option ${opt.number}: ${opt.text}`}
+									disabled={sendingInput || !onSendInput}
+								>
+									<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes
+								</button>
+							{:else if opt.type === 'yes-remember'}
+								<button
+									onclick={() => sendOptionNumber(opt.number)}
+									class="btn btn-xs"
+									style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
+									title={`Option ${opt.number}: ${opt.text}`}
+									disabled={sendingInput || !onSendInput}
+								>
+									<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes+✓
+								</button>
+							{:else if opt.type === 'custom'}
+								<button
+									onclick={() => sendOptionNumber(opt.number)}
+									class="btn btn-xs"
+									style="background: oklch(0.25 0.08 280); border: none; color: oklch(0.85 0.02 250);"
+									title={`Option ${opt.number}: ${opt.text}`}
+									disabled={sendingInput || !onSendInput}
+								>
+									<span class="opacity-60 mr-0.5">{opt.number}.</span>Custom
+								</button>
+							{/if}
+						{/each}
+						<button
+							onclick={() => sendKey('escape')}
+							class="btn btn-xs"
+							style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
+							title="Escape (cancel prompt)"
+							disabled={sendingInput || !onSendInput}
+						>
+							Esc
+						</button>
+						<button
+							onclick={() => sendKey('ctrl-c')}
+							class="btn btn-xs"
+							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+							title="Send Ctrl+C (interrupt)"
+							disabled={sendingInput || !onSendInput}
+						>
+							^C
+						</button>
+					{/if}
 				</div>
-			{/if}
 
-			<!-- JAT Workflow action buttons - show when work is complete -->
-			{#if detectedWorkflowCommands.length > 0}
-				<div class="flex gap-2 flex-wrap items-center">
-					<span class="text-xs opacity-60 mr-1">Workflow:</span>
-					{#each detectedWorkflowCommands as cmd (cmd.command)}
-						{#if cmd.variant === 'success'}
-							<button
-								onclick={() => sendWorkflowCommand(cmd.command)}
-								class="btn btn-xs gap-1"
-								style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
-								title={cmd.description || cmd.command}
-								disabled={sendingInput || !onSendInput}
-							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-								</svg>
-								{cmd.label}
-							</button>
-						{:else if cmd.variant === 'primary'}
-							<button
-								onclick={() => sendWorkflowCommand(cmd.command)}
-								class="btn btn-xs gap-1"
-								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-								title={cmd.description || cmd.command}
-								disabled={sendingInput || !onSendInput}
-							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-								</svg>
-								{cmd.label}
-							</button>
-						{:else if cmd.variant === 'warning'}
-							<button
-								onclick={() => sendWorkflowCommand(cmd.command)}
-								class="btn btn-xs gap-1"
-								style="background: linear-gradient(135deg, oklch(0.70 0.15 85) 0%, oklch(0.60 0.12 70) 100%); border: none; color: oklch(0.25 0.05 85); font-weight: 600;"
-								title={cmd.description || cmd.command}
-								disabled={sendingInput || !onSendInput}
-							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-								</svg>
-								{cmd.label}
-							</button>
-						{:else}
-							<button
-								onclick={() => sendWorkflowCommand(cmd.command)}
-								class="btn btn-xs gap-1"
-								style="background: oklch(0.30 0.08 250); border: none; color: oklch(0.90 0.02 250); font-weight: 500;"
-								title={cmd.description || cmd.command}
-								disabled={sendingInput || !onSendInput}
-							>
-								{cmd.label}
-							</button>
-						{/if}
-					{/each}
+				<!-- Right: Line count + auto-scroll + workflow buttons -->
+				<div class="flex items-center gap-2">
+					<span class="text-xs font-mono text-base-content/60">
+						{lineCount} lines
+					</span>
+					<button
+						class="btn btn-xs"
+						class:btn-primary={autoScroll}
+						class:btn-ghost={!autoScroll}
+						onclick={toggleAutoScroll}
+						title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+					>
+						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
+						</svg>
+					</button>
+
+					<!-- Workflow buttons (when work is complete) -->
+					{#if detectedWorkflowCommands.length > 0}
+						<div class="flex gap-1.5 items-center ml-2">
+							{#each detectedWorkflowCommands as cmd (cmd.command)}
+								{#if cmd.variant === 'success'}
+									<button
+										onclick={() => sendWorkflowCommand(cmd.command)}
+										class="btn btn-xs gap-1"
+										style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
+										title={cmd.description || cmd.command}
+										disabled={sendingInput || !onSendInput}
+									>
+										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+										</svg>
+										{cmd.label}
+									</button>
+								{:else if cmd.variant === 'primary'}
+									<button
+										onclick={() => sendWorkflowCommand(cmd.command)}
+										class="btn btn-xs gap-1"
+										style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+										title={cmd.description || cmd.command}
+										disabled={sendingInput || !onSendInput}
+									>
+										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+										</svg>
+										{cmd.label}
+									</button>
+								{:else if cmd.variant === 'warning'}
+									<button
+										onclick={() => sendWorkflowCommand(cmd.command)}
+										class="btn btn-xs gap-1"
+										style="background: linear-gradient(135deg, oklch(0.70 0.15 85) 0%, oklch(0.60 0.12 70) 100%); border: none; color: oklch(0.25 0.05 85); font-weight: 600;"
+										title={cmd.description || cmd.command}
+										disabled={sendingInput || !onSendInput}
+									>
+										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+										</svg>
+										{cmd.label}
+									</button>
+								{:else}
+									<button
+										onclick={() => sendWorkflowCommand(cmd.command)}
+										class="btn btn-xs gap-1"
+										style="background: oklch(0.30 0.08 250); border: none; color: oklch(0.90 0.02 250); font-weight: 500;"
+										title={cmd.description || cmd.command}
+										disabled={sendingInput || !onSendInput}
+									>
+										{cmd.label}
+									</button>
+								{/if}
+							{/each}
+						</div>
+					{/if}
 				</div>
-			{/if}
+			</div>
 
 			<!-- Text input -->
 			<div class="flex gap-2">

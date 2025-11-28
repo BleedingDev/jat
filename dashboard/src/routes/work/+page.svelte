@@ -25,6 +25,7 @@
 		startPolling,
 		stopPolling
 	} from '$lib/stores/workSessions.svelte.js';
+	import { broadcastSessionEvent } from '$lib/stores/sessionEvents';
 
 	// Resizable panel state
 	const STORAGE_KEY = 'work-panel-split';
@@ -85,6 +86,9 @@
 	let drawerOpen = $state(false);
 	let selectedTaskId = $state<string | null>(null);
 
+	// Highlighted agent for scroll-to-agent feature
+	let highlightedAgent = $state<string | null>(null);
+
 	// Sync selectedProject from URL params
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
@@ -143,6 +147,8 @@
 	async function handleKillSession(sessionName: string) {
 		const success = await kill(sessionName);
 		if (success) {
+			// Broadcast event so other pages (like /dash) know to refresh
+			broadcastSessionEvent('session-killed', sessionName);
 			await fetchTaskData();
 		}
 	}
@@ -164,6 +170,24 @@
 	function handleTaskClick(taskId: string) {
 		selectedTaskId = taskId;
 		drawerOpen = true;
+	}
+
+	// Handle agent click - scroll to work card and highlight it
+	function handleAgentClick(agentName: string) {
+		// Find the work card element using data-agent-name attribute
+		const workCard = document.querySelector(`[data-agent-name="${agentName}"]`);
+		if (workCard) {
+			// Scroll the work card into view smoothly
+			workCard.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+
+			// Set highlighted state to trigger animation
+			highlightedAgent = agentName;
+
+			// Clear highlight after animation completes (1.5s matches CSS animation duration)
+			setTimeout(() => {
+				highlightedAgent = null;
+			}, 1500);
+		}
 	}
 
 	// Refetch on drawer close
@@ -224,6 +248,7 @@
 				onContinue={handleContinue}
 				onSendInput={handleSendInput}
 				onTaskClick={handleTaskClick}
+				{highlightedAgent}
 				class="flex-1"
 			/>
 		{/if}
@@ -254,6 +279,7 @@
 				{agents}
 				{reservations}
 				ontaskclick={handleTaskClick}
+				onagentclick={handleAgentClick}
 			/>
 		{/if}
 	</div>

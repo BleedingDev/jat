@@ -12,6 +12,7 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import { getProjectsFromTasks, getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds } from '$lib/utils/soundEffects';
+	import { initSessionEvents, closeSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 
 	let { children } = $props();
 
@@ -102,6 +103,7 @@
 	// Initialize theme-change and load all tasks
 	onMount(() => {
 		themeChange(false);
+		initSessionEvents(); // Initialize cross-page session events
 		Promise.all([loadAllTasks(), loadSparklineData()]);
 
 		// Set up polling for token usage and sparkline (every 30 seconds)
@@ -110,7 +112,19 @@
 			loadSparklineData();
 		}, 30_000);
 
-		return () => clearInterval(interval);
+		return () => {
+			clearInterval(interval);
+			closeSessionEvents();
+		};
+	});
+
+	// React to session events from other pages/tabs (e.g., session killed on /work)
+	$effect(() => {
+		const event = $lastSessionEvent;
+		if (event) {
+			// Refresh data when a session is killed or spawned
+			loadAllTasks();
+		}
 	});
 
 	// Fetch all tasks to populate project dropdown and agent counts

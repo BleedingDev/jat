@@ -6,6 +6,7 @@
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
+	import { lastSessionEvent } from '$lib/stores/sessionEvents';
 
 	let tasks = $state([]);
 	let allTasks = $state([]);  // Unfiltered tasks for project list calculation
@@ -18,6 +19,9 @@
 	// Drawer state for TaskDetailDrawer
 	let drawerOpen = $state(false);
 	let selectedTaskId = $state<string | null>(null);
+
+	// Highlighted agent for scroll-to-agent feature
+	let highlightedAgent = $state<string | null>(null);
 
 	// Resizable panel state
 	const STORAGE_KEY = 'dash-panel-split';
@@ -167,10 +171,37 @@
 		drawerOpen = true;
 	}
 
+	// Handle agent click - scroll to agent card and highlight it
+	function handleAgentClick(agentName: string) {
+		// Find the agent card element using data-agent-name attribute
+		const agentCard = document.querySelector(`[data-agent-name="${agentName}"]`);
+		if (agentCard) {
+			// Scroll the agent card into view smoothly
+			agentCard.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+
+			// Set highlighted state to trigger animation
+			highlightedAgent = agentName;
+
+			// Clear highlight after animation completes (1.5s matches CSS animation duration)
+			setTimeout(() => {
+				highlightedAgent = null;
+			}, 1500);
+		}
+	}
+
 	// Auto-refresh data every 15 seconds (layout also polls at 30s)
 	$effect(() => {
 		const interval = setInterval(fetchData, 15000);
 		return () => clearInterval(interval);
+	});
+
+	// React to session events from other pages (e.g., session killed on /work)
+	$effect(() => {
+		const event = $lastSessionEvent;
+		if (event) {
+			// Immediately refresh data when a session is killed or spawned
+			fetchData();
+		}
 	});
 
 	// Auto-refresh sparkline every 30 seconds
@@ -217,7 +248,7 @@
 				</div>
 			</div>
 		{:else}
-			<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
+			<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} {highlightedAgent} />
 		{/if}
 	</div>
 
@@ -247,6 +278,7 @@
 				{agents}
 				{reservations}
 				ontaskclick={handleTaskClick}
+				onagentclick={handleAgentClick}
 			/>
 		{/if}
 	</div>
