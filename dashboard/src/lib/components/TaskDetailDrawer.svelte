@@ -960,6 +960,22 @@
 							{/if}
 						</div>
 
+						<!-- Description (Inline Editable) - Industrial -->
+						<div>
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Description</h4>
+							<InlineEdit
+								value={task.description || ''}
+								onSave={async (newValue) => {
+									await autoSave('description', newValue);
+								}}
+								type="textarea"
+								placeholder="No description"
+								disabled={isSaving}
+								rows={4}
+								class="text-sm"
+							/>
+						</div>
+
 						<!-- Attachments - Industrial -->
 						<div>
 							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
@@ -1141,22 +1157,6 @@
 								</div>
 							</div>
 						{/if}
-
-						<!-- Description (Inline Editable) - Industrial -->
-						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Description</h4>
-							<InlineEdit
-								value={task.description || ''}
-								onSave={async (newValue) => {
-									await autoSave('description', newValue);
-								}}
-								type="textarea"
-								placeholder="No description"
-								disabled={isSaving}
-								rows={4}
-								class="text-sm"
-							/>
-						</div>
 
 						<!-- Dependencies - Industrial -->
 						<div>
