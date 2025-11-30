@@ -414,10 +414,11 @@ Agent is now available for next task." \
 
 ```bash
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ Task Completed: $task_id \"$task_title\""
-echo "👤 Agent: $agent_name"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "┌──────────────────────────────────────────────────────────────────────────┐"
+echo "│  ✅ Task Completed: $task_id \"$task_title\""
+echo "│  👤 Agent: $agent_name"
+echo "│  [JAT:IDLE actions=start]"
+echo "└──────────────────────────────────────────────────────────────────────────┘"
 echo ""
 
 # Get available tasks
@@ -490,11 +491,12 @@ This preserves attribution and maintains the audit trail.
 📢 Announcing task completion...
    ✅ Sent to @active
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Task Completed: jat-abc "Fix jat CLI -p flag causing non-interactive sessions"
-👤 Agent: SwiftMoon
-📝 Note: Backfilled from spontaneous work
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ✅ Task Completed: jat-abc "Fix jat CLI -p flag..."                     │
+│  👤 Agent: SwiftMoon                                                     │
+│  📝 Note: Backfilled from spontaneous work                               │
+│  [JAT:IDLE actions=start]                                                │
+└──────────────────────────────────────────────────────────────────────────┘
 
 [Available tasks menu follows...]
 ```
@@ -529,10 +531,11 @@ This preserves attribution and maintains the audit trail.
 📢 Announcing task completion...
    ✅ Sent to @active
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Task Completed: jat-abc "Add user settings page"
-👤 Agent: JustGrove
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ✅ Task Completed: jat-abc "Add user settings page"                     │
+│  👤 Agent: JustGrove                                                     │
+│  [JAT:IDLE actions=start]                                                │
+└──────────────────────────────────────────────────────────────────────────┘
 
 📋 Recommended Next Task:
    → jat-xyz "Update documentation for new API" (Priority: P1, Type: task)
@@ -553,11 +556,9 @@ This preserves attribution and maintains the audit trail.
    • /jat:start <task-id> - Start different task
    • /jat:status - Review current state
    • Close terminal if done for the day
-
-[JAT:IDLE actions=start]
 ```
 
-**The `[JAT:IDLE ...]` marker tells the dashboard this agent completed work and is waiting for next task selection.**
+**The `[JAT:IDLE ...]` marker is embedded in the completion box** - the dashboard detects it to show the agent is ready for a new task.
 
 ---
 

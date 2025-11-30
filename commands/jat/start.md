@@ -78,6 +78,7 @@ Extract parameter and detect mode:
 
 ```bash
 PARAM="$1"  # Could be: empty, "resume", "auto", agent-name, task-id, or "quick"
+PARAM2="$2" # Could be: empty, task-id, or "quick"
 QUICK_MODE=false
 RESUME_MODE=false
 AUTO_MODE=false
@@ -94,8 +95,8 @@ if [[ "$PARAM" == "auto" ]]; then
   PARAM_TYPE="none"
 fi
 
-# Check for quick mode
-if [[ "$PARAM" == "quick" ]] || [[ "$2" == "quick" ]]; then
+# Check for quick mode (can be $1 or $2 or $3)
+if [[ "$PARAM" == "quick" ]] || [[ "$2" == "quick" ]] || [[ "$3" == "quick" ]]; then
   QUICK_MODE=true
 fi
 
@@ -104,8 +105,15 @@ if [[ "$RESUME_MODE" == "false" ]] && [[ "$AUTO_MODE" == "false" ]]; then
   if [[ -z "$PARAM" ]] || [[ "$PARAM" == "quick" ]]; then
     PARAM_TYPE="none"
   elif bd show "$PARAM" --json >/dev/null 2>&1; then
+    # First arg IS a task-id
     PARAM_TYPE="task-id"
     TASK_ID="$PARAM"
+  elif [[ -n "$PARAM2" ]] && [[ "$PARAM2" != "quick" ]] && bd show "$PARAM2" --json >/dev/null 2>&1; then
+    # First arg is NOT a task-id, but second arg IS a task-id
+    # This is the "agent-name task-id" pattern from dashboard spawn
+    PARAM_TYPE="agent-and-task"
+    REQUESTED_AGENT="$PARAM"
+    TASK_ID="$PARAM2"
   else
     PARAM_TYPE="agent-name"
     REQUESTED_AGENT="$PARAM"
@@ -131,6 +139,64 @@ SESSION_ID="a019c84c-..."; test -f ".claude/agent-${SESSION_ID}.txt" && cat ".cl
 
 #### 1C: Handle Agent Registration Based on Parameter
 
+**If PARAM_TYPE == "agent-and-task" (dashboard spawn with explicit agent):**
+
+This is the PREFERRED path from dashboard spawn. Both agent name and task ID are provided explicitly, eliminating any ambiguity about which agent to use.
+
+```bash
+AGENT_NAME="$REQUESTED_AGENT"
+
+# Check if agent exists in am-agents
+if am-agents | grep -q "^  ${AGENT_NAME}$"; then
+  echo "✓ Using pre-created agent: $AGENT_NAME"
+  # Agent already exists from spawn endpoint - just use it
+else
+  # Edge case: agent name provided but doesn't exist yet
+  echo "Creating agent: $AGENT_NAME"
+  am-register --name "$AGENT_NAME" --program claude-code --model sonnet-4.5
+fi
+
+# Task ID is already set from parameter parsing
+# No need to detect assignee - we have explicit agent name
+```
+
+**If PARAM_TYPE == "task-id" (legacy: task-id only, no agent name):**
+
+When ONLY a task-id is provided (legacy behavior), check if the task already has an assignee. This handles backward compatibility but is less reliable than the explicit agent-and-task path.
+
+```bash
+# Get task assignee
+EXISTING_ASSIGNEE=$(bd show "$TASK_ID" --json | jq -r '.[0].assignee // empty')
+
+if [[ -n "$EXISTING_ASSIGNEE" ]]; then
+  # Check if assignee exists in am-agents
+  if am-agents | grep -q "^  ${EXISTING_ASSIGNEE}$"; then
+    # REUSE the existing agent (don't create a new one!)
+    AGENT_NAME="$EXISTING_ASSIGNEE"
+    echo "✓ Resuming assigned agent: $AGENT_NAME"
+    # Skip am-register - agent already exists
+  else
+    # Assignee name exists but agent not registered (edge case)
+    # Create the agent with that name
+    echo "Creating agent: $EXISTING_ASSIGNEE"
+    am-register --name "$EXISTING_ASSIGNEE" --program claude-code --model sonnet-4.5
+    AGENT_NAME="$EXISTING_ASSIGNEE"
+  fi
+else
+  # No assignee - create new agent (fallback to default behavior)
+  echo "No assignee on task, creating new agent..."
+  am-register --program claude-code --model sonnet-4.5
+  # → Extract agent name from output
+fi
+```
+
+**Why this matters:** When the dashboard's spawn endpoint launches a task:
+1. Spawn creates an agent (e.g., "DullHill") via `am-register`
+2. Spawn assigns the task to that agent via `bd update --assignee DullHill`
+3. Spawn sends `/jat:start DullHill task-id` to Claude (PREFERRED: explicit agent name)
+
+The explicit agent name in the command ensures `/jat:start` uses the EXACT agent that spawn created. The legacy task-id-only path exists for backward compatibility but is less reliable.
+
 **If PARAM_TYPE == "agent-name":**
 ```bash
 AGENT_NAME="$REQUESTED_AGENT"
@@ -144,7 +210,7 @@ else
 fi
 ```
 
-**If no agent registered (default mode):**
+**If no agent registered (default mode, no task-id):**
 ```bash
 # Auto-create new agent immediately (FAST!)
 am-register --program claude-code --model sonnet-4.5
@@ -165,6 +231,24 @@ am-register --program claude-code --model sonnet-4.5
 # Use Write tool with session ID from Step 1A
 Write(.claude/agent-{session_id}.txt, "AgentName")
 ```
+
+#### 1E: Rename tmux Session (if running in tmux)
+
+**IMPORTANT:** If the launcher created a `jat-pending-*` tmux session, rename it to `jat-{AgentName}` so the dashboard can track this agent properly.
+
+```bash
+# Check if we're in a tmux session that needs renaming
+CURRENT_SESSION=$(tmux display-message -p '#S' 2>/dev/null || echo "")
+if [[ "$CURRENT_SESSION" == jat-pending-* ]]; then
+    tmux rename-session "jat-$AGENT_NAME"
+    echo "✓ Session renamed to jat-$AGENT_NAME"
+fi
+```
+
+**Why this matters:**
+- Dashboard counts active agents by looking for `jat-*` tmux sessions
+- Agent names like "BoldRock" → session becomes `jat-BoldRock`
+- This enables proper agent tracking and the "kill session" feature
 
 ---
 
@@ -414,6 +498,8 @@ Display comprehensive start summary:
 ```
 ╔══════════════════════════════════════════════════════════════════════════╗
 ║                    🚀 STARTING WORK: {TASK_ID}                           ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  [JAT:WORKING task={TASK_ID}]                                            ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
 ✅ Agent: {AGENT_NAME}
@@ -435,11 +521,9 @@ Display comprehensive start summary:
 │  🔗 Dependencies: {NONE or list}                                       │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
-
-[JAT:WORKING task={TASK_ID}]
 ```
 
-**The `[JAT:WORKING ...]` marker tells the dashboard this agent is actively working.**
+**The `[JAT:WORKING ...]` marker is embedded in the header box so the dashboard can detect this agent is actively working.**
 
 ---
 
@@ -458,7 +542,10 @@ Display full task details to the user and begin working on the task.
 **CRITICAL: When you complete the coding work, display "Ready for Review" - NOT "Complete".**
 
 ```
-🔍 READY FOR REVIEW: {TASK_ID}
+┌──────────────────────────────────────────────────────────────────────────┐
+│  🔍 READY FOR REVIEW: {TASK_ID}                                          │
+│  [JAT:READY actions=complete,next]                                       │
+└──────────────────────────────────────────────────────────────────────────┘
 
 Changes made:
   - [summary of what you changed]
@@ -468,11 +555,9 @@ Next steps:
   • Review the changes above
   • /jat:complete - Complete this task and see menu
   • /jat:next - Complete this task and auto-start next
-
-[JAT:READY actions=complete,next]
 ```
 
-**The `[JAT:READY ...]` marker is machine-readable** - the dashboard detects it to show appropriate action buttons.
+**The `[JAT:READY ...]` marker is embedded in the header box** - the dashboard detects it to show appropriate action buttons.
 
 **NEVER say "Task Complete" until AFTER the user runs `/jat:complete` or `/jat:next`.**
 
@@ -519,6 +604,8 @@ Why? Because:
 
 ╔══════════════════════════════════════════════════════════════════════════╗
 ║                    🚀 STARTING WORK: jat-abc                            ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  [JAT:WORKING task=jat-abc]                                              ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
 ✅ Agent: ShortShore
@@ -673,8 +760,9 @@ Options:
 | `/jat:start auto` | Auto-create agent → check mail → **auto-pick & start** highest priority task |
 | `/jat:start resume` | Choose from logged-out agents → check mail → show tasks |
 | `/jat:start MyAgent` | Register as MyAgent → check mail → show tasks |
-| `/jat:start task-abc` | Auto-create agent → check mail → **start** task-abc |
-| `/jat:start task-abc quick` | Auto-create agent → check mail → **start** task-abc (skip conflicts) |
+| `/jat:start MyAgent task-abc` | **Use MyAgent** (PREFERRED dashboard spawn path) → check mail → **start** task-abc |
+| `/jat:start task-abc` | (Legacy) Reuse assigned agent (if exists) OR create new → check mail → **start** task-abc |
+| `/jat:start task-abc quick` | (Legacy) Reuse assigned agent (if exists) OR create new → check mail → **start** task-abc (skip conflicts) |
 
 **For launching multiple agents to attack backlog:**
 ```bash
@@ -688,6 +776,7 @@ jat myproject 4 --auto   # Launches 4 agents, each auto-starts highest priority 
 | Command | Use Case |
 |---------|----------|
 | `/jat:start` | "Show me what to work on" - registration + mail + recommendations |
+| `/jat:start MyAgent task-abc` | "Dashboard spawn" - use explicit agent + start task (no duplicates) |
 | `/jat:start task-abc` | "Start this specific task NOW" - full task start flow |
 | `/jat:next` | "Complete current + auto-start next" - drive mode |
 | `/jat:complete` | "I'm done with this task" - complete and show menu |

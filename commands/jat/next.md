@@ -56,11 +56,9 @@ Next steps:
   • Review the changes above
   • /jat:complete - Complete this task and see menu
   • /jat:next - Complete this task and auto-start next
-
-[JAT:READY actions=complete,next]
 ```
 
-**The `[JAT:READY ...]` marker is machine-readable** - the dashboard detects it to show action buttons.
+**The `[JAT:READY ...]` marker should be embedded in your "Ready for Review" header** - see `/jat:start` for the full template.
 
 **Only after running completion steps, display:**
 ```
@@ -429,7 +427,11 @@ Reserving files...
 Announcing start...
   ✓ Sent to @active
 
-[JAT:WORKING task=jat-xyz]
+╔══════════════════════════════════════════════════════════════════════════╗
+║                    🚀 STARTING WORK: jat-xyz                             ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  [JAT:WORKING task=jat-xyz]                                              ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
 [Task details displayed, ready to work]
 ```
@@ -454,7 +456,11 @@ Reserving files...
 Announcing start...
   ✓ Sent to @active
 
-[JAT:WORKING task=jat-xyz]
+╔══════════════════════════════════════════════════════════════════════════╗
+║                    🚀 STARTING WORK: jat-xyz                             ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  [JAT:WORKING task=jat-xyz]                                              ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
 [Task details displayed, ready to work]
 ```
