@@ -291,6 +291,106 @@
 		logContent = null;
 	}
 
+	// Convert ANSI escape codes to HTML with inline styles
+	function ansiToHtml(text: string): string {
+		if (!text) return '';
+
+		// Escape HTML first
+		let html = text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;');
+
+		// Track current styles
+		let currentStyles: string[] = [];
+
+		// ANSI color code mappings
+		const colors: Record<number, string> = {
+			30: '#000000', 31: '#cc0000', 32: '#00cc00', 33: '#cccc00',
+			34: '#0000cc', 35: '#cc00cc', 36: '#00cccc', 37: '#cccccc',
+			90: '#666666', 91: '#ff6666', 92: '#66ff66', 93: '#ffff66',
+			94: '#6666ff', 95: '#ff66ff', 96: '#66ffff', 97: '#ffffff'
+		};
+
+		const bgColors: Record<number, string> = {
+			40: '#000000', 41: '#cc0000', 42: '#00cc00', 43: '#cccc00',
+			44: '#0000cc', 45: '#cc00cc', 46: '#00cccc', 47: '#cccccc',
+			100: '#666666', 101: '#ff6666', 102: '#66ff66', 103: '#ffff66',
+			104: '#6666ff', 105: '#ff66ff', 106: '#66ffff', 107: '#ffffff'
+		};
+
+		// Process ANSI sequences
+		// Match: ESC[ followed by semicolon-separated numbers, ending with 'm'
+		html = html.replace(/\x1b\[([0-9;]*)m|\[([0-9;]*)m/g, (match, p1, p2) => {
+			const codes = (p1 || p2 || '0').split(';').map(Number);
+			let styles: string[] = [];
+
+			for (let i = 0; i < codes.length; i++) {
+				const code = codes[i];
+
+				if (code === 0) {
+					// Reset
+					currentStyles = [];
+				} else if (code === 1) {
+					currentStyles.push('font-weight:bold');
+				} else if (code === 2) {
+					currentStyles.push('opacity:0.7');
+				} else if (code === 3) {
+					currentStyles.push('font-style:italic');
+				} else if (code === 4) {
+					currentStyles.push('text-decoration:underline');
+				} else if (code === 22) {
+					// Normal intensity
+					currentStyles = currentStyles.filter(s => !s.includes('font-weight') && !s.includes('opacity'));
+				} else if (code === 39) {
+					// Default foreground
+					currentStyles = currentStyles.filter(s => !s.includes('color:'));
+				} else if (code === 49) {
+					// Default background
+					currentStyles = currentStyles.filter(s => !s.includes('background:'));
+				} else if (colors[code]) {
+					currentStyles = currentStyles.filter(s => !s.includes('color:'));
+					currentStyles.push(`color:${colors[code]}`);
+				} else if (bgColors[code]) {
+					currentStyles = currentStyles.filter(s => !s.includes('background:'));
+					currentStyles.push(`background:${bgColors[code]}`);
+				} else if (code === 38 && codes[i + 1] === 2) {
+					// 24-bit foreground: 38;2;r;g;b
+					const r = codes[i + 2] || 0;
+					const g = codes[i + 3] || 0;
+					const b = codes[i + 4] || 0;
+					currentStyles = currentStyles.filter(s => !s.includes('color:'));
+					currentStyles.push(`color:rgb(${r},${g},${b})`);
+					i += 4;
+				} else if (code === 48 && codes[i + 1] === 2) {
+					// 24-bit background: 48;2;r;g;b
+					const r = codes[i + 2] || 0;
+					const g = codes[i + 3] || 0;
+					const b = codes[i + 4] || 0;
+					currentStyles = currentStyles.filter(s => !s.includes('background:'));
+					currentStyles.push(`background:rgb(${r},${g},${b})`);
+					i += 4;
+				}
+			}
+
+			if (currentStyles.length > 0) {
+				return `</span><span style="${currentStyles.join(';')}">`;
+			} else {
+				return '</span><span>';
+			}
+		});
+
+		// Wrap in span and clean up empty spans
+		html = `<span>${html}</span>`;
+		html = html.replace(/<span><\/span>/g, '');
+		html = html.replace(/<\/span><span>/g, '');
+
+		return html;
+	}
+
+	// Derived: rendered log content with ANSI colors
+	const renderedLogContent = $derived(ansiToHtml(logContent || ''));
+
 	// Fetch available tasks from same project for dependencies dropdown
 	async function fetchAvailableTasks(taskId: string) {
 		if (!taskId) return;
@@ -1129,13 +1229,13 @@
 										</button>
 									</div>
 									<!-- Log content -->
-									<div class="flex-1 overflow-auto p-4">
+									<div class="flex-1 overflow-auto p-4" style="background: oklch(0.12 0.01 250);">
 										{#if logContentLoading}
 											<div class="flex items-center justify-center py-12">
 												<span class="loading loading-spinner loading-lg"></span>
 											</div>
 										{:else if logContent}
-											<pre class="text-xs font-mono whitespace-pre-wrap break-words" style="color: oklch(0.70 0.02 250);">{logContent}</pre>
+											<pre class="text-xs font-mono whitespace-pre-wrap break-words" style="color: oklch(0.75 0.02 250);">{@html renderedLogContent}</pre>
 										{:else}
 											<div class="text-center py-12" style="color: oklch(0.50 0.02 250);">
 												Failed to load log content
