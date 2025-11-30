@@ -39,14 +39,11 @@
 	});
 
 	// Filter tasks by project
-	const filteredTasks = $derived(() => {
-		if (!selectedProject || selectedProject === 'All Projects') {
-			return allTasks;
-		}
-
-		// Filter by project prefix (e.g., "jat-abc" matches "jat")
-		return allTasks.filter((task) => task.id.startsWith(selectedProject + '-'));
-	});
+	const filteredTasks = $derived(
+		(!selectedProject || selectedProject === 'All Projects')
+			? allTasks
+			: allTasks.filter((task) => task.id.startsWith(selectedProject + '-'))
+	);
 
 	// Fetch tasks
 	async function fetchTasks() {
@@ -79,12 +76,15 @@
 
 	// Refetch tasks when filters change
 	$effect(() => {
+		// Track dependencies for re-fetch
+		selectedStatus;
+		selectedPriority;
 		fetchTasks();
 	});
 
 	// Update displayed tasks when project filter or allTasks change
 	$effect(() => {
-		tasks = filteredTasks();
+		tasks = filteredTasks;
 	});
 
 	onMount(() => {
