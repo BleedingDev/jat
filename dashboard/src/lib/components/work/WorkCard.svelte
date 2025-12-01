@@ -28,15 +28,21 @@
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
+	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import { playTaskCompleteSound } from '$lib/utils/soundEffects';
 
-	// Props
+	// Props - aligned with workSessions.svelte.ts types
 	interface Task {
 		id: string;
-		title: string;
-		status: string;
+		title?: string;
+		status?: string;
 		priority?: number;
 		issue_type?: string;
+	}
+
+	/** Extended task info for completed tasks - includes closedAt timestamp */
+	interface CompletedTask extends Task {
+		closedAt?: string;
 	}
 
 	interface SparklineDataPoint {
@@ -48,7 +54,9 @@
 	interface Props {
 		sessionName: string;
 		agentName: string;
-		task?: Task | null;
+		task: Task | null;
+		/** Most recently closed task by this agent (for completion state display) */
+		lastCompletedTask: CompletedTask | null;
 		output?: string;
 		lineCount?: number;
 		tokens?: number;
@@ -72,6 +80,7 @@
 		sessionName,
 		agentName,
 		task = null,
+		lastCompletedTask = null,
 		output = '',
 		lineCount = 0,
 		tokens = 0,
@@ -95,6 +104,17 @@
 	let completionDismissTimer: ReturnType<typeof setTimeout> | null = null;
 	let previousIsComplete = $state(false);
 
+	// Real-time elapsed time clock (ticks every second)
+	let currentTime = $state(Date.now());
+	let elapsedTimeInterval: ReturnType<typeof setInterval> | null = null;
+
+	onMount(() => {
+		// Update currentTime every second for real-time elapsed time display
+		elapsedTimeInterval = setInterval(() => {
+			currentTime = Date.now();
+		}, 1000);
+	});
+
 	// Track when completion state changes to trigger banner
 	$effect(() => {
 		if (isComplete && !previousIsComplete) {
@@ -111,17 +131,20 @@
 		previousIsComplete = isComplete;
 	});
 
-	// Cleanup timer on destroy
+	// Cleanup timers on destroy
 	onDestroy(() => {
 		if (completionDismissTimer) {
 			clearTimeout(completionDismissTimer);
 		}
+		if (elapsedTimeInterval) {
+			clearInterval(elapsedTimeInterval);
+		}
 	});
 
-	// Calculate elapsed time
+	// Calculate elapsed time (uses currentTime to trigger reactive updates)
 	const elapsedTime = $derived((): string => {
 		if (!startTime) return '';
-		const elapsed = Date.now() - startTime.getTime();
+		const elapsed = currentTime - startTime.getTime();
 		const seconds = Math.floor(elapsed / 1000);
 		const minutes = Math.floor(seconds / 60);
 		const hours = Math.floor(minutes / 60);
@@ -133,6 +156,24 @@
 		} else {
 			return `${seconds}s`;
 		}
+	});
+
+	// Formatted elapsed time for AnimatedDigits display
+	// Returns object with hours, minutes, seconds as zero-padded strings
+	const elapsedTimeFormatted = $derived(() => {
+		if (!startTime) return null;
+		const elapsed = currentTime - startTime.getTime();
+		const totalSeconds = Math.floor(elapsed / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+
+		return {
+			hours: String(hours).padStart(2, '0'),
+			minutes: String(minutes).padStart(2, '0'),
+			seconds: String(seconds).padStart(2, '0'),
+			showHours: hours > 0
+		};
 	});
 
 	// Format token count for display
@@ -290,14 +331,7 @@
 						variant: 'success'
 					});
 				}
-				if (actions.includes('next')) {
-					commands.push({
-						command: '/jat:next',
-						label: 'Next',
-						description: 'Complete and start next task',
-						variant: 'primary'
-					});
-				}
+				// Note: /jat:next removed from UI - one agent = one session = one task model
 			}
 		}
 
@@ -320,10 +354,10 @@
 			}
 		}
 
-		// Fallback: detect old-style patterns if no markers found
+		// Fallback: detect old-style patterns if no markers found (only for /jat:complete)
 		if (commands.length === 0) {
 			const hasNextStepsContext =
-				/next\s*steps?:/i.test(recentOutput) && /\/jat:(complete|next)\b/.test(recentOutput);
+				/next\s*steps?:/i.test(recentOutput) && /\/jat:complete\b/.test(recentOutput);
 
 			const hasResumedWork =
 				/\[JAT:WORKING/.test(recentOutput) ||
@@ -331,14 +365,7 @@
 				/╔.*STARTING WORK/i.test(recentOutput);
 
 			if (hasNextStepsContext && !hasResumedWork) {
-				if (/\/jat:next\b/.test(recentOutput)) {
-					commands.push({
-						command: '/jat:next',
-						label: 'Next',
-						description: 'Complete and start next task',
-						variant: 'primary'
-					});
-				}
+				// Note: /jat:next removed from UI - one agent = one session = one task model
 				if (/\/jat:complete\b/.test(recentOutput)) {
 					commands.push({
 						command: '/jat:complete',
@@ -352,6 +379,82 @@
 
 		return commands;
 	});
+
+	/**
+	 * Session State - Determines what to show in the header
+	 *
+	 * States:
+	 * - 'working': Has active in_progress task
+	 * - 'needs-input': Agent blocked, needs user to provide clarification (orange)
+	 * - 'ready-for-review': Work done, awaiting user review (yellow)
+	 * - 'completed': Task was closed, showing completion summary (green)
+	 * - 'idle': No task, new session (gray)
+	 */
+	type SessionState = 'working' | 'needs-input' | 'ready-for-review' | 'completed' | 'idle';
+
+	const sessionState = $derived.by((): SessionState => {
+		// Check for markers in recent output
+		const recentOutput = output ? output.slice(-3000) : '';
+
+		// Needs input marker - agent blocked, waiting for user clarification (highest priority)
+		const hasNeedsInputMarker = /\[JAT:NEEDS_INPUT\]/.test(recentOutput);
+		const hasNeedsClarificationEmoji = /❓\s*NEED CLARIFICATION/.test(recentOutput);
+		const needsInput = hasNeedsInputMarker || hasNeedsClarificationEmoji;
+
+		// Review markers - agent finished work, awaiting user decision
+		const hasNeedsReviewMarker = /\[JAT:NEEDS_REVIEW\]/.test(recentOutput);
+		const hasReadyMarker = /\[JAT:READY\s+actions=/.test(recentOutput);
+		const hasReadyForReviewEmoji = /🔍\s*READY FOR REVIEW/.test(recentOutput);
+		const hasReadyForReviewMarker = hasNeedsReviewMarker || hasReadyMarker || hasReadyForReviewEmoji;
+
+		// Completion markers - task closed, session can end
+		const hasIdleMarker = /\[JAT:IDLE\]/.test(recentOutput);
+		const hasTaskCompleteEmoji = /✅\s*TASK COMPLETE/.test(recentOutput);
+		const hasCompletionMarker = hasIdleMarker || hasTaskCompleteEmoji;
+
+		// Autopilot marker - can proceed automatically (future: trigger auto-spawn)
+		const hasAutoProceedMarker = /\[JAT:AUTO_PROCEED\]/.test(recentOutput);
+
+		// Check for needs-input first (highest priority - agent is blocked)
+		if (needsInput && task) {
+			return 'needs-input';
+		}
+
+		// If we have an active task
+		if (task) {
+			// Check if agent has finished and is ready for review
+			if (hasReadyForReviewMarker) {
+				return 'ready-for-review';
+			}
+			return 'working';
+		}
+
+		// No active task - check if we just completed something
+		if (lastCompletedTask) {
+			// Show completed state if we have recent completion evidence
+			if (hasCompletionMarker || hasReadyForReviewMarker) {
+				return 'completed';
+			}
+
+			// If the lastCompletedTask was updated recently, still show completed state
+			if (lastCompletedTask.closedAt) {
+				const closedDate = new Date(lastCompletedTask.closedAt);
+				const now = new Date();
+				const hoursSinceClosed = (now.getTime() - closedDate.getTime()) / (1000 * 60 * 60);
+				if (hoursSinceClosed < 2) {
+					return 'completed';
+				}
+			}
+		}
+
+		return 'idle';
+	});
+
+	// Check if auto-proceed mode is active (for future autopilot feature)
+	const isAutoProceed = $derived(output ? /\[JAT:AUTO_PROCEED\]/.test(output.slice(-3000)) : false);
+
+	// Task to display - either active task or last completed task
+	const displayTask = $derived(task || (sessionState === 'completed' ? lastCompletedTask : null));
 
 	// Send a workflow command (e.g., /jat:complete)
 	async function sendWorkflowCommand(command: string) {
@@ -655,12 +758,30 @@
 	in:fly={{ x: 50, duration: 300, delay: 50 }}
 	out:fade={{ duration: 200 }}
 >
-	<!-- Status accent bar - left edge -->
+	<!-- Status accent bar - left edge (color reflects session state) -->
 	<div
 		class="absolute left-0 top-0 bottom-0 w-1"
 		style="
-			background: {showCompletionBanner ? 'oklch(0.65 0.20 145)' : 'oklch(0.60 0.18 250)'};
-			box-shadow: {showCompletionBanner ? '0 0 8px oklch(0.65 0.20 145 / 0.5)' : '0 0 8px oklch(0.60 0.18 250 / 0.5)'};
+			background: {sessionState === 'needs-input'
+				? 'oklch(0.70 0.20 45)'   /* Orange for needs input - urgent attention */
+				: sessionState === 'ready-for-review'
+					? 'oklch(0.65 0.20 85)'  /* Yellow/amber for review */
+					: sessionState === 'completed' || showCompletionBanner
+						? 'oklch(0.65 0.20 145)'  /* Green for completed */
+						: sessionState === 'working'
+							? 'oklch(0.60 0.18 250)'  /* Blue for working */
+							: 'oklch(0.50 0.05 250)'  /* Gray for idle */
+			};
+			box-shadow: {sessionState === 'needs-input'
+				? '0 0 12px oklch(0.70 0.20 45 / 0.6)'  /* Stronger glow for attention */
+				: sessionState === 'ready-for-review'
+					? '0 0 8px oklch(0.65 0.20 85 / 0.5)'
+					: sessionState === 'completed' || showCompletionBanner
+						? '0 0 8px oklch(0.65 0.20 145 / 0.5)'
+						: sessionState === 'working'
+							? '0 0 8px oklch(0.60 0.18 250 / 0.5)'
+							: 'none'
+			};
 		"
 	></div>
 	<!-- Completion Success Banner -->
@@ -724,11 +845,18 @@
 
 	<!-- Header: Compact 2-row design -->
 	<div class="pl-3 pr-3 pt-2 pb-2 flex-shrink-0 flex-grow-0">
-		<!-- Row 1: TaskIdBadge + Priority + Task Title (truncated) -->
-		{#if task}
+		<!-- Row 1: State indicator + TaskIdBadge + Priority + Task Title -->
+		{#if sessionState === 'needs-input' && displayTask}
+			<!-- Needs Input state - agent blocked, needs user clarification -->
 			<div class="flex items-center gap-2 min-w-0">
+				<span
+					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 font-bold animate-pulse"
+					style="background: oklch(0.60 0.20 45 / 0.3); color: oklch(0.90 0.15 45); border: 1px solid oklch(0.60 0.20 45 / 0.5);"
+				>
+					❓ INPUT
+				</span>
 				<TaskIdBadge
-					task={{ id: task.id, status: task.status, issue_type: task.issue_type, title: task.title }}
+					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
 					size="sm"
 					showType={false}
 					showStatus={false}
@@ -738,29 +866,131 @@
 					class="font-mono text-[10px] tracking-wider px-1 py-0.5 rounded flex-shrink-0"
 					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
 				>
-					P{task.priority ?? 2}
+					P{displayTask.priority ?? 2}
 				</span>
-				<h3 class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1" style="color: oklch(0.90 0.02 250);" title={task.title}>
-					{task.title}
+				<h3 class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1" style="color: oklch(0.90 0.02 250);" title={displayTask.title || displayTask.id}>
+					{displayTask.title || displayTask.id}
+				</h3>
+			</div>
+		{:else if sessionState === 'ready-for-review' && displayTask}
+			<!-- Ready for Review state - show prominent review banner -->
+			<div class="flex items-center gap-2 min-w-0">
+				<span
+					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 font-bold animate-pulse"
+					style="background: oklch(0.55 0.18 85 / 0.3); color: oklch(0.85 0.15 85); border: 1px solid oklch(0.55 0.18 85 / 0.5);"
+				>
+					🔍 REVIEW
+				</span>
+				<TaskIdBadge
+					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
+					size="sm"
+					showType={false}
+					showStatus={false}
+					onOpenTask={onTaskClick}
+				/>
+				<span
+					class="font-mono text-[10px] tracking-wider px-1 py-0.5 rounded flex-shrink-0"
+					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
+				>
+					P{displayTask.priority ?? 2}
+				</span>
+				<h3 class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1" style="color: oklch(0.90 0.02 250);" title={displayTask.title || displayTask.id}>
+					{displayTask.title || displayTask.id}
+				</h3>
+			</div>
+		{:else if sessionState === 'completed' && displayTask}
+			<!-- Completed state - show task that was completed -->
+			<div class="flex items-center gap-2 min-w-0">
+				<span
+					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 font-bold"
+					style="background: oklch(0.45 0.18 145 / 0.3); color: oklch(0.80 0.15 145); border: 1px solid oklch(0.45 0.18 145 / 0.5);"
+				>
+					✅ DONE
+				</span>
+				<TaskIdBadge
+					task={{ id: displayTask.id, status: displayTask.status || 'closed', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
+					size="sm"
+					showType={false}
+					showStatus={false}
+					onOpenTask={onTaskClick}
+				/>
+				<span
+					class="font-mono text-[10px] tracking-wider px-1 py-0.5 rounded flex-shrink-0"
+					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
+				>
+					P{displayTask.priority ?? 2}
+				</span>
+				<h3 class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1" style="color: oklch(0.75 0.02 250);" title={displayTask.title || displayTask.id}>
+					{displayTask.title || displayTask.id}
+				</h3>
+			</div>
+		{:else if sessionState === 'working' && displayTask}
+			<!-- Working state - active task -->
+			<div class="flex items-center gap-2 min-w-0">
+				<TaskIdBadge
+					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
+					size="sm"
+					showType={false}
+					showStatus={false}
+					onOpenTask={onTaskClick}
+				/>
+				<span
+					class="font-mono text-[10px] tracking-wider px-1 py-0.5 rounded flex-shrink-0"
+					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
+				>
+					P{displayTask.priority ?? 2}
+				</span>
+				<h3 class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1" style="color: oklch(0.90 0.02 250);" title={displayTask.title || displayTask.id}>
+					{displayTask.title || displayTask.id}
 				</h3>
 			</div>
 		{:else}
-			<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
-				Idle session
-			</h3>
+			<!-- Idle state - no task, show prompt to start -->
+			<div class="flex items-center gap-2 min-w-0">
+				<span
+					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0"
+					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.60 0.02 250);"
+				>
+					IDLE
+				</span>
+				<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
+					Ready to start work
+				</h3>
+			</div>
 		{/if}
 
 		<!-- Row 2: Agent + Sparkline + Stats + Controls -->
 		<div class="flex items-center justify-between mt-1.5 gap-2">
 			<!-- Agent Info -->
-			<div class="flex items-center gap-1.5 flex-shrink-0">
+			<div class="flex items-center gap-2.5 flex-shrink-0">
 				<div class="avatar online">
-					<div class="w-4 rounded-full ring-1 ring-info ring-offset-base-100 ring-offset-1">
-						<AgentAvatar name={agentName} size={16} />
+					<div class="w-5 rounded-full ring-1 ring-info ring-offset-base-100 ring-offset-1">
+						<AgentAvatar name={agentName} size={22} />
 					</div>
 				</div>
-				<span class="font-mono text-[10px] tracking-wider" style="color: oklch(0.65 0.02 250);">{agentName}</span>
+				<span class="font-mono text-sm tracking-wider" style="color: oklch(0.65 0.02 250);">{agentName}</span>
 			</div>
+
+			<!-- Elapsed Time (real-time countdown) -->
+			{#if startTime}
+				{@const elapsed = elapsedTimeFormatted()!}
+				<div
+					class="flex items-center gap-0.5 flex-shrink-0 font-mono text-xs"
+					style="color: oklch(0.70 0.08 200);"
+					title="Session duration"
+				>
+					<svg class="-mt-0.5 mr-0.5 w-2.5 h-2.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					{#if elapsed.showHours}
+						<AnimatedDigits value={elapsed.hours} class="text-[10px]" />
+						<span class="opacity-60">:</span>
+					{/if}
+					<AnimatedDigits value={elapsed.minutes} class="text-[10px]" />
+					<span class="opacity-60">:</span>
+					<AnimatedDigits value={elapsed.seconds} class="text-[10px]" />
+				</div>
+			{/if}
 
 			<!-- Sparkline (compact, 60px wide) -->
 			{#if sparklineData && sparklineData.length > 0}
@@ -881,92 +1111,88 @@
 					{/each}
 				</div>
 			{/if}
-			<!-- Text input with dynamic button area -->
-			<div class="flex gap-2">
+			<!-- Text input: [esc][^c] LEFT | input MIDDLE | [action buttons] RIGHT -->
+			<div class="flex gap-1.5 items-center">
+				<!-- LEFT: Control buttons (always visible) -->
+				<div class="flex items-center gap-0.5 flex-shrink-0">
+					<button
+						onclick={() => sendKey('escape')}
+						class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
+						style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
+						title="Escape (cancel prompt)"
+						disabled={sendingInput || !onSendInput}
+					>
+						Esc
+					</button>
+					<button
+						onclick={() => sendKey('ctrl-c')}
+						class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
+						style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+						title="Send Ctrl+C (interrupt)"
+						disabled={sendingInput || !onSendInput}
+					>
+						^C
+					</button>
+				</div>
+
+				<!-- MIDDLE: Text input (flexible width) -->
 				<input
 					type="text"
 					bind:value={inputText}
 					onkeydown={handleInputKeydown}
 					onpaste={handlePaste}
-					placeholder="Type and press Enter... {lineCount} lines"
-					class="input input-xs flex-1 font-mono"
+					placeholder="Type and press Enter..."
+					class="input input-xs flex-1 font-mono min-w-0"
 					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
 					disabled={sendingInput || !onSendInput}
 				/>
-				<!-- Dynamic button area: quick actions when empty, Send when typing or images attached -->
-				{#if inputText.trim() || attachedImages.length > 0}
-					<!-- User is typing: show Send button -->
-					<button
-						onclick={sendTextInput}
-						class="btn btn-xs btn-primary"
-						disabled={sendingInput || !onSendInput}
-					>
-						{#if sendingInput}
-							<span class="loading loading-spinner loading-xs"></span>
-						{:else}
-							Send
-						{/if}
-					</button>
-				{:else if !task}
-					<!-- No task: show Start (unregistered) or Next (idle after completing work) + ^C -->
-					{@const isIdle = output && /is now idle|work complete|task complete/i.test(output)}
-					<div class="flex items-center gap-1">
-						{#if isIdle}
-							<button
-								onclick={() => sendWorkflowCommand('/jat:next')}
-								class="btn btn-xs gap-1"
-								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-								title="Pick up next task"
-								disabled={sendingInput || !onSendInput}
-							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-								</svg>
-								Next
-							</button>
-						{:else}
-							<button
-								onclick={() => sendWorkflowCommand('/jat:start')}
-								class="btn btn-xs gap-1"
-								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-								title="Start working on a task"
-								disabled={sendingInput || !onSendInput}
-							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-								</svg>
-								Start
-							</button>
-						{/if}
+				<!-- RIGHT: Action buttons (context-dependent) -->
+				<div class="flex items-center gap-0.5 flex-shrink-0">
+					{#if inputText.trim() || attachedImages.length > 0}
+						<!-- User is typing: show Send button -->
 						<button
-							onclick={() => sendKey('ctrl-c')}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
-							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
-							title="Send Ctrl+C (interrupt)"
+							onclick={sendTextInput}
+							class="btn btn-xs btn-primary"
 							disabled={sendingInput || !onSendInput}
 						>
-							^C
+							{#if sendingInput}
+								<span class="loading loading-spinner loading-xs"></span>
+							{:else}
+								Send
+							{/if}
 						</button>
-					</div>
-				{:else if detectedWorkflowCommands.length > 0}
-					<!-- Workflow commands detected: show Next as primary action + ^C -->
-					{@const hasNext = detectedWorkflowCommands.some(c => c.command === '/jat:next')}
-					{@const hasComplete = detectedWorkflowCommands.some(c => c.command === '/jat:complete')}
-					<div class="flex items-center gap-1">
-						{#if hasNext}
-							<button
-								onclick={() => sendWorkflowCommand('/jat:next')}
-								class="btn btn-xs gap-1"
-								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-								title="Pick up next task"
-								disabled={sendingInput || !onSendInput}
-							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-								</svg>
-								Next
-							</button>
-						{:else if hasComplete}
+					{:else if sessionState === 'completed'}
+						<!-- Completed state: show prominent "Next Task" button -->
+						<button
+							onclick={() => sendWorkflowCommand('/jat:start')}
+							class="btn btn-xs gap-1"
+							style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+							title="Start the next task"
+							disabled={sendingInput || !onSendInput}
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+							</svg>
+							Next
+						</button>
+					{:else if sessionState === 'idle'}
+						<!-- Idle state: show Start button -->
+						<button
+							onclick={() => sendWorkflowCommand('/jat:start')}
+							class="btn btn-xs gap-1"
+							style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+							title="Start working on a task"
+							disabled={sendingInput || !onSendInput}
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+							</svg>
+							Start
+						</button>
+					{:else if detectedWorkflowCommands.length > 0}
+						<!-- Workflow commands detected: show Done as primary action -->
+						{@const hasComplete = detectedWorkflowCommands.some(c => c.command === '/jat:complete')}
+						{#if hasComplete}
 							<button
 								onclick={() => sendWorkflowCommand('/jat:complete')}
 								class="btn btn-xs gap-1"
@@ -980,19 +1206,8 @@
 								Done
 							</button>
 						{/if}
-						<button
-							onclick={() => sendKey('ctrl-c')}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
-							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
-							title="Send Ctrl+C (interrupt)"
-							disabled={sendingInput || !onSendInput}
-						>
-							^C
-						</button>
-					</div>
-				{:else if detectedOptions.length > 0}
-					<!-- Prompt options detected: show quick action buttons -->
-					<div class="flex items-center gap-1">
+					{:else if detectedOptions.length > 0}
+						<!-- Prompt options detected: show quick action buttons -->
 						{#each detectedOptions as opt (opt.number)}
 							{#if opt.type === 'yes'}
 								<button
@@ -1012,7 +1227,7 @@
 									title={`Option ${opt.number}: ${opt.text}`}
 									disabled={sendingInput || !onSendInput}
 								>
-									<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes+✓
+									<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes+
 								</button>
 							{:else if opt.type === 'custom'}
 								<button
@@ -1026,45 +1241,13 @@
 								</button>
 							{/if}
 						{/each}
-						<button
-							onclick={() => sendKey('escape')}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
-							style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
-							title="Escape (cancel prompt)"
-							disabled={sendingInput || !onSendInput}
-						>
-							Esc
-						</button>
-						<button
-							onclick={() => sendKey('ctrl-c')}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
-							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
-							title="Send Ctrl+C (interrupt)"
-							disabled={sendingInput || !onSendInput}
-						>
-							^C
-						</button>
-					</div>
-				{:else if task}
-					<!-- Task active but no detected workflow: show persistent JAT action buttons + ^C -->
-					<div class="flex items-center gap-1">
-						<button
-							onclick={() => sendWorkflowCommand('/jat:next')}
-							class="btn btn-xs gap-1"
-							style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-							title="Complete this task and start next"
-							disabled={sendingInput || !onSendInput}
-						>
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-							</svg>
-							Next
-						</button>
+					{:else if task}
+						<!-- Task active but no detected workflow: show Done button -->
 						<button
 							onclick={() => sendWorkflowCommand('/jat:complete')}
 							class="btn btn-xs gap-1"
 							style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
-							title="Complete this task and see menu"
+							title="Complete this task"
 							disabled={sendingInput || !onSendInput}
 						>
 							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
@@ -1072,26 +1255,8 @@
 							</svg>
 							Done
 						</button>
-						<button
-							onclick={() => sendKey('ctrl-c')}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
-							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
-							title="Send Ctrl+C (interrupt)"
-							disabled={sendingInput || !onSendInput}
-						>
-							^C
-						</button>
-					</div>
-				{:else}
-					<!-- No task: show Send + Paste + ^C -->
-					<div class="flex items-center gap-1">
-						<button
-							onclick={sendTextInput}
-							class="btn btn-xs btn-ghost"
-							disabled={!inputText.trim() || sendingInput || !onSendInput}
-						>
-							Send
-						</button>
+					{:else}
+						<!-- No task: show Paste button -->
 						<button
 							onclick={handlePasteButton}
 							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
@@ -1103,17 +1268,8 @@
 								<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
 							</svg>
 						</button>
-						<button
-							onclick={() => sendKey('ctrl-c')}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
-							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
-							title="Send Ctrl+C (interrupt)"
-							disabled={sendingInput || !onSendInput}
-						>
-							^C
-						</button>
-					</div>
-				{/if}
+					{/if}
+				</div>
 			</div>
 		</div>
 	</div>

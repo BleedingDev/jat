@@ -94,7 +94,35 @@ export async function fetch(lines: number = 50, includeUsage: boolean = false): 
 			throw new Error(data.message || data.error || 'Failed to fetch sessions');
 		}
 
-		state.sessions = data.sessions || [];
+		const newSessions: WorkSession[] = data.sessions || [];
+
+		// When not including usage data, preserve existing tokens/cost/sparklineData
+		// to avoid overwriting data from fetchUsage() with zeros
+		if (!includeUsage && state.sessions.length > 0) {
+			const existingUsageMap = new Map(
+				state.sessions.map(s => [s.sessionName, {
+					tokens: s.tokens,
+					cost: s.cost,
+					sparklineData: s.sparklineData
+				}])
+			);
+
+			state.sessions = newSessions.map(session => {
+				const existingUsage = existingUsageMap.get(session.sessionName);
+				if (existingUsage && (existingUsage.tokens > 0 || existingUsage.sparklineData?.length)) {
+					return {
+						...session,
+						tokens: existingUsage.tokens,
+						cost: existingUsage.cost,
+						sparklineData: existingUsage.sparklineData
+					};
+				}
+				return session;
+			});
+		} else {
+			state.sessions = newSessions;
+		}
+
 		state.lastFetch = new Date();
 	} catch (err) {
 		state.error = err instanceof Error ? err.message : 'Failed to fetch sessions';

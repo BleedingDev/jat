@@ -19,23 +19,34 @@
 
 	import WorkCard from './WorkCard.svelte';
 
-	// Work session type
+	// Work session type - aligned with workSessions.svelte.ts
 	interface Task {
 		id: string;
-		title: string;
-		status: string;
+		title?: string;
+		status?: string;
 		priority?: number;
 		issue_type?: string;
+		closedAt?: string; // For completed tasks
+	}
+
+	interface SparklineDataPoint {
+		timestamp: string;
+		tokens: number;
+		cost: number;
 	}
 
 	interface WorkSession {
 		sessionName: string;
 		agentName: string;
-		task?: Task | null;
-		output?: string;
-		lineCount?: number;
-		tokens?: number;
-		cost?: number;
+		task: Task | null;
+		lastCompletedTask: Task | null;
+		output: string;
+		lineCount: number;
+		tokens: number;
+		cost: number;
+		sparklineData?: SparklineDataPoint[];
+		created: string;
+		attached: boolean;
 	}
 
 	interface Props {
@@ -141,15 +152,18 @@
 			<!-- Horizontal scrolling row (630px per card for full terminal output) -->
 			<div class="flex gap-4 overflow-x-auto h-full pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedSessions as session (session.sessionName)}
-					<div class="flex-shrink-0 h-full" style="width: 630px;">
+					<div class="flex-shrink-0 h-full" style="width: 640px;">
 					<WorkCard
 						sessionName={session.sessionName}
 						agentName={session.agentName}
 						task={session.task}
+						lastCompletedTask={session.lastCompletedTask}
 						output={session.output}
 						lineCount={session.lineCount}
 						tokens={session.tokens}
 						cost={session.cost}
+						sparklineData={session.sparklineData}
+						startTime={session.created ? new Date(session.created) : null}
 						onKillSession={createKillHandler(session.sessionName)}
 						onInterrupt={createInterruptHandler(session.sessionName)}
 						onContinue={createContinueHandler(session.sessionName)}
