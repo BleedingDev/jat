@@ -384,13 +384,14 @@
 	 * Session State - Determines what to show in the header
 	 *
 	 * States:
-	 * - 'working': Has active in_progress task
+	 * - 'starting': Task assigned, agent initializing (no [JAT:WORKING] marker yet)
+	 * - 'working': Has active in_progress task with [JAT:WORKING] marker
 	 * - 'needs-input': Agent blocked, needs user to provide clarification (orange)
 	 * - 'ready-for-review': Work done, awaiting user review (yellow)
 	 * - 'completed': Task was closed, showing completion summary (green)
 	 * - 'idle': No task, new session (gray)
 	 */
-	type SessionState = 'working' | 'needs-input' | 'ready-for-review' | 'completed' | 'idle';
+	type SessionState = 'starting' | 'working' | 'needs-input' | 'ready-for-review' | 'completed' | 'idle';
 
 	const sessionState = $derived.by((): SessionState => {
 		// Check for markers in recent output
@@ -412,7 +413,15 @@
 		};
 
 		// Find last position of each marker type
-		const needsInputPos = findLastPos([/\[JAT:NEEDS_INPUT\]/, /❓\s*NEED CLARIFICATION/]);
+		// Include Claude Code's native AskUserQuestion UI patterns
+		const needsInputPos = findLastPos([
+			/\[JAT:NEEDS_INPUT\]/,
+			/❓\s*NEED CLARIFICATION/,
+			// Claude Code's native question UI patterns
+			/Enter to select.*Tab\/Arrow keys to navigate.*Esc to cancel/,
+			/\[ \].*\n.*\[ \]/,  // Multiple checkbox options
+			/Type something\s*\n\s*Next/,  // "Type something" option in questions
+		]);
 		const workingPos = findLastPos([/\[JAT:WORKING\s+task=/]);
 		const reviewPos = findLastPos([/\[JAT:NEEDS_REVIEW\]/, /\[JAT:READY\s+actions=/, /🔍\s*READY FOR REVIEW/]);
 
@@ -439,8 +448,8 @@
 				return positions[0].state;
 			}
 
-			// No markers found, default to working if we have a task
-			return 'working';
+			// No markers found - agent is starting/initializing (hasn't emitted [JAT:WORKING] yet)
+			return 'starting';
 		}
 
 		// No active task - check if we just completed something
@@ -469,6 +478,62 @@
 
 	// Task to display - either active task or last completed task
 	const displayTask = $derived(task || (sessionState === 'completed' ? lastCompletedTask : null));
+
+	// Session state visual config (colors, icons, labels) - aligned with left accent bar colors
+	interface SessionStateVisual {
+		accent: string;      // Vibrant accent color (for name text, icon)
+		bgTint: string;      // Subtle background tint
+		glow: string;        // Glow effect for text-shadow
+		icon: 'rocket' | 'gear' | 'question' | 'eye' | 'check' | 'circle';
+		label: string;       // Human-readable label
+	}
+
+	const SESSION_STATE_VISUALS: Record<SessionState, SessionStateVisual> = {
+		starting: {
+			accent: 'oklch(0.75 0.15 200)',      // Cyan/teal - initializing
+			bgTint: 'oklch(0.75 0.15 200 / 0.10)',
+			glow: 'oklch(0.75 0.15 200 / 0.5)',
+			icon: 'rocket',
+			label: 'Starting'
+		},
+		working: {
+			accent: 'oklch(0.70 0.18 250)',      // Electric blue
+			bgTint: 'oklch(0.70 0.18 250 / 0.08)',
+			glow: 'oklch(0.70 0.18 250 / 0.4)',
+			icon: 'gear',
+			label: 'Working'
+		},
+		'needs-input': {
+			accent: 'oklch(0.75 0.20 45)',       // Urgent orange
+			bgTint: 'oklch(0.75 0.20 45 / 0.10)',
+			glow: 'oklch(0.75 0.20 45 / 0.5)',
+			icon: 'question',
+			label: 'Needs Input'
+		},
+		'ready-for-review': {
+			accent: 'oklch(0.70 0.20 85)',       // Amber/yellow
+			bgTint: 'oklch(0.70 0.20 85 / 0.08)',
+			glow: 'oklch(0.70 0.20 85 / 0.4)',
+			icon: 'eye',
+			label: 'Review'
+		},
+		completed: {
+			accent: 'oklch(0.70 0.20 145)',      // Green
+			bgTint: 'oklch(0.70 0.20 145 / 0.08)',
+			glow: 'oklch(0.70 0.20 145 / 0.4)',
+			icon: 'check',
+			label: 'Complete'
+		},
+		idle: {
+			accent: 'oklch(0.55 0.05 250)',      // Muted slate
+			bgTint: 'oklch(0.55 0.05 250 / 0.05)',
+			glow: 'oklch(0.55 0.05 250 / 0.2)',
+			icon: 'circle',
+			label: 'Idle'
+		}
+	};
+
+	const stateVisual = $derived(SESSION_STATE_VISUALS[sessionState]);
 
 	// Send a workflow command (e.g., /jat:complete)
 	async function sendWorkflowCommand(command: string) {
@@ -784,7 +849,9 @@
 						? 'oklch(0.65 0.20 145)'  /* Green for completed */
 						: sessionState === 'working'
 							? 'oklch(0.60 0.18 250)'  /* Blue for working */
-							: 'oklch(0.50 0.05 250)'  /* Gray for idle */
+							: sessionState === 'starting'
+								? 'oklch(0.70 0.15 200)'  /* Cyan for starting */
+								: 'oklch(0.50 0.05 250)'  /* Gray for idle */
 			};
 			box-shadow: {sessionState === 'needs-input'
 				? '0 0 12px oklch(0.70 0.20 45 / 0.6)'  /* Stronger glow for attention */
@@ -794,7 +861,9 @@
 						? '0 0 8px oklch(0.65 0.20 145 / 0.5)'
 						: sessionState === 'working'
 							? '0 0 8px oklch(0.60 0.18 250 / 0.5)'
-							: 'none'
+							: sessionState === 'starting'
+								? '0 0 8px oklch(0.70 0.15 200 / 0.5)'  /* Cyan glow for starting */
+								: 'none'
 			};
 		"
 	></div>
@@ -864,7 +933,7 @@
 			<!-- Needs Input state - agent blocked, needs user clarification -->
 			<div class="flex items-center gap-2 min-w-0">
 				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 font-bold animate-pulse"
+					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold animate-pulse"
 					style="background: oklch(0.60 0.20 45 / 0.3); color: oklch(0.90 0.15 45); border: 1px solid oklch(0.60 0.20 45 / 0.5);"
 				>
 					❓ INPUT
@@ -890,7 +959,7 @@
 			<!-- Ready for Review state - show prominent review banner -->
 			<div class="flex items-center gap-2 min-w-0">
 				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 font-bold animate-pulse"
+					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold animate-pulse"
 					style="background: oklch(0.55 0.18 85 / 0.3); color: oklch(0.85 0.15 85); border: 1px solid oklch(0.55 0.18 85 / 0.5);"
 				>
 					🔍 REVIEW
@@ -916,7 +985,7 @@
 			<!-- Completed state - show task that was completed -->
 			<div class="flex items-center gap-2 min-w-0">
 				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 font-bold"
+					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold"
 					style="background: oklch(0.45 0.18 145 / 0.3); color: oklch(0.80 0.15 145); border: 1px solid oklch(0.45 0.18 145 / 0.5);"
 				>
 					✅ DONE
@@ -938,9 +1007,41 @@
 					{displayTask.title || displayTask.id}
 				</h3>
 			</div>
-		{:else if sessionState === 'working' && displayTask}
-			<!-- Working state - active task -->
+		{:else if sessionState === 'starting' && displayTask}
+			<!-- Starting state - agent initializing, no [JAT:WORKING] marker yet -->
 			<div class="flex items-center gap-2 min-w-0">
+				<span
+					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold"
+					style="background: oklch(0.60 0.15 200 / 0.3); color: oklch(0.90 0.12 200); border: 1px solid oklch(0.60 0.15 200 / 0.5);"
+				>
+					🚀 STARTING
+				</span>
+				<TaskIdBadge
+					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
+					size="sm"
+					showType={false}
+					showStatus={false}
+					onOpenTask={onTaskClick}
+				/>
+				<span
+					class="font-mono text-[10px] tracking-wider px-1 py-0.5 rounded flex-shrink-0"
+					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
+				>
+					P{displayTask.priority ?? 2}
+				</span>
+				<h3 class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1" style="color: oklch(0.90 0.02 250);" title={displayTask.title || displayTask.id}>
+					{displayTask.title || displayTask.id}
+				</h3>
+			</div>
+		{:else if sessionState === 'working' && displayTask}
+			<!-- Working state - active task with [JAT:WORKING] marker -->
+			<div class="flex items-center gap-2 min-w-0">
+				<span
+					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold"
+					style="background: oklch(0.55 0.15 250 / 0.3); color: oklch(0.90 0.12 250); border: 1px solid oklch(0.55 0.15 250 / 0.5);"
+				>
+					⚙️ WORKING
+				</span>
 				<TaskIdBadge
 					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
 					size="sm"
@@ -962,7 +1063,7 @@
 			<!-- Idle state - no task, show prompt to start -->
 			<div class="flex items-center gap-2 min-w-0">
 				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded flex-shrink-0"
+					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0"
 					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.60 0.02 250);"
 				>
 					IDLE
@@ -973,62 +1074,75 @@
 			</div>
 		{/if}
 
-		<!-- Row 2: Agent + Sparkline + Stats + Controls -->
-		<div class="flex items-center justify-between mt-1.5 gap-2">
-			<!-- Agent Info -->
-			<div class="flex items-center gap-2.5 flex-shrink-0">
-				<div class="avatar online">
-					<div class="w-5 rounded-full ring-1 ring-info ring-offset-base-100 ring-offset-1">
-						<AgentAvatar name={agentName} size={22} />
+		<!-- Row 2: Agent info (avatar + name + stats) + Controls -->
+		<div class="flex items-center justify-between mt-1 gap-2">
+			<!-- Agent Info Badge: [Avatar] [Name + Sparkline] / [Time · Tokens · Cost] -->
+			<div
+				class="flex items-center gap-1.5 min-w-0 px-2 pt-1 rounded-lg"
+				style="background: {stateVisual.bgTint}; border: 1px solid {stateVisual.accent}40;"
+			>
+				<!-- Avatar with ring color based on state -->
+				<AgentAvatar
+					name={agentName}
+					size={20}
+					class="-mt-1 shrink-0 {sessionState === 'starting'
+						? 'ring-2 ring-secondary ring-offset-base-100 ring-offset-1'
+						: sessionState === 'working'
+							? 'ring-2 ring-info ring-offset-base-100 ring-offset-1'
+							: sessionState === 'needs-input'
+								? 'ring-2 ring-warning ring-offset-base-100 ring-offset-1'
+								: sessionState === 'ready-for-review'
+									? 'ring-2 ring-accent ring-offset-base-100 ring-offset-1'
+									: sessionState === 'completed'
+										? 'ring-2 ring-success ring-offset-base-100 ring-offset-1'
+										: ''}"
+				/>
+				<!-- Agent name + sparkline on top, stats below -->
+				<div class="flex flex-col min-w-0 flex-1">
+					<!-- Top row: Name + Sparkline -->
+					<div class="flex items-center gap-1">
+						<span
+							class="font-mono text-xs font-semibold tracking-wider uppercase"
+							style="color: {stateVisual.accent}; text-shadow: 0 0 12px {stateVisual.glow};"
+						>
+							{agentName}
+						</span>
+						{#if sparklineData && sparklineData.length > 0}
+							<div class="-mt-2.5 flex-shrink-0" style="width: 55px; height: 16px;">
+								<Sparkline
+									data={sparklineData}
+									height={16}
+									showTooltip={true}
+									showStyleToolbar={false}
+									defaultTimeRange="24h"
+									animate={false}
+								/>
+							</div>
+						{/if}
+					</div>
+					<!-- Bottom row: Time · Tokens · Cost -->
+					<div
+						class="flex items-center gap-1 font-mono text-[10px]"
+						style="color: oklch(0.55 0.03 250);"
+					>
+						{#if startTime}
+							{@const elapsed = elapsedTimeFormatted()!}
+							<span class="flex items-center gap-0.5" title="Session duration">
+								{#if elapsed.showHours}
+									<AnimatedDigits value={elapsed.hours} class="text-[10px]" />
+									<span class="opacity-60">:</span>
+								{/if}
+								<AnimatedDigits value={elapsed.minutes} class="text-[10px]" />
+								<span class="opacity-60">:</span>
+								<AnimatedDigits value={elapsed.seconds} class="text-[10px]" />
+							</span>
+							<span class="opacity-40">·</span>
+						{/if}
+						<span style="color: oklch(0.60 0.05 250);">{formatTokens(tokens)}</span>
+						<span class="opacity-40">·</span>
+						<span style="color: oklch(0.65 0.10 145);">${cost.toFixed(2)}</span>
 					</div>
 				</div>
-				<span class="font-mono text-sm tracking-wider" style="color: oklch(0.65 0.02 250);">{agentName}</span>
-			</div>
-
-			<!-- Elapsed Time (real-time countdown) -->
-			{#if startTime}
-				{@const elapsed = elapsedTimeFormatted()!}
-				<div
-					class="flex items-center gap-0.5 flex-shrink-0 font-mono text-xs"
-					style="color: oklch(0.70 0.08 200);"
-					title="Session duration"
-				>
-					<svg class="-mt-0.5 mr-0.5 w-2.5 h-2.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-					{#if elapsed.showHours}
-						<AnimatedDigits value={elapsed.hours} class="text-[10px]" />
-						<span class="opacity-60">:</span>
-					{/if}
-					<AnimatedDigits value={elapsed.minutes} class="text-[10px]" />
-					<span class="opacity-60">:</span>
-					<AnimatedDigits value={elapsed.seconds} class="text-[10px]" />
-				</div>
-			{/if}
-
-			<!-- Sparkline (compact, 60px wide) -->
-			{#if sparklineData && sparklineData.length > 0}
-				<div class="flex-shrink-0" style="width: 60px; height: 20px;">
-					<Sparkline
-						data={sparklineData}
-						height={20}
-						showTooltip={true}
-						showStyleToolbar={false}
-						defaultTimeRange="24h"
-						animate={false}
-					/>
-				</div>
-			{/if}
-
-			<!-- Token/Cost Stats (compact inline) -->
-			<div class="flex items-center gap-1 flex-shrink-0">
-				<span class="font-mono text-[10px]" style="color: oklch(0.70 0.05 250);">
-					{formatTokens(tokens)}
-				</span>
-				<span class="text-[10px]" style="color: oklch(0.5 0 0 / 0.3);">•</span>
-				<span class="font-mono text-[10px]" style="color: oklch(0.70 0.10 145);">
-					${cost.toFixed(2)}
-				</span>
 			</div>
 
 			<!-- Control Buttons -->
