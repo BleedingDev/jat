@@ -2788,29 +2788,72 @@ Ready to mark as complete?           ← Recent marker (pos: 500) → REVIEW sta
 
 ### Visual Configuration
 
-Each state has visual styling in `SESSION_STATE_VISUALS`:
+Session state visuals are centralized in `src/lib/config/statusColors.ts` under `SESSION_STATE_VISUALS`. Each state has both accent bar styling (for WorkCard) and badge styling (for StatusActionBadge):
 
 ```typescript
-const SESSION_STATE_VISUALS = {
+// src/lib/config/statusColors.ts
+export interface SessionStateVisual {
+    // Display
+    label: string;                 // Display label with emoji (e.g., "✅ DONE")
+    shortLabel: string;            // Short label without emoji (e.g., "Complete")
+    iconType: SessionStateIconType; // Icon identifier ('rocket' | 'gear' | 'question' | 'eye' | 'check' | 'circle')
+
+    // StatusActionBadge colors (dropdown badges)
+    bgColor: string;               // Background color (oklch with alpha)
+    textColor: string;             // Text color (oklch)
+    borderColor: string;           // Border color (oklch with alpha)
+    pulse?: boolean;               // Whether to animate with pulse
+
+    // WorkCard accent bar colors (left accent bar and agent badge)
+    accent: string;                // Vibrant accent color for bars/highlights
+    bgTint: string;                // Subtle background tint
+    glow: string;                  // Glow effect color (for active states)
+
+    // SVG path for StatusActionBadge icon
+    icon: string;
+}
+
+export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
     starting: {
-        accent: 'oklch(0.65 0.20 250)',      // Blue
-        bgTint: 'oklch(0.65 0.20 250 / 0.08)',
-        glow: 'oklch(0.65 0.20 250 / 0.4)',
-        icon: 'rocket',
-        label: 'Starting'
+        label: '🚀 STARTING',
+        shortLabel: 'Starting',
+        iconType: 'rocket',
+        // StatusActionBadge colors
+        bgColor: 'oklch(0.60 0.15 200 / 0.3)',
+        textColor: 'oklch(0.90 0.12 200)',
+        borderColor: 'oklch(0.60 0.15 200 / 0.5)',
+        // WorkCard accent colors
+        accent: 'oklch(0.75 0.15 200)',
+        bgTint: 'oklch(0.75 0.15 200 / 0.10)',
+        glow: 'oklch(0.75 0.15 200 / 0.5)',
+        icon: '...'  // SVG path
     },
-    working: {
-        accent: 'oklch(0.75 0.18 85)',       // Amber
-        // ...
-    },
+    // ... other states (working, needs-input, ready-for-review, completing, completed, idle)
+};
+```
+
+**Session State Actions** are also defined in `statusColors.ts` under `SESSION_STATE_ACTIONS`. These define the dropdown menu actions for each state:
+
+```typescript
+export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
+    completed: [
+        { id: 'cleanup', label: 'Cleanup Session', variant: 'success', ... },
+        { id: 'view-task', label: 'View Task', variant: 'default', ... },
+        { id: 'attach', label: 'Attach Terminal', variant: 'info', ... }
+    ],
+    'ready-for-review': [
+        { id: 'complete', label: 'Mark Done', variant: 'success', ... },
+        { id: 'attach', label: 'Attach Terminal', variant: 'info', ... }
+    ],
     // ... other states
 };
 ```
 
 ### Files
 
-- `src/lib/components/work/WorkCard.svelte` - Main component with state detection
-- `src/lib/components/work/StatusActionBadge.svelte` - Status badge with actions
+- `src/lib/config/statusColors.ts` - Centralized visual config (SESSION_STATE_VISUALS, SESSION_STATE_ACTIONS)
+- `src/lib/components/work/WorkCard.svelte` - Main component with state detection (imports from statusColors.ts)
+- `src/lib/components/work/StatusActionBadge.svelte` - Clickable status badge with dropdown actions
 
 ## Smart Question UI
 

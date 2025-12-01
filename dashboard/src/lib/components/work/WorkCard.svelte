@@ -32,6 +32,7 @@
 	import { playTaskCompleteSound } from '$lib/utils/soundEffects';
 	import VoiceInput from '$lib/components/VoiceInput.svelte';
 	import StatusActionBadge from './StatusActionBadge.svelte';
+	import { SESSION_STATE_VISUALS, type SessionStateVisual } from '$lib/config/statusColors';
 
 	// Props - aligned with workSessions.svelte.ts types
 	interface Task {
@@ -720,68 +721,8 @@
 	// Task to display - either active task or last completed task
 	const displayTask = $derived(task || (sessionState === 'completed' ? lastCompletedTask : null));
 
-	// Session state visual config (colors, icons, labels) - aligned with left accent bar colors
-	interface SessionStateVisual {
-		accent: string;      // Vibrant accent color (for name text, icon)
-		bgTint: string;      // Subtle background tint
-		glow: string;        // Glow effect for text-shadow
-		icon: 'rocket' | 'gear' | 'question' | 'eye' | 'check' | 'circle';
-		label: string;       // Human-readable label
-	}
-
-	const SESSION_STATE_VISUALS: Record<SessionState, SessionStateVisual> = {
-		starting: {
-			accent: 'oklch(0.75 0.15 200)',      // Cyan/teal - initializing
-			bgTint: 'oklch(0.75 0.15 200 / 0.10)',
-			glow: 'oklch(0.75 0.15 200 / 0.5)',
-			icon: 'rocket',
-			label: 'Starting'
-		},
-		working: {
-			accent: 'oklch(0.70 0.18 250)',      // Electric blue
-			bgTint: 'oklch(0.70 0.18 250 / 0.08)',
-			glow: 'oklch(0.70 0.18 250 / 0.4)',
-			icon: 'gear',
-			label: 'Working'
-		},
-		'needs-input': {
-			accent: 'oklch(0.75 0.20 45)',       // Urgent orange
-			bgTint: 'oklch(0.75 0.20 45 / 0.10)',
-			glow: 'oklch(0.75 0.20 45 / 0.5)',
-			icon: 'question',
-			label: 'Needs Input'
-		},
-		'ready-for-review': {
-			accent: 'oklch(0.70 0.20 85)',       // Amber/yellow
-			bgTint: 'oklch(0.70 0.20 85 / 0.08)',
-			glow: 'oklch(0.70 0.20 85 / 0.4)',
-			icon: 'eye',
-			label: 'Review'
-		},
-		completing: {
-			accent: 'oklch(0.65 0.15 175)',      // Teal - completing in progress
-			bgTint: 'oklch(0.65 0.15 175 / 0.08)',
-			glow: 'oklch(0.65 0.15 175 / 0.4)',
-			icon: 'gear',
-			label: 'Completing'
-		},
-		completed: {
-			accent: 'oklch(0.70 0.20 145)',      // Green
-			bgTint: 'oklch(0.70 0.20 145 / 0.08)',
-			glow: 'oklch(0.70 0.20 145 / 0.4)',
-			icon: 'check',
-			label: 'Complete'
-		},
-		idle: {
-			accent: 'oklch(0.55 0.05 250)',      // Muted slate
-			bgTint: 'oklch(0.55 0.05 250 / 0.05)',
-			glow: 'oklch(0.55 0.05 250 / 0.2)',
-			icon: 'circle',
-			label: 'Idle'
-		}
-	};
-
-	const stateVisual = $derived(SESSION_STATE_VISUALS[sessionState]);
+	// Get visual config from centralized statusColors.ts
+	const stateVisual = $derived(SESSION_STATE_VISUALS[sessionState] || SESSION_STATE_VISUALS.idle);
 
 	// Send a workflow command (e.g., /jat:complete)
 	async function sendWorkflowCommand(command: string) {

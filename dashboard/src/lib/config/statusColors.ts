@@ -88,6 +88,34 @@ export const AGENT_STATUS_VISUALS: Record<string, AgentStatusVisual> = {
 		glow: 'oklch(0.60 0.03 250 / 0.2)'
 	},
 
+	// CONNECTING: Session exists but still initializing (very new, no activity yet)
+	connecting: {
+		badge: 'badge-info badge-outline',
+		text: 'text-info',
+		icon: 'loading-ring',
+		iconType: 'daisyui',
+		animation: undefined,  // loading-ring has built-in animation
+		label: 'Connecting',
+		description: 'Session starting up',
+		accent: 'oklch(0.70 0.15 220)',       // Soft blue
+		bgTint: 'oklch(0.70 0.15 220 / 0.08)',
+		glow: 'oklch(0.70 0.15 220 / 0.3)'
+	},
+
+	// DISCONNECTED: No session but was active recently (unexpected termination)
+	disconnected: {
+		badge: 'badge-warning',
+		text: 'text-warning',
+		icon: 'disconnect',
+		iconType: 'svg',
+		animation: 'animate-pulse',
+		label: 'Disconnected',
+		description: 'Session lost unexpectedly',
+		accent: 'oklch(0.75 0.18 55)',        // Warning orange
+		bgTint: 'oklch(0.75 0.18 55 / 0.08)',
+		glow: 'oklch(0.75 0.18 55 / 0.4)'
+	},
+
 	// OFFLINE: Gone for > 1 hour
 	offline: {
 		badge: 'badge-error',
@@ -222,6 +250,9 @@ export const STATUS_ICONS = {
 
 	// Power off / sleep (for offline)
 	'power-off': 'M5.636 5.636a9 9 0 1012.728 0M12 3v9',
+
+	// Disconnected / signal lost (for disconnected - session died unexpectedly)
+	'disconnect': 'M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z',
 
 	// Clock (for open/waiting)
 	clock: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -358,6 +389,283 @@ export function getIssueTypeVisual(issueType: string | undefined | null): IssueT
 		...DEFAULT_TYPE_VISUAL,
 		label: issueType.toUpperCase()
 	};
+}
+
+// =============================================================================
+// WORK SESSION STATE VISUAL CONFIG
+// =============================================================================
+//
+// Unified configuration for session state visuals used by:
+// - StatusActionBadge: Dropdown status badges (bgColor, textColor, borderColor)
+// - WorkCard: Accent bar and agent info badge styling (accent, bgTint, glow)
+//
+// Both use the same icon identifiers and labels for consistency.
+
+export type SessionStateIconType = 'rocket' | 'gear' | 'question' | 'eye' | 'check' | 'circle';
+
+export interface SessionStateVisual {
+	// Display
+	label: string;                 // Display label with emoji (e.g., "✅ DONE")
+	shortLabel: string;            // Short label without emoji (e.g., "Complete")
+	iconType: SessionStateIconType; // Icon identifier for WorkCard
+
+	// StatusActionBadge colors (used for dropdown badges)
+	bgColor: string;               // Background color (oklch with alpha)
+	textColor: string;             // Text color (oklch)
+	borderColor: string;           // Border color (oklch with alpha)
+	pulse?: boolean;               // Whether to animate with pulse
+
+	// WorkCard accent bar colors (used for left accent bar and agent badge)
+	accent: string;                // Vibrant accent color for bars/highlights
+	bgTint: string;                // Subtle background tint
+	glow: string;                  // Glow effect color (for active states)
+
+	// SVG path for StatusActionBadge icon
+	icon: string;
+}
+
+export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
+	starting: {
+		label: '🚀 STARTING',
+		shortLabel: 'Starting',
+		iconType: 'rocket',
+		// StatusActionBadge colors
+		bgColor: 'oklch(0.60 0.15 200 / 0.3)',
+		textColor: 'oklch(0.90 0.12 200)',
+		borderColor: 'oklch(0.60 0.15 200 / 0.5)',
+		// WorkCard accent colors
+		accent: 'oklch(0.75 0.15 200)',
+		bgTint: 'oklch(0.75 0.15 200 / 0.10)',
+		glow: 'oklch(0.75 0.15 200 / 0.5)',
+		icon: 'M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z'
+	},
+	working: {
+		label: '⚙️ WORKING',
+		shortLabel: 'Working',
+		iconType: 'gear',
+		// StatusActionBadge colors
+		bgColor: 'oklch(0.55 0.15 250 / 0.3)',
+		textColor: 'oklch(0.90 0.12 250)',
+		borderColor: 'oklch(0.55 0.15 250 / 0.5)',
+		// WorkCard accent colors
+		accent: 'oklch(0.70 0.18 250)',
+		bgTint: 'oklch(0.70 0.18 250 / 0.08)',
+		glow: 'oklch(0.70 0.18 250 / 0.4)',
+		icon: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z M15 12a3 3 0 11-6 0 3 3 0 016 0z'
+	},
+	'needs-input': {
+		label: '❓ INPUT',
+		shortLabel: 'Needs Input',
+		iconType: 'question',
+		// StatusActionBadge colors
+		bgColor: 'oklch(0.60 0.20 45 / 0.3)',
+		textColor: 'oklch(0.90 0.15 45)',
+		borderColor: 'oklch(0.60 0.20 45 / 0.5)',
+		pulse: true,
+		// WorkCard accent colors
+		accent: 'oklch(0.75 0.20 45)',
+		bgTint: 'oklch(0.75 0.20 45 / 0.10)',
+		glow: 'oklch(0.75 0.20 45 / 0.5)',
+		icon: 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z'
+	},
+	'ready-for-review': {
+		label: '🔍 REVIEW',
+		shortLabel: 'Review',
+		iconType: 'eye',
+		// StatusActionBadge colors
+		bgColor: 'oklch(0.55 0.18 85 / 0.3)',
+		textColor: 'oklch(0.85 0.15 85)',
+		borderColor: 'oklch(0.55 0.18 85 / 0.5)',
+		pulse: true,
+		// WorkCard accent colors
+		accent: 'oklch(0.70 0.20 85)',
+		bgTint: 'oklch(0.70 0.20 85 / 0.08)',
+		glow: 'oklch(0.70 0.20 85 / 0.4)',
+		icon: 'M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z M15 12a3 3 0 11-6 0 3 3 0 016 0z'
+	},
+	completing: {
+		label: '⏳ COMPLETING',
+		shortLabel: 'Completing',
+		iconType: 'gear',
+		// StatusActionBadge colors
+		bgColor: 'oklch(0.50 0.12 175 / 0.3)',
+		textColor: 'oklch(0.85 0.12 175)',
+		borderColor: 'oklch(0.50 0.12 175 / 0.5)',
+		// WorkCard accent colors
+		accent: 'oklch(0.65 0.15 175)',
+		bgTint: 'oklch(0.65 0.15 175 / 0.08)',
+		glow: 'oklch(0.65 0.15 175 / 0.4)',
+		icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+	},
+	completed: {
+		label: '✅ DONE',
+		shortLabel: 'Complete',
+		iconType: 'check',
+		// StatusActionBadge colors
+		bgColor: 'oklch(0.45 0.18 145 / 0.3)',
+		textColor: 'oklch(0.80 0.15 145)',
+		borderColor: 'oklch(0.45 0.18 145 / 0.5)',
+		// WorkCard accent colors
+		accent: 'oklch(0.70 0.20 145)',
+		bgTint: 'oklch(0.70 0.20 145 / 0.08)',
+		glow: 'oklch(0.70 0.20 145 / 0.4)',
+		icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+	},
+	idle: {
+		label: 'IDLE',
+		shortLabel: 'Idle',
+		iconType: 'circle',
+		// StatusActionBadge colors
+		bgColor: 'oklch(0.5 0 0 / 0.1)',
+		textColor: 'oklch(0.60 0.02 250)',
+		borderColor: 'oklch(0.5 0 0 / 0.2)',
+		// WorkCard accent colors
+		accent: 'oklch(0.55 0.05 250)',
+		bgTint: 'oklch(0.55 0.05 250 / 0.05)',
+		glow: 'oklch(0.55 0.05 250 / 0.2)',
+		icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+	}
+};
+
+// =============================================================================
+// WORK SESSION STATE ACTIONS (StatusActionBadge dropdown actions)
+// =============================================================================
+
+export interface SessionStateAction {
+	id: string;
+	label: string;
+	icon: string;         // SVG path
+	variant: 'default' | 'success' | 'warning' | 'error' | 'info';
+	description?: string;
+}
+
+export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
+	completed: [
+		{
+			id: 'cleanup',
+			label: 'Cleanup Session',
+			icon: 'M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0',
+			variant: 'success',
+			description: 'Close tmux session and remove from list'
+		},
+		{
+			id: 'view-task',
+			label: 'View Task',
+			icon: 'M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+			variant: 'default',
+			description: 'Open task details'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
+		}
+	],
+	'ready-for-review': [
+		{
+			id: 'complete',
+			label: 'Mark Done',
+			icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'success',
+			description: 'Run /jat:complete to finish task'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal to review'
+		}
+	],
+	completing: [
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Watch completion progress'
+		}
+	],
+	'needs-input': [
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'warning',
+			description: 'Open session to provide input'
+		},
+		{
+			id: 'escape',
+			label: 'Send Escape',
+			icon: 'M9 9l6 6m0-6l-6 6m12-3a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'default',
+			description: 'Send Esc key to cancel prompt'
+		}
+	],
+	working: [
+		{
+			id: 'interrupt',
+			label: 'Interrupt',
+			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
+			variant: 'warning',
+			description: 'Send Ctrl+C to interrupt'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
+		}
+	],
+	starting: [
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
+		},
+		{
+			id: 'interrupt',
+			label: 'Cancel Start',
+			icon: 'M6 18L18 6M6 6l12 12',
+			variant: 'error',
+			description: 'Send Ctrl+C to cancel'
+		}
+	],
+	idle: [
+		{
+			id: 'start',
+			label: 'Start Work',
+			icon: 'M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z',
+			variant: 'success',
+			description: 'Run /jat:start to pick a task'
+		},
+		{
+			id: 'cleanup',
+			label: 'Close Session',
+			icon: 'M6 18L18 6M6 6l12 12',
+			variant: 'error',
+			description: 'Kill tmux session'
+		}
+	]
+};
+
+/**
+ * Get session state visual config with fallback
+ */
+export function getSessionStateVisual(state: string): SessionStateVisual {
+	return SESSION_STATE_VISUALS[state] || SESSION_STATE_VISUALS.idle;
+}
+
+/**
+ * Get session state actions with fallback
+ */
+export function getSessionStateActions(state: string): SessionStateAction[] {
+	return SESSION_STATE_ACTIONS[state] || SESSION_STATE_ACTIONS.idle;
 }
 
 // =============================================================================
