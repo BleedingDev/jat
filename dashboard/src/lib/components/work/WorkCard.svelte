@@ -274,7 +274,18 @@
 
 	// Input state
 	let inputText = $state('');
-	let inputRef: HTMLInputElement | null = null;
+	let inputRef: HTMLTextAreaElement | null = null;
+
+	// Auto-resize textarea to fit content
+	function autoResizeTextarea() {
+		if (!inputRef) return;
+		// Reset height to auto to get accurate scrollHeight
+		inputRef.style.height = 'auto';
+		// Set height to scrollHeight, capped at max (6 lines roughly = 96px)
+		const maxHeight = 96;
+		const newHeight = Math.min(inputRef.scrollHeight, maxHeight);
+		inputRef.style.height = `${newHeight}px`;
+	}
 
 	// Focus input when hovering over the card
 	function handleCardMouseEnter() {
@@ -970,6 +981,8 @@
 
 			// Clear input and attached images on success
 			inputText = '';
+			// Reset textarea height after clearing
+			setTimeout(autoResizeTextarea, 0);
 			// Revoke object URLs to prevent memory leaks
 			for (const img of attachedImages) {
 				URL.revokeObjectURL(img.preview);
@@ -983,12 +996,19 @@
 	// Handle keyboard shortcuts in input
 	function handleInputKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
+			// Enter without Shift submits the input
 			e.preventDefault();
 			sendTextInput();
+		} else if (e.key === 'Enter' && e.shiftKey) {
+			// Shift+Enter inserts newline (default textarea behavior)
+			// Let it happen naturally, then resize
+			setTimeout(autoResizeTextarea, 0);
 		} else if (e.key === 'Escape' || (e.key === 'c' && e.ctrlKey)) {
 			// Clear input text on Escape or Ctrl+C (terminal behavior)
 			e.preventDefault();
 			inputText = '';
+			// Reset textarea height after clearing
+			setTimeout(autoResizeTextarea, 0);
 		}
 		// Note: Ctrl+V is handled by onpaste event, not here
 	}
@@ -1763,9 +1783,9 @@
 			{/if}
 
 			<!-- Text input: [esc][^c] LEFT | input MIDDLE | [action buttons] RIGHT -->
-			<div class="flex gap-1.5 items-center">
+			<div class="flex gap-1.5 items-end">
 				<!-- LEFT: Control buttons (always visible) -->
-				<div class="flex items-center gap-0.5 flex-shrink-0">
+				<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">
 					<button
 						onclick={() => sendKey('escape')}
 						class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
@@ -1788,25 +1808,26 @@
 
 				<!-- MIDDLE: Text input (flexible width) with clear button -->
 				<div class="relative flex-1 min-w-0">
-					<input
-						type="text"
+					<textarea
 						bind:this={inputRef}
 						bind:value={inputText}
 						onkeydown={handleInputKeydown}
 						onpaste={handlePaste}
-						placeholder="Type and press Enter..."
-						class="input input-xs w-full font-mono pr-6"
-						style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
+						oninput={autoResizeTextarea}
+						placeholder="Type and press Enter... (Shift+Enter for newline)"
+						rows="1"
+						class="textarea textarea-xs w-full font-mono pr-6 resize-none overflow-hidden leading-tight"
+						style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250); min-height: 24px; max-height: 96px;"
 						disabled={sendingInput || !onSendInput}
-					/>
+					></textarea>
 					{#if inputText.trim()}
 						<button
 							type="button"
-							class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors"
+							class="absolute right-1.5 top-2 p-0.5 rounded-full transition-colors"
 							style="color: oklch(0.55 0.02 250);"
 							onmouseenter={(e) => e.currentTarget.style.color = 'oklch(0.75 0.02 250)'}
 							onmouseleave={(e) => e.currentTarget.style.color = 'oklch(0.55 0.02 250)'}
-							onclick={() => { inputText = ''; }}
+							onclick={() => { inputText = ''; setTimeout(autoResizeTextarea, 0); }}
 							aria-label="Clear input"
 							disabled={sendingInput || !onSendInput}
 						>
@@ -1825,15 +1846,17 @@
 				</div>
 
 				<!-- Voice input (local whisper) -->
-				<VoiceInput
-					size="sm"
-					ontranscription={handleVoiceTranscription}
-					onerror={handleVoiceError}
-					disabled={sendingInput || !onSendInput}
-				/>
+				<div class="pb-0.5">
+					<VoiceInput
+						size="sm"
+						ontranscription={handleVoiceTranscription}
+						onerror={handleVoiceError}
+						disabled={sendingInput || !onSendInput}
+					/>
+				</div>
 
 				<!-- RIGHT: Action buttons (context-dependent) -->
-				<div class="flex items-center gap-0.5 flex-shrink-0">
+				<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">
 					{#if inputText.trim() || attachedImages.length > 0}
 						<!-- User is typing: show Send button -->
 						<button
