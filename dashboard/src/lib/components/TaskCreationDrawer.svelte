@@ -120,11 +120,11 @@
 	];
 
 	const typeOptions = [
-		{ value: 'task', label: 'Task' },
-		{ value: 'bug', label: 'Bug' },
-		{ value: 'feature', label: 'Feature' },
-		{ value: 'epic', label: 'Epic' },
-		{ value: 'chore', label: 'Chore' }
+		{ value: 'task', label: 'Task', icon: '📋' },
+		{ value: 'bug', label: 'Bug', icon: '🐛' },
+		{ value: 'feature', label: 'Feature', icon: '✨' },
+		{ value: 'epic', label: 'Epic', icon: '🏔️' },
+		{ value: 'chore', label: 'Chore', icon: '🔧' }
 	];
 
 	// Projects list (could be fetched from API in future)
@@ -674,7 +674,7 @@
 								required
 							>
 								{#each typeOptions as option}
-									<option value={option.value}>{option.label}</option>
+									<option value={option.value}>{option.icon} {option.label}</option>
 								{/each}
 							</select>
 							{#if validationErrors.type}

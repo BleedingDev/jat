@@ -12,6 +12,10 @@ import { json } from '@sveltejs/kit';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // Path to store task image mappings
 const getImageStorePath = () => {
@@ -76,6 +80,41 @@ async function saveTaskImages(images) {
 }
 
 /**
+ * Sync image paths to task's notes field so agents can see them via `bd show`
+ * @param {string} taskId
+ * @param {ImageData[]} taskImages
+ */
+async function syncNotesToTask(taskId, taskImages) {
+	try {
+		const projectPath = process.cwd().replace('/dashboard', '');
+
+		if (!taskImages || taskImages.length === 0) {
+			// Clear notes if no images
+			const command = `cd "${projectPath}" && bd update ${taskId} --notes ""`;
+			await execAsync(command);
+			return;
+		}
+
+		// Build notes string with image paths
+		const imageList = taskImages
+			.map((img, i) => `  ${i + 1}. ${img.path}`)
+			.join('\n');
+
+		const notes = `📷 Attached screenshots:\n${imageList}\n(Use Read tool to view these images)`;
+
+		// Escape for shell
+		const escapedNotes = notes.replace(/"/g, '\\"');
+		const command = `cd "${projectPath}" && bd update ${taskId} --notes "${escapedNotes}"`;
+
+		await execAsync(command);
+		console.log(`Synced ${taskImages.length} image(s) to task ${taskId} notes`);
+	} catch (err) {
+		console.error('Failed to sync notes to task:', err);
+		// Don't throw - image storage succeeded, notes sync is secondary
+	}
+}
+
+/**
  * GET - Get all images for a task
  */
 /** @type {import('./$types').RequestHandler} */
@@ -134,6 +173,9 @@ export async function PUT({ params, request }) {
 
 		await saveTaskImages(images);
 
+		// Sync image paths to task notes so agents see them via `bd show`
+		await syncNotesToTask(taskId, images[taskId]);
+
 		return json({
 			success: true,
 			taskId,
@@ -186,6 +228,9 @@ export async function DELETE({ params, request }) {
 
 			await saveTaskImages(images);
 
+			// Sync notes to reflect remaining images
+			await syncNotesToTask(taskId, filteredImages);
+
 			return json({
 				success: true,
 				message: `Image ${imageId} removed from task ${taskId}`,
@@ -195,6 +240,9 @@ export async function DELETE({ params, request }) {
 			// Remove all images for this task
 			delete images[taskId];
 			await saveTaskImages(images);
+
+			// Clear notes since no images remain
+			await syncNotesToTask(taskId, []);
 
 			return json({
 				success: true,
