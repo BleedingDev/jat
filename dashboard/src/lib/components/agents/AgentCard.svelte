@@ -13,6 +13,7 @@
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { openOutputDrawerForSession } from '$lib/stores/drawerStore';
+	import { ansiToHtml } from '$lib/utils/ansiToHtml';
 	import type { Agent, Task, Reservation } from '$lib/stores/agents.svelte';
 
 	// Extended types for inbox messages
@@ -1600,12 +1601,12 @@
 						{/if}
 					</div>
 				{:else if outputContent}
-					<!-- Terminal output display -->
+					<!-- Terminal output display with ANSI color support -->
 					<div
 						class="h-full overflow-y-auto px-2 py-1.5 font-mono text-[10px] leading-tight whitespace-pre-wrap break-all"
 						style="background: oklch(0.12 0.01 250); color: oklch(0.85 0.05 145);"
 					>
-						{outputContent}
+						{@html ansiToHtml(outputContent)}
 					</div>
 				{:else}
 					<!-- No output state -->
