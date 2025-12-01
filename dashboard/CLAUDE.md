@@ -2501,6 +2501,201 @@ Check thresholds in `tokenUsageConfig.ts` and adjust to your budget.
 - jat-oig: Display token usage on AgentCard (completed)
 - jat-1q7: Document per-agent token tracking (this section)
 
+## Two-Phase Loading Pattern
+
+### Overview
+
+Pages that display expensive-to-calculate data (like token usage, sparklines) use a **two-phase loading pattern** to provide fast initial page loads while lazily fetching expensive data in the background.
+
+**Problem Solved:** The `/dash` page was taking 10+ seconds to load because it fetched token usage for all 458 agents on every request. Token usage calculation requires parsing JSONL files, which is I/O intensive.
+
+**Solution:** Split data fetching into two phases:
+1. **Phase 1 (Fast):** Fetch essential data immediately (agents, tasks, output)
+2. **Phase 2 (Lazy):** Fetch expensive data after UI renders (token usage, sparklines)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         TWO-PHASE LOADING FLOW                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Phase 1: Fast Initial Load (~100ms)                                   │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │ onMount() {                                                       │ │
+│  │   await fetchData();  // No usage=true, fast path                │ │
+│  │   // UI renders immediately with skeleton loaders                │ │
+│  │ }                                                                 │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│  Phase 2: Lazy Load Expensive Data (~200ms delay, then ~1-2s fetch)   │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │ setTimeout(() => fetchUsageData(), 200);  // Background           │ │
+│  │ // Merges into existing state, skeletons replaced with data      │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│  Phase 3: Periodic Refresh (ongoing)                                   │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │ setInterval(() => fetchData(true), 15000);    // Full refresh    │ │
+│  │ setInterval(() => fetchUsageData(), 30000);   // Usage only      │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Examples
+
+#### `/dash` Page Pattern
+
+```typescript
+// State
+let agents = $state<any[]>([]);
+
+// Phase 1: Fast fetch (no usage data)
+async function fetchData(includeUsage = false) {
+  let url = `/api/agents?full=true&activities=true`;
+  if (includeUsage) url += '&usage=true';
+
+  const response = await fetch(url);
+  const data = await response.json();
+  agents = data.agents || [];
+}
+
+// Phase 2: Lazy load usage data
+async function fetchUsageData() {
+  const response = await fetch('/api/agents?full=true&usage=true');
+  const data = await response.json();
+
+  // Merge usage into existing agents
+  const usageMap = new Map(data.agents.map(a => [a.name, a.usage]));
+  agents = agents.map(agent => ({
+    ...agent,
+    usage: usageMap.get(agent.name) || agent.usage
+  }));
+}
+
+onMount(async () => {
+  await fetchData();                          // Phase 1: Fast
+  setTimeout(() => fetchUsageData(), 100);    // Phase 2: Lazy
+});
+```
+
+#### `/work` Page Pattern
+
+```typescript
+import {
+  fetch as fetchSessions,
+  fetchUsage as fetchSessionUsage
+} from '$lib/stores/workSessions.svelte.js';
+
+onMount(() => {
+  fetchTaskData();                            // Phase 1: Fast task data
+  startPolling(500);                          // Fast polling (no usage)
+  setTimeout(() => fetchSessionUsage(), 200); // Phase 2: Lazy usage
+});
+
+// Slow refresh for usage (separate from 500ms output polling)
+$effect(() => {
+  const interval = setInterval(() => fetchSessionUsage(), 30000);
+  return () => clearInterval(interval);
+});
+```
+
+### API Query Parameters
+
+| Endpoint | Parameter | Effect | Response Time |
+|----------|-----------|--------|---------------|
+| `/api/agents` | (default) | Basic agent info | ~100ms |
+| `/api/agents?usage=true` | Token usage + sparklines | ~1.9s |
+| `/api/agents?full=true` | Full agent data (no usage) | ~120ms |
+| `/api/agents?full=true&usage=true` | Everything | ~2s |
+| `/api/work` | (default) | Sessions without usage | ~90ms |
+| `/api/work?usage=true` | Sessions with token usage | ~160ms |
+
+### Skeleton Loading States
+
+While Phase 2 data loads, show DaisyUI skeleton loaders:
+
+```svelte
+<!-- Cost badge skeleton -->
+{#if agent.usage}
+  <TokenUsageBadge usage={agent.usage} />
+{:else}
+  <div class="skeleton h-4 w-10 ml-auto rounded"></div>
+{/if}
+
+<!-- Sparkline skeleton with deterministic heights -->
+{#if sparklineData.length > 0}
+  <Sparkline data={sparklineData} />
+{:else}
+  <div class="h-10 flex items-end gap-0.5 px-1">
+    {#each [30, 45, 35, 60, 50, 40, 55, 70, 45, 35, 50, 65] as height, i}
+      <div
+        class="skeleton flex-1 rounded-sm"
+        style="height: {height}%; animation-delay: {i * 30}ms;"
+      ></div>
+    {/each}
+  </div>
+{/if}
+```
+
+**Important:** Use deterministic heights for skeleton bars (not `Math.random()`) to avoid re-render flicker.
+
+### Performance Impact
+
+| Page | Before | After (Phase 1) | Improvement |
+|------|--------|-----------------|-------------|
+| `/dash` | ~10s | ~120ms | **83x faster** |
+| `/api/agents` | 1.9s | 105ms | **18x faster** |
+| `/work` | ~200ms | ~90ms | **2x faster** |
+| `/api/work` | 161ms | 91ms | **1.8x faster** |
+
+### When to Use This Pattern
+
+**Use two-phase loading when:**
+- Data requires expensive I/O (parsing files, database aggregations)
+- Data is supplementary (nice to have, not critical for initial render)
+- Users benefit from seeing partial results quickly
+- The expensive operation can be parallelized with other work
+
+**Don't use when:**
+- All data is needed before any UI can render
+- Data fetches are already fast (<200ms)
+- The extra complexity isn't justified
+
+### Files Implementing This Pattern
+
+**Pages:**
+- `src/routes/dash/+page.svelte` - Agent dashboard with usage lazy loading
+- `src/routes/work/+page.svelte` - Work sessions with usage lazy loading
+
+**Stores:**
+- `src/lib/stores/workSessions.svelte.ts` - `fetch()` and `fetchUsage()` functions
+
+**API Endpoints:**
+- `src/routes/api/agents/+server.js` - Supports `?usage=true` parameter
+- `src/routes/api/work/+server.js` - Supports `?usage=true` parameter
+
+### Troubleshooting
+
+**Skeletons never resolve to real data:**
+- Check browser Network tab for Phase 2 fetch
+- Verify `fetchUsageData()` is called after mount
+- Check console for errors in usage fetch
+
+**Data loads twice (visible flicker):**
+- Ensure Phase 1 doesn't include usage data
+- Check that merge function preserves existing data correctly
+- Verify skeleton conditional checks `agent.usage` existence
+
+**Background refresh causing UI jumps:**
+- Use merge pattern (update existing objects) not replace pattern
+- Preserve object references where possible
+- Consider debouncing rapid updates
+
+**Task References:**
+- jat-aydj: Fix long loading time on /dash (completed)
+
 ## Development Commands
 
 ```bash

@@ -762,7 +762,9 @@
 
 		sessionControlLoading = 'kill';
 		try {
-			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}`, {
+			// Session names use jat-{agentName} format
+			const sessionName = `jat-${agent.name}`;
+			const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}`, {
 				method: 'DELETE'
 			});
 
@@ -785,7 +787,9 @@
 	async function sendInterrupt(): Promise<void> {
 		sessionControlLoading = 'interrupt';
 		try {
-			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/input`, {
+			// Session names use jat-{agentName} format
+			const sessionName = `jat-${agent.name}`;
+			const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ type: 'interrupt' })
@@ -807,7 +811,9 @@
 	async function sendContinue(): Promise<void> {
 		sessionControlLoading = 'continue';
 		try {
-			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/input`, {
+			// Session names use jat-{agentName} format
+			const sessionName = `jat-${agent.name}`;
+			const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ type: 'text', text: 'continue' })
@@ -830,7 +836,9 @@
 		sessionControlLoading = command;
 		showSlashDropdown = false;
 		try {
-			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/input`, {
+			// Session names use jat-{agentName} format
+			const sessionName = `jat-${agent.name}`;
+			const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ type: 'text', text: `/jat:${command}` })
@@ -876,7 +884,9 @@
 			outputLoading = outputContent.length === 0; // Only show loading on first fetch
 			outputError = null;
 
-			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/output`);
+			// Session names use jat-{agentName} format
+			const sessionName = `jat-${agent.name}`;
+			const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/output`);
 
 			if (!response.ok) {
 				if (response.status === 404) {
@@ -1023,6 +1033,10 @@
 					<svg class="w-3.5 h-3.5" style="color: {statusVisual.accent};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<circle cx="12" cy="12" r="6" />
 					</svg>
+				{:else if agentStatus === 'disconnected'}
+					<svg class="w-3.5 h-3.5 animate-pulse" style="color: {statusVisual.accent};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS['disconnect']} />
+					</svg>
 				{:else if agentStatus === 'offline'}
 					<svg class="w-3.5 h-3.5" style="color: {statusVisual.accent};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d={STATUS_ICONS['power-off']} />
@@ -1034,7 +1048,7 @@
 			<button
 				class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer rounded-md px-1 py-0.5 -ml-1
 					hover:bg-base-content/5 transition-colors group"
-				onclick={() => openOutputDrawerForSession(agent.name)}
+				onclick={() => openOutputDrawerForSession(`jat-${agent.name}`)}
 				title="Click to view session output"
 			>
 				<AgentAvatar name={agent.name} size={28} class="shrink-0 rounded-full transition-all {agentStatus === 'working' ? 'ring-2 ring-info ring-offset-base-100 ring-offset-1' : 'group-hover:ring-2 group-hover:ring-primary/30'}" />
@@ -1197,9 +1211,14 @@
 					<div class="w-full h-px bg-base-content/10"></div>
 				</div>
 			{:else if sparklineLoading && sparklineData.length === 0}
-				<!-- Placeholder line for loading -->
-				<div class="h-10 flex items-center">
-					<div class="w-full h-px bg-base-content/20"></div>
+				<!-- Skeleton while sparkline loads -->
+				<div class="h-10 flex items-end gap-0.5 px-1">
+					{#each [30, 45, 35, 60, 50, 40, 55, 70, 45, 35, 50, 65, 40, 55, 45, 60, 50, 35, 45, 55, 40, 50, 45, 35] as height, i}
+						<div
+							class="skeleton flex-1 rounded-sm"
+							style="height: {height}%; animation-delay: {i * 30}ms;"
+						></div>
+					{/each}
 				</div>
 			{:else if sparklineData.length === 0}
 				<!-- Placeholder line for no data -->
@@ -1312,6 +1331,9 @@
 						style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};"
 					/>
 				</div>
+			{:else}
+				<!-- Skeleton while usage data loads -->
+				<div class="skeleton h-4 w-10 ml-auto rounded"></div>
 			{/if}
 		</div>
 
@@ -1471,7 +1493,13 @@
 				<!-- Empty state if no activity and no queue -->
 				{#if !agent.current_activity && (!agent.activities || agent.activities.length === 0) && queuedTasks.length === 0}
 					<div class="p-3 text-center">
-						<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">Drop task to assign</p>
+						{#if agentStatus === 'disconnected'}
+							<p class="font-mono text-[10px] tracking-wider uppercase" style="color: oklch(0.75 0.18 55);">Session lost - restart to resume</p>
+						{:else if agentStatus === 'offline'}
+							<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/30">No active session</p>
+						{:else}
+							<p class="font-mono text-[10px] tracking-wider uppercase text-base-content/40">Drop task to assign</p>
+						{/if}
 					</div>
 				{/if}
 

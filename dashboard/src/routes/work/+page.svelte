@@ -17,6 +17,7 @@
 	import {
 		workSessionsState,
 		fetch as fetchSessions,
+		fetchUsage as fetchSessionUsage,
 		spawn,
 		kill,
 		sendInput,
@@ -289,11 +290,21 @@
 		return () => clearInterval(interval);
 	});
 
+	// Auto-refresh session usage data every 30 seconds (slower than output polling)
+	$effect(() => {
+		const interval = setInterval(() => fetchSessionUsage(), 30000);
+		return () => clearInterval(interval);
+	});
+
 	onMount(() => {
+		// Phase 1: Fast initial load (no usage data)
 		fetchTaskData();
 		startPolling(500);
 		updateContainerHeight();
 		window.addEventListener('resize', updateContainerHeight);
+
+		// Phase 2: Lazy load usage data in background
+		setTimeout(() => fetchSessionUsage(), 200);
 	});
 
 	onDestroy(() => {

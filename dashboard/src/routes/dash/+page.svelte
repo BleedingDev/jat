@@ -8,10 +8,10 @@
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import { lastSessionEvent } from '$lib/stores/sessionEvents';
 
-	let tasks = $state([]);
-	let allTasks = $state([]);  // Unfiltered tasks for project list calculation
-	let agents = $state([]);
-	let reservations = $state([]);
+	let tasks = $state<any[]>([]);
+	let allTasks = $state<any[]>([]);  // Unfiltered tasks for project list calculation
+	let agents = $state<any[]>([]);
+	let reservations = $state<any[]>([]);
 	let selectedProject = $state('All Projects');
 	let sparklineData = $state([]);
 	let isInitialLoad = $state(true);
@@ -136,10 +136,13 @@
 	});
 
 	// Fetch agent data from unified API
-	async function fetchData() {
+	// Phase 1: Fast load without usage data (agents, tasks, reservations)
+	// Phase 2: Lazy load usage data separately for displayed agents
+	async function fetchData(includeUsage = false) {
 		try {
-			// Build URL with project filter, token usage, and activities
-			let url = '/api/agents?full=true&usage=true&activities=true';
+			// Build URL with project filter and activities
+			// Only include usage=true if explicitly requested (for background refresh)
+			let url = `/api/agents?full=true&activities=true${includeUsage ? '&usage=true' : ''}`;
 			if (selectedProject && selectedProject !== 'All Projects') {
 				url += `&project=${encodeURIComponent(selectedProject)}`;
 			}
@@ -166,6 +169,25 @@
 		} finally {
 			// Only set to false after first load completes
 			isInitialLoad = false;
+		}
+	}
+
+	// Fetch usage data separately (runs after initial load completes)
+	async function fetchUsageData() {
+		try {
+			const response = await fetch('/api/agents?full=true&usage=true');
+			const data = await response.json();
+
+			if (data.error || !data.agents) return;
+
+			// Merge usage data into existing agents
+			const usageMap = new Map(data.agents.map((a: { name: string; usage?: unknown }) => [a.name, a.usage]));
+			agents = agents.map(agent => ({
+				...agent,
+				usage: usageMap.get(agent.name) || agent.usage
+			}));
+		} catch (error) {
+			console.error('Failed to fetch usage data:', error);
 		}
 	}
 
@@ -238,8 +260,9 @@
 	}
 
 	// Auto-refresh data every 15 seconds (layout also polls at 30s)
+	// Include usage data on background refresh (user won't notice delay)
 	$effect(() => {
-		const interval = setInterval(fetchData, 15000);
+		const interval = setInterval(() => fetchData(true), 15000);
 		return () => clearInterval(interval);
 	});
 
@@ -269,10 +292,15 @@
 		wasDrawerOpen = drawerOpen;
 	});
 
-	onMount(() => {
-		fetchData();
-		fetchSparklineData();
+	onMount(async () => {
+		// Phase 1: Quick initial load (no usage data) - don't wait for sparkline
+		await fetchData();
 		updateContainerHeight();
+
+		// Phase 2: Load sparkline and usage data in background (don't block UI)
+		// Sparkline takes ~1.5s on cache miss, so fetch it after UI renders
+		fetchSparklineData();
+		setTimeout(() => fetchUsageData(), 100);
 	});
 </script>
 
