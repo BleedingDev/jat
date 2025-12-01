@@ -25,6 +25,9 @@
 	let totalAgentCount = $state(0);
 	let activeAgents = $state<string[]>([]);
 
+	// Ready task count for Swarm button
+	let readyTaskCount = $state(0);
+
 	// Token usage state for TopBar
 	let tokensToday = $state(0);
 	let costToday = $state(0);
@@ -104,12 +107,13 @@
 	onMount(() => {
 		themeChange(false);
 		initSessionEvents(); // Initialize cross-page session events
-		Promise.all([loadAllTasks(), loadSparklineData()]);
+		Promise.all([loadAllTasks(), loadSparklineData(), loadReadyTaskCount()]);
 
-		// Set up polling for token usage and sparkline (every 30 seconds)
+		// Set up polling for token usage, sparkline, and ready tasks (every 30 seconds)
 		const interval = setInterval(() => {
 			loadAllTasks();
 			loadSparklineData();
+			loadReadyTaskCount();
 		}, 30_000);
 
 		return () => {
@@ -124,6 +128,7 @@
 		if (event) {
 			// Refresh data when a session is killed or spawned
 			loadAllTasks();
+			loadReadyTaskCount();
 		}
 	});
 
@@ -198,6 +203,18 @@
 		}
 	}
 
+	// Fetch ready task count for Swarm button
+	async function loadReadyTaskCount() {
+		try {
+			const response = await fetch('/api/tasks/ready');
+			const data = await response.json();
+			readyTaskCount = data.count || 0;
+		} catch (error) {
+			console.error('Failed to fetch ready task count:', error);
+			readyTaskCount = 0;
+		}
+	}
+
 	// Handle project selection change
 	function handleProjectChange(project: string) {
 		selectedProject = project;
@@ -228,10 +245,6 @@
 	<div class="drawer-content flex flex-col h-screen">
 		<!-- Top Bar -->
 		<TopBar
-			{projects}
-			{selectedProject}
-			onProjectChange={handleProjectChange}
-			{taskCounts}
 			{activeAgentCount}
 			{totalAgentCount}
 			{activeAgents}
@@ -240,6 +253,9 @@
 			{sparklineData}
 			{multiProjectData}
 			{projectColors}
+			{readyTaskCount}
+			{projects}
+			{selectedProject}
 		/>
 
 		<!-- Page content -->
