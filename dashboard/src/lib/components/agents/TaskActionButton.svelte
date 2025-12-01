@@ -16,6 +16,12 @@
 		task?: string | null;
 	}
 
+	interface ElapsedTime {
+		display: string;
+		color: string;
+		minutes: number;
+	}
+
 	interface Props {
 		task: Task;
 		agents?: Agent[];
@@ -27,6 +33,8 @@
 		onattach?: (sessionName: string) => void;
 		/** Fire scale for rocket animation (0-2.5) */
 		fireScale?: number;
+		/** Elapsed time info for displaying time working badge */
+		elapsed?: ElapsedTime | null;
 	}
 
 	let {
@@ -38,7 +46,8 @@
 		onspawn = async () => false,
 		onrelease = async () => false,
 		onattach = () => {},
-		fireScale = 1
+		fireScale = 1,
+		elapsed = null
 	}: Props = $props();
 
 	// Local state
@@ -184,18 +193,23 @@
 			{#if task.status === 'in_progress' && task.assignee}
 				<!-- Agent avatar button for in-progress tasks with assignee -->
 				<button
-					class="flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+					class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
 					onclick={() => dropdownOpen = !dropdownOpen}
-					title="{task.assignee} is working on this task"
+					title="{task.assignee} is working on this task{elapsed ? ` for ${elapsed.display}` : ''}"
 				>
 					<div class="avatar {isAgentOnline ? 'online' : 'offline'}">
 						<div
-							class="rounded-full {isAgentOnline ? 'ring-2 ring-info ring-offset-base-100 ring-offset-1' : 'ring-2 ring-warning ring-offset-base-100 ring-offset-1'}"
+							class="rounded-full {isAgentOnline ? 'ring-2 ring-info ring-offset-base-100 ring-offset-1 avatar-ring-pulse' : 'ring-2 ring-warning ring-offset-base-100 ring-offset-1'}"
 							style="width: 24px; height: 24px;"
 						>
 							<AgentAvatar name={task.assignee} size={24} />
 						</div>
 					</div>
+					{#if elapsed}
+						<span class="badge badge-xs {elapsed.color} font-mono" style="font-size: 10px; padding: 0 4px; min-height: 14px;">
+							{elapsed.display}
+						</span>
+					{/if}
 				</button>
 			{:else}
 				<!-- Fallback button for blocked tasks or in-progress without assignee -->
@@ -299,3 +313,19 @@
 		</button>
 	{/if}
 </div>
+
+<style>
+	/* Pulsing ring animation for active agents */
+	.avatar-ring-pulse {
+		animation: ring-pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes ring-pulse {
+		0%, 100% {
+			box-shadow: 0 0 0 0 oklch(0.70 0.18 240 / 0.4);
+		}
+		50% {
+			box-shadow: 0 0 0 4px oklch(0.70 0.18 240 / 0);
+		}
+	}
+</style>
