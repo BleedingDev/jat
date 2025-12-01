@@ -156,8 +156,8 @@
 
 		// Sync to URL
 		const url = new URL(window.location.href);
-		if (mode === 'type') {
-			// 'type' is default, remove param
+		if (mode === 'parent') {
+			// 'parent' is default, remove param
 			url.searchParams.delete('groupBy');
 		} else {
 			url.searchParams.set('groupBy', mode);
@@ -1262,7 +1262,7 @@
 				<input
 					type="text"
 					placeholder="Search {sortedTasks.length} of {tasks.length} tasks..."
-					class="pl-9 pr-3 py-1.5 min-w-40 max-w-64 shrink rounded font-mono text-sm"
+					class="pl-9 pr-8 py-1.5 min-w-40 max-w-64 shrink rounded font-mono text-sm"
 					style="
 						background: oklch(0.18 0.01 250);
 						border: 1px solid oklch(0.35 0.02 250);
@@ -1271,6 +1271,28 @@
 					bind:value={searchQuery}
 					oninput={() => updateURL()}
 				/>
+				{#if searchQuery}
+					<button
+						type="button"
+						class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors"
+						style="color: oklch(0.55 0.02 250);"
+						onmouseenter={(e) => e.currentTarget.style.color = 'oklch(0.75 0.02 250)'}
+						onmouseleave={(e) => e.currentTarget.style.color = 'oklch(0.55 0.02 250)'}
+						onclick={() => { searchQuery = ''; updateURL(); }}
+						aria-label="Clear search"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							stroke="currentColor"
+							class="w-4 h-4"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				{/if}
 			</div>
 
 			<!-- Project Filter -->
@@ -1910,6 +1932,7 @@
 												blockingReason={depStatus.blockingReason}
 												onspawn={handleSpawnSingle}
 												{fireScale}
+												{elapsed}
 												onattach={(sessionName) => {
 													// Open tmux session in new terminal
 													const command = `tmux attach-session -t "${sessionName}"`;
