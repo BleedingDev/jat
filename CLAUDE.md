@@ -42,16 +42,57 @@ browser-start.js --help
 /jat:start auto
 ```
 
+## Tmux Requirement (Critical)
+
+**All Claude Code sessions MUST run inside tmux for dashboard tracking.**
+
+The dashboard tracks agents via tmux sessions named `jat-{AgentName}`. Sessions not running in tmux will show as "offline" or "disconnected" in the dashboard.
+
+### Correct Launch Methods
+
+```bash
+# Via jat CLI (recommended for multi-agent)
+jat chimaro 4 --claude      # 4 agents, Claude only (no npm/browser)
+jat chimaro 4 --auto        # 4 agents, auto-attack mode
+
+# Via bash launcher functions (recommended for single agent)
+jat-chimaro                 # Single agent for chimaro project
+jat-jat                     # Single agent for jat project
+
+# Generate launcher functions (if not installed)
+~/code/jat/scripts/setup-bash-functions.sh
+source ~/.bashrc
+```
+
+### Session Naming Flow
+
+1. Launch creates `jat-pending-{id}` tmux session
+2. `/jat:start` registers agent and renames session to `jat-{AgentName}`
+3. Dashboard sees `jat-{AgentName}` and tracks the agent
+
+### What NOT To Do
+
+```bash
+# WRONG - runs Claude directly without tmux
+cd ~/code/chimaro && claude "/jat:start"
+
+# This will show a statusline error:
+# "NOT IN TMUX SESSION - Dashboard cannot track this session"
+```
+
 ## Launch Multi-Agent Backlog Attack
 
 ```bash
 # Launch 4 agents that each auto-start the highest priority task
-jat myproject 4 --auto
+jat chimaro 4 --auto
 
 # This will:
 # 1. Start npm dev server + browser + dashboard
-# 2. Launch 4 Claude sessions (15s stagger between each)
+# 2. Launch 4 Claude sessions in tmux (15s stagger between each)
 # 3. Each session runs /jat:start auto → picks & starts top task
+
+# Claude-only (no npm server, browser, or dashboard)
+jat chimaro 4 --claude --auto
 ```
 
 ## Dashboard Development
@@ -111,6 +152,44 @@ npm run dev
 
 See `dashboard/CLAUDE.md` for full details.
 
+## Voice-to-Text (Optional)
+
+The dashboard supports voice input using local whisper.cpp - 100% private, no data leaves your machine.
+
+### Installation
+
+```bash
+# During initial install, select "Yes" when prompted for Voice-to-Text
+
+# Or install later:
+bash ~/code/jat/scripts/install-whisper.sh
+```
+
+### Requirements
+
+- **Disk space**: ~2GB (whisper.cpp + model)
+- **Build tools**: cmake, g++, make
+- **Audio**: ffmpeg + development libraries
+
+### What Gets Installed
+
+- `~/.local/share/jat/whisper/` - whisper.cpp source and build
+- `~/.local/share/jat/whisper/build/bin/whisper-cli` - transcription binary
+- `~/.local/share/jat/whisper/models/ggml-large-v3-turbo-q5_1.bin` - 624MB model
+
+### Where Voice Input Appears
+
+- **TaskCreationDrawer**: Mic buttons next to title and description fields
+- **WorkCard**: Mic button next to session text input
+
+### How It Works
+
+1. Click mic button → browser records audio (MediaRecorder API)
+2. Audio sent to `/api/transcribe` (local endpoint)
+3. ffmpeg converts WebM → WAV (16kHz mono)
+4. whisper-cli transcribes audio locally
+5. Text appears in input field
+
 ## Common Issues
 
 ### Dashboard themes not working
@@ -141,6 +220,35 @@ npm run dev
 ```bash
 # Write to your session file (PPID-based)
 session_id=$(cat /tmp/claude-session-${PPID}.txt | tr -d '\n') && echo "YourAgentName" > ".claude/agent-${session_id}.txt"
+```
+
+### Agent shows "offline" or "disconnected" in dashboard
+```bash
+# Cause: Claude session not running inside tmux
+# Fix: Exit and restart with a launcher function
+exit
+jat-chimaro    # or jat-jat, jat-myproject, etc.
+
+# If launcher functions not installed:
+~/code/jat/scripts/setup-bash-functions.sh
+source ~/.bashrc
+```
+
+### Voice input not working
+```bash
+# Check if whisper is installed
+ls ~/.local/share/jat/whisper/build/bin/whisper-cli
+
+# If not found, install it
+bash ~/code/jat/scripts/install-whisper.sh
+
+# If whisper-cli exists but fails, rebuild (ffmpeg updated)
+cd ~/.local/share/jat/whisper/build
+cmake .. -DWHISPER_FFMPEG=ON && make -j$(nproc) whisper-cli
+
+# Test transcription API
+curl http://localhost:5174/api/transcribe
+# Should return: {"status":"ok","whisper_cli":"...","model_exists":true}
 ```
 
 ## References

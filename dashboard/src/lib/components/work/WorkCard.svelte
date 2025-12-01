@@ -30,6 +30,7 @@
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import { playTaskCompleteSound } from '$lib/utils/soundEffects';
+	import VoiceInput from '$lib/components/VoiceInput.svelte';
 
 	// Props - aligned with workSessions.svelte.ts types
 	interface Task {
@@ -750,6 +751,25 @@
 		attachedImages = attachedImages.filter(i => i.id !== id);
 	}
 
+	// Handle voice transcription - append text to input
+	function handleVoiceTranscription(event: CustomEvent<string>) {
+		const text = event.detail;
+		if (text) {
+			// Append to existing text with space separator if needed
+			if (inputText.trim()) {
+				inputText = inputText.trim() + ' ' + text;
+			} else {
+				inputText = text;
+			}
+		}
+	}
+
+	// Handle voice input error
+	function handleVoiceError(event: CustomEvent<string>) {
+		console.error('Voice input error:', event.detail);
+		// Could show error toast here, but for now just log
+	}
+
 	// Manual paste button - reads clipboard and handles text or images
 	async function handlePasteButton() {
 		if (!onSendInput) return;
@@ -1263,17 +1283,51 @@
 					</button>
 				</div>
 
-				<!-- MIDDLE: Text input (flexible width) -->
-				<input
-					type="text"
-					bind:value={inputText}
-					onkeydown={handleInputKeydown}
-					onpaste={handlePaste}
-					placeholder="Type and press Enter..."
-					class="input input-xs flex-1 font-mono min-w-0"
-					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
+				<!-- MIDDLE: Text input (flexible width) with clear button -->
+				<div class="relative flex-1 min-w-0">
+					<input
+						type="text"
+						bind:value={inputText}
+						onkeydown={handleInputKeydown}
+						onpaste={handlePaste}
+						placeholder="Type and press Enter..."
+						class="input input-xs w-full font-mono pr-6"
+						style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
+						disabled={sendingInput || !onSendInput}
+					/>
+					{#if inputText.trim()}
+						<button
+							type="button"
+							class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors"
+							style="color: oklch(0.55 0.02 250);"
+							onmouseenter={(e) => e.currentTarget.style.color = 'oklch(0.75 0.02 250)'}
+							onmouseleave={(e) => e.currentTarget.style.color = 'oklch(0.55 0.02 250)'}
+							onclick={() => { inputText = ''; }}
+							aria-label="Clear input"
+							disabled={sendingInput || !onSendInput}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="w-3 h-3"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					{/if}
+				</div>
+
+				<!-- Voice input (local whisper) -->
+				<VoiceInput
+					size="sm"
+					ontranscription={handleVoiceTranscription}
+					onerror={handleVoiceError}
 					disabled={sendingInput || !onSendInput}
 				/>
+
 				<!-- RIGHT: Action buttons (context-dependent) -->
 				<div class="flex items-center gap-0.5 flex-shrink-0">
 					{#if inputText.trim() || attachedImages.length > 0}

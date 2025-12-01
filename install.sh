@@ -136,7 +136,37 @@ fi
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 7/9: Setting Up Global Configuration${NC}"
+echo -e "${BOLD}Step 7/10: Voice-to-Text (Optional)${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Check if gum is available
+INSTALL_WHISPER="no"
+if command -v gum &> /dev/null; then
+    echo "Voice-to-Text enables speech input in the dashboard."
+    echo "Requires: ~2GB disk, cmake, g++, ffmpeg"
+    echo ""
+    if gum confirm "Install Voice-to-Text (whisper.cpp)?"; then
+        INSTALL_WHISPER="yes"
+    fi
+else
+    echo -e "${YELLOW}  ⊘ Voice-to-Text installation skipped (gum not available)${NC}"
+    echo ""
+    echo "  To install manually later:"
+    echo "    bash $INSTALL_DIR/scripts/install-whisper.sh"
+fi
+
+if [ "$INSTALL_WHISPER" = "yes" ]; then
+    bash "$INSTALL_DIR/scripts/install-whisper.sh"
+else
+    echo ""
+    echo "  Skipping Voice-to-Text installation"
+    echo "  Run later with: bash $INSTALL_DIR/scripts/install-whisper.sh"
+fi
+
+echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Step 8/10: Setting Up Global Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -144,7 +174,7 @@ bash "$INSTALL_DIR/scripts/setup-global-claude-md.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 8/9: Setting Up Repositories${NC}"
+echo -e "${BOLD}Step 9/10: Setting Up Repositories${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -152,7 +182,7 @@ bash "$INSTALL_DIR/scripts/setup-repos.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 9/9: Setting Up Bash Launcher Functions${NC}"
+echo -e "${BOLD}Step 10/10: Setting Up Bash Launcher Functions${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -173,6 +203,9 @@ echo "  ✓ Beads CLI (bd command)"
 echo "  ✓ 28 Generic Tools (am-*, browser-*, db-*, etc.)"
 if [ ! -z "$SELECTED_STACKS" ] && echo "$SELECTED_STACKS" | grep -q "SvelteKit"; then
     echo "  ✓ SvelteKit + Supabase Stack (11 additional tools)"
+fi
+if [ "$INSTALL_WHISPER" = "yes" ]; then
+    echo "  ✓ Voice-to-Text (whisper.cpp + large-v3-turbo model)"
 fi
 echo "  ✓ Multi-line statusline (agent, task, git, context)"
 echo "  ✓ Real-time hooks (auto-refresh on am-*/bd commands)"
