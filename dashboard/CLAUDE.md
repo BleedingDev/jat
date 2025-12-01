@@ -2696,6 +2696,285 @@ While Phase 2 data loads, show DaisyUI skeleton loaders:
 **Task References:**
 - jat-aydj: Fix long loading time on /dash (completed)
 
+## WorkCard Session State Lifecycle
+
+### Overview
+
+The **WorkCard** component (`src/lib/components/work/WorkCard.svelte`) tracks agent session states through a complete lifecycle. States are detected by pattern-matching the tmux session output.
+
+### State Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SESSION STATE LIFECYCLE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  STARTING ──► WORKING ◄──► NEEDS INPUT ──► REVIEW ──► COMPLETING ──► IDLE  │
+│     │            │              │             │            │           │    │
+│     │            │              │             │            │           │    │
+│     ▼            ▼              ▼             ▼            ▼           ▼    │
+│  Agent       Agent is       Agent asks    Agent asks   /jat:complete  Task  │
+│  booting     working on     a question    if ready     is running    done   │
+│              task           (tool use)    to complete                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Session States
+
+| State | Badge | Color | Description | Detection Pattern |
+|-------|-------|-------|-------------|-------------------|
+| `starting` | 🚀 STARTING | Blue | Agent initializing | No markers yet, task not in_progress |
+| `working` | ⚡ WORKING | Amber | Agent actively working | `[JAT:WORKING]` marker OR task.status === 'in_progress' |
+| `needs-input` | ❓ NEEDS INPUT | Purple | Waiting for user response | `⎿` prompt character in output |
+| `ready-for-review` | 👁 REVIEW | Cyan | Agent asking to complete | "ready to mark complete", "shall I mark" |
+| `completing` | ⏳ COMPLETING | Teal | Running /jat:complete | "jat:complete is running", "Marking task complete" |
+| `completed` | ✓ COMPLETED | Green | Task finished | `[JAT:COMPLETED]` marker |
+| `idle` | 💤 IDLE | Gray | No active task | Agent registered but no task assigned |
+
+### State Detection Algorithm
+
+```typescript
+// Position-based detection: most recent marker wins
+const positions = [
+    { state: 'completed', pos: completedPos },
+    { state: 'needs-input', pos: needsInputPos },
+    { state: 'ready-for-review', pos: reviewPos },
+    { state: 'completing', pos: completingPos },
+    { state: 'working', pos: workingPos },
+];
+
+// Sort by position descending, take first match
+const sorted = positions.filter(p => p.pos >= 0).sort((a, b) => b.pos - a.pos);
+return sorted[0]?.state || inferFromBeads();
+```
+
+### Why Position-Based Detection?
+
+Agent output contains multiple markers over time. The **most recent** marker reflects current state:
+
+```
+[output history]
+[JAT:WORKING] Started task           ← Old marker (pos: 100)
+Building component...
+Testing...
+Ready to mark as complete?           ← Recent marker (pos: 500) → REVIEW state
+```
+
+### State Transitions
+
+**STARTING → WORKING:**
+- Automatic when `[JAT:WORKING]` marker appears
+- Or inferred from `task.status === 'in_progress'` in Beads
+
+**WORKING → NEEDS INPUT:**
+- Agent calls AskUserQuestion tool
+- `⎿` prompt appears in output
+
+**NEEDS INPUT → WORKING:**
+- User provides input
+- Agent continues processing
+
+**WORKING → REVIEW:**
+- Agent asks about completion: "ready to mark complete?", "shall I mark", etc.
+
+**REVIEW → COMPLETING:**
+- User runs `/jat:complete` command
+- Pattern: "jat:complete is running"
+
+**COMPLETING → COMPLETED → IDLE:**
+- Task marked closed in Beads
+- Agent becomes idle
+
+### Visual Configuration
+
+Each state has visual styling in `SESSION_STATE_VISUALS`:
+
+```typescript
+const SESSION_STATE_VISUALS = {
+    starting: {
+        accent: 'oklch(0.65 0.20 250)',      // Blue
+        bgTint: 'oklch(0.65 0.20 250 / 0.08)',
+        glow: 'oklch(0.65 0.20 250 / 0.4)',
+        icon: 'rocket',
+        label: 'Starting'
+    },
+    working: {
+        accent: 'oklch(0.75 0.18 85)',       // Amber
+        // ...
+    },
+    // ... other states
+};
+```
+
+### Files
+
+- `src/lib/components/work/WorkCard.svelte` - Main component with state detection
+- `src/lib/components/work/StatusActionBadge.svelte` - Status badge with actions
+
+## Smart Question UI
+
+### Overview
+
+When an agent uses the `AskUserQuestion` tool, WorkCard displays the question options as clickable buttons instead of requiring manual text input.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SMART QUESTION UI FLOW                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Agent calls AskUserQuestion tool                                        │
+│     └─► PreToolUse hook fires BEFORE user sees question                     │
+│                                                                             │
+│  2. Hook writes question data to /tmp/claude-question-tmux-{session}.json   │
+│     └─► Contains: questions[], options[], multiSelect flag                  │
+│                                                                             │
+│  3. Dashboard polls /api/work/{sessionId}/question                          │
+│     └─► Returns parsed question data                                        │
+│                                                                             │
+│  4. WorkCard renders options as buttons                                     │
+│     └─► Single-select: Click sends option number immediately               │
+│     └─► Multi-select: Click toggles selection, Done button submits         │
+│                                                                             │
+│  5. Button click sends tmux keys: "1" or "1 2 3" (multi-select)            │
+│     └─► Claude Code receives selection, continues workflow                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### PreToolUse Hook
+
+**File:** `.claude/hooks/pre-ask-user-question.sh`
+
+The hook captures question data BEFORE the user answers:
+
+```bash
+#!/bin/bash
+# Triggered by Claude Code PreToolUse event for AskUserQuestion
+
+# Get tmux session name
+tmux_session=$(tmux display-message -p '#S' 2>/dev/null)
+
+# Read JSON from stdin (Claude Code passes tool input)
+json_input=$(cat)
+
+# Write to temp file for dashboard to read
+echo "$json_input" > "/tmp/claude-question-tmux-${tmux_session}.json"
+```
+
+**Hook Configuration:** `.claude/settings.json`
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-ask-user-question.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Question Data Format
+
+```typescript
+interface QuestionData {
+    questions: Array<{
+        question: string;      // "Which approach should we use?"
+        header: string;        // "Approach"
+        multiSelect: boolean;  // true = checkboxes, false = radio
+        options: Array<{
+            label: string;     // "Option A"
+            description: string;
+        }>;
+    }>;
+}
+```
+
+### Multi-Select Behavior
+
+**Single-Select (multiSelect: false):**
+- Click option → sends number immediately
+- Example: Click "Option 2" → sends "2" to tmux
+
+**Multi-Select (multiSelect: true):**
+- Click options → toggles selection (visual feedback)
+- Click "Done" → sends all selected numbers
+- Example: Select 1, 3, 4 → Done → sends "1 3 4" + Enter
+
+### tmux Key Sequence
+
+For multi-select with Submit button:
+
+```typescript
+// Navigate to Submit option (options.length + 1 because of "Type something" option)
+const submitIndex = options.length + 1;
+await sendKeys(submitIndex.toString());  // Select Submit
+await delay(150);
+await sendKeys('Enter');                  // Confirm on review screen
+```
+
+### API Endpoint
+
+**GET** `/api/work/{sessionId}/question`
+
+Returns current question data if available:
+
+```json
+{
+    "hasQuestion": true,
+    "question": {
+        "questions": [...],
+        "timestamp": "2025-12-01T10:30:00Z"
+    }
+}
+```
+
+### UI Components
+
+**Option Buttons:**
+```svelte
+{#each question.options as option, index}
+    <button
+        onclick={() => handleOptionClick(index + 1)}
+        class:selected={selectedOptions.has(index)}
+    >
+        {index + 1}. {option.label}
+    </button>
+{/each}
+```
+
+**Multi-Select Done Button:**
+```svelte
+{#if question.multiSelect && selectedOptions.size > 0}
+    <button onclick={submitMultiSelect}>
+        Done ({selectedOptions.size} selected)
+    </button>
+{/if}
+```
+
+### Troubleshooting
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Buttons don't appear | Hook not configured | Check `.claude/settings.json` has PreToolUse hook |
+| Wrong option selected | Index off by 1 | Options are 1-indexed for Claude Code |
+| Multi-select doesn't submit | Missing Enter key | Need double-Enter: select Submit, then confirm |
+| Question data stale | Old temp file | Files are per-session, check tmux session name |
+
+### Task Reference
+
+- jat-nsrz: Smart Question UI - Parse and display Claude Code question options (completed)
+
 ## Development Commands
 
 ```bash
