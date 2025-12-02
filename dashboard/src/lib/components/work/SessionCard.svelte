@@ -1286,18 +1286,11 @@
 				break;
 
 			case 'attach':
-				// Attach terminal with container width for proper Hyprland sizing
 				if (sessionName) {
-					const widthPx = scrollContainerRef?.getBoundingClientRect().width;
-					console.log('[SessionCard] Attach clicked, widthPx:', widthPx, 'sessionName:', sessionName);
 					try {
-						const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ widthPx })
+						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+							method: 'POST'
 						});
-						const result = await response.json();
-						console.log('[SessionCard] Attach response:', result);
 					} catch (e) {
 						console.error('[SessionCard] Failed to attach terminal:', e);
 					}
@@ -1353,18 +1346,11 @@
 				break;
 
 			case 'attach':
-				// Attach terminal to server session with container width
 				if (sessionName) {
-					const widthPx = scrollContainerRef?.getBoundingClientRect().width;
-					console.log('[SessionCard:server] Attach clicked, widthPx:', widthPx, 'sessionName:', sessionName);
 					try {
-						const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ widthPx })
+						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+							method: 'POST'
 						});
-						const result = await response.json();
-						console.log('[SessionCard:server] Attach response:', result);
 					} catch (e) {
 						console.error('[SessionCard:server] Failed to attach terminal:', e);
 					}

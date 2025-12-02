@@ -1229,14 +1229,10 @@
 				break;
 
 			case 'attach':
-				// Attach terminal with container width for proper Hyprland sizing
 				if (sessionName) {
-					const widthPx = scrollContainerRef?.getBoundingClientRect().width;
 					try {
 						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ widthPx })
+							method: 'POST'
 						});
 					} catch (e) {
 						console.error('Failed to attach terminal:', e);
