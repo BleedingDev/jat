@@ -1,6 +1,6 @@
 # Agent Command Quick Reference
 
-**9 commands for multi-agent orchestration**
+**7 commands for multi-agent orchestration**
 
 ## Getting Help
 
@@ -13,7 +13,7 @@
 ```
 
 **What it shows:**
-- All 9 agent commands with examples
+- All 7 agent commands with examples
 - Quick tips and common patterns
 - Links to full documentation
 
@@ -24,7 +24,7 @@
 
 ---
 
-## Core Workflow (4 commands)
+## Core Workflow (3 commands)
 
 ### `/jat:start` - Get to Work
 
@@ -47,35 +47,11 @@
 
 ---
 
-### `/jat:next` - Drive Mode (Auto-Continue)
+### `/jat:complete` - Finish Task Properly
 
 **Usage:**
 ```bash
-/jat:next                     # Full verify + commit + auto-start next
-/jat:next quick               # Quick commit + auto-start next (skip verify)
-```
-
-**What it does:**
-- ✅ Verify task (tests, lint, security) - unless quick mode
-- ✅ Commit changes
-- ✅ Acknowledge all unread Agent Mail
-- ✅ Announce completion
-- ✅ Mark task complete in Beads
-- ✅ Release file locks
-- ✅ **Auto-start highest priority task** (continuous flow)
-
-**When to use:**
-- Flow state / drive mode
-- Sprint work
-- High velocity
-
----
-
-### `/jat:complete` - Finish Properly (Manual Selection)
-
-**Usage:**
-```bash
-/jat:complete                 # Full verify + show menu + recommended next
+/jat:complete                 # Full verify + commit + close task
 ```
 
 **What it does:**
@@ -85,25 +61,22 @@
 - ✅ Announce completion
 - ✅ Mark task complete in Beads
 - ✅ Release file locks
-- ✅ **Show available tasks menu**
-- ✅ **Display recommended next task** (you choose)
+- ✅ **Session ends** (one agent = one task)
 
 **Output includes:**
 ```
 ✅ Task Completed: jat-abc "Add user settings"
 👤 Agent: GreatWind
 
-📋 Recommended Next Task:
-   → jat-xyz "Update documentation" (Priority: P1)
-
-   Type: /jat:start jat-xyz
+💡 What's next:
+   • Close this terminal (session complete)
+   • Spawn a new agent from dashboard for next task
 ```
 
 **When to use:**
-- Want to choose next task manually
-- Context switch needed
-- Review point
-- End of work (before closing terminal)
+- Task is complete
+- Ready for review
+- End of work (session will end)
 
 ---
 
@@ -130,7 +103,7 @@
 
 ---
 
-## Support Commands (5 commands)
+## Support Commands (4 commands)
 
 ### `/jat:status` - Check Current Work
 
@@ -230,52 +203,45 @@
 
 ## Common Workflows
 
-### Drive Mode (Continuous Flow)
+### Standard Workflow (One Agent = One Task)
 ```bash
-/jat:start                    # Create agent
-/jat:start task-abc           # Start first task
-/jat:next                     # Complete + auto-start next
-/jat:next                     # Complete + auto-start next
-/jat:next                     # Complete + auto-start next
-# ... continuous loop, never stops ...
+/jat:start task-abc           # Create agent, start task
+# ... work on task ...
+/jat:complete                 # Complete task, session ends
+# Close terminal, spawn new agent for next task
 ```
 
-### Manual Mode (Careful Selection)
+### Quick Start (Skip Checks)
 ```bash
-/jat:start                    # Create agent
-/jat:start task-abc           # Start task
-/jat:complete                 # Complete + show menu
-# Review recommendations...
-/jat:start task-xyz           # Pick manually
-/jat:complete                 # Complete + show menu
-# ... controlled workflow ...
+/jat:start task-abc quick     # Skip conflict checks
+# ... work on task ...
+/jat:complete                 # Complete task
 ```
 
-### Quick Pivot (Context Switch)
+### Pivot Mid-Task
 ```bash
 /jat:start task-ui-123        # Working on UI
 # Got stuck, need to switch...
-/jat:pause                    # Quick exit + show menu
-/jat:start task-bug-456       # Switch to different work
+/jat:pause                    # Quick save + release locks
+# Close terminal, spawn new agent for different task
 ```
 
-### Multi-Agent Coordination
+### Multi-Agent Swarm
 ```bash
-# Terminal 1: Frontend (drive mode)
-/jat:start
+# Terminal 1: Agent FrontPeak (frontend task)
 /jat:start task-ui-123
-/jat:next                     # Auto-continues
+# ... work ...
+/jat:complete                 # Done, session ends
 
-# Terminal 2: Backend (manual)
-/jat:start resume             # Choose logged-out agent
+# Terminal 2: Agent BackStream (backend task)
 /jat:start task-api-456
-/jat:complete                 # Manual control
+# ... work ...
+/jat:complete                 # Done, session ends
 
-# Terminal 3: QA (quick pivot)
-/jat:start
+# Terminal 3: Agent TestRiver (testing task)
 /jat:start task-test-789
-/jat:pause                    # Switch to urgent bug
-/jat:start task-hotfix-001
+# ... work ...
+/jat:complete                 # Done, session ends
 ```
 
 ---
@@ -283,16 +249,17 @@
 ## Quick Tips
 
 **Speed:**
-- Use `/jat:start quick` for immediate task start (no checks)
-- Use `/jat:next quick` for rapid iteration (no verification)
+- Use `/jat:start quick` for immediate task start (skip conflict checks)
+- Use `/jat:start task-abc quick` to start specific task immediately
 
-**Control:**
-- Use `/jat:complete` when you want to choose next task
-- Use `/jat:pause` for emergency exits or context switches
+**Model:**
+- One agent = one session = one task
+- Spawn new agents for new tasks
+- Clean context = better quality work
 
 **Quality:**
 - Always run `/jat:verify` before `/jat:complete` for critical work
-- Let `/jat:next` handle verification automatically (default mode)
+- `/jat:complete` runs verification automatically
 
 **Coordination:**
 - All commands acknowledge Agent Mail (stay synchronized)

@@ -329,7 +329,7 @@
 		selectedIndices: number[]; // For multi-select, which are checked
 	}
 
-	// Detected JAT workflow commands (e.g., /jat:complete, /jat:next)
+	// Detected JAT workflow commands (e.g., /jat:complete, /jat:pause)
 	interface WorkflowCommand {
 		command: string; // Full command (e.g., '/jat:complete')
 		label: string; // Display label (e.g., 'Complete')
@@ -1871,14 +1871,15 @@
 							{/if}
 						</button>
 					{:else if sessionState === 'completed'}
-						<!-- Completed state: session done, user should close or spawn new agent from dashboard -->
-						<span
-							class="font-mono text-[10px] tracking-wider uppercase px-2 py-1 rounded"
-							style="background: oklch(0.30 0.12 145); color: oklch(0.90 0.05 145);"
-							title="Task complete - close session or spawn new agent from dashboard"
-						>
-							✓ Done
-						</span>
+						<!-- Completed state: actionable badge with cleanup/attach options -->
+						<StatusActionBadge
+							{sessionState}
+							{sessionName}
+							dropUp={true}
+							alignRight={true}
+							onAction={handleStatusAction}
+							disabled={sendingInput || !onSendInput}
+						/>
 					{:else if sessionState === 'ready-for-review'}
 						<!-- Ready for review: show Complete button -->
 						<button
@@ -1959,20 +1960,6 @@
 								</button>
 							{/if}
 						{/each}
-					{:else if task}
-						<!-- Task active but no detected workflow: show Done button -->
-						<button
-							onclick={() => sendWorkflowCommand('/jat:complete')}
-							class="btn btn-xs gap-1"
-							style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
-							title="Complete this task"
-							disabled={sendingInput || !onSendInput}
-						>
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
-							Done
-						</button>
 					{:else}
 						<!-- No task: show Paste button -->
 						<button

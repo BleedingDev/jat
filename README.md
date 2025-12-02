@@ -40,11 +40,12 @@ bd init
 #   Paste written PRD, then: /jat:plan
 /jat:plan
 
-# 5. Complete tasks (drive mode - auto-continues)
-/jat:next
+# 5. Complete task and end session
+/jat:complete
+# Spawn new agent for next task
 ```
 
-**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 9 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
+**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 8 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
 
 ### How It Actually Works
 
@@ -72,10 +73,12 @@ jat chimaro --claude # Launch only Claude Code
 | Component | What Happens |
 |-----------|--------------|
 | **VS Code** | Opens new window in project directory |
-| **Claude Code** | Opens in alacritty terminal with `/jat:start` auto-run |
+| **Claude Code** | Opens in tmux session (inside alacritty) with `/jat:start` auto-run |
 | **Dev Server** | Runs `npm run dev --port <configured-port>` (if port set) |
 | **Browser** | Opens `http://localhost:<port>` after 2s delay (if port set) |
 | **Window Colors** | Applies Hyprland border colors per project |
+
+**Important:** Claude Code sessions run inside tmux for dashboard tracking. Sessions not in tmux will show as "offline" in the dashboard.
 
 ### Configuration
 
@@ -132,7 +135,7 @@ If you have `PROJECT_CONFIG` in your bashrc, import it:
 
 Jomarchy Agent Tools is a **self-contained AI development environment** that gives your AI coding assistants (Claude Code, Cline, Codex, OpenCode, etc.) the ability to:
 
-- **Command** agent swarms with high-level coordination primitives (/jat:start, /jat:next, /jat:complete, /jat:pause)
+- **Command** agent swarms with high-level coordination primitives (/jat:start, /jat:complete, /jat:pause)
 - **Coordinate** across multiple agents without conflicts (Agent Mail messaging + file locks)
 - **Transcend** project folders and context window bounds with persistent state
 - **Plan** work with dependency-aware task management (Beads)
@@ -236,23 +239,24 @@ Modern AI coding assistants face three major challenges:
 
 **The Swarm:**
 ```bash
-# Agent 1
+# Agent 1 (first task)
 /register
 /start  # Auto-picks: "Fix type errors in auth/"
 # ... fixes 15 errors in 8 minutes ...
-/complete  # ✅ Auto-starts next: "Fix type errors in ui/"
+/complete  # ✅ Done, session ends
+# Spawn Agent 1b for next task
 
 # Agent 2 (parallel session)
 /register
 /start  # Gets: "Fix type errors in api/"
 # ... fixes 12 errors in 6 minutes ...
-/complete  # ✅ Continues to next chunk
+/complete  # ✅ Done, session ends
 
 # Agent 3 (parallel session)
 /start  # Gets: "Fix type errors in lib/"
 ```
 
-**Result:** All 100 errors fixed in 18 minutes across 3 agents with **zero conflicts** (file reservations prevent collisions).
+**Result:** All 100 errors fixed in 18 minutes across agents with **zero conflicts** (file reservations prevent collisions).
 
 ### Scenario 2: Multi-Agent Feature Development
 
@@ -457,7 +461,7 @@ bd-006 (P1): Add conflict resolution [depends: bd-005]
 
 ### Step 3: Single Agent Execution (One AI assistant)
 
-**Simple workflow - one agent tackles tasks sequentially:**
+**Simple workflow - one agent per task:**
 
 ```bash
 # In your AI coding assistant
@@ -467,17 +471,15 @@ bd-006 (P1): Add conflict resolution [depends: bd-005]
            # Agent reserves files, announces start via Agent Mail
            # Works on bd-001: "Set up WebSocket server"
 
-/complete  # Marks bd-001 done, auto-starts bd-002
-           # Continuous flow - no manual task selection needed
-
-/complete  # Finishes bd-002, moves to bd-003
-...
+/complete  # Marks bd-001 done, session ends
+           # Close terminal, spawn new agent for next task
 ```
 
-**Key benefits:**
+**Key principles:**
+- **One agent = one session = one task** - keeps context clean and focused
 - `/start` always picks the **right** task (highest priority, no blockers)
-- `/complete` automatically chains to next task
-- File reservations prevent conflicts if you later add more agents
+- `/complete` finishes the task and ends the session
+- File reservations prevent conflicts when multiple agents are running
 - Progress persists in Beads (survives session restarts)
 
 ### Step 4: Multi-Agent Swarm (Advanced - parallel work)
@@ -531,7 +533,7 @@ am-inbox Frontend --unread
 /block "bd-006 blocked: need Redis connection string from DevOps"
 # → Sends high-priority message to team
 # → Marks task as blocked in Beads
-# → Auto-starts different task
+# → Session can pivot or end
 ```
 
 ### Step 6: Verification & Completion
@@ -619,8 +621,8 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
 
 # 4. Execute (AI assistant or swarm)
 /start    # Pick first task
-/complete # Finish and auto-continue
-...       # Repeat until feature done
+/complete # Finish task, session ends
+# Spawn new agent for next task
 
 # 5. Review PR (GitHub)
 # Auto-created when feature tasks complete
@@ -794,7 +796,7 @@ am-release "src/auth/**" --agent GreatWind
 
 #### Agent Command Quick Reference
 
-**Core Workflow (4 commands):**
+**Core Workflow (3 commands):**
 
 **`/jat:start` - Get to Work**
 ```bash
@@ -806,24 +808,9 @@ am-release "src/auth/**" --agent GreatWind
 /jat:start task-abc quick     # Start specific task (skip checks)
 ```
 
-**`/jat:next` - Drive Mode (Auto-Continue)**
+**`/jat:complete` - Finish Task Properly**
 ```bash
-/jat:next                     # Full verify + commit + auto-start next
-/jat:next quick               # Quick commit + auto-start next (skip verify)
-```
-
-**What it does:**
-- ✅ Verify task (tests, lint, security) - unless quick mode
-- ✅ Commit changes
-- ✅ Acknowledge all unread Agent Mail
-- ✅ Announce completion
-- ✅ Mark task complete in Beads
-- ✅ Release file locks
-- ✅ **Auto-start highest priority task** (continuous flow)
-
-**`/jat:complete` - Finish Properly (Manual Selection)**
-```bash
-/jat:complete                 # Full verify + show menu + recommended next
+/jat:complete                 # Full verify + commit + close task
 ```
 
 **What it does:**
@@ -833,8 +820,7 @@ am-release "src/auth/**" --agent GreatWind
 - ✅ Announce completion
 - ✅ Mark task complete in Beads
 - ✅ Release file locks
-- ✅ **Show available tasks menu**
-- ✅ **Display recommended next task** (you choose)
+- ✅ **Session ends** (spawn new agent for next task)
 
 **`/jat:pause` - Quick Pivot (Context Switch)**
 ```bash
@@ -888,30 +874,27 @@ am-release "src/auth/**" --agent GreatWind
 
 **Common Workflows:**
 
-**Drive Mode (Continuous):**
+**Standard Workflow (One Agent = One Task):**
 ```bash
-/jat:start                    # Create agent
-/jat:start task-abc           # Start first task
-/jat:next                     # Complete + auto-start next
-/jat:next                     # Complete + auto-start next
-# ... continuous loop ...
+/jat:start task-abc           # Create agent, start task
+# ... work on task ...
+/jat:complete                 # Complete task, session ends
+# Close terminal, spawn new agent for next task
 ```
 
-**Manual Mode (Careful):**
+**Quick Start (Skip Checks):**
 ```bash
-/jat:start                    # Create agent
-/jat:start task-abc           # Start task
-/jat:complete                 # Complete + show menu
-# Review recommendations...
-/jat:start task-xyz           # Pick manually
+/jat:start task-abc quick     # Skip conflict checks
+# ... work on task ...
+/jat:complete                 # Complete task
 ```
 
-**Quick Pivot:**
+**Pivot Mid-Task:**
 ```bash
 /jat:start task-ui-123        # Working on UI
 # Got stuck, need to switch...
-/jat:pause                    # Quick exit + show menu
-/jat:start task-bug-456       # Switch to different work
+/jat:pause                    # Quick save + release locks
+# Close terminal, spawn new agent for different task
 ```
 
 ---
@@ -1015,15 +998,14 @@ bd show <task-id> --json               # Get task details as JSON
 
 ### 3. Agent Swarm Coordination Commands
 
-**8 slash commands** installed to `commands/jat/` that enable sophisticated multi-agent orchestration:
+**7 slash commands** installed to `commands/jat/` that enable sophisticated multi-agent orchestration:
 
 ```
 commands/jat/
 ├── help.md        - Command reference: show all commands or specific help
 ├── start.md       - Begin work: register + task start
-├── next.md        - Drive mode: complete + auto-start next
-├── complete.md    - Finish properly: complete + show menu
-├── pause.md       - Quick pivot: pause + show menu
+├── complete.md    - Finish task: verify, commit, close, end session
+├── pause.md       - Quick pivot: pause + release locks
 ├── status.md      - Check current work status
 ├── verify.md      - Quality checks before completion
 └── plan.md        - Convert planning docs to Beads tasks
@@ -1034,17 +1016,15 @@ commands/jat/
 **Getting Help (1 command):**
 - `/jat:help` - Command reference: display all commands with examples (like `--help` in bash)
 
-**Core Workflow (4 commands):**
+**Core Workflow (3 commands):**
 - `/jat:start` - Begin work: handles registration, task selection, conflict detection, and work start
-- `/jat:next` - Drive mode: complete task + auto-start next (high velocity)
-- `/jat:complete` - Finish properly: complete task + show menu (manual selection)
-- `/jat:pause` - Quick pivot: pause task + show menu (context switch)
+- `/jat:complete` - Finish task: verify, commit, close task, end session (one agent = one task)
+- `/jat:pause` - Quick pivot: pause task, release locks (for context switch)
 
-**Coordination & Quality (4 commands):**
+**Coordination & Quality (3 commands):**
 - `/jat:status` - Check state, sync with team, update presence
 - `/jat:verify` - Pre-completion checks (tests, lint, browser, security)
 - `/jat:plan` - Convert planning documents to structured Beads tasks
-- `/jat:doctor` - Diagnose and repair jat setup (missing imports, broken config)
 
 #### How Commands Work
 
@@ -1055,9 +1035,9 @@ Commands are **markdown files with instructions** that Claude Code executes:
 - Leverage bash tools (am-*, bd, browser-*) under the hood
 - Provide structured output with visual progress indicators
 
-#### Example: Continuous Agent Workflow
+#### Example: Agent Workflow
 
-**Single agent, continuous flow:**
+**Single agent, one task:**
 
 ```bash
 # Start session (auto-creates agent)
@@ -1101,49 +1081,33 @@ Commands are **markdown files with instructions** that Claude Code executes:
 
 # ... work happens (write code, test, document) ...
 
-# Drive mode - complete and auto-continue
-/jat:next
+# Complete task and end session
+/jat:complete
 # → Runs /jat:verify (tests, lint, security)
 # → Commits changes
 # → Acknowledges all unread Agent Mail
 # → Announces completion
 # → Marks task complete in Beads
 # → Releases file reservations
-# → AUTO-STARTS NEXT TASK (continuous flow)
-
-# ... next task starts automatically ...
-# ... work, /jat:next, work, /jat:next (loop) ...
-
-# Complete properly and show menu (manual selection)
-/jat:complete
-# → Full verification and completion
-# → Shows available tasks menu
-# → Displays recommended next task
-# → You choose what's next
+# → SESSION ENDS
 # Output:
 #   ✅ Task Completed: jat-abc "Add user settings"
 #   👤 Agent: GreatWind
 #
-#   📋 Recommended Next Task:
-#      → jat-xyz "Update docs" (Priority: P1)
-#
-#      Type: /jat:start jat-xyz
+#   💡 What's next:
+#      • Close this terminal (session complete)
+#      • Spawn a new agent from dashboard for next task
 
-# Quick pivot to different work
+# Quick pivot to different work (mid-task)
 /jat:pause
 # → Quick commit/stash (2 seconds)
 # → Acknowledges all unread Agent Mail
 # → Releases locks
-# → Shows available tasks menu
-# → You pick different work
-
-# End of day - just close terminal after /jat:complete
-/jat:complete
-# → Shows menu + recommended next task
-# → Close terminal when done
+# → Task stays in_progress
+# → Close terminal, spawn new agent for different work
 ```
 
-**Key insight:** `/jat:next` creates a **continuous flow** by automatically starting the next highest-priority task. Agents never sit idle!
+**Key principle:** One agent = one session = one task. After completing, close the terminal and spawn a new agent for the next task.
 
 #### Example: Multi-Agent Coordination
 
@@ -1158,7 +1122,7 @@ Commands are **markdown files with instructions** that Claude Code executes:
 # → Announces in Agent Mail thread
 # ... implements API routes ...
 /complete
-# → Auto-starts "Add profile validation logic"
+# → Session ends, spawn new agent for next API task
 
 # Agent 2: GreenCastle (Frontend UI)
 /register
@@ -1221,12 +1185,12 @@ Commands are **markdown files with instructions** that Claude Code executes:
 
 **Key Benefits:**
 
-1. **🌊 Continuous Flow** - `/complete` auto-starts next task → agents never idle
+1. **🎯 Clean Context** - One agent = one task → focused, manageable sessions
 2. **🤝 Seamless Handoffs** - Full context transfer between agents
 3. **🛡️ Conflict-Free** - File reservations + checks prevent collisions
 4. **📈 Infinite Scale** - Add agents without coordination overhead
 5. **🔄 Persistent State** - Work survives context window resets
-6. **🎯 Smart Selection** - Context-aware task matching from conversation
+6. **🧭 Smart Selection** - Context-aware task matching from conversation
 7. **⚡ Bulk Parallelization** - Deploy 60+ agents for massive remediation tasks
 
 
@@ -1992,6 +1956,28 @@ bash scripts/setup-global-claude-md.sh
 ls ~/.claude/commands/jat/
 # Should show: register.md, start.md, complete.md, etc.
 ```
+
+### Agent Shows "Offline" or "Disconnected" in Dashboard
+
+**Symptoms:** Agent appears offline/disconnected even though Claude Code is running
+
+**Cause:** Claude Code session not running inside tmux
+
+**Solution:**
+```bash
+# Exit the session and restart with a launcher function
+exit
+jat-chimaro    # or jat-jat, jat-myproject, etc.
+
+# Or use the jat CLI
+jat chimaro --claude
+
+# If launcher functions not installed:
+~/code/jat/scripts/setup-bash-functions.sh
+source ~/.bashrc
+```
+
+**Why this matters:** The dashboard tracks agents via tmux sessions named `jat-{AgentName}`. If you run Claude directly without tmux, the dashboard can't see the session.
 
 ### Browser Tools Fail (Chrome Not Found)
 

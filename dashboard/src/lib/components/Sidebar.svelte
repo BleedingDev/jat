@@ -297,30 +297,17 @@
 								</p>
 							</div>
 
-							<!-- /jat:next -->
-							<div class="mb-4">
-								<h5 class="text-md font-semibold mb-2">/jat:next - Drive Mode (Auto-Continue)</h5>
-								<div class="mockup-code text-xs mb-2">
-									<pre><code>/jat:next                     # Full verify + commit + auto-start next</code></pre>
-									<pre><code>/jat:next quick               # Quick commit + auto-start next (skip verify)</code></pre>
-								</div>
-								<p class="text-sm text-base-content/70">
-									Verify → Commit → Acknowledge Mail → Announce → Mark complete → Release locks →
-									Auto-start next task (continuous flow)
-								</p>
-							</div>
-
 							<!-- /jat:complete -->
 							<div class="mb-4">
 								<h5 class="text-md font-semibold mb-2">
-									/jat:complete - Finish Properly (Manual Selection)
+									/jat:complete - Finish Task Properly
 								</h5>
 								<div class="mockup-code text-xs mb-2">
-									<pre><code>/jat:complete                 # Full verify + show menu + recommended next</code></pre>
+									<pre><code>/jat:complete                 # Full verify + commit + close task</code></pre>
 								</div>
 								<p class="text-sm text-base-content/70">
-									Same as /jat:next but shows available tasks menu instead of auto-continuing. Use
-									when you want to choose next task manually.
+									Completes the current task with full verification. Session ends after completion.
+									Spawn a new agent for the next task.
 								</p>
 							</div>
 
@@ -389,14 +376,14 @@
 							<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 								<div class="alert alert-success">
 									<span class="text-sm"
-										><strong>Speed:</strong> Use `/jat:start quick` and `/jat:next quick` for rapid
-										iteration</span
+										><strong>Speed:</strong> Use `/jat:start quick` to skip conflict checks and start
+										immediately</span
 									>
 								</div>
 								<div class="alert alert-info">
 									<span class="text-sm"
-										><strong>Control:</strong> Use `/jat:complete` when you want to choose next task
-										manually</span
+										><strong>Model:</strong> One agent = one session = one task. Spawn new agents for
+										new tasks</span
 									>
 								</div>
 								<div class="alert alert-warning">
@@ -716,22 +703,19 @@
 						<div>
 							<h4 class="text-lg font-semibold mb-3">Common Workflows</h4>
 
-							<h5 class="text-md font-semibold mb-2">Drive Mode (Continuous Flow)</h5>
+							<h5 class="text-md font-semibold mb-2">Standard Workflow (One Agent = One Task)</h5>
 							<div class="mockup-code text-xs mb-3">
-								<pre><code>/jat:start                    # Create agent</code></pre>
-								<pre><code>/jat:start task-abc           # Start first task</code></pre>
-								<pre><code>/jat:next                     # Complete + auto-start next</code></pre>
-								<pre><code>/jat:next                     # Complete + auto-start next</code></pre>
-								<pre><code># ... continuous loop, never stops ...</code></pre>
+								<pre><code>/jat:start task-abc           # Create agent, start task</code></pre>
+								<pre><code># ... work on task ...</code></pre>
+								<pre><code>/jat:complete                 # Complete task, session ends</code></pre>
+								<pre><code># Close terminal, spawn new agent for next task</code></pre>
 							</div>
 
-							<h5 class="text-md font-semibold mb-2">Manual Mode (Careful Selection)</h5>
+							<h5 class="text-md font-semibold mb-2">Quick Start (Skip Checks)</h5>
 							<div class="mockup-code text-xs mb-3">
-								<pre><code>/jat:start                    # Create agent</code></pre>
-								<pre><code>/jat:start task-abc           # Start task</code></pre>
-								<pre><code>/jat:complete                 # Complete + show menu</code></pre>
-								<pre><code># Review recommendations...</code></pre>
-								<pre><code>/jat:start task-xyz           # Pick manually</code></pre>
+								<pre><code>/jat:start task-abc quick     # Skip conflict checks</code></pre>
+								<pre><code># ... work on task ...</code></pre>
+								<pre><code>/jat:complete                 # Complete task</code></pre>
 							</div>
 						</div>
 
