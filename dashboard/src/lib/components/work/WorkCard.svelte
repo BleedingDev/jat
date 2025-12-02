@@ -211,24 +211,28 @@
 				}
 			}
 		}
+
+		// Set up ResizeObserver after a short delay to ensure DOM is fully ready
+		// This auto-resizes tmux session to match the WorkCard width
+		setTimeout(() => {
+			if (scrollContainerRef && typeof ResizeObserver !== 'undefined' && !resizeObserverSetup) {
+				resizeObserverInstance = new ResizeObserver(handleContainerResize);
+				resizeObserverInstance.observe(scrollContainerRef);
+				resizeObserverSetup = true;
+
+				// Initial resize based on current container width
+				const initialWidth = scrollContainerRef.getBoundingClientRect().width;
+				const initialColumns = calculateColumns(initialWidth);
+				if (initialColumns > 0) {
+					resizeTmuxSession(initialColumns);
+				}
+			}
+		}, 100);
 	});
 
-	// Set up ResizeObserver after DOM is ready
-	// Using $effect to ensure scrollContainerRef is bound
-	$effect(() => {
-		if (!scrollContainerRef || typeof ResizeObserver === 'undefined') return;
-		if (resizeObserver) return; // Already set up
+	// ResizeObserver instance (not reactive, just for cleanup)
+	let resizeObserverInstance: ResizeObserver | null = null;
 
-		resizeObserver = new ResizeObserver(handleContainerResize);
-		resizeObserver.observe(scrollContainerRef);
-
-		// Initial resize based on current container width
-		const initialWidth = scrollContainerRef.getBoundingClientRect().width;
-		const initialColumns = calculateColumns(initialWidth);
-		if (initialColumns > 0) {
-			resizeTmuxSession(initialColumns);
-		}
-	});
 
 	// Track when completion state changes to trigger banner
 	$effect(() => {
@@ -301,8 +305,8 @@
 		if (resizeDebounceTimer) {
 			clearTimeout(resizeDebounceTimer);
 		}
-		if (resizeObserver) {
-			resizeObserver.disconnect();
+		if (resizeObserverInstance) {
+			resizeObserverInstance.disconnect();
 		}
 	});
 
@@ -358,7 +362,8 @@
 
 	// Tmux session resize state
 	// Tracks the output container width and resizes tmux to match
-	let resizeObserver: ResizeObserver | null = null;
+	// Using $state so the $effect guard works correctly
+	let resizeObserverSetup = $state(false);
 	let lastResizedWidth = $state(0);
 	let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const RESIZE_DEBOUNCE_MS = 300; // Wait for resize to stabilize
@@ -1560,7 +1565,8 @@
 		background: linear-gradient(135deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.01 250) 50%, oklch(0.16 0.01 250) 100%);
 		border: 1px solid {showCompletionBanner ? 'oklch(0.65 0.20 145)' : 'oklch(0.35 0.02 250)'};
 		box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1);
-		{effectiveWidth ? `width: ${effectiveWidth}px; flex-shrink: 0;` : ''}
+		width: {effectiveWidth ?? 640}px;
+		flex-shrink: 0;
 	"
 	data-agent-name={agentName}
 	in:fly={{ x: 50, duration: 300, delay: 50 }}

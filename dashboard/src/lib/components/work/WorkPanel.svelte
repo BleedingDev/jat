@@ -243,26 +243,27 @@
 			<!-- min-h-0 is critical for proper flex height calculation -->
 			<div class="flex gap-4 overflow-x-auto h-full pt-10 pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedSessions as session (session.sessionName)}
-					<div class="flex-shrink-0" style="width: 640px; height: calc(100% - 8px);">
-					<WorkCard
-						sessionName={session.sessionName}
-						agentName={session.agentName}
-						task={session.task}
-						lastCompletedTask={session.lastCompletedTask}
-						output={session.output}
-						lineCount={session.lineCount}
-						tokens={session.tokens}
-						cost={session.cost}
-						sparklineData={session.sparklineData}
-						startTime={session.created ? new Date(session.created) : null}
-						onKillSession={createKillHandler(session.sessionName)}
-						onInterrupt={createInterruptHandler(session.sessionName)}
-						onContinue={createContinueHandler(session.sessionName)}
-						onAttachTerminal={createAttachTerminalHandler(session.sessionName)}
-						onSendInput={createSendInputHandler(session.sessionName)}
-						onTaskClick={onTaskClick}
-						isHighlighted={highlightedAgent === session.agentName}
-					/>
+					<!-- Height container - WorkCard controls its own width via cardWidth prop or default 640px -->
+					<div class="h-[calc(100%-8px)]">
+						<WorkCard
+							sessionName={session.sessionName}
+							agentName={session.agentName}
+							task={session.task}
+							lastCompletedTask={session.lastCompletedTask}
+							output={session.output}
+							lineCount={session.lineCount}
+							tokens={session.tokens}
+							cost={session.cost}
+							sparklineData={session.sparklineData}
+							startTime={session.created ? new Date(session.created) : null}
+							onKillSession={createKillHandler(session.sessionName)}
+							onInterrupt={createInterruptHandler(session.sessionName)}
+							onContinue={createContinueHandler(session.sessionName)}
+							onAttachTerminal={createAttachTerminalHandler(session.sessionName)}
+							onSendInput={createSendInputHandler(session.sessionName)}
+							onTaskClick={onTaskClick}
+							isHighlighted={highlightedAgent === session.agentName}
+						/>
 					</div>
 				{/each}
 			</div>
