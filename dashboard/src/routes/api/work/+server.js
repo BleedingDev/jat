@@ -108,7 +108,7 @@ export async function GET({ url }) {
 		}
 
 		// Step 2: Get all tasks from Beads (for lookup)
-		/** @type {Array<{id: string, title: string, status: string, priority: number, assignee: string, issue_type?: string}>} */
+		/** @type {Array<{id: string, title: string, status: string, priority: number, assignee: string, issue_type?: string, updated_at?: string}>} */
 		let allTasks = [];
 		try {
 			allTasks = getTasks({});
@@ -166,6 +166,8 @@ export async function GET({ url }) {
 		const workSessions = await Promise.all(
 			rawSessions.map(async (session) => {
 				// Extract agent name from session name (jat-AgentName -> AgentName)
+				// The tmux session name is the authoritative source since /jat:start
+				// renames the tmux session when registering the agent
 				const agentName = session.name.replace(/^jat-/, '');
 
 				// Get task for this agent

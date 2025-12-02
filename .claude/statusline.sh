@@ -186,6 +186,34 @@ if [[ -z "$agent_name" ]] && [[ -n "$AGENT_NAME" ]]; then
     agent_name="$AGENT_NAME"
 fi
 
+# Get tmux session name for verification and fallback
+# The tmux session name (jat-AgentName) is the authoritative source since /jat:start
+# updates both the agent file AND the tmux session name atomically
+tmux_session=$(tmux display-message -p '#S' 2>/dev/null || echo "")
+tmux_agent_name=""
+# Match jat-AgentName but NOT jat-pending-* (which are sessions still being set up)
+# NOTE: Must extract BASH_REMATCH before any other regex test clears it!
+if [[ "$tmux_session" =~ ^jat-(.+)$ ]]; then
+    tmux_agent_name="${BASH_REMATCH[1]}"
+    # Filter out pending sessions
+    if [[ "$tmux_agent_name" =~ ^pending- ]]; then
+        tmux_agent_name=""
+    fi
+fi
+
+# Verification: If agent file and tmux session name disagree, prefer tmux session name
+# This handles the case where a stale agent file exists from a previous session
+if [[ -n "$agent_name" ]] && [[ -n "$tmux_agent_name" ]] && [[ "$agent_name" != "$tmux_agent_name" ]]; then
+    # Agent file and tmux session name don't match - tmux is authoritative
+    # (tmux session is renamed by /jat:start which is the registration source)
+    agent_name="$tmux_agent_name"
+fi
+
+# Fallback: Use tmux session name if agent file doesn't exist
+if [[ -z "$agent_name" ]] && [[ -n "$tmux_agent_name" ]]; then
+    agent_name="$tmux_agent_name"
+fi
+
 # Get git branch if in a git repo, prepend with folder name
 git_branch=""
 if [[ -n "$cwd" ]] && [[ -d "$cwd/.git" ]]; then
