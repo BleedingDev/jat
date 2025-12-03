@@ -2292,23 +2292,29 @@
 		</div>
 	{/if}
 
-	<!-- Header: Full-width task content
+	<!-- Header: Full-width task content (hover to expand title + description)
 		 Row 1: [id][title - full width]
 		 Row 2: [description - full width]
 	-->
-	<div class="pl-3 pr-3 pt-2 pb-2 flex-shrink-0 flex-grow-0">
+	<div
+		class="pl-3 pr-3 pt-2 pb-2 flex-shrink-0 flex-grow-0"
+		onmouseenter={handleTaskMouseEnter}
+		onmouseleave={handleTaskMouseLeave}
+	>
 		{#if displayTask}
 			<!-- Row 1: Task ID + Title (full width now that agent info is in tab) -->
-			<div class="flex items-center gap-2 mb-1">
+			<div class="flex items-start gap-2 mb-1">
 				<!-- Task ID -->
-				<TaskIdBadge
-					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
-					size="sm"
-					showType={false}
-					showStatus={false}
-					onOpenTask={onTaskClick}
-				/>
-				<!-- Task Title (click to edit) - now full width -->
+				<div class="flex-shrink-0 pt-0.5">
+					<TaskIdBadge
+						task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
+						size="sm"
+						showType={false}
+						showStatus={false}
+						onOpenTask={onTaskClick}
+					/>
+				</div>
+				<!-- Task Title (click to edit) - expands on hover -->
 				{#if editingTitle}
 					<input
 						bind:this={titleInputRef}
@@ -2321,7 +2327,7 @@
 					/>
 				{:else}
 					<h3
-						class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30"
+						class="font-mono font-bold text-sm tracking-wide min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30 transition-all duration-300 ease-out {taskHovered ? '' : 'truncate'}"
 						style="color: {sessionState === 'completed' ? 'oklch(0.75 0.02 250)' : 'oklch(0.90 0.02 250)'};"
 						onclick={startEditingTitle}
 						role="button"
@@ -2338,8 +2344,6 @@
 				type="button"
 				class="w-full text-left cursor-pointer"
 				onclick={() => onTaskClick?.(displayTask.id)}
-				onmouseenter={handleTaskMouseEnter}
-				onmouseleave={handleTaskMouseLeave}
 				title="Click to view task details"
 			>
 				<div
