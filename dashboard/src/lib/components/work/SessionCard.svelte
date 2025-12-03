@@ -1693,7 +1693,7 @@
 </script>
 
 <div
-	class="card h-full flex flex-col relative {className} {isHighlighted ? 'agent-highlight-flash ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}"
+	class="card h-full flex flex-col relative rounded-none {className} {isHighlighted ? 'agent-highlight-flash ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}"
 	style="
 		background: linear-gradient(135deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.01 250) 50%, oklch(0.16 0.01 250) 100%);
 		border: 1px solid {showCompletionBanner ? 'oklch(0.65 0.20 145)' : 'oklch(0.35 0.02 250)'};
@@ -1806,7 +1806,7 @@
 		<!-- Combines: Agent Info + Status Dropdown into unified tab -->
 		<!-- Background uses gradient that matches the main card's left-to-right gradient -->
 		<div
-			class="absolute right-[-1px] top-0 -mt-8.5 z-10 flex items-center gap-0 rounded-lg rounded-bl-none rounded-br-none bl-"
+			class="absolute right-[-1px] top-0 -mt-8.5 z-10 flex items-center gap-0 rounded-lg rounded-bl-none rounded-br-none"
 			style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 0px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
 		>
 			<!-- Agent Info Section -->
