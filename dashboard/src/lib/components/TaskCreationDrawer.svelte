@@ -674,6 +674,8 @@
 					// Spawn an agent for the newly created task via /api/work/spawn
 					// This endpoint properly registers the agent, assigns the task, and starts Claude
 					// Note: The spawn API will infer project from task ID prefix (e.g., jomarchy-abc → ~/code/jomarchy)
+					console.log('[TaskCreationDrawer] Spawning agent for task:', taskId);
+
 					const spawnResponse = await fetch('/api/work/spawn', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
@@ -682,17 +684,25 @@
 						})
 					});
 
-					if (!spawnResponse.ok) {
-						const spawnError = await spawnResponse.json();
-						throw new Error(spawnError.message || 'Failed to spawn agent');
+					// Parse response body once
+					let spawnData;
+					try {
+						spawnData = await spawnResponse.json();
+					} catch (jsonError) {
+						console.error('[TaskCreationDrawer] Failed to parse spawn response:', jsonError);
+						throw new Error('Invalid response from spawn API');
 					}
 
-					const spawnData = await spawnResponse.json();
-					successMessage = `Agent spawned for ${taskId}!`;
+					if (!spawnResponse.ok) {
+						console.error('[TaskCreationDrawer] Spawn API returned error:', spawnData);
+						throw new Error(spawnData.message || spawnData.error || 'Failed to spawn agent');
+					}
 
-					// Broadcast both events
+					console.log('[TaskCreationDrawer] Spawn successful:', spawnData);
+					successMessage = `Agent ${spawnData.session?.agentName || ''} spawned for ${taskId}!`;
+
+					// Broadcast task created event
 					broadcastTaskEvent('task-created', taskId);
-					broadcastTaskEvent('task-start-requested', taskId);
 
 					setTimeout(() => {
 						resetForm();
@@ -701,8 +711,9 @@
 					}, 1200);
 				} catch (spawnError: any) {
 					// Task was created but spawn failed - show warning but don't treat as full failure
-					console.error('Spawn error:', spawnError);
-					successMessage = `Task ${taskId} created but agent spawn failed: ${spawnError.message}`;
+					console.error('[TaskCreationDrawer] Spawn error:', spawnError);
+					const errorMessage = spawnError?.message || String(spawnError) || 'Unknown error';
+					successMessage = `Task ${taskId} created but agent spawn failed: ${errorMessage}`;
 					setTimeout(() => {
 						resetForm();
 						isTaskDrawerOpen.set(false);
@@ -1073,7 +1084,7 @@
 								required
 							>
 								{#each typeOptions as option}
-									<option value={option.value}>{option.icon} {option.label}</option>
+									<option value={option.value}>{option.label} {option.icon}</option>
 								{/each}
 							</select>
 							{#if validationErrors.type}
