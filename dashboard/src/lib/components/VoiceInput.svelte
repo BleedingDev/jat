@@ -12,6 +12,7 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import { playRecordingStartSound, playRecordingStopSound } from '$lib/utils/soundEffects';
 
 	type SizeType = 'sm' | 'md' | 'lg';
 
@@ -132,6 +133,7 @@
 			mediaRecorder.start();
 			isRecording = true;
 			statusText = 'Recording...';
+			playRecordingStartSound();
 			onstart?.();
 
 		} catch (err: any) {
@@ -152,6 +154,9 @@
 	function stopRecording() {
 		if (mediaRecorder && mediaRecorder.state !== 'inactive') {
 			mediaRecorder.stop();
+		}
+		if (isRecording) {
+			playRecordingStopSound();
 		}
 		isRecording = false;
 

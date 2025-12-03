@@ -15,6 +15,8 @@
 	 * - class: Additional CSS classes
 	 */
 
+	import { playPickupSound, playDropSound } from '$lib/utils/soundEffects';
+
 	interface Props {
 		onSpawnForTask?: (taskId: string) => Promise<void>;
 		disabled?: boolean;
@@ -47,6 +49,9 @@
 		if (disabled || isSpawning) return;
 
 		event.preventDefault();
+		if (!isDragOver) {
+			playPickupSound();
+		}
 		isDragOver = true;
 	}
 
@@ -71,6 +76,7 @@
 		const taskId = event.dataTransfer?.getData('text/plain');
 		if (!taskId) return;
 
+		playDropSound();
 		isSpawning = true;
 		try {
 			await onSpawnForTask(taskId);

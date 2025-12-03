@@ -37,11 +37,16 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
-	import { playTaskCompleteSound } from '$lib/utils/soundEffects';
+	import {
+		playTaskCompleteSound,
+		playNeedsInputSound,
+		playReadyForReviewSound
+	} from '$lib/utils/soundEffects';
 	import VoiceInput from '$lib/components/VoiceInput.svelte';
 	import StatusActionBadge from './StatusActionBadge.svelte';
 	import ServerStatusBadge from './ServerStatusBadge.svelte';
 	import TerminalActivitySparkline from './TerminalActivitySparkline.svelte';
+	import StreakCelebration from '$lib/components/StreakCelebration.svelte';
 	import {
 		SESSION_STATE_VISUALS,
 		SERVER_STATE_VISUALS,
@@ -176,6 +181,12 @@
 	let completionDismissTimer: ReturnType<typeof setTimeout> | null = null;
 	let previousIsComplete = $state(false);
 
+	// Star celebration state (compact mode only)
+	let showCelebration = $state(false);
+	let tasksCompletedToday = $state(1);  // Default to 1 (at least the current task)
+	let previousSessionState = $state<string>('idle');  // Track for celebration trigger
+	let celebrationDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Real-time elapsed time clock (ticks every second)
 	let currentTime = $state(Date.now());
 	let elapsedTimeInterval: ReturnType<typeof setInterval> | null = null;
@@ -233,6 +244,34 @@
 	// Dismiss terminal-parsed question UI
 	function dismissTerminalQuestion() {
 		dismissedTerminalQuestion = true;
+	}
+
+	// Fetch count of tasks completed today by this agent
+	async function fetchTasksCompletedToday(): Promise<number> {
+		if (!agentName) return 1;
+		try {
+			// Fetch closed tasks from the tasks API
+			const response = await fetch('/api/tasks?status=closed');
+			if (!response.ok) return 1;
+
+			const data = await response.json();
+			const today = new Date();
+			today.setHours(0, 0, 0, 0);
+
+			// Filter tasks completed today by this agent
+			const completedToday = (data.tasks || []).filter((task: any) => {
+				if (task.assignee !== agentName) return false;
+				if (!task.updated_at) return false;
+
+				const taskDate = new Date(task.updated_at);
+				return taskDate >= today;
+			});
+
+			return Math.max(1, completedToday.length);
+		} catch (error) {
+			console.error('Error fetching tasks completed today:', error);
+			return 1;
+		}
 	}
 
 	// Track previous output length for detecting when question UI disappears
@@ -315,18 +354,20 @@
 	let resizeObserverInstance: ResizeObserver | null = null;
 
 
-	// Track when completion state changes to trigger banner
+	// Track when completion state changes to trigger banner (full mode only)
 	$effect(() => {
 		if (isComplete && !previousIsComplete) {
-			// Task just completed - show banner and play sound
-			showCompletionBanner = true;
-			playTaskCompleteSound();
+			// Task just completed - show banner (full mode only, compact uses sessionState trigger)
+			if (!isCompactMode) {
+				showCompletionBanner = true;
+				playTaskCompleteSound();
 
-			// Auto-dismiss after 4 seconds
-			completionDismissTimer = setTimeout(() => {
-				showCompletionBanner = false;
-				onDismiss?.();
-			}, 4000);
+				// Auto-dismiss after 4 seconds
+				completionDismissTimer = setTimeout(() => {
+					showCompletionBanner = false;
+					onDismiss?.();
+				}, 4000);
+			}
 		}
 		previousIsComplete = isComplete;
 	});
@@ -370,6 +411,9 @@
 	onDestroy(() => {
 		if (completionDismissTimer) {
 			clearTimeout(completionDismissTimer);
+		}
+		if (celebrationDismissTimer) {
+			clearTimeout(celebrationDismissTimer);
 		}
 		if (elapsedTimeInterval) {
 			clearInterval(elapsedTimeInterval);
@@ -1262,6 +1306,44 @@
 	// Get visual config from centralized statusColors.ts
 	const stateVisual = $derived(SESSION_STATE_VISUALS[sessionState] || SESSION_STATE_VISUALS.idle);
 
+	// Track sessionState transitions to trigger sounds and celebration
+	$effect(() => {
+		// Play sound on state transitions (all modes)
+		if (previousSessionState !== sessionState) {
+			// Play attention sounds for states that need user action
+			if (sessionState === 'needs-input' && previousSessionState !== 'needs-input') {
+				playNeedsInputSound();
+			} else if (sessionState === 'ready-for-review' && previousSessionState !== 'ready-for-review') {
+				playReadyForReviewSound();
+			}
+		}
+
+		// Detect transition to 'completed' state - celebration (compact mode only)
+		if (isCompactMode && sessionState === 'completed' && previousSessionState !== 'completed') {
+			// Only trigger if not already showing celebration
+			if (!showCelebration) {
+				showCelebration = true;
+				playTaskCompleteSound();
+
+				// Fetch actual count of tasks completed today
+				fetchTasksCompletedToday().then(count => {
+					tasksCompletedToday = count;
+				});
+
+				// Clear any existing timer
+				if (celebrationDismissTimer) {
+					clearTimeout(celebrationDismissTimer);
+				}
+
+				// Auto-dismiss after 4 seconds
+				celebrationDismissTimer = setTimeout(() => {
+					showCelebration = false;
+				}, 4000);
+			}
+		}
+		previousSessionState = sessionState;
+	});
+
 	// Send a workflow command (e.g., /jat:complete)
 	async function sendWorkflowCommand(command: string) {
 		if (!onSendInput) return;
@@ -1795,12 +1877,15 @@
 	     Skips: Terminal output, input section, completion banner, resize handle
 	     ═══════════════════════════════════════════════════════════════════════════ -->
 	<article
-		class="unified-agent-card p-2 rounded-lg {className}"
-		class:ring-2={isHighlighted}
+		class="unified-agent-card p-2 rounded-lg relative overflow-hidden {className}"
+		class:ring-2={isHighlighted || sessionState === 'needs-input'}
 		class:ring-primary={isHighlighted}
+		class:ring-warning={sessionState === 'needs-input'}
+		class:animate-pulse-subtle={sessionState === 'needs-input'}
 		style="
 			background: linear-gradient(135deg, {stateVisual.bgTint} 0%, oklch(0.18 0.01 250) 100%);
 			border-left: 3px solid {stateVisual.accent};
+			{sessionState === 'needs-input' ? 'box-shadow: 0 0 12px oklch(0.70 0.20 85 / 0.4);' : ''}
 		"
 		data-agent-name={agentName}
 	>
@@ -1877,9 +1962,10 @@
 				<!-- Task title -->
 				<button
 					type="button"
-					class="text-left font-mono font-bold text-sm tracking-wide truncate hover:border-b hover:border-dashed hover:border-base-content/30"
+					class="text-left font-mono font-bold text-sm tracking-wide truncate transition-all hover:underline hover:underline-offset-2 hover:decoration-dashed hover:decoration-base-content/50"
 					style="color: {sessionState === 'completed' ? 'oklch(0.75 0.02 250)' : 'oklch(0.90 0.02 250)'};"
 					onclick={() => onTaskClick?.(displayTask.id)}
+					title="Click to view task details"
 				>
 					{displayTask.title || displayTask.id}
 				</button>
@@ -1912,6 +1998,14 @@
 			<div class="text-sm text-base-content/50 italic">
 				No active task
 			</div>
+		{/if}
+
+		<!-- Star celebration overlay -->
+		{#if showCelebration}
+			<StreakCelebration
+				count={tasksCompletedToday}
+				onDismiss={() => { showCelebration = false; }}
+			/>
 		{/if}
 	</article>
 {:else}
@@ -2686,6 +2780,20 @@
 							</svg>
 							Start
 						</button>
+					{:else if sessionState === 'working' && task}
+						<!-- Working state with task: always show Complete button -->
+						<button
+							onclick={() => sendWorkflowCommand('/jat:complete')}
+							class="btn btn-xs gap-1"
+							style="background: linear-gradient(135deg, oklch(0.40 0.12 145) 0%, oklch(0.35 0.10 160) 100%); border: none; color: white; font-weight: 500;"
+							title="Complete this task"
+							disabled={sendingInput || !onSendInput}
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+							</svg>
+							Complete
+						</button>
 					{:else if detectedWorkflowCommands.length > 0}
 						<!-- Workflow commands detected: show Done as primary action -->
 						{@const hasComplete = detectedWorkflowCommands.some(c => c.command === '/jat:complete')}
@@ -2776,5 +2884,21 @@
 		100% {
 			transform: translateX(100%);
 		}
+	}
+
+	/* Subtle pulse animation for needs-input state */
+	@keyframes pulse-subtle {
+		0%, 100% {
+			opacity: 1;
+			box-shadow: 0 0 12px oklch(0.70 0.20 85 / 0.4);
+		}
+		50% {
+			opacity: 0.95;
+			box-shadow: 0 0 20px oklch(0.70 0.20 85 / 0.6);
+		}
+	}
+
+	.animate-pulse-subtle {
+		animation: pulse-subtle 2s ease-in-out infinite;
 	}
 </style>

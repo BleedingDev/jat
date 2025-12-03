@@ -30,6 +30,10 @@
 		startPolling as startServerPolling,
 		stopPolling as stopServerPolling
 	} from '$lib/stores/serverSessions.svelte.js';
+	import {
+		playServerStartSound,
+		playServerStopSound
+	} from '$lib/utils/soundEffects';
 
 	interface Project {
 		name: string;
@@ -151,11 +155,12 @@
 	let editingPort = $state<string | null>(null); // Project name being edited (port)
 	let portDraft = $state<string>('');
 
+	// Phase 1: Fast fetch without stats (instant page load)
 	async function fetchProjects() {
 		loading = true;
 		error = null;
 		try {
-			const response = await fetch('/api/projects?stats=true');
+			const response = await fetch('/api/projects');
 			if (!response.ok) {
 				throw new Error('Failed to fetch projects');
 			}
@@ -165,6 +170,34 @@
 			error = err.message || 'Failed to load projects';
 		} finally {
 			loading = false;
+		}
+	}
+
+	// Phase 2: Lazy fetch stats in background and merge
+	async function fetchProjectStats() {
+		try {
+			const response = await fetch('/api/projects?stats=true');
+			if (!response.ok) return;
+			const data = await response.json();
+			const statsMap = new Map<string, Project>((data.projects || []).map((p: Project) => [p.name, p]));
+
+			// Merge stats into existing projects
+			projects = projects.map(p => {
+				const withStats = statsMap.get(p.name);
+				if (withStats) {
+					return {
+						...p,
+						tasks: withStats.tasks,
+						agents: withStats.agents,
+						status: withStats.status,
+						lastActivity: withStats.lastActivity
+					};
+				}
+				return p;
+			});
+		} catch (err) {
+			// Stats are optional - don't show error to user
+			console.warn('Failed to fetch project stats:', err);
 		}
 	}
 
@@ -401,16 +434,21 @@
 	}
 
 	async function handleStopServer(sessionName: string) {
+		playServerStopSound();
 		await stopServerSession(sessionName);
 		await fetchProjects();
 	}
 
 	async function handleRestartServer(sessionName: string) {
+		// Restart is stop + start, play both sounds with delay
+		playServerStopSound();
 		await restartServerSession(sessionName);
+		setTimeout(() => playServerStartSound(), 300);
 		await fetchProjects();
 	}
 
 	async function handleStartServer(projectName: string) {
+		playServerStartSound();
 		await startServerSession(projectName);
 		await fetchProjects();
 	}
@@ -481,11 +519,15 @@
 	}
 
 	onMount(async () => {
+		// Phase 1: Fast initial load (no stats)
 		await fetchProjects();
 		startServerPolling(2000);
 		updateContainerHeight();
 		window.addEventListener('resize', updateContainerHeight);
 		window.addEventListener('keydown', handleKeydown);
+
+		// Phase 2: Lazy load stats in background after UI renders
+		setTimeout(() => fetchProjectStats(), 100);
 
 		// Auto-scroll to first running server session
 		setTimeout(() => {
@@ -853,19 +895,29 @@
 										{:else}
 											<span style="color: oklch(0.75 0.18 145);">now</span>
 										{/if}
-									{:else}
+									{:else if project.lastActivity !== undefined}
 										{project.lastActivity || '-'}
+									{:else}
+										<div class="skeleton h-3 w-6 rounded"></div>
 									{/if}
 								</td>
 
 								<!-- Tasks -->
 								<td class="px-3 py-3 font-mono text-xs" style="color: oklch(0.65 0.02 250);">
-									{formatTasks(project.tasks)}
+									{#if project.tasks !== undefined}
+										{formatTasks(project.tasks)}
+									{:else}
+										<div class="skeleton h-3 w-8 rounded"></div>
+									{/if}
 								</td>
 
 								<!-- Agents -->
 								<td class="px-3 py-3 font-mono text-xs" style="color: oklch(0.65 0.02 250);">
-									{formatAgents(project.agents)}
+									{#if project.agents !== undefined}
+										{formatAgents(project.agents)}
+									{:else}
+										<div class="skeleton h-3 w-6 rounded"></div>
+									{/if}
 								</td>
 
 								<!-- Description (editable) -->

@@ -2,8 +2,8 @@
 	/**
 	 * UserProfile Component
 	 *
-	 * User profile dropdown with theme selector and terminal settings.
-	 * Shows avatar with user info, theme picker, and terminal height slider.
+	 * User profile dropdown with theme selector, sound settings, and terminal settings.
+	 * Shows avatar with user info, theme picker, sound toggle, and terminal height slider.
 	 * Uses DaisyUI dropdown component.
 	 *
 	 * Note: This is a placeholder component. No authentication system implemented yet.
@@ -12,6 +12,12 @@
 
 	import { onMount } from 'svelte';
 	import ThemeSelector from './ThemeSelector.svelte';
+	import {
+		areSoundsEnabled,
+		enableSounds,
+		disableSounds,
+		playSuccessChime
+	} from '$lib/utils/soundEffects';
 
 	// Placeholder user data
 	const user = {
@@ -24,6 +30,13 @@
 	const userIcon =
 		'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z';
 
+	// Sound icon paths
+	const soundOnIcon = 'M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z';
+	const soundOffIcon = 'M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.531V19.94a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.506-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.395C2.806 8.757 3.63 8.25 4.51 8.25H6.75z';
+
+	// Sound settings
+	let soundsEnabled = $state(false);
+
 	// Terminal height settings (global user preference)
 	const TERMINAL_HEIGHT_KEY = 'user-terminal-height';
 	const DEFAULT_TERMINAL_HEIGHT = 50;
@@ -32,6 +45,9 @@
 	let terminalHeight = $state(DEFAULT_TERMINAL_HEIGHT);
 
 	onMount(() => {
+		// Load saved sound preference
+		soundsEnabled = areSoundsEnabled();
+
 		// Load saved terminal height
 		const saved = localStorage.getItem(TERMINAL_HEIGHT_KEY);
 		if (saved) {
@@ -41,6 +57,18 @@
 			}
 		}
 	});
+
+	function handleSoundToggle() {
+		if (soundsEnabled) {
+			disableSounds();
+			soundsEnabled = false;
+		} else {
+			enableSounds();
+			soundsEnabled = true;
+			// Play a test sound so user knows it works
+			setTimeout(() => playSuccessChime(), 100);
+		}
+	}
 
 	function handleHeightChange(newHeight: number) {
 		terminalHeight = newHeight;
@@ -97,6 +125,43 @@
 
 		<li>
 			<ThemeSelector compact={false} />
+		</li>
+
+		<!-- Sound Settings -->
+		<li class="menu-title mt-2">
+			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Sound</span>
+		</li>
+
+		<li>
+			<button
+				onclick={handleSoundToggle}
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
+				style="background: {soundsEnabled ? 'oklch(0.30 0.08 145 / 0.3)' : 'transparent'};"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					class="w-4 h-4"
+					style="color: {soundsEnabled ? 'oklch(0.75 0.15 145)' : 'oklch(0.55 0.02 250)'};"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d={soundsEnabled ? soundOnIcon : soundOffIcon} />
+				</svg>
+				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+					Sound Effects
+				</span>
+				<span
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+					style="
+						background: {soundsEnabled ? 'oklch(0.35 0.10 145)' : 'oklch(0.25 0.02 250)'};
+						color: {soundsEnabled ? 'oklch(0.85 0.10 145)' : 'oklch(0.55 0.02 250)'};
+					"
+				>
+					{soundsEnabled ? 'ON' : 'OFF'}
+				</span>
+			</button>
 		</li>
 
 		<li class="menu-title mt-2">

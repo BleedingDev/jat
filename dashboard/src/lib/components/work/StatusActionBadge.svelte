@@ -6,6 +6,7 @@
 	 * Replaces static status badges (DONE, WORKING, etc.) with actionable buttons.
 	 *
 	 * Configuration is imported from statusColors.ts for consistency.
+	 * Plays contextual sounds for each action type.
 	 */
 
 	import { fly } from 'svelte/transition';
@@ -15,6 +16,14 @@
 		type SessionStateVisual,
 		type SessionStateAction
 	} from '$lib/config/statusColors';
+	import {
+		playTaskCompleteSound,
+		playCleanupSound,
+		playKillSound,
+		playAttachSound,
+		playInterruptSound,
+		playTaskStartSound
+	} from '$lib/utils/soundEffects';
 
 	type SessionState = 'starting' | 'working' | 'needs-input' | 'ready-for-review' | 'completing' | 'completed' | 'idle';
 
@@ -65,12 +74,40 @@
 		}
 	});
 
+	// Play sound based on action type
+	function playActionSound(actionId: string): void {
+		switch (actionId) {
+			case 'complete':
+				playTaskCompleteSound();
+				break;
+			case 'cleanup':
+				playCleanupSound();
+				break;
+			case 'kill':
+				playKillSound();
+				break;
+			case 'attach':
+				playAttachSound();
+				break;
+			case 'interrupt':
+			case 'escape':
+				playInterruptSound();
+				break;
+			case 'start':
+				playTaskStartSound();
+				break;
+			// 'view-task' is silent - just viewing
+		}
+	}
+
 	// Handle action execution
 	async function executeAction(action: SessionStateAction) {
 		if (disabled || isExecuting) return;
 
 		isExecuting = true;
 		try {
+			// Play sound before executing action
+			playActionSound(action.id);
 			await onAction?.(action.id);
 		} finally {
 			isExecuting = false;

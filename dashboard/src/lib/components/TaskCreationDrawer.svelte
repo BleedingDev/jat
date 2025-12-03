@@ -15,6 +15,7 @@
 	import { tick, onMount, onDestroy } from 'svelte';
 	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects } from '$lib/stores/drawerStore';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
+	import { playSuccessChime, playErrorSound, playAttachmentSound } from '$lib/utils/soundEffects';
 	import VoiceInput from './VoiceInput.svelte';
 
 	// Type for pending attachments (before upload)
@@ -471,6 +472,7 @@
 
 		const files = event.dataTransfer?.files;
 		if (files && files.length > 0) {
+			playAttachmentSound();
 			handleFiles(files);
 		}
 	}
@@ -650,6 +652,7 @@
 
 			// Success!
 			successMessage = `Task ${taskId} created successfully!`;
+			playSuccessChime();
 
 			// Broadcast task created event so pages can refresh immediately
 			broadcastTaskEvent('task-created', taskId);
@@ -731,6 +734,7 @@
 		} catch (error) {
 			console.error('Error creating task:', error);
 			submitError = error.message || 'Failed to create task. Please try again.';
+			playErrorSound();
 		} finally {
 			isSubmitting = false;
 		}
