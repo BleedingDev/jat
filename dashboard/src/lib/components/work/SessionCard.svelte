@@ -2798,6 +2798,16 @@
 							</svg>
 							Complete
 						</button>
+					{:else if sessionState === 'completing'}
+						<!-- Completing state: show actionable badge with attach/kill options -->
+						<StatusActionBadge
+							{sessionState}
+							{sessionName}
+							dropUp={true}
+							alignRight={true}
+							onAction={handleStatusAction}
+							disabled={sendingInput || !onSendInput}
+						/>
 					{:else if detectedWorkflowCommands.length > 0}
 						<!-- Workflow commands detected: show Done as primary action -->
 						{@const hasComplete = detectedWorkflowCommands.some(c => c.command === '/jat:complete')}
