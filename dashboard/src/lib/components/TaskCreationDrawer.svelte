@@ -773,7 +773,35 @@
 
 	// Track which save action to perform after submission
 	type SaveAction = 'close' | 'new' | 'start';
-	let pendingSaveAction = $state<SaveAction>('close');
+	const SAVE_PREFERENCE_KEY = 'taskDrawer.savePreference';
+
+	// Load saved preference from localStorage, default to 'close'
+	function getStoredSavePreference(): SaveAction {
+		if (typeof window === 'undefined') return 'close';
+		const stored = localStorage.getItem(SAVE_PREFERENCE_KEY);
+		if (stored === 'close' || stored === 'new' || stored === 'start') {
+			return stored;
+		}
+		return 'close';
+	}
+
+	// Save preference to localStorage
+	function storeSavePreference(action: SaveAction) {
+		if (typeof window === 'undefined') return;
+		localStorage.setItem(SAVE_PREFERENCE_KEY, action);
+	}
+
+	let pendingSaveAction = $state<SaveAction>(getStoredSavePreference());
+
+	// Labels and icons for each save action
+	const saveActionLabels: Record<SaveAction, string> = {
+		close: 'Save',
+		new: 'Save & New',
+		start: 'Save & Start'
+	};
+
+	// Get the current default save action (loaded from preference)
+	const defaultSaveAction = $derived(pendingSaveAction);
 
 	// Handle drawer close
 	function handleClose() {
@@ -794,6 +822,8 @@
 	// Unified submit handler for all save actions
 	async function submitWithAction(action: SaveAction) {
 		pendingSaveAction = action;
+		// Store the preference for next time
+		storeSavePreference(action);
 
 		// Create a synthetic event for handleSubmit
 		const syntheticEvent = { preventDefault: () => {} } as Event;
@@ -1465,18 +1495,18 @@
 
 						<!-- Split button with dropdown -->
 						<div class="join">
-							<!-- Main action: Save (and Close) -->
+							<!-- Main action: Uses stored preference -->
 							<button
 								type="submit"
 								class="btn btn-primary font-mono join-item"
-								onclick={() => submitWithAction('close')}
+								onclick={() => submitWithAction(defaultSaveAction)}
 								disabled={isSubmitting}
 							>
 								{#if isSubmitting}
 									<span class="loading loading-spinner loading-sm"></span>
 									Saving...
 								{:else}
-									Save
+									{saveActionLabels[defaultSaveAction]}
 								{/if}
 							</button>
 
@@ -1494,20 +1524,24 @@
 								</button>
 								<ul
 									tabindex="0"
-									class="dropdown-content menu rounded-box z-[1] w-52 p-2 shadow-lg"
+									class="dropdown-content menu rounded-box z-[1] w-56 p-2 shadow-lg"
 									style="background: oklch(0.22 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
 								>
 									<li>
 										<button
 											type="button"
-											class="font-mono text-sm flex items-center gap-2"
+											class="font-mono text-sm flex items-center gap-2 {defaultSaveAction === 'close' ? 'bg-primary/20' : ''}"
 											style="color: oklch(0.80 0.02 250);"
 											onclick={() => submitWithAction('close')}
 											disabled={isSubmitting}
 										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-											</svg>
+											{#if defaultSaveAction === 'close'}
+												<svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<span class="w-4"></span>
+											{/if}
 											Save
 											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌘↵</span>
 										</button>
@@ -1515,14 +1549,18 @@
 									<li>
 										<button
 											type="button"
-											class="font-mono text-sm flex items-center gap-2"
+											class="font-mono text-sm flex items-center gap-2 {defaultSaveAction === 'new' ? 'bg-primary/20' : ''}"
 											style="color: oklch(0.80 0.02 250);"
 											onclick={() => submitWithAction('new')}
 											disabled={isSubmitting}
 										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-											</svg>
+											{#if defaultSaveAction === 'new'}
+												<svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<span class="w-4"></span>
+											{/if}
 											Save & New
 											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌘⇧↵</span>
 										</button>
@@ -1530,15 +1568,18 @@
 									<li>
 										<button
 											type="button"
-											class="font-mono text-sm flex items-center gap-2"
+											class="font-mono text-sm flex items-center gap-2 {defaultSaveAction === 'start' ? 'bg-primary/20' : ''}"
 											style="color: oklch(0.80 0.02 250);"
 											onclick={() => submitWithAction('start')}
 											disabled={isSubmitting}
 										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-											</svg>
+											{#if defaultSaveAction === 'start'}
+												<svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<span class="w-4"></span>
+											{/if}
 											Save & Start
 											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌥↵</span>
 										</button>
