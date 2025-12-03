@@ -70,9 +70,11 @@ export async function POST({ request }) {
 			// -nt: no timestamps (we just want the text)
 			// -np: no progress output
 			// --no-prints: minimize output
+			// Increased timeout to 120 seconds (2 minutes) for longer recordings
+			// Large-v3-turbo model processes ~50-100 seconds of audio per minute on average hardware
 			const { stdout, stderr } = await execAsync(
 				`"${WHISPER_CLI}" -m "${WHISPER_MODEL}" -f "${wavPath}" -nt -np --no-prints -l en 2>/dev/null`,
-				{ timeout: 30000 } // 30 second timeout
+				{ timeout: 120000 } // 120 second timeout (2 minutes)
 			);
 
 			// Parse output - whisper-cli outputs text directly

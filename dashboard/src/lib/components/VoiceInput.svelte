@@ -162,6 +162,10 @@
 		}
 	}
 
+	// Timeout for transcription API calls (2.5 minutes to allow for longer recordings)
+	// Server has 2 minute timeout, client needs slightly more to receive timeout response
+	const TRANSCRIPTION_TIMEOUT_MS = 150000;
+
 	// Process recorded audio through local whisper
 	async function processAudio() {
 		if (audioChunks.length === 0) {
@@ -173,6 +177,12 @@
 		isProcessing = true;
 		statusText = 'Processing...';
 
+		// Create AbortController for timeout
+		const abortController = new AbortController();
+		const timeoutId = setTimeout(() => {
+			abortController.abort();
+		}, TRANSCRIPTION_TIMEOUT_MS);
+
 		try {
 			// Create blob from chunks
 			const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
@@ -182,11 +192,14 @@
 			const formData = new FormData();
 			formData.append('audio', audioBlob, 'recording.webm');
 
-			// Send to local transcription API
+			// Send to local transcription API with abort signal for timeout
 			const response = await fetch('/api/transcribe', {
 				method: 'POST',
-				body: formData
+				body: formData,
+				signal: abortController.signal
 			});
+
+			clearTimeout(timeoutId);
 
 			if (!response.ok) {
 				const errorData = await response.json();
@@ -203,8 +216,18 @@
 			}
 
 		} catch (err: any) {
+			clearTimeout(timeoutId);
 			console.error('Transcription error:', err);
-			onerror?.(new CustomEvent('error', { detail: err.message || 'Transcription failed' }));
+
+			// Provide more helpful error messages
+			let errorMessage = err.message || 'Transcription failed';
+			if (err.name === 'AbortError') {
+				errorMessage = 'Transcription timed out. Try a shorter recording.';
+			} else if (errorMessage.includes('timed out')) {
+				errorMessage = 'Transcription timed out. The recording may be too long.';
+			}
+
+			onerror?.(new CustomEvent('error', { detail: errorMessage }));
 		} finally {
 			isProcessing = false;
 			statusText = '';
@@ -233,7 +256,7 @@
 </script>
 
 {#if isSupported && isWhisperAvailable}
-	<div class="relative inline-flex items-center gap-1">
+	<div class="relative inline-flex items-center gap-1 -mt-2">
 		<button
 			type="button"
 			class="btn btn-circle {sizeClasses[size]} {isRecording ? 'btn-error animate-pulse' : isProcessing ? 'btn-warning' : 'btn-ghost'} transition-all duration-200"
