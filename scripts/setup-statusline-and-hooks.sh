@@ -50,6 +50,37 @@ fi
 echo ""
 
 # ============================================================================
+# STEP 1b: Migrate agent session files to .claude/sessions/
+# ============================================================================
+
+echo -e "${BLUE}Step 1b: Migrating agent session files...${NC}"
+
+# Find all projects with .claude directories
+for project_dir in "$HOME/code"/*; do
+    if [ -d "$project_dir/.claude" ]; then
+        project_name=$(basename "$project_dir")
+        sessions_dir="$project_dir/.claude/sessions"
+
+        # Create sessions directory if it doesn't exist
+        mkdir -p "$sessions_dir"
+
+        # Count files to migrate
+        legacy_count=$(find "$project_dir/.claude" -maxdepth 1 -name "agent-*.txt" 2>/dev/null | wc -l)
+        legacy_jsonl=$(find "$project_dir/.claude" -maxdepth 1 -name "agent-*-activity.jsonl" 2>/dev/null | wc -l)
+
+        if [ "$legacy_count" -gt 0 ] || [ "$legacy_jsonl" -gt 0 ]; then
+            # Move agent files to sessions directory
+            find "$project_dir/.claude" -maxdepth 1 -name "agent-*.txt" -exec mv {} "$sessions_dir/" \; 2>/dev/null
+            find "$project_dir/.claude" -maxdepth 1 -name "agent-*-activity.jsonl" -exec mv {} "$sessions_dir/" \; 2>/dev/null
+            echo -e "  ${GREEN}✓ $project_name: Migrated $legacy_count txt + $legacy_jsonl jsonl files${NC}"
+        fi
+    fi
+done
+
+echo -e "  ${GREEN}✓ Migration complete${NC}"
+echo ""
+
+# ============================================================================
 # STEP 2: Install global hook to ~/.claude/hooks/
 # ============================================================================
 

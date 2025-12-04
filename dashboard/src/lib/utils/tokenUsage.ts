@@ -174,13 +174,9 @@ export async function buildSessionAgentMap(projectPath: string): Promise<Map<str
 	];
 
 	for (const scanPath of projectsToScan) {
-		// Check new location first: .claude/sessions/
+		// Scan .claude/sessions/ for agent files
 		const sessionsDir = path.join(scanPath, '.claude', 'sessions');
 		await scanDirectoryForAgentFiles(sessionsDir, map);
-
-		// Fall back to legacy location: .claude/
-		const claudeDir = path.join(scanPath, '.claude');
-		await scanDirectoryForAgentFiles(claudeDir, map);
 	}
 
 	return map;
