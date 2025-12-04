@@ -1,31 +1,30 @@
 /**
  * Sound effects for the dashboard using Web Audio API
  * Generates sounds programmatically without external audio files
+ *
+ * Sound preference is managed by the unified preferences store.
+ * This module provides the Web Audio API implementation.
  */
+
+import {
+	getSoundsEnabled,
+	setSoundsEnabled
+} from '$lib/stores/preferences.svelte';
 
 let audioContext: AudioContext | null = null;
-let soundsEnabled = false;
-
-// Check localStorage for user preference
-if (typeof window !== 'undefined') {
-	soundsEnabled = localStorage.getItem('dashboard-sounds-enabled') === 'true';
-}
 
 /**
- * Check if sounds are enabled
+ * Check if sounds are enabled (delegates to preferences store)
  */
 export function areSoundsEnabled(): boolean {
-	return soundsEnabled;
+	return getSoundsEnabled();
 }
 
 /**
  * Enable sounds (call after user grants permission)
  */
 export function enableSounds(): void {
-	soundsEnabled = true;
-	if (typeof window !== 'undefined') {
-		localStorage.setItem('dashboard-sounds-enabled', 'true');
-	}
+	setSoundsEnabled(true);
 	// Initialize audio context
 	const ctx = getAudioContext();
 	if (ctx && ctx.state === 'suspended') {
@@ -37,10 +36,7 @@ export function enableSounds(): void {
  * Disable sounds
  */
 export function disableSounds(): void {
-	soundsEnabled = false;
-	if (typeof window !== 'undefined') {
-		localStorage.setItem('dashboard-sounds-enabled', 'false');
-	}
+	setSoundsEnabled(false);
 }
 
 /**
@@ -66,7 +62,7 @@ function getAudioContext(): AudioContext | null {
  * Call this from a click handler to enable sounds
  */
 export function initAudioOnInteraction(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (ctx && ctx.state === 'suspended') {
@@ -81,7 +77,7 @@ export function initAudioOnInteraction(): void {
  * Creates a soft, non-intrusive notification sound
  */
 export function playNewTaskChime(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -145,7 +141,7 @@ function playTone(
  * Creates an energetic, activating tone
  */
 export function playTaskStartSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -175,7 +171,7 @@ function playStartTones(ctx: AudioContext): void {
  * Play a success sound (task completed, etc.)
  */
 export function playSuccessChime(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -197,7 +193,7 @@ export function playSuccessChime(): void {
  * Play an error/warning sound
  */
 export function playErrorSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -218,7 +214,7 @@ export function playErrorSound(): void {
  * Play a soft "whoosh" sound for task removal/exit
  */
 export function playTaskExitSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -250,7 +246,7 @@ function playExitTones(ctx: AudioContext): void {
  * Creates a satisfying "achievement" sound
  */
 export function playTaskCompleteSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -281,7 +277,7 @@ function playCompleteTones(ctx: AudioContext): void {
  * Creates an ascending arpeggio with a sparkle finish
  */
 export function playAgentJoinSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -317,7 +313,7 @@ function playJoinTones(ctx: AudioContext): void {
  * Used when cleaning up sessions or removing items
  */
 export function playCleanupSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -345,7 +341,7 @@ function playCleanupTones(ctx: AudioContext): void {
  * Used when forcefully terminating sessions
  */
 export function playKillSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -372,7 +368,7 @@ function playKillTones(ctx: AudioContext): void {
  * Used when attaching to terminals
  */
 export function playAttachSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -399,7 +395,7 @@ function playAttachTones(ctx: AudioContext): void {
  * Used when sending Ctrl+C or escape
  */
 export function playInterruptSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -429,7 +425,7 @@ function playInterruptTones(ctx: AudioContext): void {
  * Used when starting dev servers
  */
 export function playServerStartSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -458,7 +454,7 @@ function playServerStartTones(ctx: AudioContext): void {
  * Used when stopping servers
  */
 export function playServerStopSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -491,7 +487,7 @@ function playServerStopTones(ctx: AudioContext): void {
  * Used when agent needs user input
  */
 export function playNeedsInputSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -519,7 +515,7 @@ function playNeedsInputTones(ctx: AudioContext): void {
  * Used when agent is ready for user review
  */
 export function playReadyForReviewSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -551,7 +547,7 @@ function playReadyForReviewTones(ctx: AudioContext): void {
  * Used when starting to drag an item
  */
 export function playPickupSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -577,7 +573,7 @@ function playPickupTones(ctx: AudioContext): void {
  * Used when successfully dropping an item
  */
 export function playDropSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -608,7 +604,7 @@ function playDropTones(ctx: AudioContext): void {
  * Used when voice recording starts
  */
 export function playRecordingStartSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -634,7 +630,7 @@ function playRecordingStartTones(ctx: AudioContext): void {
  * Used when voice recording stops
  */
 export function playRecordingStopSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -665,7 +661,7 @@ function playRecordingStopTones(ctx: AudioContext): void {
  * Used when spawning multiple agents
  */
 export function playSwarmSound(agentCount: number = 3): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -699,7 +695,7 @@ function playSwarmTones(ctx: AudioContext, count: number): void {
  * Used when copying to clipboard
  */
 export function playCopySound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -725,7 +721,7 @@ function playCopyTones(ctx: AudioContext): void {
  * Used when deleting items
  */
 export function playDeleteSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -752,7 +748,7 @@ function playDeleteTones(ctx: AudioContext): void {
  * Used when attaching files
  */
 export function playAttachmentSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -779,7 +775,7 @@ function playAttachmentTones(ctx: AudioContext): void {
  * Used for streak celebrations and big achievements
  */
 export function playCelebrationSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
@@ -810,7 +806,7 @@ function playCelebrationTones(ctx: AudioContext): void {
  * Used when opening command palette or modals
  */
 export function playOpenSound(): void {
-	if (!soundsEnabled) return;
+	if (!areSoundsEnabled()) return;
 
 	const ctx = getAudioContext();
 	if (!ctx) return;
