@@ -1,6 +1,7 @@
 /**
  * Convert ANSI escape codes to HTML spans with inline styles
  * Supports common color codes used by Claude Code / terminal output
+ * Includes automatic contrast adjustment for background colors
  */
 
 // ANSI color code to CSS color mapping
@@ -45,6 +46,76 @@ const ANSI_BG_COLORS: Record<number, string> = {
 	106: '#81ecec',
 	107: '#ffffff',
 };
+
+/**
+ * Parse a hex color string to RGB values
+ */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+	const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+	return result
+		? {
+				r: parseInt(result[1], 16),
+				g: parseInt(result[2], 16),
+				b: parseInt(result[3], 16),
+			}
+		: null;
+}
+
+/**
+ * Calculate relative luminance of a color (WCAG formula)
+ * Returns value between 0 (black) and 1 (white)
+ */
+function getLuminance(r: number, g: number, b: number): number {
+	const [rs, gs, bs] = [r, g, b].map((c) => {
+		c = c / 255;
+		return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+	});
+	return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Calculate contrast ratio between two colors (WCAG formula)
+ * Returns ratio from 1 (same color) to 21 (black vs white)
+ */
+function getContrastRatio(
+	fg: { r: number; g: number; b: number },
+	bg: { r: number; g: number; b: number }
+): number {
+	const fgLum = getLuminance(fg.r, fg.g, fg.b);
+	const bgLum = getLuminance(bg.r, bg.g, bg.b);
+	const lighter = Math.max(fgLum, bgLum);
+	const darker = Math.min(fgLum, bgLum);
+	return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Get a contrasting foreground color for a given background
+ * Uses WCAG 4.5:1 contrast ratio as minimum threshold
+ */
+function getContrastingForeground(bgColor: string, currentFg: string | null): string | null {
+	const bg = hexToRgb(bgColor);
+	if (!bg) return currentFg;
+
+	// If we have a foreground color, check if it has sufficient contrast
+	if (currentFg) {
+		const fg = hexToRgb(currentFg);
+		if (fg && getContrastRatio(fg, bg) >= 4.5) {
+			return currentFg; // Current foreground is fine
+		}
+	}
+
+	// Calculate background luminance to determine if we need light or dark text
+	const bgLum = getLuminance(bg.r, bg.g, bg.b);
+
+	// Dark backgrounds (luminance < 0.5) need light text
+	// Light backgrounds (luminance >= 0.5) need dark text
+	// Using a slightly lower threshold (0.4) to be more aggressive about dark text on mid-tones
+	if (bgLum < 0.4) {
+		return '#ffffff'; // White text on dark backgrounds
+	} else {
+		return '#1a1a1a'; // Near-black text on light backgrounds
+	}
+}
 
 interface AnsiState {
 	bold: boolean;
@@ -99,12 +170,19 @@ function parseAnsiCode(code: string, state: AnsiState): void {
 function stateToStyle(state: AnsiState): string {
 	const styles: string[] = [];
 
-	if (state.color) {
-		styles.push(`color:${state.color}`);
-	}
+	// When background color is set, ensure foreground has sufficient contrast
 	if (state.bgColor) {
 		styles.push(`background-color:${state.bgColor}`);
+		// Get a contrasting foreground color (either the current one if sufficient, or auto-selected)
+		const contrastingFg = getContrastingForeground(state.bgColor, state.color);
+		if (contrastingFg) {
+			styles.push(`color:${contrastingFg}`);
+		}
+	} else if (state.color) {
+		// No background, just use the specified foreground color
+		styles.push(`color:${state.color}`);
 	}
+
 	if (state.bold) {
 		styles.push('font-weight:bold');
 	}
