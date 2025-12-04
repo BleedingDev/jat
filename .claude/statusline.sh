@@ -6,7 +6,8 @@
 #
 # Multi-line status display for agent orchestration workflows
 #
-# Line 1: Agent Name · [Priority] Task ID - Task Title ⏲ ActiveTime
+# Line 1: ██ Agent Name · [Priority] Task ID - Task Title ⏲ ActiveTime
+#         ^^ ANSI avatar (color based on name hash)
 # Line 2: ▪▪▪▪▪▪▫▫▫▫ · ⎇ folder@branch · 🔒 N  📬 N  ⏱ Xm
 # Line 3: 💬 Xm Last user prompt...
 #
@@ -44,7 +45,7 @@
 #   Idle status:    Gray        (\033[0;37m)
 #
 # Example output:
-#   GreatWind · [P1] 🔧 jat-4p0 - Demo: Frontend... ⏲ 1h23m
+#   ██ GreatWind · [P1] 🔧 jat-4p0 - Demo: Frontend... ⏲ 1h23m
 #   ▪▪▪▪▪▪▫▫▫▫ · ⎇ jat@master* · 🔒 2  📬 1  ⏱ 45m
 #   💬 12m yes implement top 3
 #
@@ -63,6 +64,74 @@ RED='\033[0;31m'
 MAGENTA='\033[0;35m'
 RESET='\033[0m'
 BOLD='\033[1m'
+
+# ============================================================================
+# AGENT AVATAR (ANSI)
+# ============================================================================
+# Generates a compact 2-character colored avatar based on agent name.
+# Uses 256-color ANSI codes for richer color palette.
+# Colors derived from name hash (same algorithm as dashboard fallback SVG).
+#
+# Format: ██ (two full blocks with foreground color from name hash)
+# The avatar appears at the left of the agent name in the statusline.
+# ============================================================================
+
+# Generate ANSI avatar from agent name
+# Usage: avatar=$(generate_avatar "AgentName")
+generate_avatar() {
+    local name="$1"
+    [[ -z "$name" ]] && echo "" && return
+
+    # Hash the name to get a consistent color
+    local hash=0
+    for (( i=0; i<${#name}; i++ )); do
+        char="${name:$i:1}"
+        # Get ASCII value
+        ascii=$(printf '%d' "'$char")
+        hash=$(( (ascii + (hash * 31)) % 65536 ))
+    done
+
+    # Convert hash to hue (0-360)
+    local hue=$(( hash % 360 ))
+
+    # Map hue to 256-color palette (colors 16-231 are a 6x6x6 color cube)
+    # Simplified: use hue to pick from color wheel
+    # We'll use colors that look good: blues, greens, cyans, magentas, etc.
+    local color_code
+    if [[ $hue -lt 30 ]]; then
+        color_code=196   # Red
+    elif [[ $hue -lt 60 ]]; then
+        color_code=208   # Orange
+    elif [[ $hue -lt 90 ]]; then
+        color_code=226   # Yellow
+    elif [[ $hue -lt 120 ]]; then
+        color_code=118   # Lime
+    elif [[ $hue -lt 150 ]]; then
+        color_code=48    # Green
+    elif [[ $hue -lt 180 ]]; then
+        color_code=51    # Cyan
+    elif [[ $hue -lt 210 ]]; then
+        color_code=45    # Sky blue
+    elif [[ $hue -lt 240 ]]; then
+        color_code=33    # Blue
+    elif [[ $hue -lt 270 ]]; then
+        color_code=129   # Purple
+    elif [[ $hue -lt 300 ]]; then
+        color_code=201   # Magenta
+    elif [[ $hue -lt 330 ]]; then
+        color_code=199   # Pink
+    else
+        color_code=196   # Red (wrap around)
+    fi
+
+    # Use a darker shade for the background (offset by ~18 in the color cube)
+    local bg_code=$(( color_code - 36 ))
+    [[ $bg_code -lt 16 ]] && bg_code=16
+
+    # Generate avatar: 2 blocks with foreground color
+    # Format: \033[38;5;Nm sets 256-color foreground
+    echo -e "\033[38;5;${color_code}m██\033[0m"
+}
 
 # ============================================================================
 # CACHING LAYER
@@ -579,8 +648,11 @@ fi
 # Build status line with all indicators
 status_line=""
 
-# Start with agent name
-status_line="${BOLD}${BLUE}${agent_name}${RESET}"
+# Generate avatar for agent
+agent_avatar=$(generate_avatar "$agent_name")
+
+# Start with avatar and agent name
+status_line="${agent_avatar} ${BOLD}${BLUE}${agent_name}${RESET}"
 
 if [[ -n "$task_id" ]]; then
     # Add priority badge if available
