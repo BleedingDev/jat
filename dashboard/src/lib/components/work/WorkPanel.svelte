@@ -1,13 +1,13 @@
 <script lang="ts">
 	/**
 	 * WorkPanel Component
-	 * Responsive grid layout for WorkCard components with empty state.
+	 * Responsive grid layout for SessionCard components with empty state.
 	 *
 	 * Features:
-	 * - Responsive grid layout for WorkCards
+	 * - Responsive grid layout for agent work cards
 	 * - Configurable sorting (state, priority, created, cost)
 	 * - Empty state with guidance message and drop zone
-	 * - Passes through event handlers to WorkCards
+	 * - Passes through event handlers to SessionCards
 	 *
 	 * Props:
 	 * - workSessions: Array of active work sessions
@@ -17,7 +17,7 @@
 	 * - onTaskClick: Callback when clicking a task ID
 	 */
 
-	import WorkCard from './WorkCard.svelte';
+	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import { initSort, getSortBy, getSortDir } from '$lib/stores/workSort.svelte.js';
 	import { onMount } from 'svelte';
 
@@ -243,9 +243,10 @@
 			<!-- min-h-0 is critical for proper flex height calculation -->
 			<div class="flex gap-4 overflow-x-auto h-full pt-10 pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedSessions as session (session.sessionName)}
-					<!-- Height container - WorkCard controls its own width via cardWidth prop or default 640px -->
+					<!-- Height container - SessionCard controls its own width -->
 					<div class="h-[calc(100%-8px)]">
-						<WorkCard
+						<SessionCard
+							mode="agent"
 							sessionName={session.sessionName}
 							agentName={session.agentName}
 							task={session.task}
@@ -255,13 +256,14 @@
 							tokens={session.tokens}
 							cost={session.cost}
 							sparklineData={session.sparklineData}
-							startTime={session.created ? new Date(session.created) : null}
+							created={session.created}
+							attached={session.attached}
 							onKillSession={createKillHandler(session.sessionName)}
 							onInterrupt={createInterruptHandler(session.sessionName)}
 							onContinue={createContinueHandler(session.sessionName)}
 							onAttachTerminal={createAttachTerminalHandler(session.sessionName)}
 							onSendInput={createSendInputHandler(session.sessionName)}
-							onTaskClick={onTaskClick}
+							{onTaskClick}
 							isHighlighted={highlightedAgent === session.agentName}
 						/>
 					</div>

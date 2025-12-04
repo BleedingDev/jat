@@ -4,16 +4,13 @@
 	 *
 	 * Kanban board grouping agents/sessions by their activity state.
 	 * Each column represents an activity state (starting, working, needs-input, etc.)
-	 * Uses UnifiedAgentCard with mode='compact' for each agent.
-	 *
-	 * @see docs/unified-agent-card-refactor-plan.md Phase 5
+	 * Uses SessionCard with mode='compact' for each agent.
 	 */
 
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import type { ActivityState } from '$lib/types/agent';
-	import type { Agent, Task, InputType } from '$lib/types/agent';
 	import AgentKanbanColumn from './AgentKanbanColumn.svelte';
-	import UnifiedAgentCard from '../UnifiedAgentCard.svelte';
+	import SessionCard from '$lib/components/work/SessionCard.svelte';
 
 	// Work session type (from WorkPanel)
 	interface SparklineDataPoint {
@@ -230,80 +227,17 @@
 		collapsedColumns = new Set(collapsedColumns);
 	}
 
-	/**
-	 * Create agent object from session (for UnifiedAgentCard)
-	 */
-	function createAgentFromSession(session: WorkSession): Agent {
-		return {
-			id: 0,
-			name: session.agentName,
-			program: 'claude-code',
-			model: 'unknown',
-			task_description: session.task?.title || '',
-			last_active_ts: new Date().toISOString(),
-			reservation_count: 0,
-			task_count: session.task ? 1 : 0,
-			open_tasks: 0,
-			in_progress_tasks: session.task ? 1 : 0,
-			active: true,
-			hasSession: true
-		};
-	}
-
-	/**
-	 * Convert session task to Task format
-	 * NOTE: Must include assignee for UnifiedAgentCard to find currentTask
-	 */
-	function convertTask(
-		task: WorkSession['task'] | WorkSession['lastCompletedTask'],
-		agentName?: string
-	): Task | null {
-		if (!task) return null;
-		// issue_type only exists on task, not lastCompletedTask
-		const issueType = 'issue_type' in task ? task.issue_type : undefined;
-		return {
-			id: task.id,
-			title: task.title || task.id,
-			description: '',
-			status: (task.status as 'open' | 'in_progress' | 'blocked' | 'closed') || 'in_progress',
-			priority: task.priority ?? 2,
-			issue_type: (issueType as 'task' | 'bug' | 'feature' | 'epic' | 'chore') || 'task',
-			project: task.id.split('-')[0] || 'unknown',
-			labels: [],
-			assignee: agentName // Required for UnifiedAgentCard to match currentTask
-		};
-	}
-
-	// Session-specific handlers
+	// Session-specific handlers that create closures
 	function createKillHandler(sessionName: string) {
 		return async () => {
 			if (onKillSession) await onKillSession(sessionName);
 		};
 	}
 
-	function createInterruptHandler(sessionName: string) {
-		return async () => {
-			if (onInterrupt) await onInterrupt(sessionName);
-		};
-	}
-
-	function createContinueHandler(sessionName: string) {
-		return async () => {
-			if (onContinue) await onContinue(sessionName);
-		};
-	}
-
-	function createAttachHandler(sessionName: string) {
-		return async () => {
-			if (onAttachTerminal) await onAttachTerminal(sessionName);
-		};
-	}
-
 	function createSendInputHandler(sessionName: string) {
-		return async (input: string, type: InputType) => {
+		return async (input: string, type: 'text' | 'key' | 'raw') => {
 			if (onSendInput) {
-				const mappedType = type === 'paste' || type === 'image' ? 'raw' : type;
-				await onSendInput(sessionName, input, mappedType);
+				await onSendInput(sessionName, input, type);
 			}
 		};
 	}
@@ -322,45 +256,20 @@
 			onToggleCollapse={() => toggleCollapse(state)}
 		>
 			{#each sessions as session (session.sessionName)}
-				{@const sessionState = getSessionState(session)}
-				<UnifiedAgentCard
-					agent={createAgentFromSession(session)}
+				<SessionCard
 					mode="compact"
-					activityStateOverride={sessionState}
-					tasks={session.task ? [convertTask(session.task, session.agentName)!] : []}
+					sessionName={session.sessionName}
+					agentName={session.agentName}
+					task={session.task}
+					lastCompletedTask={session.lastCompletedTask}
 					output={session.output}
-					lastCompletedTask={convertTask(session.lastCompletedTask, session.agentName)}
-					sparklineData={session.sparklineData?.map((d) => ({
-						date: d.timestamp,
-						tokens: d.tokens,
-						cost: d.cost
-					}))}
-					usage={session.tokens
-						? {
-								today: {
-									input_tokens: 0,
-									cache_creation_input_tokens: 0,
-									cache_read_input_tokens: 0,
-									output_tokens: 0,
-									total_tokens: session.tokens,
-									cost: session.cost,
-									sessionCount: 1
-								},
-								week: {
-									input_tokens: 0,
-									cache_creation_input_tokens: 0,
-									cache_read_input_tokens: 0,
-									output_tokens: 0,
-									total_tokens: session.tokens,
-									cost: session.cost,
-									sessionCount: 1
-								}
-							}
-						: undefined}
+					lineCount={session.lineCount}
+					tokens={session.tokens}
+					cost={session.cost}
+					sparklineData={session.sparklineData}
+					created={session.created}
+					attached={session.attached}
 					onKillSession={createKillHandler(session.sessionName)}
-					onInterrupt={createInterruptHandler(session.sessionName)}
-					onContinue={createContinueHandler(session.sessionName)}
-					onAttachTerminal={createAttachHandler(session.sessionName)}
 					onSendInput={createSendInputHandler(session.sessionName)}
 					{onTaskClick}
 				/>
