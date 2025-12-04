@@ -67,12 +67,15 @@ export async function GET({ params, url }) {
 		} catch (err) {
 			console.error(`Failed to generate avatar for ${name}:`, err.message);
 			// Return a simple fallback SVG instead of error
+			// Note: The client-side AgentAvatar component detects fallback SVGs
+			// (by checking for <text> tag) and shows a generic icon instead
 			const fallbackSvg = generateFallbackSvg(name);
 			return new Response(fallbackSvg, {
 				status: 200,
 				headers: {
 					'Content-Type': 'image/svg+xml',
-					'Cache-Control': 'public, max-age=60' // Short cache for fallback
+					// Don't cache fallbacks - avatar might be generated soon
+					'Cache-Control': 'no-store'
 				}
 			});
 		} finally {

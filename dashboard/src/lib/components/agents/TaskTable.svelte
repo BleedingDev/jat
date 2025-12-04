@@ -1861,7 +1861,7 @@
 										<!-- Working agents avatars -->
 										{#if workingAgents.length > 0}
 											<div class="flex items-center -space-x-1 ml-3">
-												{#each workingAgents.slice(0, 4) as agentName}
+												{#each workingAgents.slice(0, 4) as agentName (agentName)}
 													<WorkingAgentBadge
 														name={agentName || ''}
 														size={20}

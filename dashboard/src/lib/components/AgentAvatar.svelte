@@ -36,7 +36,8 @@
 
 	// Cache version - increment to bust all avatar caches
 	// Bump this when avatars are regenerated or cache logic changes
-	const CACHE_VERSION = 4;
+	// v5: Added key to TaskTable #each loop for proper component keying
+	const CACHE_VERSION = 5;
 
 	// Actual fetch implementation
 	async function doFetch(agentName: string, cacheKey: string): Promise<string | null> {
