@@ -112,7 +112,7 @@
 		onContinue?: () => void;
 		onAttachTerminal?: () => void; // Open tmux session in terminal
 		onTaskClick?: (taskId: string) => void; // Agent mode only
-		onSendInput?: (input: string, type: 'text' | 'key' | 'raw') => Promise<void>;
+		onSendInput?: (input: string, type: 'text' | 'key' | 'raw') => Promise<boolean | void>;
 		onDismiss?: () => void; // Agent mode: called when completion banner auto-dismisses
 		// Server mode callbacks
 		onStopServer?: () => Promise<void>;
@@ -187,6 +187,9 @@
 	let tasksCompletedToday = $state(1);  // Default to 1 (at least the current task)
 	let previousSessionState = $state<string>('idle');  // Track for celebration trigger
 	let celebrationDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Session log capture state (prevents duplicate captures)
+	let logCaptured = $state(false);
 
 	// Real-time elapsed time clock (ticks every second)
 	let currentTime = $state(Date.now());
@@ -856,12 +859,10 @@
 		}, STREAM_DEBOUNCE_MS);
 	}
 
-	// Focus input when hovering over the card + track hovered session for keyboard shortcuts
+	// Track hovered session for keyboard shortcuts (Alt+A, Alt+C, etc.)
+	// NOTE: Removed auto-focus on hover - it was causing accidental input capture
+	// when user typed in other inputs while hovering over the card
 	function handleCardMouseEnter() {
-		if (inputRef && !sendingInput) {
-			inputRef.focus();
-		}
-		// Track hovered session for Alt+A keyboard shortcut
 		setHoveredSession(sessionName);
 	}
 
@@ -1322,11 +1323,144 @@
 	// Check if auto-proceed mode is active (for future autopilot feature)
 	const isAutoProceed = $derived(output ? /\[JAT:AUTO_PROCEED\]/.test(output.slice(-3000)) : false);
 
+	// Detect human action markers in output
+	// Format: [JAT:HUMAN_ACTION {"title":"...","description":"..."}]
+	interface HumanAction {
+		title: string;
+		description: string;
+		completed: boolean;
+	}
+
+	let humanActionCompletedState = $state<Map<string, boolean>>(new Map());
+
+	const detectedHumanActions = $derived.by((): HumanAction[] => {
+		if (!output) return [];
+
+		// Look at a larger window for human actions (they appear in completion summary)
+		const recentOutput = output.slice(-6000);
+
+		const actions: HumanAction[] = [];
+		// Find all [JAT:HUMAN_ACTION markers and extract JSON with balanced braces
+		const markerPrefix = '[JAT:HUMAN_ACTION ';
+		let searchStart = 0;
+
+		while (true) {
+			const markerStart = recentOutput.indexOf(markerPrefix, searchStart);
+			if (markerStart === -1) break;
+
+			const jsonStart = markerStart + markerPrefix.length;
+
+			// Find matching closing brace by counting balanced braces
+			let braceCount = 0;
+			let jsonEnd = -1;
+			let inString = false;
+			let escapeNext = false;
+
+			for (let i = jsonStart; i < recentOutput.length; i++) {
+				const char = recentOutput[i];
+
+				if (escapeNext) {
+					escapeNext = false;
+					continue;
+				}
+
+				if (char === '\\' && inString) {
+					escapeNext = true;
+					continue;
+				}
+
+				if (char === '"' && !escapeNext) {
+					inString = !inString;
+					continue;
+				}
+
+				if (!inString) {
+					if (char === '{') {
+						braceCount++;
+					} else if (char === '}') {
+						braceCount--;
+						if (braceCount === 0) {
+							jsonEnd = i + 1;
+							break;
+						}
+					} else if (char === ']' && braceCount === 0) {
+						// Hit the closing ] before finding valid JSON
+						break;
+					}
+				}
+			}
+
+			searchStart = markerStart + 1;
+
+			if (jsonEnd === -1) {
+				// Couldn't find balanced braces - likely truncated output, skip silently
+				continue;
+			}
+
+			const jsonStr = recentOutput.slice(jsonStart, jsonEnd);
+
+			try {
+				const json = JSON.parse(jsonStr);
+				if (json.title) {
+					const actionKey = json.title;
+					actions.push({
+						title: json.title,
+						description: json.description || '',
+						completed: humanActionCompletedState.get(actionKey) || false
+					});
+				}
+			} catch {
+				// Invalid JSON despite balanced braces - skip silently
+				// This can happen with malformed output, no need to log
+			}
+		}
+
+		return actions;
+	});
+
+	// Toggle completion state of a human action
+	function toggleHumanAction(actionTitle: string) {
+		const newState = new Map(humanActionCompletedState);
+		newState.set(actionTitle, !newState.get(actionTitle));
+		humanActionCompletedState = newState;
+	}
+
+	// Count of pending human actions
+	const pendingHumanActionsCount = $derived(
+		detectedHumanActions.filter(a => !a.completed).length
+	);
+
 	// Task to display - either active task or last completed task
 	const displayTask = $derived(task || (sessionState === 'completed' ? lastCompletedTask : null));
 
 	// Get visual config from centralized statusColors.ts
 	const stateVisual = $derived(SESSION_STATE_VISUALS[sessionState] || SESSION_STATE_VISUALS.idle);
+
+	// Capture session log to .beads/logs/ on completion
+	async function captureSessionLog() {
+		if (logCaptured || !sessionName) return;
+
+		try {
+			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/capture-log`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					taskId: task?.id || displayTask?.id
+				})
+			});
+
+			if (response.ok) {
+				const result = await response.json();
+				console.log(`[SessionCard] Session log captured: ${result.filename}`);
+				logCaptured = true;
+			} else {
+				const error = await response.json();
+				console.warn('[SessionCard] Failed to capture session log:', error.message);
+			}
+		} catch (err) {
+			console.error('[SessionCard] Error capturing session log:', err);
+		}
+	}
 
 	// Track sessionState transitions to trigger sounds and celebration
 	$effect(() => {
@@ -1340,10 +1474,15 @@
 			}
 		}
 
-		// Detect transition to 'completed' state - celebration (compact mode only)
-		if (isCompactMode && sessionState === 'completed' && previousSessionState !== 'completed') {
-			// Only trigger if not already showing celebration
-			if (!showCelebration) {
+		// Detect transition to 'completed' state - celebration and log capture
+		if (sessionState === 'completed' && previousSessionState !== 'completed') {
+			// Capture session log (all modes)
+			if (!logCaptured) {
+				captureSessionLog();
+			}
+
+			// Celebration animation (compact mode only)
+			if (isCompactMode && !showCelebration) {
 				showCelebration = true;
 				playTaskCompleteSound();
 
@@ -1368,13 +1507,27 @@
 
 	// Send a workflow command (e.g., /jat:complete)
 	async function sendWorkflowCommand(command: string) {
-		if (!onSendInput) return;
+		if (!onSendInput) {
+			console.warn('[SessionCard] sendWorkflowCommand: onSendInput is not defined');
+			return;
+		}
 		sendingInput = true;
 		try {
-			// Send the command text, then press enter to submit
-			await onSendInput(command, 'text');
-			await new Promise((r) => setTimeout(r, 50)); // Small delay between text and enter
-			await onSendInput('enter', 'key');
+			// Send Ctrl+C first to clear any stray characters in input
+			await onSendInput('ctrl-c', 'key');
+			await new Promise((r) => setTimeout(r, 50));
+			// Send the command text (API appends Enter for type='text')
+			const textResult = await onSendInput(command, 'text');
+			if (textResult === false) {
+				console.warn('[SessionCard] sendWorkflowCommand: Failed to send command text');
+				// Don't return early - fall through to finally block to reset sendingInput
+			} else {
+				// Send extra Enter after delay - Claude Code needs double Enter for slash commands
+				await new Promise((r) => setTimeout(r, 100));
+				await onSendInput('enter', 'key');
+			}
+		} catch (err) {
+			console.error('[SessionCard] sendWorkflowCommand error:', err);
 		} finally {
 			sendingInput = false;
 		}
@@ -1944,6 +2097,16 @@
 						/>
 					</div>
 				{/if}
+				<!-- Human Actions Required indicator (shows if pending actions exist) -->
+				{#if pendingHumanActionsCount > 0}
+					<span
+						class="badge badge-xs font-mono"
+						style="background: oklch(0.45 0.18 50); color: oklch(0.98 0.02 250); border: none;"
+						title="{pendingHumanActionsCount} manual action{pendingHumanActionsCount > 1 ? 's' : ''} required"
+					>
+						🧑 {pendingHumanActionsCount}
+					</span>
+				{/if}
 				<!-- Status action dropdown -->
 				<StatusActionBadge
 					{sessionState}
@@ -2198,6 +2361,16 @@
 			<div class="flex items-center">
 				<!-- Shorter, neutral divider -->
 				<div class="w-px h-4 mx-1.5" style="background: oklch(0.40 0.01 250);"></div>
+				<!-- Human Actions Required indicator -->
+				{#if pendingHumanActionsCount > 0}
+					<span
+						class="badge badge-xs font-mono mr-1.5"
+						style="background: oklch(0.45 0.18 50); color: oklch(0.98 0.02 250); border: none;"
+						title="{pendingHumanActionsCount} manual action{pendingHumanActionsCount > 1 ? 's' : ''} required"
+					>
+						🧑 {pendingHumanActionsCount}
+					</span>
+				{/if}
 				<StatusActionBadge
 					{sessionState}
 					{sessionName}
@@ -2649,6 +2822,73 @@
 						{:else}
 							Click an option to select
 						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Human Actions Required: Display when agent outputs [JAT:HUMAN_ACTION] markers -->
+			{#if detectedHumanActions.length > 0}
+				<div
+					class="mb-2 p-2.5 rounded-lg"
+					style="background: linear-gradient(135deg, oklch(0.25 0.08 50) 0%, oklch(0.22 0.05 45) 100%); border: 1px solid oklch(0.45 0.15 50);"
+				>
+					<!-- Header -->
+					<div class="flex items-center gap-2 mb-2">
+						<span class="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style="background: oklch(0.40 0.18 50); color: oklch(0.98 0.02 250);">
+							🧑 HUMAN
+						</span>
+						<span class="text-xs font-semibold" style="color: oklch(0.95 0.08 50);">
+							{pendingHumanActionsCount > 0 ? `${pendingHumanActionsCount} action${pendingHumanActionsCount > 1 ? 's' : ''} required` : 'All actions completed'}
+						</span>
+						{#if pendingHumanActionsCount === 0}
+							<svg class="w-4 h-4" style="color: oklch(0.70 0.20 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+							</svg>
+						{/if}
+					</div>
+
+					<!-- Action items as checklist -->
+					<div class="flex flex-col gap-1.5">
+						{#each detectedHumanActions as action (action.title)}
+							<button
+								type="button"
+								onclick={() => toggleHumanAction(action.title)}
+								class="flex items-start gap-2 p-2 rounded text-left transition-all"
+								style="background: {action.completed ? 'oklch(0.20 0.02 250)' : 'oklch(0.28 0.04 50)'}; border: 1px solid {action.completed ? 'oklch(0.35 0.02 250)' : 'oklch(0.40 0.08 50)'};"
+								title="Click to mark as {action.completed ? 'pending' : 'done'}"
+							>
+								<!-- Checkbox -->
+								<span
+									class="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center mt-0.5"
+									style="background: {action.completed ? 'oklch(0.55 0.20 145)' : 'oklch(0.30 0.02 250)'}; border: 1px solid {action.completed ? 'oklch(0.65 0.20 145)' : 'oklch(0.45 0.02 250)'};"
+								>
+									{#if action.completed}
+										<svg class="w-3 h-3" style="color: oklch(0.98 0.01 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+										</svg>
+									{/if}
+								</span>
+								<!-- Action content -->
+								<div class="flex-1 min-w-0">
+									<div
+										class="text-xs font-semibold {action.completed ? 'line-through opacity-60' : ''}"
+										style="color: {action.completed ? 'oklch(0.60 0.02 250)' : 'oklch(0.95 0.05 50)'};"
+									>
+										{action.title}
+									</div>
+									{#if action.description && !action.completed}
+										<div class="text-[11px] mt-0.5 opacity-70" style="color: oklch(0.80 0.02 250);">
+											{action.description}
+										</div>
+									{/if}
+								</div>
+							</button>
+						{/each}
+					</div>
+
+					<!-- Hint -->
+					<div class="text-[10px] mt-2 opacity-50" style="color: oklch(0.65 0.02 250);">
+						Complete these manual steps before marking task as done
 					</div>
 				</div>
 			{/if}
