@@ -25,7 +25,7 @@
 	import UserProfile from './UserProfile.svelte';
 	import CommandPalette from './CommandPalette.svelte';
 	import Sparkline from './Sparkline.svelte';
-	import { isSparklineVisible } from '$lib/utils/sparklinePreferences';
+	import { getSparklineVisible } from '$lib/stores/preferences.svelte';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import { startSpawning, stopSpawning, startBulkSpawn, endBulkSpawn } from '$lib/stores/spawningTasks';
 	import {
@@ -54,27 +54,14 @@
 	} from '$lib/stores/serverSort.svelte.js';
 	import { onMount, onDestroy } from 'svelte';
 
-	// Sparkline visibility preference
-	let sparklineVisible = $state(true);
+	// Sparkline visibility (reactive from preferences store)
+	const sparklineVisible = $derived(getSparklineVisible());
 
-	// Initialize sort stores and sparkline preference on mount
+	// Initialize sort stores on mount
 	onMount(() => {
 		initSort();
 		initAgentSort();
 		initServerSort();
-
-		// Load sparkline visibility preference
-		sparklineVisible = isSparklineVisible();
-
-		// Listen for preference changes from UserProfile
-		const handleVisibilityChange = (e: CustomEvent<boolean>) => {
-			sparklineVisible = e.detail;
-		};
-		window.addEventListener('sparkline-visibility-changed', handleVisibilityChange as EventListener);
-
-		return () => {
-			window.removeEventListener('sparkline-visibility-changed', handleVisibilityChange as EventListener);
-		};
 	});
 
 	// Check which page we're on for showing appropriate sort dropdown

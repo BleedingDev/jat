@@ -2250,8 +2250,11 @@
 			{/if}
 		</div>
 	</div>
+</div>
 
-	<!-- Toast Notification (Fixed position, bottom-right) - Industrial -->
+<!-- Modals and Toast - placed OUTSIDE drawer to avoid stacking context issues -->
+
+<!-- Toast Notification (Fixed position, bottom-right) - Industrial -->
 	{#if toastMessage}
 		<div class="toast toast-end toast-bottom z-[60]">
 			<div
@@ -2510,4 +2513,3 @@
 			</div>
 		</div>
 	{/if}
-</div>

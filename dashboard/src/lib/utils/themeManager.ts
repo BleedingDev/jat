@@ -1,12 +1,18 @@
 // src/lib/utils/themeManager.ts
 
 /**
- * Centralized theme management utility for Beads Dashboard.
- * Simple theme handling with localStorage persistence.
+ * Theme management utility for Beads Dashboard.
+ *
+ * Theme preference is managed by the unified preferences store.
+ * This module provides theme validation and the list of available themes.
  */
 
+import {
+	getTheme as getThemeFromStore,
+	setTheme as setThemeInStore
+} from '$lib/stores/preferences.svelte';
+
 const DEFAULT_THEME = 'nord';
-const THEME_KEY = 'theme';
 
 // All available DaisyUI themes
 export const AVAILABLE_THEMES = [
@@ -47,46 +53,36 @@ export const AVAILABLE_THEMES = [
 export type Theme = (typeof AVAILABLE_THEMES)[number];
 
 /**
- * Get the current theme from DOM or localStorage.
+ * Get the current theme (delegates to preferences store)
  */
 export function getTheme(): string {
-	if (typeof document === 'undefined') return DEFAULT_THEME;
-	return (
-		document.documentElement.getAttribute('data-theme') ||
-		localStorage.getItem(THEME_KEY) ||
-		DEFAULT_THEME
-	);
+	return getThemeFromStore();
 }
 
 /**
- * Set the theme in DOM and localStorage.
+ * Set the theme with validation (delegates to preferences store)
  * @param theme - Theme name from available DaisyUI themes
  */
 export function setTheme(theme: string) {
-	if (typeof document === 'undefined') return;
-
 	// Validate theme is available
 	if (!AVAILABLE_THEMES.includes(theme as Theme)) {
 		console.warn(`Invalid theme "${theme}", falling back to default`);
 		theme = DEFAULT_THEME;
 	}
 
-	document.documentElement.setAttribute('data-theme', theme);
-	localStorage.setItem(THEME_KEY, theme);
+	setThemeInStore(theme);
 }
 
 /**
  * Initialize theme on app start.
+ * Note: Preferences store handles initialization via initPreferences()
  */
 export function initializeTheme() {
 	if (typeof document === 'undefined') return;
 
-	const localTheme = localStorage.getItem(THEME_KEY);
-	if (localTheme) {
-		setTheme(localTheme);
-	} else {
-		setTheme(DEFAULT_THEME);
-	}
+	// Just ensure DOM attribute matches store state
+	const theme = getThemeFromStore();
+	document.documentElement.setAttribute('data-theme', theme);
 }
 
 /**
