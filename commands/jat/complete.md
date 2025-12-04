@@ -409,69 +409,51 @@ Agent is now available for next task." \
 
 ---
 
-### STEP 8: Show Final Summary with Reflection
+### STEP 8: Show Final Summary (Single Unified Box)
 
-```bash
-echo ""
-echo "┌──────────────────────────────────────────────────────────────────────────┐"
-echo "│  ✅ Task Completed: $task_id \"$task_title\""
-echo "│  👤 Agent: $agent_name"
-echo "│  [JAT:IDLE]"
-echo "└──────────────────────────────────────────────────────────────────────────┘"
-echo ""
-echo "This session has completed its task. One agent = one session = one task."
-echo ""
-```
-
-**IMPORTANT: Provide a thoughtful completion reflection for the swarm commander:**
-
-After the completion banner, analyze the work you just completed and present:
+Output this SINGLE box containing everything - task info AND reflection together:
 
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║                    📝 COMPLETION REFLECTION                              ║
-╚══════════════════════════════════════════════════════════════════════════╝
-
-📋 What was accomplished:
-   • [Brief summary of the work completed]
-   • [Key changes made]
-   • [Problems solved]
-
-⚡ Quality signals:
-   • Tests: [passing/failing/none added]
-   • Build: [clean/warnings]
-   • Complexity: [straightforward | some challenges | significant obstacles]
-
-🔗 Cross-agent intel:
-   • Files modified: [list key files - helps commander spot conflicts]
-   • Patterns discovered: [conventions other agents should follow]
-   • Gotchas: [surprises or tricky areas other agents should know about]
-
-🔍 Could we apply this elsewhere?
-   • [Similar patterns/code elsewhere in the codebase]
-   • [Other files that might benefit from same treatment]
-   • [Related functionality that could be improved]
-
-✨ Ideas to make the app even better:
-   • [UX improvements related to this work]
-   • [Features that would complement this]
-   • [Technical debt or refactoring opportunities discovered]
-
-📊 Backlog impact:
-   • Unblocked: [any tasks that can now proceed]
-   • Discovered: [new work that should be added to backlog]
-   • Reprioritize: [any tasks that seem more/less urgent now]
-
-💡 Session complete. Close terminal when ready.
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ✅ Task Completed: $task_id "$task_title"                               │
+│  👤 Agent: $agent_name                                                   │
+│  [JAT:IDLE]                                                              │
+│                                                                          │
+│  📋 What was accomplished:                                               │
+│     • [Brief summary of the work completed]                              │
+│     • [Key changes made]                                                 │
+│     • [Problems solved]                                                  │
+│                                                                          │
+│  ⚡ Quality signals:                                                      │
+│     • Tests: [passing/failing/none added]                                │
+│     • Build: [clean/warnings]                                            │
+│     • Complexity: [straightforward | some challenges | obstacles]        │
+│                                                                          │
+│  🔗 Cross-agent intel:                                                   │
+│     • Files: [key files modified]                                        │
+│     • Patterns: [conventions other agents should follow]                 │
+│     • Gotchas: [surprises or tricky areas]                               │
+│                                                                          │
+│  🔍 Apply elsewhere:                                                     │
+│     • [Similar code that could benefit from same treatment]              │
+│                                                                          │
+│  ✨ Ideas to improve the app:                                            │
+│     • [UX improvements, features, or tech debt discovered]               │
+│                                                                          │
+│  📊 Backlog impact:                                                      │
+│     • Unblocked: [tasks that can now proceed]                            │
+│     • Discovered: [new work to add]                                      │
+│                                                                          │
+│  💡 Session complete. Close terminal when ready.                         │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Guidelines for the reflection:**
-- **Be specific** about what was accomplished - the commander needs to understand impact
-- **Surface conflicts** - mention files touched that parallel agents might also need
-- **Share discoveries** - patterns, conventions, and gotchas help the whole swarm
-- **Think strategically** - how does this work affect the broader development effort?
-- **Keep it actionable** - every insight should help the commander make decisions
-- Don't recommend "next tasks" from Beads - focus on insights from this work
+**Guidelines:**
+- Everything goes in ONE box - do not output a second box or "Next steps" menu
+- Be specific about what was accomplished
+- Surface conflicts - files touched that parallel agents might need
+- Share discoveries - patterns and gotchas help the whole swarm
+- Keep it actionable - insights should help the commander make decisions
 
 ---
 
@@ -540,41 +522,35 @@ This preserves attribution and maintains the audit trail.
 │  👤 Agent: SwiftMoon                                                     │
 │  📝 Note: Backfilled from spontaneous work                               │
 │  [JAT:IDLE]                                                              │
+│                                                                          │
+│  📋 What was accomplished:                                               │
+│     • Fixed jat CLI -p flag that caused non-interactive sessions         │
+│     • Changed from -p flag to positional argument for prompt passing     │
+│     • Sessions now stay interactive as expected                          │
+│                                                                          │
+│  ⚡ Quality signals:                                                      │
+│     • Tests: passing (added 2 new CLI tests)                             │
+│     • Build: clean                                                       │
+│     • Complexity: straightforward once root cause identified             │
+│                                                                          │
+│  🔗 Cross-agent intel:                                                   │
+│     • Files: cli/jat, scripts/setup-bash-functions.sh                    │
+│     • Patterns: Claude's -p flag conflicts with interactive mode         │
+│     • Gotchas: Must use positional args for prompts, not flags           │
+│                                                                          │
+│  🔍 Apply elsewhere:                                                     │
+│     • Check other CLI scripts in ~/code/jat/cli/ for similar issues      │
+│                                                                          │
+│  ✨ Ideas to improve the app:                                            │
+│     • Add --verbose flag to jat CLI for debugging session issues         │
+│     • Consider adding a --dry-run mode to preview what would be launched │
+│                                                                          │
+│  📊 Backlog impact:                                                      │
+│     • Unblocked: None directly                                           │
+│     • Discovered: Should audit all CLI scripts for flag compatibility    │
+│                                                                          │
+│  💡 Session complete. Close terminal when ready.                         │
 └──────────────────────────────────────────────────────────────────────────┘
-
-╔══════════════════════════════════════════════════════════════════════════╗
-║                    📝 COMPLETION REFLECTION                              ║
-╚══════════════════════════════════════════════════════════════════════════╝
-
-📋 What was accomplished:
-   • Fixed jat CLI -p flag that caused non-interactive sessions
-   • Changed from -p flag to positional argument for prompt passing
-   • Sessions now stay interactive as expected
-
-⚡ Quality signals:
-   • Tests: passing (added 2 new CLI tests)
-   • Build: clean
-   • Complexity: straightforward once root cause identified
-
-🔗 Cross-agent intel:
-   • Files modified: cli/jat, scripts/setup-bash-functions.sh
-   • Patterns discovered: Claude's -p flag conflicts with interactive mode
-   • Gotchas: Must use positional args for prompts, not flags
-
-🔍 Could we apply this elsewhere?
-   • Check other CLI scripts in ~/code/jat/cli/ for similar flag issues
-   • The setup-bash-functions.sh might have similar invocation patterns
-
-✨ Ideas to make the app even better:
-   • Add --verbose flag to jat CLI for debugging session issues
-   • Consider adding a --dry-run mode to preview what would be launched
-
-📊 Backlog impact:
-   • Unblocked: None directly
-   • Discovered: Should audit all CLI scripts for flag compatibility
-   • Reprioritize: None
-
-💡 Session complete. Close terminal when ready.
 ```
 
 ---
@@ -611,45 +587,37 @@ This preserves attribution and maintains the audit trail.
 │  ✅ Task Completed: jat-abc "Add user settings page"                     │
 │  👤 Agent: JustGrove                                                     │
 │  [JAT:IDLE]                                                              │
+│                                                                          │
+│  📋 What was accomplished:                                               │
+│     • Added new user settings page at /account/settings                  │
+│     • Implemented form fields for profile, notifications, privacy        │
+│     • Connected to existing user API endpoints with proper validation    │
+│                                                                          │
+│  ⚡ Quality signals:                                                      │
+│     • Tests: passing (added 8 new component tests)                       │
+│     • Build: clean                                                       │
+│     • Complexity: some challenges (form state management was tricky)     │
+│                                                                          │
+│  🔗 Cross-agent intel:                                                   │
+│     • Files: routes/account/settings/+page.svelte, SettingsForm.svelte   │
+│     • Patterns: Using $state runes for form state, validation in server  │
+│     • Gotchas: User API returns nested objects - flatten for form binding│
+│                                                                          │
+│  🔍 Apply elsewhere:                                                     │
+│     • Form validation pattern could improve /account/profile             │
+│     • Notification prefs component could be reused in team settings      │
+│                                                                          │
+│  ✨ Ideas to improve the app:                                            │
+│     • Real-time preview for notification settings                        │
+│     • Keyboard shortcuts for power users (Cmd+S to save)                 │
+│     • Auto-save on change instead of explicit save button                │
+│                                                                          │
+│  📊 Backlog impact:                                                      │
+│     • Unblocked: Team settings can reuse notification component          │
+│     • Discovered: Profile page could use same form patterns              │
+│                                                                          │
+│  💡 Session complete. Close terminal when ready.                         │
 └──────────────────────────────────────────────────────────────────────────┘
-
-This session has completed its task. One agent = one session = one task.
-
-╔══════════════════════════════════════════════════════════════════════════╗
-║                    📝 COMPLETION REFLECTION                              ║
-╚══════════════════════════════════════════════════════════════════════════╝
-
-📋 What was accomplished:
-   • Added new user settings page at /account/settings
-   • Implemented form fields for profile, notifications, privacy preferences
-   • Connected to existing user API endpoints with proper validation
-
-⚡ Quality signals:
-   • Tests: passing (added 8 new component tests)
-   • Build: clean
-   • Complexity: some challenges (form state management was tricky)
-
-🔗 Cross-agent intel:
-   • Files modified: routes/account/settings/+page.svelte, lib/components/SettingsForm.svelte
-   • Patterns discovered: Using $state runes for form state, validation in +page.server.ts
-   • Gotchas: The user API returns nested objects - need to flatten for form binding
-
-🔍 Could we apply this elsewhere?
-   • The form validation pattern used here could improve /account/profile
-   • The notification preferences component could be reused in team settings
-   • Similar settings UI could benefit the admin dashboard
-
-✨ Ideas to make the app even better:
-   • Add real-time preview for notification settings (show sample notification)
-   • Consider adding keyboard shortcuts for power users (Cmd+S to save)
-   • The settings could auto-save on change instead of requiring explicit save
-
-📊 Backlog impact:
-   • Unblocked: Team settings task can now reuse notification component
-   • Discovered: Profile page could use same form patterns (consider refactoring)
-   • Reprioritize: Admin dashboard settings seems higher value now
-
-💡 Session complete. Close terminal when ready.
 ```
 
 **Markers explained:**
