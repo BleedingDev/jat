@@ -1235,6 +1235,15 @@
 			/shall I mark.*complete/i,
 			/mark.*as complete\??/i,
 			/should I.*complete.*task/i,
+			// Patterns for when agent completes substantial work and presents it
+			/let me know (?:if|when|what)/i,
+			/please (?:review|check|look at|see)/i,
+			/i['']?ve (?:completed|finished|created|implemented|updated|fixed|added|written|built)/i,
+			/(?:changes|updates|fixes|implementation|feature|analysis|document|code) (?:is|are|has been|have been) (?:done|ready|complete|finished)/i,
+			/task (?:is )?(?:done|complete|finished)/i,
+			/work (?:is )?(?:done|complete|finished)/i,
+			/that['']?s (?:it|all|everything|done)/i,
+			/run.*\/jat:complete/i,  // Agent suggesting to run complete command
 		]);
 		const completingPos = findLastPos([
 			// Triggered when user runs /jat:complete command

@@ -266,7 +266,11 @@ Read the full task details and start coding.
 
 ## When You Finish Working
 
-**Output "Ready for Review" - NOT "Complete".**
+**🚨 CRITICAL: You MUST output the `[JAT:NEEDS_REVIEW]` marker when done.**
+
+The dashboard detects your state by scanning terminal output. Without this marker, you'll show "Working" even when you're done. This confuses users who don't know you're waiting for them.
+
+**Always output this exact format:**
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -280,6 +284,18 @@ Changes made:
 
 Run /jat:complete when ready to close this task.
 ```
+
+**When to output this marker:**
+- After completing any substantial code changes
+- After writing documentation or analysis
+- After fixing a bug (even if more testing is recommended)
+- Before asking "should I mark this complete?"
+- Whenever you're done and waiting for user input
+
+**Do NOT:**
+- Say "I'm done" without the marker
+- Just stop outputting and wait
+- Use vague phrases like "let me know if you have questions"
 
 **Do NOT say "Task Complete" until the user runs `/jat:complete`.**
 
@@ -335,6 +351,12 @@ The task is still `in_progress` in Beads until `/jat:complete` runs `bd close`.
 
 **Most recent marker wins.** Dashboard scans terminal output for these patterns.
 
+**Why markers matter:**
+- Without explicit markers, users don't know you're waiting for them
+- The dashboard shows "Working" indefinitely if no state change is detected
+- Agents that "go quiet" without a marker appear stuck
+- **Always output `[JAT:NEEDS_REVIEW]` when you finish working**
+
 ---
 
 ## Error Handling
@@ -383,7 +405,11 @@ Options:
 # Skip conflict checks
 /jat:start jat-abc quick
 
-# When done coding
-# → Output [JAT:NEEDS_REVIEW] and summary
-# → User runs /jat:complete
+# When done coding - ALWAYS output this:
+echo "🔍 READY FOR REVIEW: {task-id}"
+echo "[JAT:NEEDS_REVIEW]"
+echo ""
+echo "Changes made:"
+echo "  - ..."
+# → Then wait for user to run /jat:complete
 ```
