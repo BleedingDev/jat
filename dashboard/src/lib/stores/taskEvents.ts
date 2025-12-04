@@ -5,7 +5,7 @@
 
 import { writable } from 'svelte/store';
 
-export type TaskEventType = 'task-created' | 'task-updated' | 'task-released';
+export type TaskEventType = 'task-created' | 'task-updated' | 'task-released' | 'task-start-requested';
 
 export interface TaskEvent {
 	type: TaskEventType;

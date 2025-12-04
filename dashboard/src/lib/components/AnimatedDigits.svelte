@@ -32,7 +32,7 @@
 <span class="inline-flex items-baseline font-mono {className}" {style} aria-label={value}>
 	{#each characters as char, i (i)}
 		{#if /\d/.test(char)}
-			<span class="countdown">
+			<span class="countdown mt-1">
 				<span style="--value:{parseInt(char)};" aria-hidden="true">{char}</span>
 			</span>
 		{:else}
