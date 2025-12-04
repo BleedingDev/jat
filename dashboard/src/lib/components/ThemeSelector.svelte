@@ -49,6 +49,7 @@
 	];
 
 	let currentTheme = $state('nord');
+	let isAnimating = $state(false);
 
 	// Get display label for current theme
 	const currentThemeLabel = $derived(
@@ -69,8 +70,21 @@
 	});
 
 	function handleThemeChange(themeName: string) {
-		currentTheme = themeName;
-		setTheme(themeName);
+		if (themeName === currentTheme) return;
+
+		// Trigger animation
+		isAnimating = true;
+
+		// Change theme after a brief delay to let animation start
+		setTimeout(() => {
+			currentTheme = themeName;
+			setTheme(themeName);
+		}, 150);
+
+		// Reset animation state
+		setTimeout(() => {
+			isAnimating = false;
+		}, 500);
 	}
 </script>
 
@@ -85,18 +99,19 @@
 		title={compact ? currentThemeLabel : 'Change Theme'}
 		data-tip={compact ? currentThemeLabel : undefined}
 	>
-		<!-- Theme color preview blocks -->
+		<!-- Theme color preview blocks with animation -->
 		<div
 			data-theme={currentTheme}
-			class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-0.5 shadow-sm w-4 h-4"
+			class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-0.5 shadow-sm w-4 h-4 transition-transform duration-300 ease-out"
+			class:theme-spin={isAnimating}
 		>
-			<div class="bg-base-content size-1 rounded-full"></div>
-			<div class="bg-primary size-1 rounded-full"></div>
-			<div class="bg-secondary size-1 rounded-full"></div>
-			<div class="bg-accent size-1 rounded-full"></div>
+			<div class="bg-base-content size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 0ms"></div>
+			<div class="bg-primary size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 50ms"></div>
+			<div class="bg-secondary size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 100ms"></div>
+			<div class="bg-accent size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 150ms"></div>
 		</div>
 		{#if !compact}
-			<span class="text-sm font-medium">{currentThemeLabel}</span>
+			<span class="text-sm font-medium transition-opacity duration-200" class:opacity-50={isAnimating}>{currentThemeLabel}</span>
 		{/if}
 	</div>
 
@@ -165,3 +180,43 @@
 		</ul>
 	</div>
 </div>
+
+<style>
+	/* Theme toggle animation - spin and scale the preview grid */
+	.theme-spin {
+		animation: theme-spin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	@keyframes theme-spin {
+		0% {
+			transform: rotate(0deg) scale(1);
+		}
+		50% {
+			transform: rotate(180deg) scale(1.2);
+		}
+		100% {
+			transform: rotate(360deg) scale(1);
+		}
+	}
+
+	/* Staggered dot animation - each dot pulses with a delay */
+	.theme-dot-animate {
+		animation: dot-pulse 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+		animation-delay: var(--dot-delay);
+	}
+
+	@keyframes dot-pulse {
+		0% {
+			transform: scale(1);
+			opacity: 1;
+		}
+		50% {
+			transform: scale(0.5);
+			opacity: 0.5;
+		}
+		100% {
+			transform: scale(1);
+			opacity: 1;
+		}
+	}
+</style>
