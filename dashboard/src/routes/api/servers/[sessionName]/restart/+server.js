@@ -112,16 +112,6 @@ export async function POST({ params }) {
 		const portArg = port ? ` -- --port ${port}` : '';
 		const restartCommand = `npm run dev${portArg}`;
 
-		// Kill the existing session (Ctrl+C may cause it to exit entirely)
-		try {
-			await execAsync(`tmux kill-session -t "${sessionName}" 2>/dev/null`);
-		} catch {
-			// Session may already be dead
-		}
-
-		// Wait a moment for cleanup
-		await new Promise((resolve) => setTimeout(resolve, 500));
-
 		// Determine the correct working directory
 		// Check if dashboard subdirectory exists with package.json
 		let workDir = projectPath;
@@ -136,30 +126,23 @@ export async function POST({ params }) {
 			// Use projectPath as-is
 		}
 
-		// Create a new session with a shell (so it survives future restarts)
-		await execAsync(`tmux new-session -d -s "${sessionName}" -c "${workDir}"`);
+		// Create a restart script that runs in the background
+		// This survives even if we're restarting the server handling this request
+		const restartScript = `
+			sleep 0.5
+			tmux kill-session -t "${sessionName}" 2>/dev/null || true
+			sleep 0.5
+			tmux new-session -d -s "${sessionName}" -c "${workDir}"
+			sleep 0.2
+			tmux send-keys -t "${sessionName}" "${restartCommand}" Enter
+		`;
 
-		// Wait for session to be ready
-		await new Promise((resolve) => setTimeout(resolve, 200));
+		// Run in background with nohup so it survives if this server dies
+		await execAsync(`nohup bash -c '${restartScript}' >/dev/null 2>&1 &`);
 
-		// Send the dev command
-		await execAsync(`tmux send-keys -t "${sessionName}" "${restartCommand}" Enter`);
-
-		// Wait a moment and get output
-		await new Promise((resolve) => setTimeout(resolve, 500));
-
-		let output = '';
-		let lineCount = 0;
-		try {
-			const { stdout } = await execAsync(
-				`tmux capture-pane -p -e -t "${sessionName}" -S -50`,
-				{ maxBuffer: 1024 * 1024 }
-			);
-			output = stdout;
-			lineCount = stdout.split('\n').length;
-		} catch {
-			// Session might not have output yet
-		}
+		// Return immediately - the restart happens in the background
+		const output = 'Restarting server in background...';
+		const lineCount = 1;
 
 		return json({
 			success: true,
