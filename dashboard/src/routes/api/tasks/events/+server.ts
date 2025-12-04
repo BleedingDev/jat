@@ -5,11 +5,13 @@
 
 import { watch, type FSWatcher } from 'fs';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { join, dirname, basename } from 'path';
 
 // Dashboard runs from /home/jw/code/jat/dashboard
 // Beads file is at /home/jw/code/jat/.beads/issues.jsonl (parent directory)
 const BEADS_FILE = join(process.cwd(), '..', '.beads', 'issues.jsonl');
+const BEADS_DIR = dirname(BEADS_FILE);
+const BEADS_FILENAME = basename(BEADS_FILE);
 
 // Track connected clients and file watcher
 let watcher: FSWatcher | null = null;
@@ -91,7 +93,8 @@ function startWatcher() {
 		return;
 	}
 
-	console.log(`[SSE] Starting file watcher for: ${BEADS_FILE}`);
+	// Watch the DIRECTORY instead of the file - more reliable for atomic writes
+	console.log(`[SSE] Starting directory watcher for: ${BEADS_DIR} (watching ${BEADS_FILENAME})`);
 
 	// Initialize previous task IDs
 	getTaskIds().then(ids => {
@@ -100,9 +103,11 @@ function startWatcher() {
 	});
 
 	try {
-		watcher = watch(BEADS_FILE, { persistent: false }, (eventType) => {
-			console.log(`[SSE] File event: ${eventType}`);
-			if (eventType === 'change') {
+		// Watch the directory and filter for our target file
+		watcher = watch(BEADS_DIR, { persistent: false }, (eventType, filename) => {
+			// Only react to changes in our target file
+			if (filename === BEADS_FILENAME || filename === null) {
+				console.log(`[SSE] File event: ${eventType} for ${filename || 'unknown'}`);
 				// Debounce rapid changes
 				if (debounceTimer) clearTimeout(debounceTimer);
 				debounceTimer = setTimeout(() => {
@@ -112,10 +117,10 @@ function startWatcher() {
 		});
 
 		watcher.on('error', (err) => {
-			console.error('[SSE] Beads file watcher error:', err);
+			console.error('[SSE] Beads directory watcher error:', err);
 		});
 
-		console.log('[SSE] File watcher started successfully');
+		console.log('[SSE] Directory watcher started successfully');
 	} catch (err) {
 		console.error('[SSE] Failed to start beads watcher:', err);
 	}
