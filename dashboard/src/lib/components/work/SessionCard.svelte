@@ -47,6 +47,7 @@
 	import ServerStatusBadge from "./ServerStatusBadge.svelte";
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
 	import StreakCelebration from "$lib/components/StreakCelebration.svelte";
+	import SuggestedTasksSection from "./SuggestedTasksSection.svelte";
 	import {
 		SESSION_STATE_VISUALS,
 		SERVER_STATE_VISUALS,
@@ -567,6 +568,9 @@
 	let autoScroll = $state(true);
 	let userScrolledUp = $state(false);
 	let scrollContainerRef: HTMLDivElement | null = null;
+
+	// Suggested tasks panel expanded state
+	let suggestedTasksExpanded = $state(false);
 
 	// Tmux session resize state
 	// Tracks the output container width and resizes tmux to match
@@ -1568,6 +1572,58 @@
 	/** Check if any suggested tasks are detected */
 	const hasSuggestedTasks = $derived(detectedSuggestedTasks.length > 0);
 
+	/** Whether task creation is in progress */
+	let isCreatingSuggestedTasks = $state(false);
+
+	/** Create selected suggested tasks via bulk API */
+	async function createSuggestedTasks(selectedTasks: typeof detectedSuggestedTasks) {
+		if (selectedTasks.length === 0) return;
+
+		isCreatingSuggestedTasks = true;
+
+		try {
+			// Map tasks to the format expected by the bulk API
+			const tasksToCreate = selectedTasks.map((t) => ({
+				type: t.edits?.type || t.type || 'task',
+				title: t.edits?.title || t.title,
+				description: t.edits?.description || t.description || '',
+				priority: t.edits?.priority ?? t.priority ?? 2,
+				labels: [],
+				reason: t.reason,
+			}));
+
+			const response = await fetch('/api/tasks/bulk', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tasks: tasksToCreate }),
+			});
+
+			const result = await response.json();
+
+			if (response.ok && result.success) {
+				// Clear selections and edits for created tasks
+				selectedTasks.forEach((t, i) => {
+					const key = getSuggestedTaskKey(t, i);
+					// Deselect the task
+					const newSelections = new Map(suggestedTaskSelections);
+					newSelections.delete(key);
+					suggestedTaskSelections = newSelections;
+					// Clear edits
+					clearSuggestedTaskEdits(key);
+				});
+
+				// Log success
+				console.log(`[SuggestedTasks] Created ${result.created} tasks:`, result.results);
+			} else {
+				console.error('[SuggestedTasks] Creation failed:', result.message || result.error);
+			}
+		} catch (error) {
+			console.error('[SuggestedTasks] Error creating tasks:', error);
+		} finally {
+			isCreatingSuggestedTasks = false;
+		}
+	}
+
 	// Task to display - either active task or last completed task
 	const displayTask = $derived(
 		task || (sessionState === "completed" ? lastCompletedTask : null),
@@ -2315,6 +2371,18 @@
 						🧑 {pendingHumanActionsCount}
 					</span>
 				{/if}
+				<!-- Suggested Tasks indicator (shows when agent suggests tasks to create) -->
+				{#if hasSuggestedTasks}
+					<button
+						type="button"
+						class="badge badge-xs font-mono cursor-pointer hover:opacity-80 transition-opacity"
+						style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
+						title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''}"
+						onclick={() => suggestedTasksExpanded = !suggestedTasksExpanded}
+					>
+						💡 {detectedSuggestedTasks.length}
+					</button>
+				{/if}
 				<!-- Status action dropdown -->
 				<StatusActionBadge
 					{sessionState}
@@ -2682,6 +2750,18 @@
 							🧑 {pendingHumanActionsCount}
 						</span>
 					{/if}
+					<!-- Suggested Tasks indicator -->
+					{#if hasSuggestedTasks}
+						<button
+							type="button"
+							class="badge badge-xs font-mono mr-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+							style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
+							title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''}"
+							onclick={() => suggestedTasksExpanded = !suggestedTasksExpanded}
+						>
+							💡 {detectedSuggestedTasks.length}
+						</button>
+					{/if}
 					<StatusActionBadge
 						{sessionState}
 						{sessionName}
@@ -2959,6 +3039,22 @@
 					<p class="text-base-content/40 italic m-0">No output yet...</p>
 				{/if}
 			</div>
+
+			<!-- Suggested Tasks Section (when detected in output) -->
+			{#if hasSuggestedTasks && isAgentMode}
+				<div class="px-3 py-2 flex-shrink-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
+					<SuggestedTasksSection
+						tasks={detectedSuggestedTasks}
+						selectedCount={selectedSuggestedTasksCount}
+						onToggleSelection={toggleSuggestedTaskSelection}
+						getTaskKey={getSuggestedTaskKey}
+						onCreateTasks={createSuggestedTasks}
+						onEditTask={updateSuggestedTaskEdit}
+						onClearEdits={clearSuggestedTaskEdits}
+						isCreating={isCreatingSuggestedTasks}
+					/>
+				</div>
+			{/if}
 
 			<!-- Input Section -->
 			<div
@@ -3391,6 +3487,105 @@
 							style="color: oklch(0.65 0.02 250);"
 						>
 							Complete these manual steps before marking task as done
+						</div>
+					</div>
+				{/if}
+
+				<!-- Suggested Tasks Panel: Display when badge is clicked and tasks exist -->
+				{#if suggestedTasksExpanded && hasSuggestedTasks}
+					<div
+						class="mb-2 p-2.5 rounded-lg"
+						style="background: linear-gradient(135deg, oklch(0.25 0.08 250) 0%, oklch(0.22 0.05 245) 100%); border: 1px solid oklch(0.45 0.15 250);"
+					>
+						<!-- Header -->
+						<div class="flex items-center justify-between gap-2 mb-2">
+							<div class="flex items-center gap-2">
+								<span
+									class="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold"
+									style="background: oklch(0.40 0.18 250); color: oklch(0.98 0.02 250);"
+								>
+									💡 SUGGESTED
+								</span>
+								<span
+									class="text-xs font-semibold"
+									style="color: oklch(0.95 0.08 250);"
+								>
+									{detectedSuggestedTasks.length} task{detectedSuggestedTasks.length > 1 ? 's' : ''} to create
+								</span>
+							</div>
+							<!-- Close button -->
+							<button
+								type="button"
+								class="btn btn-ghost btn-xs"
+								onclick={() => suggestedTasksExpanded = false}
+								title="Close"
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+
+						<!-- Task items list -->
+						<div class="flex flex-col gap-1.5">
+							{#each detectedSuggestedTasks as suggestedTask, index (getSuggestedTaskKey(suggestedTask, index))}
+								{@const taskKey = getSuggestedTaskKey(suggestedTask, index)}
+								<div
+									class="flex items-start gap-2 p-2 rounded text-left"
+									style="background: oklch(0.28 0.04 250); border: 1px solid oklch(0.40 0.08 250);"
+								>
+									<!-- Priority badge -->
+									<span
+										class="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold mt-0.5"
+										style="background: {suggestedTask.priority === 0 ? 'oklch(0.50 0.20 25)' :
+											suggestedTask.priority === 1 ? 'oklch(0.55 0.18 50)' :
+											suggestedTask.priority === 2 ? 'oklch(0.50 0.15 250)' :
+											'oklch(0.40 0.05 250)'}; color: oklch(0.98 0.02 250);"
+									>
+										P{suggestedTask.priority}
+									</span>
+									<!-- Task content -->
+									<div class="flex-1 min-w-0">
+										<div
+											class="text-xs font-semibold"
+											style="color: oklch(0.95 0.05 250);"
+										>
+											{suggestedTask.title}
+										</div>
+										{#if suggestedTask.description}
+											<div
+												class="text-[11px] mt-0.5 opacity-70 line-clamp-2"
+												style="color: oklch(0.80 0.02 250);"
+											>
+												{suggestedTask.description}
+											</div>
+										{/if}
+										{#if suggestedTask.reason}
+											<div
+												class="text-[10px] mt-1 italic opacity-50"
+												style="color: oklch(0.70 0.05 250);"
+											>
+												Reason: {suggestedTask.reason}
+											</div>
+										{/if}
+									</div>
+									<!-- Type badge -->
+									<span
+										class="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono opacity-70"
+										style="background: oklch(0.35 0.02 250); color: oklch(0.85 0.02 250);"
+									>
+										{suggestedTask.type}
+									</span>
+								</div>
+							{/each}
+						</div>
+
+						<!-- Hint -->
+						<div
+							class="text-[10px] mt-2 opacity-50"
+							style="color: oklch(0.65 0.02 250);"
+						>
+							Agent-suggested tasks from recent output. Review and create as needed.
 						</div>
 					</div>
 				{/if}
