@@ -8,13 +8,15 @@
 	import TaskCreationDrawer from '$lib/components/TaskCreationDrawer.svelte';
 	import SpawnModal from '$lib/components/SpawnModal.svelte';
 	import OutputDrawer from '$lib/components/OutputDrawer.svelte';
+	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
+	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime } from '$lib/utils/soundEffects';
 	import { initSessionEvents, closeSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, openTaskDrawer } from '$lib/stores/drawerStore';
+	import { availableProjects, openTaskDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
@@ -580,6 +582,15 @@
 
 <!-- Output Drawer (global session output panel) -->
 <OutputDrawer />
+
+<!-- Global Task Detail Drawer (for inspecting tasks from anywhere) -->
+<TaskDetailDrawer
+	bind:taskId={$taskDetailDrawerTaskId}
+	bind:isOpen={$isTaskDetailDrawerOpen}
+/>
+
+<!-- Global Toast Notifications -->
+<ToastContainer />
 
 <!-- Sound Permission Toast -->
 {#if showSoundPrompt}
