@@ -188,9 +188,11 @@
 		{ value: 'bug', label: 'Bug', icon: '🐛' },
 		{ value: 'feature', label: 'Feature', icon: '✨' },
 		{ value: 'epic', label: 'Epic', icon: '🏔️' },
-		{ value: 'chore', label: 'Chore', icon: '🔧' },
-		{ value: 'human', label: 'Human', icon: '🧑' }
+		{ value: 'chore', label: 'Chore', icon: '🔧' }
 	];
+
+	// Human action toggle - adds 'human-action' label when checked
+	let isHumanAction = $state(false);
 
 	// Dynamic projects list from store (populated by layout from tasks)
 	let dynamicProjects = $state<string[]>([]);
@@ -603,11 +605,16 @@
 		isSubmitting = true;
 
 		try {
-			// Parse labels
+			// Parse labels and add human-action if checkbox is checked
 			const labels = formData.labels
 				.split(',')
 				.map((l) => l.trim())
 				.filter((l) => l.length > 0);
+
+			// Add human-action label if toggle is enabled
+			if (isHumanAction && !labels.includes('human-action')) {
+				labels.push('human-action');
+			}
 
 			// Get dependencies from selected list
 			const dependencies = selectedDependencies.map(d => d.id);
@@ -754,6 +761,9 @@
 		selectedDependencies = [];
 		availableTasks = [];
 		showDependencyDropdown = false;
+
+		// Reset human action toggle
+		isHumanAction = false;
 
 		// Reset AI suggestion state
 		isLoadingSuggestions = false;
@@ -1123,6 +1133,30 @@
 								</label>
 							{/if}
 						</div>
+					</div>
+
+					<!-- Human Action Toggle - Industrial -->
+					<div class="form-control">
+						<label class="label cursor-pointer justify-start gap-3">
+							<input
+								type="checkbox"
+								class="toggle toggle-sm"
+								style={isHumanAction
+									? 'background-color: oklch(0.70 0.18 45); border-color: oklch(0.70 0.18 45);'
+									: ''}
+								bind:checked={isHumanAction}
+								disabled={isSubmitting}
+							/>
+							<span class="flex items-center gap-2">
+								<span style="font-size: 1.1rem;">🧑</span>
+								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: {isHumanAction ? 'oklch(0.85 0.15 45)' : 'oklch(0.55 0.02 250)'};">
+									Human action required
+								</span>
+							</span>
+						</label>
+						<span class="text-xs ml-12" style="color: oklch(0.45 0.02 250);">
+							Tasks that require human intervention (not agent work)
+						</span>
 					</div>
 
 					<!-- Project - Industrial -->
