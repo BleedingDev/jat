@@ -15,7 +15,7 @@
 	import { initSessionEvents, closeSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
 	import { availableProjects, openTaskDrawer } from '$lib/stores/drawerStore';
-	import { hoveredSessionName } from '$lib/stores/hoveredSession';
+	import { hoveredSessionName, triggerCompleteFlash } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
 
@@ -342,6 +342,8 @@
 			event.preventDefault();
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
+				// Trigger visual feedback immediately
+				triggerCompleteFlash(sessionName);
 				try {
 					// Send Ctrl+C first to clear any stray characters in input
 					await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
@@ -400,6 +402,105 @@
 				}
 			} catch (err) {
 				console.error('Error spawning session:', err);
+			}
+			return;
+		}
+
+		// Alt+K = Kill hovered session (closes task and kills tmux session)
+		if (event.altKey && event.code === 'KeyK') {
+			event.preventDefault();
+			const sessionName = get(hoveredSessionName);
+			if (sessionName) {
+				try {
+					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}`, {
+						method: 'DELETE'
+					});
+					if (!response.ok) {
+						console.error('Failed to kill session:', await response.text());
+					}
+				} catch (err) {
+					console.error('Error killing session:', err);
+				}
+			}
+			return;
+		}
+
+		// Alt+I = Interrupt hovered session (send Ctrl+C)
+		if (event.altKey && event.code === 'KeyI') {
+			event.preventDefault();
+			const sessionName = get(hoveredSessionName);
+			if (sessionName) {
+				try {
+					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'ctrl-c' })
+					});
+					if (!response.ok) {
+						console.error('Failed to interrupt session:', await response.text());
+					}
+				} catch (err) {
+					console.error('Error interrupting session:', err);
+				}
+			}
+			return;
+		}
+
+		// Alt+P = Pause hovered session (send /jat:pause command)
+		if (event.altKey && event.code === 'KeyP') {
+			event.preventDefault();
+			const sessionName = get(hoveredSessionName);
+			if (sessionName) {
+				try {
+					// Send Ctrl+C first to clear any stray characters in input
+					await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'ctrl-c' })
+					});
+					await new Promise((r) => setTimeout(r, 50));
+					// Send the pause command
+					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							type: 'text',
+							input: '/jat:pause'
+						})
+					});
+					if (!response.ok) {
+						console.error('Failed to send pause command:', await response.text());
+					} else {
+						// Send extra Enter after delay - Claude Code needs double Enter for slash commands
+						await new Promise((r) => setTimeout(r, 100));
+						await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ type: 'enter' })
+						});
+					}
+				} catch (err) {
+					console.error('Error sending pause command:', err);
+				}
+			}
+			return;
+		}
+
+		// Alt+R = Restart hovered session (kill and respawn with same task)
+		if (event.altKey && event.code === 'KeyR') {
+			event.preventDefault();
+			const sessionName = get(hoveredSessionName);
+			if (sessionName) {
+				try {
+					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/restart`, {
+						method: 'POST'
+					});
+					if (!response.ok) {
+						console.error('Failed to restart session:', await response.text());
+					}
+				} catch (err) {
+					console.error('Error restarting session:', err);
+				}
 			}
 			return;
 		}
