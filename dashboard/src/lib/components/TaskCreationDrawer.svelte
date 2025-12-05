@@ -188,7 +188,8 @@
 		{ value: 'bug', label: 'Bug', icon: '🐛' },
 		{ value: 'feature', label: 'Feature', icon: '✨' },
 		{ value: 'epic', label: 'Epic', icon: '🏔️' },
-		{ value: 'chore', label: 'Chore', icon: '🔧' }
+		{ value: 'chore', label: 'Chore', icon: '🔧' },
+		{ value: 'human', label: 'Human', icon: '🧑' }
 	];
 
 	// Dynamic projects list from store (populated by layout from tasks)
