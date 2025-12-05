@@ -115,6 +115,7 @@
 		usageLoading?: boolean; // Agent mode: show skeleton while loading usage data
 		sparklineData?: SparklineDataPoint[]; // Agent mode: hourly token usage
 		activityData?: number[]; // Server mode: terminal activity sparkline
+		contextPercent?: number; // Agent mode: context remaining percentage (0-100)
 		isComplete?: boolean; // Agent mode: task completion state
 		startTime?: Date | null; // When work started (for elapsed time)
 		created?: string; // Session creation timestamp
@@ -166,6 +167,7 @@
 		usageLoading = false,
 		sparklineData = [],
 		activityData = [],
+		contextPercent,
 		isComplete = false,
 		startTime = null,
 		created = "",
@@ -2965,6 +2967,16 @@
 						variant="integrated"
 					/>
 				</div>
+				<!-- Context Progress Bar - bottom border showing context remaining -->
+				{#if contextPercent !== undefined}
+					{@const progressColor = contextPercent > 50 ? 'progress-success' : contextPercent > 25 ? 'progress-warning' : 'progress-error'}
+					<progress
+						class="progress {progressColor} h-0.5 w-full absolute bottom-0 left-0 rounded-none"
+						value={contextPercent}
+						max="100"
+						title="{contextPercent}% context remaining"
+					></progress>
+				{/if}
 			</div>
 		{:else}
 			<!-- Server Tab - positioned at top-right, pulled up to top of container -->
