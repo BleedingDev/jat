@@ -190,7 +190,7 @@ export async function POST({ request }) {
 
 		try {
 			const escapedPrompt = initialPrompt.replace(/"/g, '\\"');
-			await execAsync(`tmux send-keys -t "${sessionName}" "${escapedPrompt}"`);
+			await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}"`);
 			await new Promise(resolve => setTimeout(resolve, 100));
 			await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 		} catch (err) {
@@ -207,7 +207,7 @@ export async function POST({ request }) {
 			try {
 				// Send the image path as input - the agent can then view it with Read tool
 				const escapedPath = imagePath.replace(/"/g, '\\"');
-				await execAsync(`tmux send-keys -t "${sessionName}" "${escapedPath}"`);
+				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPath}"`);
 				await new Promise(resolve => setTimeout(resolve, 100));
 				await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 				console.log(`[spawn] Sent image path to session ${sessionName}: ${imagePath}`);

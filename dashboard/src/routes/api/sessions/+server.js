@@ -155,7 +155,7 @@ export async function POST({ request }) {
 				await new Promise(resolve => setTimeout(resolve, 5000));
 				const escapedPrompt = initialPrompt.replace(/"/g, '\\"');
 				// Send prompt text first, then Enter separately for reliability
-				await execAsync(`tmux send-keys -t "${sessionName}" "${escapedPrompt}"`);
+				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}"`);
 				await new Promise(resolve => setTimeout(resolve, 100));
 				await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 			}

@@ -113,7 +113,7 @@ export async function POST({ params }) {
 
 		try {
 			const escapedPrompt = initialPrompt.replace(/"/g, '\\"');
-			await execAsync(`tmux send-keys -t "${sessionId}" "${escapedPrompt}"`);
+			await execAsync(`tmux send-keys -t "${sessionId}" -- "${escapedPrompt}"`);
 			await new Promise(resolve => setTimeout(resolve, 100));
 			await execAsync(`tmux send-keys -t "${sessionId}" Enter`);
 		} catch (err) {

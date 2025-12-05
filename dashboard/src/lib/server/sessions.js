@@ -314,10 +314,11 @@ export function sendInput(agentName, input, pressEnter = true) {
 
 		if (pressEnter) {
 			// Send input followed by Enter key
-			execSync(`tmux send-keys -t "${sessionName}" -l "${escapedInput}"`, { stdio: 'pipe' });
+			// Use -- to signal end of options (prevents input starting with - from being parsed as flag)
+			execSync(`tmux send-keys -t "${sessionName}" -l -- "${escapedInput}"`, { stdio: 'pipe' });
 			execSync(`tmux send-keys -t "${sessionName}" Enter`, { stdio: 'pipe' });
 		} else {
-			execSync(`tmux send-keys -t "${sessionName}" -l "${escapedInput}"`, { stdio: 'pipe' });
+			execSync(`tmux send-keys -t "${sessionName}" -l -- "${escapedInput}"`, { stdio: 'pipe' });
 		}
 
 		return { success: true };
@@ -353,10 +354,11 @@ export async function sendInputAsync(agentName, input, pressEnter = true) {
 		const escapedInput = input.replace(/"/g, '\\"');
 
 		if (pressEnter) {
-			await execAsync(`tmux send-keys -t "${sessionName}" -l "${escapedInput}"`);
+			// Use -- to signal end of options (prevents input starting with - from being parsed as flag)
+			await execAsync(`tmux send-keys -t "${sessionName}" -l -- "${escapedInput}"`);
 			await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 		} else {
-			await execAsync(`tmux send-keys -t "${sessionName}" -l "${escapedInput}"`);
+			await execAsync(`tmux send-keys -t "${sessionName}" -l -- "${escapedInput}"`);
 		}
 
 		return { success: true };
