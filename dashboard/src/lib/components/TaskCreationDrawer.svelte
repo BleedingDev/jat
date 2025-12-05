@@ -143,6 +143,72 @@
 	let isTitleRecording = $state(false);
 	let isDescriptionRecording = $state(false);
 
+	// Paste detection for multi-line text parsing
+	// When user pastes text with line breaks, parse first line as title and rest as description
+	async function handleTitlePaste(event: ClipboardEvent) {
+		const pastedText = event.clipboardData?.getData('text') || '';
+
+		// Only process if pasted text contains newlines (multi-line paste)
+		if (!pastedText.includes('\n')) {
+			return; // Let the default paste happen for single-line text
+		}
+
+		// Prevent default paste since we'll handle it
+		event.preventDefault();
+
+		// Split on first newline(s) - handle both \n and \r\n
+		const lines = pastedText.split(/\r?\n/);
+
+		// Find first non-empty line for title
+		let titleLine = '';
+		let descriptionStartIndex = 0;
+
+		for (let i = 0; i < lines.length; i++) {
+			const trimmed = lines[i].trim();
+			if (trimmed) {
+				titleLine = trimmed;
+				descriptionStartIndex = i + 1;
+				break;
+			}
+		}
+
+		// Collect remaining lines for description
+		const descriptionLines = lines.slice(descriptionStartIndex).filter(line => line.trim());
+		const description = descriptionLines.join('\n').trim();
+
+		// Set title (append to existing if any, or replace)
+		if (formData.title.trim()) {
+			// If there's existing title, append pasted title
+			formData.title = formData.title.trim() + ' ' + titleLine;
+		} else {
+			formData.title = titleLine;
+		}
+
+		// Set description (append to existing if any, or replace)
+		if (description) {
+			if (formData.description.trim()) {
+				formData.description = formData.description.trim() + '\n\n' + description;
+			} else {
+				formData.description = description;
+			}
+		}
+
+		// If we have both title and description now, trigger AI analysis immediately
+		if (formData.title.trim() && formData.description.trim()) {
+			// Small delay to let the state update
+			await tick();
+			fetchSuggestions();
+		}
+
+		// Focus remains on title input for user to adjust
+		// (already there since paste happened in title input)
+		await tick();
+		if (titleInput) {
+			// Move cursor to end of title for easy editing
+			titleInput.selectionStart = titleInput.selectionEnd = formData.title.length;
+		}
+	}
+
 	// Voice input handlers
 	function handleTitleTranscription(event: CustomEvent<string>) {
 		const text = event.detail;
@@ -929,11 +995,12 @@
 							<input
 								id="task-title"
 								type="text"
-								placeholder="Enter task title or use voice..."
+								placeholder="Paste task text or enter title..."
 								class="input flex-1 font-mono {validationErrors.title ? 'input-error' : ''}"
 								style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
 								bind:this={titleInput}
 								bind:value={formData.title}
+								onpaste={handleTitlePaste}
 								disabled={isSubmitting}
 								required
 								autofocus={isOpen}
