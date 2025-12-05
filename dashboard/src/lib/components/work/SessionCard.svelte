@@ -56,7 +56,7 @@
 		getServerStateVisual,
 	} from "$lib/config/statusColors";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
-	import { setHoveredSession, completingSessionFlash } from "$lib/stores/hoveredSession";
+	import { setHoveredSession, completingSessionFlash, highlightedSessionName } from "$lib/stores/hoveredSession";
 	import {
 		findHumanActionMarkers,
 		findSuggestedTasksMarker,
@@ -190,6 +190,12 @@
 
 	// Flash effect when Alt+C complete command is triggered
 	const isCompleteFlashing = $derived($completingSessionFlash === sessionName);
+
+	// Highlight effect when Alt+number jump is triggered
+	const isJumpHighlighted = $derived($highlightedSessionName === sessionName);
+
+	// Combined highlight state (from prop or jump)
+	const effectiveHighlighted = $derived(isHighlighted || isJumpHighlighted);
 
 	// Completion state
 	let showCompletionBanner = $state(false);
@@ -2242,10 +2248,11 @@
 	     ═══════════════════════════════════════════════════════════════════════════ -->
 	<article
 		class="unified-agent-card p-2 rounded-lg relative overflow-hidden {className} {isCompleteFlashing ? 'complete-flash-animation' : ''}"
-		class:ring-2={isHighlighted || sessionState === "needs-input" || isCompleteFlashing}
-		class:ring-primary={isHighlighted}
+		class:ring-2={effectiveHighlighted || sessionState === "needs-input" || isCompleteFlashing}
+		class:ring-primary={effectiveHighlighted}
 		class:ring-success={isCompleteFlashing}
-		class:ring-warning={sessionState === "needs-input" && !isCompleteFlashing}
+		class:ring-warning={sessionState === "needs-input" && !isCompleteFlashing && !effectiveHighlighted}
+		class:ring-info={isJumpHighlighted}
 		class:animate-pulse-subtle={sessionState === "needs-input" && !isCompleteFlashing}
 		style="
 			background: linear-gradient(135deg, {stateVisual.bgTint} 0%, oklch(0.18 0.01 250) 100%);
@@ -2254,7 +2261,9 @@
 			? 'box-shadow: 0 0 20px oklch(0.65 0.20 145 / 0.6);'
 			: sessionState === 'needs-input'
 				? 'box-shadow: 0 0 12px oklch(0.70 0.20 85 / 0.4);'
-				: ''}
+				: isJumpHighlighted
+					? 'box-shadow: 0 0 20px oklch(0.60 0.15 220 / 0.6);'
+					: ''}
 		"
 		data-agent-name={agentName}
 	>
@@ -2426,7 +2435,7 @@
 	     FULL MODE (agent/server) - Complete card with terminal output
 	     ═══════════════════════════════════════════════════════════════════════════ -->
 	<div
-		class="card h-full flex flex-col relative rounded-none {className} {isHighlighted
+		class="card h-full flex flex-col relative rounded-none {className} {effectiveHighlighted
 			? 'agent-highlight-flash ring-2 ring-info ring-offset-2 ring-offset-base-100'
 			: ''} {isCompleteFlashing ? 'complete-flash-animation' : ''}"
 		style="
@@ -2435,10 +2444,14 @@
 			? 'oklch(0.65 0.20 145)'
 			: showCompletionBanner
 				? 'oklch(0.65 0.20 145)'
-				: 'oklch(0.35 0.02 250)'};
+				: isJumpHighlighted
+					? 'oklch(0.60 0.15 220)'
+					: 'oklch(0.35 0.02 250)'};
 			box-shadow: {isCompleteFlashing
 			? '0 0 20px oklch(0.65 0.20 145 / 0.6), inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'
-			: 'inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'};
+			: isJumpHighlighted
+				? '0 0 20px oklch(0.60 0.15 220 / 0.6), inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'
+				: 'inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'};
 			width: {effectiveWidth ?? 640}px;
 			flex-shrink: 0;
 		"

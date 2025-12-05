@@ -15,9 +15,11 @@
 	import { initSessionEvents, closeSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
 	import { availableProjects, openTaskDrawer } from '$lib/stores/drawerStore';
-	import { hoveredSessionName, triggerCompleteFlash } from '$lib/stores/hoveredSession';
+	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
+	import { getSessions as getWorkSessions } from '$lib/stores/workSessions.svelte';
+	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
 
 	let { children } = $props();
 
@@ -501,6 +503,28 @@
 				} catch (err) {
 					console.error('Error restarting session:', err);
 				}
+			}
+			return;
+		}
+
+		// Alt+1 through Alt+9 = Jump to Nth session (work sessions first, then server sessions)
+		if (event.altKey && event.code >= 'Digit1' && event.code <= 'Digit9') {
+			event.preventDefault();
+			const index = parseInt(event.code.replace('Digit', ''), 10) - 1; // 0-indexed
+
+			// Get combined session list: work sessions first, then server sessions
+			const workSessions = getWorkSessions();
+			const serverSessions = getServerSessions();
+
+			// Combine sessions with work sessions first
+			const allSessions: Array<{ sessionName: string; agentName?: string; type: 'work' | 'server' }> = [
+				...workSessions.map(s => ({ sessionName: s.sessionName, agentName: s.agentName, type: 'work' as const })),
+				...serverSessions.map(s => ({ sessionName: s.sessionName, type: 'server' as const }))
+			];
+
+			if (index < allSessions.length) {
+				const session = allSessions[index];
+				jumpToSession(session.sessionName, session.agentName);
 			}
 			return;
 		}
