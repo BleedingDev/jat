@@ -1510,7 +1510,6 @@
 
 		// Use unified marker parser for safe JSON extraction
 		const marker = findSuggestedTasksMarker(recentOutput);
-
 		if (!marker || !marker.tasks.length) return [];
 
 		// Map parsed tasks to tasks with local UI state
@@ -1692,24 +1691,27 @@
 	async function createSuggestedTasksViaBulkApi(selectedTasks: SuggestedTaskWithState[]): Promise<void> {
 		if (selectedTasks.length === 0) return;
 
-		// Map tasks to the bulk API format
+		// Determine default project from current task ID if available
+		const currentTaskId = task?.id || displayTask?.id;
+		const defaultProject = currentTaskId ? getProjectFromTaskId(currentTaskId) : undefined;
+
+		// Map tasks to the bulk API format, including all editable fields
 		const tasksToCreate = selectedTasks.map((t) => ({
 			type: t.edits?.type || t.type || 'task',
 			title: t.edits?.title || t.title,
 			description: t.edits?.description || t.description || '',
 			priority: t.edits?.priority ?? t.priority ?? 2,
+			// Use task-specific project if set, otherwise use default from current task
+			project: t.edits?.project || t.project || defaultProject || undefined,
+			labels: t.edits?.labels || t.labels || undefined,
+			depends_on: t.edits?.depends_on || t.depends_on || undefined,
 		}));
-
-		// Determine project from task ID if available
-		const currentTaskId = task?.id || displayTask?.id;
-		const project = currentTaskId ? getProjectFromTaskId(currentTaskId) : undefined;
 
 		const response = await fetch('/api/tasks/bulk', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				tasks: tasksToCreate,
-				project: project || undefined
+				tasks: tasksToCreate
 			})
 		});
 
@@ -1727,8 +1729,9 @@
 	}
 
 	// Task to display - either active task or last completed task
+	// Show lastCompletedTask in both "completed" and "idle" states to maintain task linkage
 	const displayTask = $derived(
-		task || (sessionState === "completed" ? lastCompletedTask : null),
+		task || ((sessionState === "completed" || sessionState === "idle") ? lastCompletedTask : null),
 	);
 
 	// Get visual config from centralized statusColors.ts
