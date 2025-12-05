@@ -882,7 +882,7 @@
 
 	// Get agents who have worked on a project (for project header avatars)
 	// Shows all agents with assigned tasks, not just currently working ones
-	function getProjectWorkingAgents(project: string): string[] {
+	function getProjectAssignedAgents(project: string): string[] {
 		const epicMap = nestedGroupedTasks.get(project);
 		if (!epicMap) return [];
 		const agents = new Set<string>();
@@ -2215,7 +2215,7 @@
 				{#if groupingMode === 'project'}
 					{#each Array.from(nestedGroupedTasks.entries()) as [projectKey, epicMap]}
 						{@const projectTaskCount = getProjectTaskCount(projectKey)}
-						{@const projectWorkingAgents = getProjectWorkingAgents(projectKey)}
+						{@const projectAssignedAgents = getProjectAssignedAgents(projectKey)}
 						{@const isProjectCollapsed = collapsedProjects.has(projectKey)}
 
 						<!-- Project Header (Top-level, sticky) -->
@@ -2272,9 +2272,9 @@
 										</span>
 
 										<!-- Working agents avatars -->
-										{#if projectWorkingAgents.length > 0}
+										{#if projectAssignedAgents.length > 0}
 											<div class="flex items-center -space-x-1 ml-3">
-												{#each projectWorkingAgents.slice(0, 5) as agentName (agentName)}
+												{#each projectAssignedAgents.slice(0, 5) as agentName (agentName)}
 													<WorkingAgentBadge
 														name={agentName || ''}
 														size={22}
@@ -2283,10 +2283,10 @@
 														onClick={onagentclick}
 													/>
 												{/each}
-												{#if projectWorkingAgents.length > 5}
+												{#if projectAssignedAgents.length > 5}
 													<div class="avatar placeholder w-5">
 														<div class="bg-neutral text-neutral-content w-5 rounded-full text-[9px] font-mono">
-															+{projectWorkingAgents.length - 5}
+															+{projectAssignedAgents.length - 5}
 														</div>
 													</div>
 												{/if}
@@ -2309,7 +2309,7 @@
 								{@const epicVisual = getGroupHeaderInfo('parent', epicKey)}
 								{@const parentTask = [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicKey)}
 								{@const isEpicCollapsed = collapsedGroups.has(`${projectKey}::${epicKey}`)}
-								{@const epicWorkingAgents = [...new Set(epicTasks.filter(t => t.assignee).map(t => t.assignee))]}
+								{@const epicAssignedAgents = [...new Set(epicTasks.filter(t => t.assignee).map(t => t.assignee))]}
 								{@const hasChildTasks = epicTasks.some(t => extractParentId(t.id) === epicKey)}
 								{@const showEpicHeader = epicTasks.length >= 2 || hasChildTasks}
 
@@ -2370,9 +2370,9 @@
 													{/if}
 
 													<!-- Working agents -->
-													{#if epicWorkingAgents.length > 0}
+													{#if epicAssignedAgents.length > 0}
 														<div class="flex items-center -space-x-1 ml-3">
-															{#each epicWorkingAgents.slice(0, 4) as agentName (agentName)}
+															{#each epicAssignedAgents.slice(0, 4) as agentName (agentName)}
 																<WorkingAgentBadge
 																	name={agentName || ''}
 																	size={18}
@@ -2614,7 +2614,7 @@
 						{@const epicId = groupingMode === 'parent' ? groupKey : null}
 						{@const parentTask = epicId ? [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicId) : null}
 						{@const isCollapsed = collapsedGroups.has(groupKey)}
-						{@const workingAgents = [...new Set(typeTasks.filter(t => t.assignee).map(t => t.assignee))]}
+						{@const assignedAgents = [...new Set(typeTasks.filter(t => t.assignee).map(t => t.assignee))]}
 						<!-- In parent/project mode, only show collapsible header for groups with 2+ child tasks -->
 						<!-- Standalone tasks (single task where task.id === groupKey) get no header -->
 						{@const hasChildTasks = typeTasks.some(t => {
@@ -2683,9 +2683,9 @@
 										{/if}
 
 										<!-- Working agents avatars -->
-										{#if workingAgents.length > 0}
+										{#if assignedAgents.length > 0}
 											<div class="flex items-center -space-x-1 ml-3">
-												{#each workingAgents.slice(0, 4) as agentName (agentName)}
+												{#each assignedAgents.slice(0, 4) as agentName (agentName)}
 													<WorkingAgentBadge
 														name={agentName || ''}
 														size={20}
@@ -2694,10 +2694,10 @@
 														onClick={onagentclick}
 													/>
 												{/each}
-												{#if workingAgents.length > 4}
+												{#if assignedAgents.length > 4}
 													<div class="avatar placeholder w-5">
 														<div class="bg-neutral text-neutral-content w-5 rounded-full text-[9px] font-mono">
-															+{workingAgents.length - 4}
+															+{assignedAgents.length - 4}
 														</div>
 													</div>
 												{/if}
