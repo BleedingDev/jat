@@ -66,6 +66,7 @@
 		type SuggestedTask,
 	} from "$lib/utils/markerParser";
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
+	import { getFileTypeInfo, formatFileSize, type FileCategory } from "$lib/utils/fileUtils";
 	import { getTerminalHeight, getCtrlCIntercept, setCtrlCIntercept } from "$lib/stores/preferences.svelte";
 	import { successToast } from "$lib/stores/toasts.svelte";
 	import { availableProjects as availableProjectsStore } from "$lib/stores/drawerStore";
@@ -1033,14 +1034,17 @@
 		setHoveredSession(null);
 	}
 
-	// Attached images (pending upload)
-	interface AttachedImage {
+	// Attached files (pending upload) - supports images, PDFs, text, code, etc.
+	interface AttachedFile {
 		id: string;
 		blob: Blob;
-		preview: string; // Data URL for thumbnail
+		preview: string; // Object URL for thumbnail (images only)
 		name: string;
+		category: FileCategory; // File type category
+		icon: string; // SVG path for non-image files
+		iconColor: string; // oklch color for icon
 	}
-	let attachedImages = $state<AttachedImage[]>([]);
+	let attachedFiles = $state<AttachedFile[]>([]);
 
 	// Drag-and-drop state for file attachments
 	let isDragOver = $state(false);
@@ -2187,17 +2191,18 @@
 
 		// Need either text or images to send
 		const hasText = inputText.trim().length > 0;
-		const hasImages = attachedImages.length > 0;
-		if (!hasText && !hasImages) return;
+		const hasFiles = attachedFiles.length > 0;
+		if (!hasText && !hasFiles) return;
 
 		setSendingInput(true);
 		try {
-			// Upload all attached images first and collect paths
-			const imagePaths: string[] = [];
-			for (const img of attachedImages) {
+			// Upload all attached files first and collect paths
+			const filePaths: string[] = [];
+			for (const file of attachedFiles) {
 				const formData = new FormData();
-				formData.append("image", img.blob, `pasted-image-${Date.now()}.png`);
+				formData.append("file", file.blob, file.name);
 				formData.append("sessionName", sessionName);
+				formData.append("filename", file.name);
 
 				const response = await fetch("/api/work/upload-image", {
 					method: "POST",
@@ -2206,16 +2211,16 @@
 
 				if (response.ok) {
 					const { filePath } = await response.json();
-					imagePaths.push(filePath);
+					filePaths.push(filePath);
 				} else {
-					console.error("Failed to upload image:", img.name);
+					console.error("Failed to upload file:", file.name);
 				}
 			}
 
-			// Build the message: image paths first, then user text
+			// Build the message: file paths first, then user text
 			let message = "";
-			if (imagePaths.length > 0) {
-				message = imagePaths.join(" ");
+			if (filePaths.length > 0) {
+				message = filePaths.join(" ");
 				if (hasText) {
 					message += " " + inputText.trim();
 				}
@@ -2229,7 +2234,7 @@
 				if (
 					liveStreamEnabled &&
 					lastStreamedText === inputText.trim() &&
-					!hasImages
+					!hasFiles
 				) {
 					// Text already in terminal, just submit
 					await onSendInput("enter", "key");
@@ -2248,16 +2253,16 @@
 				}
 			}
 
-			// Clear input and attached images on success
+			// Clear input and attached files on success
 			inputText = "";
 			lastStreamedText = ""; // Reset streamed text tracking
 			// Reset textarea height after clearing
 			setTimeout(autoResizeTextarea, 0);
 			// Revoke object URLs to prevent memory leaks
-			for (const img of attachedImages) {
-				URL.revokeObjectURL(img.preview);
+			for (const file of attachedFiles) {
+				if (file.preview) URL.revokeObjectURL(file.preview);
 			}
-			attachedImages = [];
+			attachedFiles = [];
 		} finally {
 			setSendingInput(false);
 		}
@@ -2315,10 +2320,10 @@
 				e.preventDefault();
 				const blob = item.getAsFile();
 				if (blob) {
-					await attachImage(blob);
+					await attachFile(blob);
 					// Also archive to task if there's an active task
 					if (task?.id) {
-						await saveImageToTask(blob, task.id);
+						await saveFileToTask(blob, task.id);
 					}
 				}
 				return;
@@ -2327,24 +2332,46 @@
 		// For text, let the native paste happen (don't preventDefault)
 	}
 
-	// Attach an image (add to pending list, don't upload yet)
-	async function attachImage(blob: Blob) {
-		const id = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-		const name = `Image ${attachedImages.length + 1}`;
+	// Attach a file (add to pending list, don't upload yet)
+	async function attachFile(blob: Blob, filename?: string) {
+		const id = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-		// Create preview URL
-		const preview = URL.createObjectURL(blob);
+		// Determine file name and type info
+		let name: string;
+		let typeInfo;
+		if (blob instanceof File) {
+			name = blob.name;
+			typeInfo = getFileTypeInfo(blob);
+		} else {
+			// For blobs without a name (e.g., pasted images), infer from MIME type
+			const ext = blob.type.split('/')[1] || 'bin';
+			name = filename || `File ${attachedFiles.length + 1}.${ext}`;
+			// Create a mock File to get type info
+			const mockFile = new File([blob], name, { type: blob.type });
+			typeInfo = getFileTypeInfo(mockFile);
+		}
 
-		attachedImages = [...attachedImages, { id, blob, preview, name }];
+		// Create preview URL only for images
+		const preview = typeInfo.previewable ? URL.createObjectURL(blob) : '';
+
+		attachedFiles = [...attachedFiles, {
+			id,
+			blob,
+			preview,
+			name,
+			category: typeInfo.category,
+			icon: typeInfo.icon,
+			iconColor: typeInfo.color
+		}];
 	}
 
-	// Remove an attached image
-	function removeAttachedImage(id: string) {
-		const img = attachedImages.find((i) => i.id === id);
-		if (img) {
-			URL.revokeObjectURL(img.preview);
+	// Remove an attached file
+	function removeAttachedFile(id: string) {
+		const file = attachedFiles.find((f) => f.id === id);
+		if (file && file.preview) {
+			URL.revokeObjectURL(file.preview);
 		}
-		attachedImages = attachedImages.filter((i) => i.id !== id);
+		attachedFiles = attachedFiles.filter((f) => f.id !== id);
 	}
 
 	// Handle drag-and-drop for file attachments
@@ -2386,30 +2413,32 @@
 		const files = Array.from(e.dataTransfer.files);
 
 		for (const file of files) {
-			// Handle images - attach them directly
-			if (file.type.startsWith("image/")) {
-				await attachImage(file);
+			// Attach all file types (images, PDFs, text, code, etc.)
+			await attachFile(file);
 
-				// Also save to task for archival (if there's an active task)
-				if (task?.id) {
-					await saveImageToTask(file, task.id);
-				}
+			// Also save to task for archival (if there's an active task)
+			if (task?.id) {
+				await saveFileToTask(file, task.id);
 			}
-			// For non-image files, we could potentially handle them differently in the future
-			// For now, only image attachments are supported (same as paste behavior)
 		}
 	}
 
 	/**
-	 * Save an image to a task for archival in TaskDetailDrawer.
-	 * Uploads the image and stores the reference with the task.
+	 * Save a file to a task for archival in TaskDetailDrawer.
+	 * Uploads the file and stores the reference with the task.
 	 */
-	async function saveImageToTask(blob: Blob, taskId: string) {
+	async function saveFileToTask(blob: Blob, taskId: string) {
 		try {
+			// Determine filename from blob or generate one
+			const filename = blob instanceof File
+				? blob.name
+				: `task-${taskId}-${Date.now()}.${blob.type.split('/')[1] || 'bin'}`;
+
 			// Upload to server
 			const formData = new FormData();
-			formData.append("image", blob, `task-${taskId}-${Date.now()}.png`);
+			formData.append("file", blob, filename);
 			formData.append("sessionName", `task-${taskId}`);
+			formData.append("filename", filename);
 
 			const response = await fetch("/api/work/upload-image", {
 				method: "POST",
@@ -2417,25 +2446,25 @@
 			});
 
 			if (!response.ok) {
-				console.error("Failed to upload image for task archival");
+				console.error("Failed to upload file for task archival");
 				return;
 			}
 
 			const { filePath } = await response.json();
 
-			// Generate unique ID for this image
-			const imageId = `img-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+			// Generate unique ID for this file
+			const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
 			// Save to task for persistence (shows in TaskDetailDrawer)
 			await fetch(`/api/tasks/${taskId}/image`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ path: filePath, id: imageId, action: "add" }),
+				body: JSON.stringify({ path: filePath, id: fileId, action: "add" }),
 			});
 
-			console.log(`Archived image to task ${taskId}: ${filePath}`);
+			console.log(`Archived file to task ${taskId}: ${filePath}`);
 		} catch (err) {
-			console.error("Failed to archive image to task:", err);
+			console.error("Failed to archive file to task:", err);
 		}
 	}
 
@@ -2472,10 +2501,10 @@
 				);
 				if (imageType) {
 					const blob = await item.getType(imageType);
-					await attachImage(blob);
+					await attachFile(blob);
 					// Also archive to task if there's an active task
 					if (task?.id) {
-						await saveImageToTask(blob, task.id);
+						await saveFileToTask(blob, task.id);
 					}
 					return;
 				}
@@ -3005,9 +3034,26 @@
 			<!-- Combines: Agent Info + Status Dropdown into unified tab -->
 			<!-- Background uses gradient that matches the main card's left-to-right gradient -->
 			<div
-				class="absolute right-[-1px] top-0 -mt-8.5 z-10 flex flex-col rounded-lg rounded-bl-none rounded-br-none overflow-hidden"
+				class="absolute right-[-1px] top-0 -mt-8.5 z-10 flex flex-col rounded-lg rounded-bl-none rounded-br-none"
 				style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 0px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
 			>
+				<!-- Context Progress Bar - top border showing context remaining -->
+				{#if contextPercent != null && contextPercent >= 0}
+					{@const progressColor = contextPercent > 50 ? 'progress-success' : contextPercent > 25 ? 'progress-warning' : 'progress-error'}
+					<div class="w-full -mt-4 -mb-2 pr-0.5">
+						<progress
+							class="progress {progressColor} h-0.5 w-full rounded-xl"
+							value={contextPercent}
+							max="100"
+							title="{contextPercent}% context remaining"
+						></progress>
+					</div>
+				{:else}
+					<!-- Skeleton placeholder while context data loads -->
+					<div class="w-full px-1 -mt-1.75">
+						<div class="h-1.5 w-full rounded-sm skeleton opacity-40"></div>
+					</div>
+				{/if}
 				<!-- Main row: Agent Info + Status -->
 				<div class="flex items-center gap-0">
 				<!-- Agent Info Section -->
@@ -3096,16 +3142,6 @@
 					/>
 				</div>
 				</div>
-				<!-- Context Progress Bar - bottom border showing context remaining -->
-				{#if contextPercent != null && contextPercent >= 0}
-					{@const progressColor = contextPercent > 50 ? 'progress-success' : contextPercent > 25 ? 'progress-warning' : 'progress-error'}
-					<progress
-						class="progress {progressColor} h-1 w-full rounded-none"
-						value={contextPercent}
-						max="100"
-						title="{contextPercent}% context remaining"
-					></progress>
-				{/if}
 			</div>
 		{:else}
 			<!-- Server Tab - positioned at top-right, pulled up to top of container -->
@@ -3400,32 +3436,51 @@
 				class="px-3 py-2 flex-shrink-0"
 				style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);"
 			>
-				<!-- Attached Images Preview -->
-				{#if attachedImages.length > 0}
+				<!-- Attached Files Preview -->
+				{#if attachedFiles.length > 0}
 					<div class="flex items-center gap-1.5 mb-2 flex-wrap">
-						{#each attachedImages as img (img.id)}
+						{#each attachedFiles as file (file.id)}
 							<div
 								class="relative group flex items-center gap-1 px-1.5 py-0.5 rounded"
 								style="background: oklch(0.28 0.08 200); border: 1px solid oklch(0.35 0.06 200);"
 							>
-								<!-- Thumbnail preview -->
-								<img
-									src={img.preview}
-									alt={img.name}
-									class="w-5 h-5 object-cover rounded"
-								/>
-								<!-- Image name -->
+								<!-- File preview/icon -->
+								{#if file.category === 'image' && file.preview}
+									<img
+										src={file.preview}
+										alt={file.name}
+										class="w-5 h-5 object-cover rounded"
+									/>
+								{:else}
+									<!-- Icon for non-image files -->
+									<svg
+										class="w-4 h-4"
+										style="color: {file.iconColor};"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+										stroke-width="1.5"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d={file.icon}
+										/>
+									</svg>
+								{/if}
+								<!-- File name -->
 								<span
-									class="font-mono text-[10px]"
+									class="font-mono text-[10px] max-w-24 truncate"
 									style="color: oklch(0.85 0.02 250);"
+									title={file.name}
 								>
-									[{img.name}]
+									[{file.name}]
 								</span>
 								<!-- Remove button -->
 								<button
-									onclick={() => removeAttachedImage(img.id)}
+									onclick={() => removeAttachedFile(file.id)}
 									class="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
-									title="Remove image"
+									title="Remove file"
 								>
 									<svg
 										class="w-3 h-3"
@@ -4249,7 +4304,7 @@
 
 					<!-- RIGHT: Action buttons (context-dependent) -->
 					<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">
-						{#if inputText.trim() || attachedImages.length > 0}
+						{#if inputText.trim() || attachedFiles.length > 0}
 							<!-- User is typing: show Send button -->
 							<button
 								onclick={sendTextInput}

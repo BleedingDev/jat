@@ -16,14 +16,17 @@
 	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects } from '$lib/stores/drawerStore';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { playSuccessChime, playErrorSound, playAttachmentSound } from '$lib/utils/soundEffects';
+	import { getFileTypeInfo, formatFileSize, getAcceptAttribute, type FileCategory } from '$lib/utils/fileUtils';
 	import VoiceInput from './VoiceInput.svelte';
 
 	// Type for pending attachments (before upload)
 	interface PendingAttachment {
 		id: string;
 		file: File;
-		preview: string; // Object URL for preview
-		type: 'image' | 'file';
+		preview: string; // Object URL for preview (images only)
+		category: FileCategory; // File category from fileUtils
+		icon: string; // SVG path for non-image files
+		iconColor: string; // oklch color for icon
 	}
 
 	// Reactive state from store
@@ -501,15 +504,17 @@
 			// Generate unique ID
 			const id = `att-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
-			// Determine type and create preview
-			const isImage = file.type.startsWith('image/');
-			const preview = isImage ? URL.createObjectURL(file) : '';
+			// Get file type info from utilities
+			const typeInfo = getFileTypeInfo(file);
+			const preview = typeInfo.previewable ? URL.createObjectURL(file) : '';
 
 			pendingAttachments = [...pendingAttachments, {
 				id,
 				file,
 				preview,
-				type: isImage ? 'image' : 'file'
+				category: typeInfo.category,
+				icon: typeInfo.icon,
+				iconColor: typeInfo.color
 			}];
 		}
 	}
@@ -630,13 +635,6 @@
 		}
 
 		return allSuccess;
-	}
-
-	// Format file size for display
-	function formatFileSize(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	}
 
 	// Validate form
@@ -1293,7 +1291,7 @@
 						<input
 							type="file"
 							multiple
-							accept="image/*,.pdf,.txt,.md,.json,.csv"
+							accept={getAcceptAttribute()}
 							class="hidden"
 							bind:this={fileInputRef}
 							onchange={handleFileInputChange}
@@ -1348,7 +1346,7 @@
 										style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.30 0.02 250);"
 									>
 										<!-- Preview/Icon -->
-										{#if att.type === 'image' && att.preview}
+										{#if att.category === 'image' && att.preview}
 											<img
 												src={att.preview}
 												alt={att.file.name}
@@ -1359,8 +1357,8 @@
 												class="w-10 h-10 flex items-center justify-center rounded"
 												style="background: oklch(0.25 0.02 250);"
 											>
-												<svg class="w-5 h-5" style="color: oklch(0.55 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+												<svg class="w-5 h-5" style="color: {att.iconColor};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d={att.icon} />
 												</svg>
 											</div>
 										{/if}
