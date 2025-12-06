@@ -1932,6 +1932,36 @@
 		isDormant && stateVisual.dormantGlow ? stateVisual.dormantGlow : stateVisual.glow
 	);
 
+	// Format time since activity for dormant tooltip
+	const dormantTooltip = $derived.by((): string | null => {
+		if (!isDormant) return null;
+
+		const now = currentTime;
+		let minutesInactive: number;
+
+		if (sessionState === 'completed' && lastCompletedTask?.closedAt) {
+			const closedDate = new Date(lastCompletedTask.closedAt);
+			minutesInactive = Math.floor((now - closedDate.getTime()) / (1000 * 60));
+		} else {
+			minutesInactive = Math.floor((now - lastActivityTime) / (1000 * 60));
+		}
+
+		if (minutesInactive < 1) {
+			return 'Inactive for less than a minute';
+		} else if (minutesInactive === 1) {
+			return 'Inactive for 1 minute';
+		} else if (minutesInactive < 60) {
+			return `Inactive for ${minutesInactive} minutes`;
+		} else {
+			const hours = Math.floor(minutesInactive / 60);
+			const mins = minutesInactive % 60;
+			if (mins === 0) {
+				return `Inactive for ${hours} hour${hours > 1 ? 's' : ''}`;
+			}
+			return `Inactive for ${hours}h ${mins}m`;
+		}
+	});
+
 	// Capture session log to .beads/logs/ on completion
 	async function captureSessionLog() {
 		if (logCaptured || !sessionName) return;
@@ -2813,6 +2843,7 @@
 					{sessionState}
 					{sessionName}
 					{isDormant}
+					{dormantTooltip}
 					onAction={handleStatusAction}
 					variant="integrated"
 					alignRight={true}
@@ -3323,6 +3354,7 @@
 						{sessionState}
 						{sessionName}
 						{isDormant}
+						{dormantTooltip}
 						onAction={handleStatusAction}
 						disabled={sendingInput}
 						alignRight={true}
@@ -4414,6 +4446,7 @@
 								{sessionState}
 								{sessionName}
 								{isDormant}
+								{dormantTooltip}
 								dropUp={true}
 								alignRight={true}
 								onAction={handleStatusAction}
@@ -4497,6 +4530,7 @@
 								{sessionState}
 								{sessionName}
 								{isDormant}
+								{dormantTooltip}
 								dropUp={true}
 								alignRight={true}
 								onAction={handleStatusAction}

@@ -37,6 +37,8 @@
 		variant?: 'badge' | 'integrated';
 		/** When true, shows dormant variant (💤) for states that support it (completed) */
 		isDormant?: boolean;
+		/** Tooltip text for dormant state (e.g., "Inactive for 15 minutes") */
+		dormantTooltip?: string | null;
 		onAction?: (actionId: string) => Promise<void> | void;
 		class?: string;
 	}
@@ -49,6 +51,7 @@
 		alignRight = false,
 		variant = 'badge',
 		isDormant = false,
+		dormantTooltip = null,
 		onAction,
 		class: className = ''
 	}: Props = $props();
@@ -157,7 +160,7 @@
 			: `background: ${config.bgColor}; color: ${config.textColor}; border: 1px solid ${config.borderColor};`
 		}
 		disabled={disabled}
-		title="Click for actions"
+		title={dormantTooltip || "Click for actions"}
 	>
 		{variant === 'integrated' ? displayShortLabel : displayLabel}
 		<!-- Dropdown indicator -->
