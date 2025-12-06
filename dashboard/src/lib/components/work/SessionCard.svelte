@@ -734,18 +734,39 @@
 		}
 	}
 
-	// Monospace font character width estimation
-	// text-xs is typically 12px, monospace chars are ~0.6em wide = ~7.2px
-	const CHAR_WIDTH_PX = 7.2;
-	// Horizontal padding in the output container (p-3 = 12px on each side)
+	// Horizontal padding in the output container (px-3 = 12px on each side)
 	const CONTAINER_PADDING_PX = 24;
+
+	/**
+	 * Get the current character width based on terminal font settings.
+	 * Monospace fonts are typically ~0.6em wide.
+	 */
+	function getCharWidthPx(): number {
+		if (typeof window === 'undefined') return 7.2; // SSR fallback
+
+		// Get current font size from CSS variable
+		const fontSizeStr = getComputedStyle(document.documentElement)
+			.getPropertyValue('--terminal-font-size').trim() || '0.875rem';
+
+		// Convert to pixels
+		let fontSizePx = 14; // default (0.875rem = 14px)
+		if (fontSizeStr.endsWith('rem')) {
+			fontSizePx = parseFloat(fontSizeStr) * 16; // assuming 16px root
+		} else if (fontSizeStr.endsWith('px')) {
+			fontSizePx = parseFloat(fontSizeStr);
+		}
+
+		// Monospace chars are ~0.6em wide
+		return fontSizePx * 0.6;
+	}
 
 	/**
 	 * Calculate the number of columns that fit in a given pixel width
 	 */
 	function calculateColumns(pixelWidth: number): number {
+		const charWidth = getCharWidthPx();
 		const availableWidth = pixelWidth - CONTAINER_PADDING_PX;
-		const columns = Math.floor(availableWidth / CHAR_WIDTH_PX);
+		const columns = Math.floor(availableWidth / charWidth);
 		// Clamp to reasonable range
 		return Math.max(40, Math.min(columns, 300));
 	}
@@ -3042,38 +3063,95 @@
 		{/if}
 
 		{#if isAgentMode}
-			<!-- Agent Tab - positioned at top-right, pulled up to top of container -->
-			<!-- Combines: Agent Info + Status Dropdown into unified tab -->
-			<!-- Background uses gradient that matches the main card's left-to-right gradient -->
+			<!-- Task Content Section (Task-First Layout) -->
+			<!-- Shown above agent bar because task is primary focus -->
 			<div
-				class="absolute right-[-1px] top-0 -mt-8.5 z-10 flex flex-col rounded-lg rounded-bl-none rounded-br-none"
-				style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 0px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
+				class="pl-3 pr-3 pt-2 flex-shrink-0 flex-grow-0"
+				style="border-bottom: 1px solid oklch(0.30 0.02 250);"
+				onmouseenter={handleTaskMouseEnter}
+				onmouseleave={handleTaskMouseLeave}
 			>
-				<!-- Context Progress Bar - top border showing context remaining -->
-				{#if contextPercent != null && contextPercent >= 0}
-					{@const progressColor = contextPercent > 50 ? 'progress-success' : contextPercent > 25 ? 'progress-warning' : 'progress-error'}
-					<div class="w-full -mt-4 -mb-2 pr-0.5">
-						<progress
-							class="progress {progressColor} h-0.5 w-full rounded-xl"
-							value={contextPercent}
-							max="100"
-							title="{contextPercent}% context remaining"
-						></progress>
+				{#if displayTask}
+					<!-- Row 1: Task ID + Title -->
+					<div class="flex items-start gap-2 mb-1">
+						<div class="flex-shrink-0 pt-0.5">
+							<TaskIdBadge
+								task={{
+									id: displayTask.id,
+									status: displayTask.status || "in_progress",
+									issue_type: displayTask.issue_type,
+									title: displayTask.title || displayTask.id,
+								}}
+								size="sm"
+								showType={false}
+								showStatus={false}
+								onOpenTask={onTaskClick}
+							/>
+						</div>
+						{#if editingTitle}
+							<input
+								bind:this={titleInputRef}
+								bind:value={editedTitle}
+								onblur={saveTitle}
+								onkeydown={handleTitleKeydown}
+								class="font-mono font-bold text-sm tracking-wide min-w-0 flex-1 bg-transparent border-b border-info outline-none"
+								style="color: oklch(0.90 0.02 250);"
+								disabled={savingTitle}
+							/>
+						{:else}
+							<h3
+								class="mt-2 font-mono font-bold text-sm tracking-wide min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30 transition-all duration-300 ease-out {taskHovered ? '' : 'truncate'}"
+								style="color: {sessionState === 'completed' ? 'oklch(0.75 0.02 250)' : 'oklch(0.90 0.02 250)'};"
+								onclick={startEditingTitle}
+								role="button"
+								tabindex="0"
+								title="Click to edit title"
+							>
+								{displayTask.title || displayTask.id}
+							</h3>
+						{/if}
 					</div>
+					<!-- Row 2: Description (hover to expand) -->
+					<button
+						type="button"
+						class="w-full text-left cursor-pointer"
+						onclick={() => onTaskClick?.(displayTask.id)}
+						title="Click to view task details"
+					>
+						<div
+							class="overflow-hidden transition-all duration-300 ease-out"
+							style="max-height: {taskHovered ? '50vh' : '2.6rem'};"
+						>
+							<p class="text-xs leading-relaxed" style="color: oklch(0.65 0.02 250);">
+								{displayTask.description || "No description"}
+							</p>
+						</div>
+					</button>
 				{:else}
-					<!-- Skeleton placeholder while context data loads -->
-					<div class="w-full px-1 -mt-1.75">
-						<div class="h-1.5 w-full rounded-sm skeleton opacity-40"></div>
+					<!-- Idle state -->
+					<div class="flex items-center gap-2 mb-1">
+						<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
+							Ready to start work
+						</h3>
 					</div>
 				{/if}
-				<!-- Main row: Agent Info + Status -->
-				<div class="flex items-center gap-0">
-				<!-- Agent Info Section -->
-				<div class="flex items-center gap-1.5 pl-3 pt-2">
+			</div>
+
+			<!-- Agent Header Bar - Below task (secondary info) -->
+			<!-- Layout: [avatar][name][time] ... [sparkline][context] | [badges][STATUS] -->
+			<div
+				class="flex items-center justify-between px-3 py-1.5 flex-shrink-0"
+				style="
+					background: linear-gradient(180deg, oklch(0.20 0.015 250) 0%, oklch(0.18 0.01 250) 100%);
+					border-bottom: 1px solid oklch(0.25 0.02 250);
+				"
+			>
+				<!-- Left: Agent Info -->
+				<div class="flex items-center gap-2 min-w-0">
 					<AgentAvatar
 						name={agentName}
-						size={24}
-						class="-mt-0.5 shrink-0 {sessionState === 'starting'
+						size={28}
+						class="shrink-0 {sessionState === 'starting'
 							? 'ring-2 ring-secondary ring-offset-base-100 ring-offset-1'
 							: sessionState === 'working'
 								? 'ring-2 ring-info ring-offset-base-100 ring-offset-1'
@@ -3085,49 +3163,80 @@
 											? 'ring-2 ring-success ring-offset-base-100 ring-offset-1'
 											: ''}"
 					/>
-					<div class="flex flex-col min-w-0 ml-1">
-						<div class="flex items-center gap-1">
-							<span
-								class="font-mono text-[11px] font-semibold tracking-wider uppercase"
-								style="color: {stateVisual.accent}; text-shadow: 0 0 12px {stateVisual.glow};"
-							>
-								{agentName}
-							</span>
-							{#if sparklineData && sparklineData.length > 0}
-								<div
-									class="-mt-3 flex-shrink-0 w-[45px] sm:w-[50px] md:w-[60px] lg:w-[70px] h-[14px]"
+					<div class="flex flex-col min-w-0">
+						<!-- Agent name -->
+						<span
+							class="font-mono text-sm font-bold tracking-wide"
+							style="color: {stateVisual.accent}; text-shadow: 0 0 12px {stateVisual.glow};"
+						>
+							{agentName}
+						</span>
+						<!-- Elapsed time (styled like server uptime) -->
+						{#if startTime}
+							{@const elapsed = elapsedTimeFormatted()}
+							{#if elapsed}
+								<span
+									class="flex items-center gap-0.5 font-mono text-xs"
+									title="Session duration"
+									style="color: {stateVisual.textColor};"
 								>
-									<Sparkline
-										data={sparklineData}
-										height={14}
-										showTooltip={true}
-										showStyleToolbar={false}
-										defaultTimeRange="24h"
-										animate={false}
-									/>
-								</div>
+									{#if elapsed.showHours}
+										<AnimatedDigits value={elapsed.hours} class="text-xs" />
+										<span class="opacity-60">:</span>
+									{/if}
+									<AnimatedDigits value={elapsed.minutes} class="text-xs" />
+									<span class="opacity-60">:</span>
+									<AnimatedDigits value={elapsed.seconds} class="text-xs" />
+								</span>
 							{/if}
-						</div>
-						<!-- Stats row (using shared snippet, no sparkline - it's above) -->
-						{@render agentStatsRow(false)}
+						{:else}
+							<span
+								class="font-mono text-xs"
+								style="color: {stateVisual.textColor};"
+							>
+								{stateVisual.shortLabel}
+							</span>
+						{/if}
 					</div>
 				</div>
-				<!-- Status Dropdown Section (divider + badge) -->
-				<div class="flex items-center">
-					<!-- Shorter, neutral divider -->
-					<div
-						class="w-px h-4 mx-1.5"
-						style="background: oklch(0.40 0.01 250);"
-					></div>
+
+				<!-- Right: Sparkline + Context + Badges + Status -->
+				<div class="flex items-center gap-2">
+					<!-- Token Activity Sparkline (bar chart style, moved to right side) -->
+					{#if sparklineData && sparklineData.length > 0}
+						{@const tokenActivityData = sparklineData.map(d => d.tokens)}
+						<div class="mr-6">
+						<TerminalActivitySparkline
+							activityData={tokenActivityData}
+							maxBars={12}
+							height={16}
+							width={70}
+							showTooltip={true}
+						/>
+						</div>
+					{/if}
+
+					<!-- Context Progress (compact) -->
+					{#if contextPercent != null && contextPercent >= 0}
+						{@const progressColor = contextPercent > 50 ? 'progress-success' : contextPercent > 25 ? 'progress-warning' : 'progress-error'}
+						<div class="w-16 flex items-center gap-1" title="{contextPercent}% context remaining">
+							<progress
+								class="progress {progressColor} h-1.5 w-full"
+								value={contextPercent}
+								max="100"
+							></progress>
+						</div>
+					{/if}
+
+					<!-- Divider -->
+					<div class="w-px h-5" style="background: oklch(0.35 0.02 250);"></div>
+
 					<!-- Human Actions Required indicator -->
 					{#if pendingHumanActionsCount > 0}
 						<span
-							class="badge badge-xs font-mono mr-1.5"
+							class="badge badge-xs font-mono"
 							style="background: oklch(0.45 0.18 50); color: oklch(0.98 0.02 250); border: none;"
-							title="{pendingHumanActionsCount} manual action{pendingHumanActionsCount >
-							1
-								? 's'
-								: ''} required"
+							title="{pendingHumanActionsCount} manual action{pendingHumanActionsCount > 1 ? 's' : ''} required"
 						>
 							🧑 {pendingHumanActionsCount}
 						</span>
@@ -3136,7 +3245,7 @@
 					{#if hasSuggestedTasks}
 						<button
 							type="button"
-							class="badge badge-xs font-mono mr-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+							class="badge badge-xs font-mono cursor-pointer hover:opacity-80 transition-opacity"
 							style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
 							title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''} - click to review and create"
 							onclick={() => suggestedTasksModalOpen = true}
@@ -3153,26 +3262,27 @@
 						variant="integrated"
 					/>
 				</div>
-				</div>
 			</div>
 		{:else}
-			<!-- Server Tab - positioned at top-right, pulled up to top of container -->
-			<!-- Shows: Project Name + Port + Status Dropdown -->
-			<!-- Background uses gradient that matches the main card's left-to-right gradient -->
+			<!-- Server Header Bar - Integrated full-width header (matching Concept B) -->
+			<!-- Layout: [icon][name][port][uptime] ... [sparkline][errors][STATUS] -->
 			{@const serverVisual = getServerStateVisual(serverStatus)}
 			<div
-				class="absolute right-[-1px] top-0 -mt-9.5 z-10 flex items-center gap-0 rounded rounded-bl-none rounded-br-none"
-				style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 1px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
+				class="flex items-center justify-between px-3 py-2 flex-shrink-0"
+				style="
+					background: linear-gradient(180deg, oklch(0.22 0.02 250) 0%, oklch(0.19 0.015 250) 100%);
+					border-bottom: 1px solid oklch(0.30 0.02 250);
+				"
 			>
-				<!-- Server Info Section -->
-				<div class="flex items-center gap-1.5 pl-2 pr-1.5 py-1">
+				<!-- Left: Server Info -->
+				<div class="flex items-center gap-2 min-w-0">
 					<!-- Server icon -->
 					<div
-						class="flex items-center justify-center w-5 h-5 rounded"
+						class="flex items-center justify-center w-7 h-7 rounded"
 						style="background: {serverVisual.bgTint};"
 					>
 						<svg
-							class="w-3 h-3"
+							class="w-4 h-4"
 							style="color: {serverVisual.accent};"
 							fill="none"
 							viewBox="0 0 24 24"
@@ -3188,13 +3298,13 @@
 					</div>
 					<div class="flex flex-col min-w-0">
 						<span
-							class="font-mono text-[11px] font-semibold tracking-wider uppercase"
+							class="font-mono text-sm font-bold tracking-wide"
 							style="color: {serverVisual.accent}; text-shadow: 0 0 12px {serverVisual.glow};"
 						>
 							{displayName || projectName}
 						</span>
 						<div
-							class="flex items-center gap-1 font-mono text-[9px]"
+							class="flex items-center gap-1.5 font-mono text-xs"
 							style="color: oklch(0.55 0.03 250);"
 						>
 							{#if port}
@@ -3217,18 +3327,18 @@
 									{#if serverElapsed.showHours}
 										<AnimatedDigits
 											value={serverElapsed.hours}
-											class="text-[9px]"
+											class="text-xs"
 										/>
 										<span class="opacity-60">:</span>
 									{/if}
 									<AnimatedDigits
 										value={serverElapsed.minutes}
-										class="text-[9px]"
+										class="text-xs"
 									/>
 									<span class="opacity-60">:</span>
 									<AnimatedDigits
 										value={serverElapsed.seconds}
-										class="text-[9px]"
+										class="text-xs"
 									/>
 								</span>
 							{:else}
@@ -3239,42 +3349,35 @@
 						</div>
 					</div>
 				</div>
-				<!-- Activity Sparkline Section -->
-				{#if activityData.length > 0}
-					{@const hasRecentActivity = activityData.slice(-3).some((v) => v > 0)}
-					<div class="flex items-center">
+
+				<!-- Right: Activity + Errors + Status -->
+				<div class="flex items-center gap-2">
+					<!-- Activity Sparkline -->
+					{#if activityData.length > 0}
+						{@const hasRecentActivity = activityData.slice(-3).some((v) => v > 0)}
 						<div
-							class="w-px h-4 mx-1"
-							style="background: oklch(0.40 0.01 250);"
-						></div>
-						<div
-							class="px-1 {hasRecentActivity ? 'animate-pulse' : ''}"
+							class="{hasRecentActivity ? 'animate-pulse' : ''}"
 							title="Terminal activity"
 							style={hasRecentActivity ? "animation-duration: 2s;" : ""}
 						>
 							<TerminalActivitySparkline
 								{activityData}
 								maxBars={12}
-								height={14}
-								width={44}
+								height={16}
+								width={50}
 							/>
 						</div>
-					</div>
-				{/if}
-				<!-- Error Badge (if errors detected) -->
-				{#if serverErrors().hasErrors}
-					<div class="flex items-center">
+					{/if}
+
+					<!-- Error Badge -->
+					{#if serverErrors().hasErrors}
 						<div
-							class="w-px h-4 mx-1"
-							style="background: oklch(0.40 0.01 250);"
-						></div>
-						<div
-							class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono"
+							class="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono"
 							style="background: oklch(0.35 0.15 25 / 0.3); color: oklch(0.75 0.18 25);"
 							title="Errors detected in output"
 						>
 							<svg
-								class="w-3 h-3"
+								class="w-3.5 h-3.5"
 								fill="none"
 								viewBox="0 0 24 24"
 								stroke="currentColor"
@@ -3288,15 +3391,11 @@
 							</svg>
 							<span>{serverErrors().count}</span>
 						</div>
-					</div>
-				{/if}
-				<!-- Status Dropdown Section (divider + badge) -->
-				<div class="flex items-center">
-					<!-- Shorter, neutral divider -->
-					<div
-						class="w-px h-4 mx-1.5"
-						style="background: oklch(0.40 0.01 250);"
-					></div>
+					{/if}
+
+					<!-- Divider -->
+					<div class="w-px h-5" style="background: oklch(0.35 0.02 250);"></div>
+
 					<ServerStatusBadge
 						{serverStatus}
 						{sessionName}
@@ -3311,98 +3410,10 @@
 			</div>
 		{/if}
 
-		<!-- Header: Full-width task content (hover to expand title + description)
-		 Row 1: [id][title - full width]
-		 Row 2: [description - full width]
-	-->
-		<div
-			class="pl-3 pr-3 pt-2 pb-2 flex-shrink-0 flex-grow-0"
-			onmouseenter={handleTaskMouseEnter}
-			onmouseleave={handleTaskMouseLeave}
-		>
-			{#if displayTask}
-				<!-- Row 1: Task ID + Title (full width now that agent info is in tab) -->
-				<div class="flex items-start gap-2 mb-1">
-					<!-- Task ID -->
-					<div class="flex-shrink-0 pt-0.5">
-						<TaskIdBadge
-							task={{
-								id: displayTask.id,
-								status: displayTask.status || "in_progress",
-								issue_type: displayTask.issue_type,
-								title: displayTask.title || displayTask.id,
-							}}
-							size="sm"
-							showType={false}
-							showStatus={false}
-							onOpenTask={onTaskClick}
-						/>
-					</div>
-					<!-- Task Title (click to edit) - expands on hover -->
-					{#if editingTitle}
-						<input
-							bind:this={titleInputRef}
-							bind:value={editedTitle}
-							onblur={saveTitle}
-							onkeydown={handleTitleKeydown}
-							class="font-mono font-bold text-sm tracking-wide min-w-0 flex-1 bg-transparent border-b border-info outline-none"
-							style="color: oklch(0.90 0.02 250);"
-							disabled={savingTitle}
-						/>
-					{:else}
-						<h3
-							class="font-mono font-bold text-sm tracking-wide min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30 transition-all duration-300 ease-out {taskHovered
-								? ''
-								: 'truncate'}"
-							style="color: {sessionState === 'completed'
-								? 'oklch(0.75 0.02 250)'
-								: 'oklch(0.90 0.02 250)'};"
-							onclick={startEditingTitle}
-							role="button"
-							tabindex="0"
-							title="Click to edit title"
-						>
-							{displayTask.title || displayTask.id}
-						</h3>
-					{/if}
-				</div>
-
-				<!-- Row 2: Description (full width, hover to expand) -->
-				<button
-					type="button"
-					class="w-full text-left cursor-pointer"
-					onclick={() => onTaskClick?.(displayTask.id)}
-					title="Click to view task details"
-				>
-					<div
-						class="overflow-hidden transition-all duration-300 ease-out"
-						style="max-height: {taskHovered ? '50vh' : '2.6rem'};"
-					>
-						<p
-							class="text-xs leading-relaxed"
-							style="color: oklch(0.65 0.02 250);"
-						>
-							{displayTask.description || "No description"}
-						</p>
-					</div>
-				</button>
-			{:else}
-				<!-- Idle state - no task (agent info is in tab, so just show idle message) -->
-				<div class="flex items-center gap-2 mb-1">
-					<h3
-						class="font-mono font-bold text-sm tracking-wide"
-						style="color: oklch(0.5 0 0 / 0.5);"
-					>
-						Ready to start work
-					</h3>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Output Section -->
+			<!-- Output Section -->
 		<div
 			class="flex-1 flex flex-col min-h-0"
-			style="border-top: 1px solid oklch(0.5 0 0 / 0.08);"
+			style="border-top: 10px solid oklch(0.5 0 0 / 0.08);"
 		>
 			<!-- Output Content - Click to center card, add glow effect, and focus input -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -3417,7 +3428,7 @@
 				{#if output}
 					<pre
 						class="whitespace-pre-wrap break-words m-0 text-base-content"
-						style="font-family: inherit; font-size: inherit;">{@html renderedOutput}</pre>
+						style="font-family: var(--terminal-font); font-size: var(--terminal-font-size);">{@html renderedOutput}</pre>
 				{:else}
 					<p class="text-base-content/40 italic m-0">No output yet...</p>
 				{/if}
