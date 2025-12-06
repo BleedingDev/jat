@@ -1,0 +1,328 @@
+#!/bin/bash
+
+# bd-review-rules - Manage review rules for Beads tasks
+#
+# Review rules determine whether a task requires human review before
+# auto-closing or can auto-proceed based on type and priority.
+#
+# Usage:
+#   bd-review-rules                           # Show all current rules
+#   bd-review-rules --type bug --max-auto 2   # Set bug max auto-proceed to P2
+#   bd-review-rules --type feature            # Show rule for specific type
+#   bd-review-rules --default review          # Set default action (review/auto)
+#   bd-review-rules --reset                   # Reset to default rules
+#
+# Schema (stored as bd config keys):
+#   review_rules.default_action    = "review" or "auto"
+#   review_rules.bug.max_auto      = 0-4 (max priority that auto-proceeds)
+#   review_rules.feature.max_auto  = 0-4
+#   review_rules.task.max_auto     = 0-4
+#   review_rules.chore.max_auto    = 0-4
+#   review_rules.epic.max_auto     = 0-4
+#
+# Examples:
+#   --max-auto 3 means P0-P3 auto-proceed, P4 requires review
+#   --max-auto 0 means only P0 auto-proceeds
+#   --max-auto -1 means all priorities require review (no auto-proceed)
+
+set -e
+
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Default values
+DEFAULT_ACTION="review"
+DEFAULT_MAX_AUTO=3  # P0-P3 auto-proceed by default
+
+# All task types
+TASK_TYPES=("bug" "feature" "task" "chore" "epic")
+
+# Parse arguments
+TYPE=""
+MAX_AUTO=""
+DEFAULT=""
+RESET=false
+SHOW_TYPE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --type|-t)
+            TYPE="$2"
+            shift 2
+            ;;
+        --max-auto|-m)
+            MAX_AUTO="$2"
+            shift 2
+            ;;
+        --default|-d)
+            DEFAULT="$2"
+            shift 2
+            ;;
+        --reset|-r)
+            RESET=true
+            shift
+            ;;
+        --help|-h)
+            echo "bd-review-rules - Manage review rules for Beads tasks"
+            echo ""
+            echo "Usage:"
+            echo "  bd-review-rules                           Show all current rules"
+            echo "  bd-review-rules --type TYPE --max-auto N  Set max auto-proceed priority for TYPE"
+            echo "  bd-review-rules --type TYPE               Show rule for specific type"
+            echo "  bd-review-rules --default ACTION          Set default action (review/auto)"
+            echo "  bd-review-rules --reset                   Reset to default rules"
+            echo ""
+            echo "Options:"
+            echo "  --type, -t TYPE       Task type: bug, feature, task, chore, epic"
+            echo "  --max-auto, -m N      Max priority that auto-proceeds (0-4, or -1 for none)"
+            echo "  --default, -d ACTION  Default action: 'review' or 'auto'"
+            echo "  --reset, -r           Reset all rules to defaults"
+            echo "  --help, -h            Show this help"
+            echo ""
+            echo "How it works:"
+            echo "  Tasks with priority <= max-auto will auto-proceed on completion"
+            echo "  Tasks with priority > max-auto will require human review"
+            echo ""
+            echo "Examples:"
+            echo "  bd-review-rules --type bug --max-auto 1"
+            echo "    # P0-P1 bugs auto-proceed, P2-P4 bugs require review"
+            echo ""
+            echo "  bd-review-rules --type feature --max-auto -1"
+            echo "    # All features require human review"
+            echo ""
+            echo "  bd-review-rules --default auto"
+            echo "    # Default to auto-proceed if no type-specific rule"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}" >&2
+            echo "Use --help for usage information" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Function to get a config value with default
+get_config() {
+    local key="$1"
+    local default="$2"
+    local value
+    value=$(bd config get "$key" 2>/dev/null || echo "")
+    # bd config get returns "key (not set)" if not set
+    if [ -z "$value" ] || [ "$value" = "null" ] || [[ "$value" == *"(not set)"* ]]; then
+        echo "$default"
+    else
+        echo "$value"
+    fi
+}
+
+# Function to set a config value
+set_config() {
+    local key="$1"
+    local value="$2"
+    bd config set "$key" -- "$value" >/dev/null 2>&1
+}
+
+# Function to sync config to JSON file
+sync_to_json() {
+    if command -v bd-review-rules-loader &>/dev/null; then
+        bd-review-rules-loader --sync-from-config >/dev/null 2>&1 || true
+    fi
+}
+
+# Function to get priority name
+priority_name() {
+    local p="$1"
+    case $p in
+        0) echo "P0 (Critical)" ;;
+        1) echo "P1 (High)" ;;
+        2) echo "P2 (Medium)" ;;
+        3) echo "P3 (Low)" ;;
+        4) echo "P4 (Lowest)" ;;
+        *) echo "P$p" ;;
+    esac
+}
+
+# Function to show rule explanation
+explain_rule() {
+    local type="$1"
+    local max_auto="$2"
+
+    if [ "$max_auto" -lt 0 ]; then
+        echo -e "    ${RED}●${NC} All ${BOLD}$type${NC} tasks require human review"
+    elif [ "$max_auto" -ge 4 ]; then
+        echo -e "    ${GREEN}●${NC} All ${BOLD}$type${NC} tasks auto-proceed"
+    else
+        local auto_range="P0"
+        if [ "$max_auto" -gt 0 ]; then
+            auto_range="P0-P$max_auto"
+        fi
+        local review_start=$((max_auto + 1))
+        local review_range="P$review_start-P4"
+        echo -e "    ${GREEN}●${NC} ${BOLD}$type${NC} $auto_range → auto-proceed"
+        echo -e "    ${YELLOW}●${NC} ${BOLD}$type${NC} $review_range → requires review"
+    fi
+}
+
+# Reset to defaults
+if [ "$RESET" = true ]; then
+    echo -e "${BLUE}Resetting review rules to defaults...${NC}"
+    echo ""
+
+    set_config "review_rules.default_action" "$DEFAULT_ACTION"
+
+    for t in "${TASK_TYPES[@]}"; do
+        set_config "review_rules.$t.max_auto" "$DEFAULT_MAX_AUTO"
+    done
+
+    sync_to_json
+    echo -e "${GREEN}✓ Reset complete${NC}"
+    echo ""
+    echo "Default rules:"
+    echo "  • Default action: $DEFAULT_ACTION"
+    echo "  • All types: max_auto = $DEFAULT_MAX_AUTO (P0-P$DEFAULT_MAX_AUTO auto-proceed)"
+    exit 0
+fi
+
+# Set default action
+if [ -n "$DEFAULT" ]; then
+    if [ "$DEFAULT" != "review" ] && [ "$DEFAULT" != "auto" ]; then
+        echo -e "${RED}Error: Default action must be 'review' or 'auto'${NC}" >&2
+        exit 1
+    fi
+    set_config "review_rules.default_action" "$DEFAULT"
+    sync_to_json
+    echo -e "${GREEN}✓ Default action set to: $DEFAULT${NC}"
+    exit 0
+fi
+
+# Set rule for specific type
+if [ -n "$TYPE" ] && [ -n "$MAX_AUTO" ]; then
+    # Validate type
+    valid_type=false
+    for t in "${TASK_TYPES[@]}"; do
+        if [ "$TYPE" = "$t" ]; then
+            valid_type=true
+            break
+        fi
+    done
+
+    if [ "$valid_type" = false ]; then
+        echo -e "${RED}Error: Invalid type '$TYPE'${NC}" >&2
+        echo "Valid types: ${TASK_TYPES[*]}" >&2
+        exit 1
+    fi
+
+    # Validate max_auto
+    if ! [[ "$MAX_AUTO" =~ ^-?[0-9]+$ ]] || [ "$MAX_AUTO" -lt -1 ] || [ "$MAX_AUTO" -gt 4 ]; then
+        echo -e "${RED}Error: max-auto must be -1 to 4${NC}" >&2
+        exit 1
+    fi
+
+    set_config "review_rules.$TYPE.max_auto" "$MAX_AUTO"
+    sync_to_json
+    echo -e "${GREEN}✓ Updated rule for $TYPE${NC}"
+    echo ""
+    explain_rule "$TYPE" "$MAX_AUTO"
+    exit 0
+fi
+
+# Show rule for specific type
+if [ -n "$TYPE" ]; then
+    # Validate type
+    valid_type=false
+    for t in "${TASK_TYPES[@]}"; do
+        if [ "$TYPE" = "$t" ]; then
+            valid_type=true
+            break
+        fi
+    done
+
+    if [ "$valid_type" = false ]; then
+        echo -e "${RED}Error: Invalid type '$TYPE'${NC}" >&2
+        echo "Valid types: ${TASK_TYPES[*]}" >&2
+        exit 1
+    fi
+
+    max_auto=$(get_config "review_rules.$TYPE.max_auto" "$DEFAULT_MAX_AUTO")
+    echo -e "${BOLD}Review rule for $TYPE:${NC}"
+    echo ""
+    echo "  max_auto: $max_auto"
+    echo ""
+    explain_rule "$TYPE" "$max_auto"
+    exit 0
+fi
+
+# Show all rules (default action)
+echo ""
+echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BOLD}║                         📋 Review Rules                                  ║${NC}"
+echo -e "${BOLD}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Get default action
+default_action=$(get_config "review_rules.default_action" "$DEFAULT_ACTION")
+echo -e "  ${CYAN}Default action:${NC} $default_action"
+echo -e "  ${DIM}(Used when no type-specific rule matches)${NC}"
+echo ""
+
+echo -e "  ${CYAN}Rules by type:${NC}"
+echo ""
+echo -e "  ┌─────────────┬───────────┬────────────────────────────────────────┐"
+echo -e "  │ ${BOLD}Type${NC}        │ ${BOLD}Max Auto${NC}  │ ${BOLD}Behavior${NC}                               │"
+echo -e "  ├─────────────┼───────────┼────────────────────────────────────────┤"
+
+for t in "${TASK_TYPES[@]}"; do
+    max_auto=$(get_config "review_rules.$t.max_auto" "$DEFAULT_MAX_AUTO")
+
+    # Format type with padding
+    type_padded=$(printf "%-11s" "$t")
+    max_padded=$(printf "%-9s" "$max_auto")
+
+    # Generate behavior description
+    if [ "$max_auto" -lt 0 ]; then
+        behavior="All require review"
+    elif [ "$max_auto" -ge 4 ]; then
+        behavior="All auto-proceed"
+    else
+        # Format auto range
+        if [ "$max_auto" -eq 0 ]; then
+            auto_range="P0"
+        else
+            auto_range="P0-P$max_auto"
+        fi
+        # Format review range
+        review_start=$((max_auto + 1))
+        if [ "$review_start" -eq 4 ]; then
+            review_range="P4"
+        else
+            review_range="P$review_start-P4"
+        fi
+        behavior="$auto_range auto, $review_range review"
+    fi
+    behavior_padded=$(printf "%-38s" "$behavior")
+
+    echo -e "  │ $type_padded │ $max_padded │ $behavior_padded │"
+done
+
+echo -e "  └─────────────┴───────────┴────────────────────────────────────────┘"
+echo ""
+
+echo -e "  ${CYAN}Legend:${NC}"
+echo -e "    ${GREEN}●${NC} auto-proceed  = Task closes automatically after agent completes"
+echo -e "    ${YELLOW}●${NC} review        = Task awaits human review before closing"
+echo ""
+
+echo -e "  ${CYAN}Set rules:${NC}"
+echo "    bd-review-rules --type bug --max-auto 1      # P0-P1 bugs auto"
+echo "    bd-review-rules --type feature --max-auto -1 # All features need review"
+echo "    bd-review-rules --default auto               # Default to auto-proceed"
+echo "    bd-review-rules --reset                      # Reset to defaults"
+echo ""
