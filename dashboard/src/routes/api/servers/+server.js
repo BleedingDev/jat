@@ -100,29 +100,34 @@ async function isPortListening(port) {
  * @returns {'running' | 'starting' | 'stopped'}
  */
 function detectStatus(output, portRunning) {
+	// If port is actively listening, server is definitely running
+	// This takes precedence over error pattern detection since many servers
+	// log errors (API errors, validation errors) while still running fine
+	if (portRunning) {
+		return 'running';
+	}
+
 	// Strip ANSI codes before pattern matching
 	const recentOutput = stripAnsi(output.slice(-2000));
 
-	// Check for error patterns (server stopped/crashed)
-	const errorPatterns = [
-		/error:/i,
-		/EADDRINUSE/i,
-		/failed to start/i,
-		/exit code/i,
-		/npm err!/i,
-		/crashed/i,
-		/terminated/i
+	// Check for fatal error patterns (server actually stopped/crashed)
+	// Be specific - avoid matching general API errors or validation errors
+	const fatalErrorPatterns = [
+		/EADDRINUSE/i,           // Port already in use
+		/failed to start/i,      // Server failed to start
+		/npm err!/i,             // npm error
+		/exit code \d+/i,        // Process exited with error code
+		/crashed/i,              // Server crashed
+		/terminated/i,           // Process terminated
+		/exited unexpectedly/i,  // Process exited
+		/build failed/i,         // Build error
+		/cannot find module/i    // Module not found
 	];
 
-	for (const pattern of errorPatterns) {
+	for (const pattern of fatalErrorPatterns) {
 		if (pattern.test(recentOutput)) {
 			return 'stopped';
 		}
-	}
-
-	// If port is actively listening, server is running
-	if (portRunning) {
-		return 'running';
 	}
 
 	// Check for startup patterns

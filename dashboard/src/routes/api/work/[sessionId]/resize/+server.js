@@ -25,8 +25,8 @@ export async function POST({ params, request }) {
 		return json({ error: 'Session ID is required' }, { status: 400 });
 	}
 
-	// Validate session ID format (jat-AgentName)
-	if (!sessionId.startsWith('jat-')) {
+	// Validate session ID format (jat-AgentName or server-ProjectName)
+	if (!sessionId.startsWith('jat-') && !sessionId.startsWith('server-')) {
 		return json({ error: 'Invalid session ID format' }, { status: 400 });
 	}
 
