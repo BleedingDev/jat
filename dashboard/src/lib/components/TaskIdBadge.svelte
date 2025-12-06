@@ -9,10 +9,27 @@
 		id: string;
 		status: string;
 		title?: string;
+		priority?: number;
+	}
+
+	/** Dependency graph data from API */
+	interface DepGraphNode {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+		isBlocking?: boolean;
+		isWaiting?: boolean;
+	}
+
+	interface DepGraphData {
+		task: { id: string; title: string; status: string; priority: number; issue_type?: string };
+		blockedBy: DepGraphNode[];
+		unblocks: DepGraphNode[];
 	}
 
 	interface Props {
-		task: { id: string; status: string; issue_type?: string; assignee?: string; title?: string; updated_at?: string; labels?: string[] };
+		task: { id: string; status: string; issue_type?: string; assignee?: string; title?: string; updated_at?: string; labels?: string[]; priority?: number };
 		size?: 'xs' | 'sm' | 'md';
 		showStatus?: boolean;
 		showType?: boolean;
@@ -35,9 +52,58 @@
 		blocks?: DepTask[];
 		/** Show dependency indicators below badge */
 		showDependencies?: boolean;
+		/** Show dependency mini-graph in dropdown (fetches from API on hover) */
+		showDepGraph?: boolean;
 	}
 
-	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false }: Props = $props();
+	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true }: Props = $props();
+
+	// Dependency graph state
+	let depGraphData = $state<DepGraphData | null>(null);
+	let depGraphLoading = $state(false);
+	let depGraphError = $state<string | null>(null);
+	let depGraphFetched = $state(false);
+
+	// Fetch dependency graph data on hover
+	async function fetchDepGraph() {
+		if (depGraphFetched || depGraphLoading || !showDepGraph) return;
+
+		depGraphLoading = true;
+		depGraphError = null;
+
+		try {
+			const response = await fetch(`/api/tasks/${task.id}/deps`);
+			if (!response.ok) {
+				throw new Error('Failed to fetch dependencies');
+			}
+			depGraphData = await response.json();
+			depGraphFetched = true;
+		} catch (err) {
+			depGraphError = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			depGraphLoading = false;
+		}
+	}
+
+	// Handle dependency task click
+	function handleDepTaskClick(depId: string, event: MouseEvent) {
+		event.stopPropagation();
+		event.preventDefault();
+		if (onOpenTask) {
+			onOpenTask(depId);
+		}
+	}
+
+	// Get priority badge class
+	function getPriorityBadge(priority: number): string {
+		const badges: Record<number, string> = {
+			0: 'badge-error',
+			1: 'badge-warning',
+			2: 'badge-info',
+			3: 'badge-ghost'
+		};
+		return badges[priority] || 'badge-ghost';
+	}
 
 	// Show assignee when task is in_progress and has an assignee
 	const shouldShowAssignee = $derived(showAssignee && task.status === 'in_progress' && task.assignee);
@@ -242,7 +308,7 @@
 			</div>
 		{/if}
 
-		<div class="dropdown dropdown-hover {dropdownAlign === 'end' ? 'dropdown-left' : 'dropdown-right'}">
+		<div class="dropdown dropdown-hover {dropdownAlign === 'end' ? 'dropdown-left' : 'dropdown-right'}" onmouseenter={fetchDepGraph}>
 			<button
 				class="inline-flex items-center font-mono rounded cursor-pointer
 					   bg-base-100 hover:bg-base-200 transition-colors group border border-base-300 {sizeClasses[size]}"
@@ -336,6 +402,108 @@
 						</li>
 					{/if}
 				</ul>
+
+				<!-- Dependency Mini-Graph -->
+				{#if showDepGraph}
+					<div class="border-t border-base-200 mt-1 pt-2">
+						{#if depGraphLoading}
+							<div class="flex items-center justify-center py-2">
+								<span class="loading loading-spinner loading-xs"></span>
+								<span class="text-xs text-base-content/50 ml-2">Loading deps...</span>
+							</div>
+						{:else if depGraphError}
+							<div class="text-xs text-error/70 text-center py-2">{depGraphError}</div>
+						{:else if depGraphData}
+							{@const activeBlockers = depGraphData.blockedBy.filter(d => d.isBlocking)}
+							{@const activeUnblocks = depGraphData.unblocks.filter(d => d.isWaiting)}
+							{@const hasDeps = activeBlockers.length > 0 || activeUnblocks.length > 0}
+
+							{#if !hasDeps}
+								<div class="text-xs text-base-content/50 text-center py-1">No dependencies</div>
+							{:else}
+								<!-- Blockers section (tasks that block this) -->
+								{#if activeBlockers.length > 0}
+									<div class="mb-2">
+										<div class="flex items-center gap-1 mb-1.5 px-1">
+											<svg class="w-3 h-3 text-error/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+											</svg>
+											<span class="text-[10px] font-semibold text-error/80 uppercase tracking-wide">Blocked By</span>
+											<span class="text-[10px] text-base-content/40">({activeBlockers.length})</span>
+										</div>
+										<div class="space-y-1 max-h-24 overflow-y-auto">
+											{#each activeBlockers.slice(0, 5) as dep}
+												{@const depColor = getProjectColorFromHash(dep.id)}
+												{@const depStatus = TASK_STATUS_VISUALS[dep.status] || TASK_STATUS_VISUALS.open}
+												<button
+													class="w-full flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-base-200 transition-colors text-left group"
+													onclick={(e) => handleDepTaskClick(dep.id, e)}
+												>
+													<svg class="w-2.5 h-2.5 {depStatus.text} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<circle cx="12" cy="12" r="10" />
+													</svg>
+													<span class="font-mono text-[11px]" style="color: {depColor}">{dep.id}</span>
+													<span class="badge badge-xs {getPriorityBadge(dep.priority)} scale-90">P{dep.priority}</span>
+													<svg class="w-3 h-3 text-base-content/20 group-hover:text-base-content/50 ml-auto shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+													</svg>
+												</button>
+											{/each}
+											{#if activeBlockers.length > 5}
+												<div class="text-[10px] text-base-content/40 text-center">+{activeBlockers.length - 5} more</div>
+											{/if}
+										</div>
+									</div>
+								{/if}
+
+								<!-- Current task indicator -->
+								<div class="flex items-center justify-center py-1.5 border-y border-base-200/50 my-1">
+									<div class="flex items-center gap-1.5">
+										<div class="w-1.5 h-1.5 rounded-full {statusVisual.text}"></div>
+										<span class="font-mono text-[11px] font-medium" style="color: {projectColor}">{task.id}</span>
+									</div>
+								</div>
+
+								<!-- Unblocks section (tasks waiting on this) -->
+								{#if activeUnblocks.length > 0}
+									<div class="mt-2">
+										<div class="flex items-center gap-1 mb-1.5 px-1">
+											<svg class="w-3 h-3 text-success/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+											</svg>
+											<span class="text-[10px] font-semibold text-success/80 uppercase tracking-wide">Unblocks</span>
+											<span class="text-[10px] text-base-content/40">({activeUnblocks.length})</span>
+										</div>
+										<div class="space-y-1 max-h-24 overflow-y-auto">
+											{#each activeUnblocks.slice(0, 5) as dep}
+												{@const depColor = getProjectColorFromHash(dep.id)}
+												{@const depStatus = TASK_STATUS_VISUALS[dep.status] || TASK_STATUS_VISUALS.open}
+												<button
+													class="w-full flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-base-200 transition-colors text-left group"
+													onclick={(e) => handleDepTaskClick(dep.id, e)}
+												>
+													<svg class="w-2.5 h-2.5 {depStatus.text} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<circle cx="12" cy="12" r="10" />
+													</svg>
+													<span class="font-mono text-[11px]" style="color: {depColor}">{dep.id}</span>
+													<span class="badge badge-xs {getPriorityBadge(dep.priority)} scale-90">P{dep.priority}</span>
+													<svg class="w-3 h-3 text-base-content/20 group-hover:text-base-content/50 ml-auto shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+													</svg>
+												</button>
+											{/each}
+											{#if activeUnblocks.length > 5}
+												<div class="text-[10px] text-base-content/40 text-center">+{activeUnblocks.length - 5} more</div>
+											{/if}
+										</div>
+									</div>
+								{/if}
+							{/if}
+						{:else}
+							<div class="text-xs text-base-content/50 text-center py-1">Hover to load deps</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 
