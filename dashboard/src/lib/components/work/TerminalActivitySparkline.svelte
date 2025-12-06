@@ -47,14 +47,11 @@
 	let prevDataLength = $state(0);
 	// Counter that increments when new data arrives (used as animation key)
 	let animationGeneration = $state(0);
-	// How many new bars to animate (from the right)
-	let newBarsCount = $state(0);
 
-	// Detect new data and trigger animation
+	// Detect new data and trigger animation for all bars
 	$effect(() => {
 		if (animateEntry && activityData.length > prevDataLength) {
-			// New data arrived - animate the new bar(s)
-			newBarsCount = activityData.length - prevDataLength;
+			// New data arrived - animate all bars
 			animationGeneration++;
 		}
 		prevDataLength = activityData.length;
@@ -125,14 +122,14 @@
 		{@const isActive = value > 0}
 		{@const barHeight = isNoData ? 0 : isIdle ? 2 : Math.max((value / maxValue()) * height, 3)}
 		{@const isRecent = i >= displayData().length - 3}
-		{@const isNewBar = animateEntry && (i >= maxBars - newBarsCount)}
 		<div
-			class="rounded-sm transition-all duration-200 {isNewBar ? 'sparkline-bar-enter' : ''}"
+			class="rounded-sm transition-all duration-200 {animateEntry ? 'sparkline-bar-enter' : ''}"
 			style="
 				width: {barWidth()}px;
 				height: {barHeight}px;
 				background: {isIdle ? 'oklch(0.30 0.01 250)' : barColor()};
 				opacity: {isNoData ? 0 : isRecent ? 1 : 0.5};
+				{animateEntry ? `animation-delay: ${i * 30}ms;` : ''}
 			"
 		></div>
 	{/each}
