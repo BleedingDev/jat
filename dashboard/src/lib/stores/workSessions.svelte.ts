@@ -16,6 +16,7 @@
  */
 
 import { getTerminalScrollback } from '$lib/stores/preferences.svelte';
+import { throttledFetch } from '$lib/utils/requestThrottler';
 
 /**
  * Sparkline data point for hourly token usage
@@ -94,7 +95,7 @@ export async function fetch(includeUsage: boolean = false): Promise<void> {
 		if (includeUsage) {
 			url += '&usage=true';
 		}
-		const response = await globalThis.fetch(url);
+		const response = await throttledFetch(url);
 		const data = await response.json();
 
 		if (!response.ok) {
@@ -147,7 +148,7 @@ export async function fetch(includeUsage: boolean = false): Promise<void> {
 export async function fetchUsage(): Promise<void> {
 	try {
 		const lines = getTerminalScrollback() || 2000;
-		const response = await globalThis.fetch(`/api/work?lines=${lines}&usage=true`);
+		const response = await throttledFetch(`/api/work?lines=${lines}&usage=true`);
 		const data = await response.json();
 
 		if (!response.ok || !data.sessions) return;
@@ -282,17 +283,20 @@ export async function sendEscape(sessionName: string): Promise<boolean> {
 
 /**
  * Start polling for session updates
+ * Default interval increased from 500ms to 2000ms to reduce request load.
+ * For faster updates, use SSE events instead of polling.
  */
-export function startPolling(intervalMs: number = 500): void {
+export function startPolling(intervalMs: number = 2000): void {
 	stopPolling(); // Clear any existing interval
 
 	// Initial fetch
 	fetch();
 
-	// Set up polling
+	// Set up polling (minimum 1000ms to prevent browser connection exhaustion)
+	const safeInterval = Math.max(intervalMs, 1000);
 	pollingInterval = setInterval(() => {
 		fetch();
-	}, intervalMs);
+	}, safeInterval);
 }
 
 /**

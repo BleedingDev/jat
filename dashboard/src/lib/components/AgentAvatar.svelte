@@ -29,10 +29,11 @@
 	let currentFetchedName = $state<string | null>(null);
 
 	// Cache for avatar SVGs (module-level to persist across instances)
-	const avatarCache = new Map<string, string>();
+	// Using globalThis to ensure cache survives HMR in development
+	const avatarCache: Map<string, string> = (globalThis as any).__avatarCache ??= new Map();
 
 	// Pending fetches to deduplicate in-flight requests
-	const pendingFetches = new Map<string, Promise<string | null>>();
+	const pendingFetches: Map<string, Promise<string | null>> = (globalThis as any).__pendingAvatarFetches ??= new Map();
 
 	// Cache version - increment to bust all avatar caches
 	// Bump this when avatars are regenerated or cache logic changes
@@ -42,36 +43,29 @@
 	// Actual fetch implementation
 	async function doFetch(agentName: string, cacheKey: string): Promise<string | null> {
 		const url = `/api/avatar/${encodeURIComponent(agentName)}?v=${CACHE_VERSION}`;
-		console.log(`[AgentAvatar] Fetching: ${url}`);
 
 		try {
 			const response = await fetch(url);
-			console.log(`[AgentAvatar] Response for ${agentName}: status=${response.status}`);
 
 			if (response.ok) {
 				const svg = await response.text();
-				console.log(`[AgentAvatar] Got SVG for ${agentName}: ${svg.length} bytes, starts with: ${svg.substring(0, 50)}`);
 				// Only use real generated avatars, not fallbacks with initials
 				const isFallback = svg.includes('<text');
 				if (isFallback) {
-					console.log(`[AgentAvatar] Fallback detected for ${agentName}, using generic icon`);
 					return null; // Return null so generic avatar icon is shown
 				}
 				avatarCache.set(cacheKey, svg);
-				console.log(`[AgentAvatar] Cached ${agentName}`);
 				return svg;
 			}
-			console.log(`[AgentAvatar] Failed for ${agentName}: status=${response.status}`);
 			return null;
 		} catch (err) {
-			console.error(`[AgentAvatar] Fetch error for ${agentName}:`, err);
+			// Silently fail - will show fallback icon
 			return null;
 		}
 	}
 
 	// Fetch avatar - called by effect when name changes
 	async function fetchAvatar(agentName: string): Promise<void> {
-		console.log(`[AgentAvatar] fetchAvatar called for: ${agentName}`);
 		if (!agentName) {
 			loadState = 'error';
 			svgContent = null;
@@ -83,13 +77,11 @@
 		// Check cache first
 		const cached = avatarCache.get(cacheKey);
 		if (cached) {
-			console.log(`[AgentAvatar] Cache HIT for ${agentName}`);
 			svgContent = cached;
 			loadState = 'success';
 			currentFetchedName = agentName;
 			return;
 		}
-		console.log(`[AgentAvatar] Cache MISS for ${agentName}, fetching...`);
 
 		// Check if there's already a pending fetch for this avatar
 		let fetchPromise = pendingFetches.get(cacheKey);
@@ -104,18 +96,14 @@
 
 		try {
 			const svg = await fetchPromise;
-			console.log(`[AgentAvatar] Fetch complete for ${agentName}: got ${svg ? svg.length + ' bytes' : 'null'}`);
 			if (svg) {
 				svgContent = svg;
 				loadState = 'success';
-				console.log(`[AgentAvatar] Set loadState=success for ${agentName}`);
 			} else {
 				loadState = 'error';
-				console.log(`[AgentAvatar] Set loadState=error for ${agentName} (null svg)`);
 			}
 		} catch (err) {
 			loadState = 'error';
-			console.error(`[AgentAvatar] Set loadState=error for ${agentName} (exception):`, err);
 		} finally {
 			// Clean up pending fetch after a short delay (allow other waiters to complete)
 			setTimeout(() => pendingFetches.delete(cacheKey), 100);
