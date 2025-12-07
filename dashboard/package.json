@@ -15,6 +15,7 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.70.1",
+		"@humanspeak/svelte-virtual-list": "^0.3.6",
 		"better-sqlite3": "^11.8.1",
 		"d3": "^7.9.0",
 		"svelte-dnd-action": "^0.9.67",

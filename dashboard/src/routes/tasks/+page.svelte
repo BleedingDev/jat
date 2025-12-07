@@ -484,7 +484,7 @@
 
 		// Phase 1: Fast initial load (no usage data)
 		fetchTaskData();
-		startPolling(500);
+		startPolling(2000); // 2s polling (was 500ms - too aggressive)
 		updateContainerHeight();
 		window.addEventListener('resize', updateContainerHeight);
 		window.addEventListener('keydown', handleKeydown);
