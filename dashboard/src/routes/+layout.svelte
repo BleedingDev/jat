@@ -14,7 +14,7 @@
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime } from '$lib/utils/soundEffects';
-	import { initSessionEvents, closeSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
+	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
 	import { availableProjects, openTaskDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
@@ -49,6 +49,24 @@
 	// Ready task count and list for Swarm button dropdown
 	let readyTaskCount = $state(0);
 	let readyTasks = $state<Array<{ id: string; title: string; priority: number; type: string; project: string }>>([]);
+
+	// Epics with ready children for Run Epic feature
+	interface EpicWithReady {
+		id: string;
+		title: string;
+		project: string;
+		readyCount: number;
+		totalCount: number;
+	}
+	let epicsWithReady = $state<EpicWithReady[]>([]);
+
+	// Review rules for settings preview
+	interface ReviewRule {
+		type: string;
+		maxAutoPriority: number;
+		note?: string;
+	}
+	let reviewRules = $state<ReviewRule[]>([]);
 
 	// Token usage state for TopBar
 	let tokensToday = $state(0);
@@ -85,6 +103,7 @@
 			// Refresh task data immediately
 			loadAllTasks();
 			loadReadyTaskCount();
+			loadEpicsWithReady();
 		}
 	});
 
@@ -153,9 +172,10 @@
 	onMount(() => {
 		initPreferences(); // Initialize unified preferences store
 		themeChange(false);
-		initSessionEvents(); // Initialize cross-page session events
+		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
+		connectSessionEvents(); // Connect to real-time session events SSE
 		connectTaskEvents(); // Connect to real-time task events SSE
-		Promise.all([loadAllTasks(), loadSparklineData(), loadReadyTaskCount(), loadConfigProjects(), loadStateCounts()]);
+		Promise.all([loadAllTasks(), loadSparklineData(), loadReadyTaskCount(), loadConfigProjects(), loadStateCounts(), loadEpicsWithReady(), loadReviewRules()]);
 
 		// Set up polling for token usage and sparkline (every 30 seconds)
 		// Note: Task data is now refreshed via SSE events, but we keep polling for sparkline
@@ -171,8 +191,9 @@
 		return () => {
 			clearInterval(sparklineInterval);
 			clearInterval(stateCountsInterval);
-			closeSessionEvents();
-			disconnectTaskEvents();
+			closeSessionEvents(); // Close cross-page BroadcastChannel
+			disconnectSessionEvents(); // Disconnect from session events SSE
+			disconnectTaskEvents(); // Disconnect from task events SSE
 		};
 	});
 
@@ -184,6 +205,7 @@
 			loadAllTasks();
 			loadReadyTaskCount();
 			loadStateCounts();
+			loadEpicsWithReady();
 		}
 	});
 
@@ -283,6 +305,56 @@
 			console.error('Failed to fetch ready task count:', error);
 			readyTaskCount = 0;
 			readyTasks = [];
+		}
+	}
+
+	// Fetch epics with ready children for Run Epic feature
+	async function loadEpicsWithReady() {
+		try {
+			// Get all tasks and filter for open epics
+			const response = await fetch('/api/tasks?status=open');
+			const data = await response.json();
+			const epics = (data.tasks || []).filter((t: any) => t.issue_type === 'epic');
+
+			// For each epic, get its ready children count
+			const epicsData: EpicWithReady[] = [];
+
+			for (const epic of epics) {
+				try {
+					const childResponse = await fetch(`/api/epics/${epic.id}/children`);
+					if (childResponse.ok) {
+						const childData = await childResponse.json();
+						if (childData.summary?.ready > 0) {
+							epicsData.push({
+								id: epic.id,
+								title: epic.title,
+								project: epic.project || epic.id.split('-')[0],
+								readyCount: childData.summary.ready,
+								totalCount: childData.summary.total
+							});
+						}
+					}
+				} catch {
+					// Skip epics we can't fetch children for
+				}
+			}
+
+			epicsWithReady = epicsData.sort((a, b) => b.readyCount - a.readyCount);
+		} catch (error) {
+			console.error('Failed to fetch epics with ready:', error);
+			epicsWithReady = [];
+		}
+	}
+
+	// Fetch review rules for settings preview
+	async function loadReviewRules() {
+		try {
+			const response = await fetch('/api/review-rules');
+			const data = await response.json();
+			reviewRules = data.rules || [];
+		} catch (error) {
+			console.error('Failed to fetch review rules:', error);
+			reviewRules = [];
 		}
 	}
 
@@ -562,6 +634,8 @@
 			{readyTasks}
 			{projects}
 			{selectedProject}
+			{epicsWithReady}
+			{reviewRules}
 		/>
 
 		<!-- Page content -->
