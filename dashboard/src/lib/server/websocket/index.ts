@@ -9,6 +9,9 @@
  *
  * // In an API endpoint after updating a task:
  * broadcastTaskChange(['new-task-id'], []);
+ *
+ * // High priority broadcast with retry:
+ * broadcast('agents', { type: 'agent-state-change', ... }, { priority: 'high' });
  */
 
 export {
@@ -30,7 +33,8 @@ export {
 
 	// Types
 	type Channel,
-	type ChannelMessages
+	type ChannelMessages,
+	type BroadcastOptions
 } from './connectionPool.js';
 
 export { webSocketPlugin } from './vitePlugin.js';
@@ -40,3 +44,11 @@ export {
 	stopWatchers,
 	isWatchersRunning
 } from './watchers.js';
+
+// Message Queue exports for advanced use cases
+export {
+	getQueueStats,
+	type QueuedMessage,
+	type QueueStats,
+	type MessagePriority
+} from './messageQueue.js';

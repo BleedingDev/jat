@@ -23,6 +23,16 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
 import type { Server as HttpServer } from 'http';
+import {
+	enqueue,
+	startRetryProcessor,
+	stopRetryProcessor,
+	registerClient,
+	unregisterClient,
+	getQueueStats,
+	setDeadLetterCallback,
+	type MessagePriority
+} from './messageQueue.js';
 
 // ============================================================================
 // Types
@@ -150,6 +160,17 @@ export function initializeWebSocket(httpServer: HttpServer): WebSocketServer {
 	// Start heartbeat interval (every 30 seconds)
 	heartbeatInterval = setInterval(sendHeartbeats, 30000);
 
+	// Start message retry processor
+	startRetryProcessor();
+
+	// Set up dead letter callback for logging
+	setDeadLetterCallback((clientId, message) => {
+		console.warn(
+			`[WS] Dead letter: message ${message.id} to ${clientId} ` +
+				`on channel ${message.channel} after ${message.attemptCount} attempts`
+		);
+	});
+
 	console.log('[WS] WebSocket server ready on /ws');
 	return wss;
 }
@@ -170,6 +191,7 @@ function handleConnection(ws: WebSocket, request: IncomingMessage): void {
 	};
 
 	clients.set(ws, metadata);
+	registerClient(ws, clientId);
 	console.log(`[WS] Client connected: ${clientId} (total: ${clients.size})`);
 
 	// Send welcome message
@@ -225,6 +247,9 @@ function handleDisconnection(ws: WebSocket): void {
 			subscribers?.delete(ws);
 		});
 	}
+
+	// Unregister from message queue (dead letters any pending messages)
+	unregisterClient(ws);
 
 	clients.delete(ws);
 	console.log(`[WS] Total clients: ${clients.size}`);
@@ -314,23 +339,45 @@ function unsubscribeClient(ws: WebSocket, channels: Channel[]): void {
 // Broadcasting
 // ============================================================================
 
+/** Broadcast options */
+export interface BroadcastOptions {
+	/** Message priority for retry queue (default: 'normal') */
+	priority?: MessagePriority;
+	/** Whether to queue failed messages for retry (default: true) */
+	enableRetry?: boolean;
+}
+
 /**
  * Broadcast a message to all subscribers of a channel
  *
+ * Messages that fail to send are automatically queued for retry with
+ * exponential backoff. Use the priority option for important messages.
+ *
  * @param channel - The channel to broadcast to
  * @param message - The message payload (will be JSON stringified)
- * @returns Number of clients the message was sent to
+ * @param options - Broadcast options (priority, enableRetry)
+ * @returns Object with sent count and queued count
  *
  * @example
+ * // Normal broadcast (queues failed messages for retry)
  * broadcast('tasks', { type: 'task-updated', taskId: 'jat-abc', data: {...} });
+ *
+ * // High priority broadcast (more retries, faster retry)
+ * broadcast('agents', { type: 'agent-state-change', ... }, { priority: 'high' });
+ *
+ * // Fire-and-forget (no retry on failure)
+ * broadcast('output', { type: 'output-update', ... }, { enableRetry: false });
  */
 export function broadcast<C extends Channel>(
 	channel: C,
-	message: ChannelMessages[C]
-): number {
+	message: ChannelMessages[C],
+	options: BroadcastOptions = {}
+): { sent: number; queued: number } {
+	const { priority = 'normal', enableRetry = true } = options;
+
 	const subscribers = channelSubscribers.get(channel);
 	if (!subscribers || subscribers.size === 0) {
-		return 0;
+		return { sent: 0, queued: 0 };
 	}
 
 	const payload = JSON.stringify({
@@ -340,6 +387,8 @@ export function broadcast<C extends Channel>(
 	});
 
 	let sentCount = 0;
+	let queuedCount = 0;
+
 	subscribers.forEach(ws => {
 		if (ws.readyState === WebSocket.OPEN) {
 			try {
@@ -347,11 +396,19 @@ export function broadcast<C extends Channel>(
 				sentCount++;
 			} catch (error) {
 				console.error(`[WS] Failed to send to client:`, error);
+				if (enableRetry) {
+					enqueue(ws, channel, message, { priority });
+					queuedCount++;
+				}
 			}
+		} else if (enableRetry && ws.readyState === WebSocket.CONNECTING) {
+			// Client is reconnecting, queue for later
+			enqueue(ws, channel, message, { priority });
+			queuedCount++;
 		}
 	});
 
-	return sentCount;
+	return { sent: sentCount, queued: queuedCount };
 }
 
 /**
@@ -423,6 +480,7 @@ export function getStats(): {
 		channels: Channel[];
 		lastHeartbeat: string;
 	}>;
+	messageQueue: ReturnType<typeof getQueueStats>;
 } {
 	const channelStats: Record<Channel, number> = {} as Record<Channel, number>;
 	allChannels.forEach(channel => {
@@ -442,7 +500,8 @@ export function getStats(): {
 		uptimeSeconds: serverStartTime
 			? Math.floor((Date.now() - serverStartTime.getTime()) / 1000)
 			: 0,
-		clientDetails
+		clientDetails,
+		messageQueue: getQueueStats()
 	};
 }
 
@@ -470,16 +529,20 @@ export function shutdown(): Promise<void> {
 			heartbeatInterval = null;
 		}
 
+		// Stop message retry processor
+		stopRetryProcessor();
+
 		if (!wss) {
 			resolve();
 			return;
 		}
 
-		// Notify all clients of shutdown
-		broadcast('system', { type: 'error', message: 'Server shutting down' });
+		// Notify all clients of shutdown (fire-and-forget, no retry needed)
+		broadcast('system', { type: 'error', message: 'Server shutting down' }, { enableRetry: false });
 
-		// Close all connections
+		// Close all connections (this will dead-letter queued messages)
 		clients.forEach((meta, ws) => {
+			unregisterClient(ws);
 			ws.close(1001, 'Server shutdown');
 		});
 		clients.clear();
@@ -503,27 +566,31 @@ export function shutdown(): Promise<void> {
 // ============================================================================
 
 /**
- * Broadcast agent state change
+ * Broadcast agent state change (high priority - state changes are important)
  */
 export function broadcastAgentState(
 	agentName: string,
 	state: string,
 	data?: unknown
-): number {
-	return broadcast('agents', {
-		type: 'agent-state-change',
-		agentName,
-		data: { state, ...((data as object) || {}) }
-	});
+): { sent: number; queued: number } {
+	return broadcast(
+		'agents',
+		{
+			type: 'agent-state-change',
+			agentName,
+			data: { state, ...((data as object) || {}) }
+		},
+		{ priority: 'high' }
+	);
 }
 
 /**
- * Broadcast agent usage update
+ * Broadcast agent usage update (normal priority)
  */
 export function broadcastAgentUsage(
 	agentName: string,
 	usage: { tokens: number; cost: number }
-): number {
+): { sent: number; queued: number } {
 	return broadcast('agents', {
 		type: 'agent-usage-update',
 		agentName,
@@ -532,23 +599,30 @@ export function broadcastAgentUsage(
 }
 
 /**
- * Broadcast task change event
+ * Broadcast task change event (high priority - task changes are important)
  */
 export function broadcastTaskChange(
 	newTasks: string[] = [],
 	removedTasks: string[] = []
-): number {
-	return broadcast('tasks', {
-		type: 'task-change',
-		newTasks,
-		removedTasks
-	});
+): { sent: number; queued: number } {
+	return broadcast(
+		'tasks',
+		{
+			type: 'task-change',
+			newTasks,
+			removedTasks
+		},
+		{ priority: 'high' }
+	);
 }
 
 /**
- * Broadcast task update
+ * Broadcast task update (normal priority)
  */
-export function broadcastTaskUpdate(taskId: string, data: unknown): number {
+export function broadcastTaskUpdate(
+	taskId: string,
+	data: unknown
+): { sent: number; queued: number } {
 	return broadcast('tasks', {
 		type: 'task-updated',
 		taskId,
@@ -557,28 +631,40 @@ export function broadcastTaskUpdate(taskId: string, data: unknown): number {
 }
 
 /**
- * Broadcast output update for a session
+ * Broadcast output update for a session (low priority, fire-and-forget)
+ * Output updates are high volume and not critical - missing one is okay
  */
 export function broadcastOutput(
 	sessionName: string,
 	output: string,
 	lineCount: number
-): number {
-	return broadcast('output', {
-		type: 'output-update',
-		sessionName,
-		output,
-		lineCount
-	});
+): { sent: number; queued: number } {
+	return broadcast(
+		'output',
+		{
+			type: 'output-update',
+			sessionName,
+			output,
+			lineCount
+		},
+		{ priority: 'low', enableRetry: false }
+	);
 }
 
 /**
- * Broadcast new agent mail message
+ * Broadcast new agent mail message (high priority - messages are important)
  */
-export function broadcastNewMessage(agentName: string, messageData: unknown): number {
-	return broadcast('messages', {
-		type: 'new-message',
-		agentName,
-		data: messageData
-	});
+export function broadcastNewMessage(
+	agentName: string,
+	messageData: unknown
+): { sent: number; queued: number } {
+	return broadcast(
+		'messages',
+		{
+			type: 'new-message',
+			agentName,
+			data: messageData
+		},
+		{ priority: 'high' }
+	);
 }
