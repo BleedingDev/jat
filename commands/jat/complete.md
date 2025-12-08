@@ -414,6 +414,13 @@ This step implements the review rules system that allows project-level configura
 #### Rule Evaluation Order
 
 ```
+0. Check session epic context (.claude/sessions/context-{session_id}.json)
+   └─ If epic context exists with reviewThreshold:
+      └─ Compare task.priority to threshold
+      └─ If priority > threshold: emit [JAT:IDLE] (require review)
+      └─ If priority <= threshold: emit [JAT:AUTO_PROCEED]
+   └─ Epic context takes precedence over all other rules
+
 1. Check task.notes for [REVIEW_OVERRIDE:...] pattern
    └─ If found → Use override action (always_review, auto_proceed, force_review)
 
@@ -424,6 +431,11 @@ This step implements the review rules system that allows project-level configura
 3. If config missing → Use hardcoded defaults
 ```
 
+**Note on priority semantics:** Lower priority number = higher importance (P0 is critical, P4 is lowest).
+The threshold represents the HIGHEST priority number that should auto-proceed.
+- `threshold: 1` → Only P0 and P1 auto-proceed, P2-P4 require review
+- `threshold: 3` → P0-P3 auto-proceed, only P4 requires review
+
 #### Implementation
 
 ```bash
@@ -433,19 +445,84 @@ task_notes=$(echo "$task_json" | jq -r '.[0].notes // ""')
 task_priority=$(echo "$task_json" | jq -r '.[0].priority')
 task_type=$(echo "$task_json" | jq -r '.[0].issue_type')
 
-# Step 1: Check for per-task override in notes
-COMPLETION_MARKER="[JAT:IDLE]"  # Default: requires review
+COMPLETION_MARKER=""  # Will be set by first matching rule
 
-if echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:always_review\]'; then
-  echo "📋 Review override detected: always_review"
-  COMPLETION_MARKER="[JAT:IDLE]"
-elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:auto_proceed\]'; then
-  echo "📋 Review override detected: auto_proceed"
-  COMPLETION_MARKER="[JAT:AUTO_PROCEED]"
-elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:force_review\]'; then
-  echo "📋 Review override detected: force_review"
-  COMPLETION_MARKER="[JAT:IDLE]"
-else
+# Step 0: Check session epic context (highest priority)
+# Session context is set by dashboard when spawning agents for epic execution
+session_id=$(~/code/jat/scripts/get-current-session-id)
+context_file=".claude/sessions/context-${session_id}.json"
+
+if [[ -f "$context_file" ]]; then
+  epic_threshold=$(jq -r '.reviewThreshold // empty' "$context_file")
+
+  if [[ -n "$epic_threshold" ]]; then
+    # Convert reviewThreshold string to numeric threshold
+    # 'all' = always review (threshold -1)
+    # 'none' = never review (threshold 4)
+    # 'p0' = only P0 requires review (threshold -1 means P0+ auto-proceed is wrong)
+    # 'p0-p1' = P0-P1 require review (threshold 1, P2+ auto-proceed)
+    # 'p0-p2' = P0-P2 require review (threshold 2, P3+ auto-proceed)
+    case "$epic_threshold" in
+      "all")
+        echo "📋 Epic context: reviewThreshold='all' → All tasks require review"
+        COMPLETION_MARKER="[JAT:IDLE]"
+        ;;
+      "none")
+        echo "📋 Epic context: reviewThreshold='none' → All tasks auto-proceed"
+        COMPLETION_MARKER="[JAT:AUTO_PROCEED]"
+        ;;
+      "p0")
+        # Only P0 requires review; P1+ auto-proceed
+        if (( task_priority == 0 )); then
+          echo "📋 Epic context: P0 task requires review (threshold: p0)"
+          COMPLETION_MARKER="[JAT:IDLE]"
+        else
+          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0)"
+          COMPLETION_MARKER="[JAT:AUTO_PROCEED]"
+        fi
+        ;;
+      "p0-p1")
+        # P0-P1 require review; P2+ auto-proceed
+        if (( task_priority <= 1 )); then
+          echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p1)"
+          COMPLETION_MARKER="[JAT:IDLE]"
+        else
+          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p1)"
+          COMPLETION_MARKER="[JAT:AUTO_PROCEED]"
+        fi
+        ;;
+      "p0-p2")
+        # P0-P2 require review; P3+ auto-proceed
+        if (( task_priority <= 2 )); then
+          echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p2)"
+          COMPLETION_MARKER="[JAT:IDLE]"
+        else
+          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p2)"
+          COMPLETION_MARKER="[JAT:AUTO_PROCEED]"
+        fi
+        ;;
+      *)
+        echo "⚠️ Unknown epic reviewThreshold: $epic_threshold (ignoring)"
+        ;;
+    esac
+  fi
+fi
+
+# If epic context didn't set marker, continue with other rules
+if [[ -z "$COMPLETION_MARKER" ]]; then
+  COMPLETION_MARKER="[JAT:IDLE]"  # Default: requires review
+
+  # Step 1: Check for per-task override in notes
+  if echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:always_review\]'; then
+    echo "📋 Review override detected: always_review"
+    COMPLETION_MARKER="[JAT:IDLE]"
+  elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:auto_proceed\]'; then
+    echo "📋 Review override detected: auto_proceed"
+    COMPLETION_MARKER="[JAT:AUTO_PROCEED]"
+  elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:force_review\]'; then
+    echo "📋 Review override detected: force_review"
+    COMPLETION_MARKER="[JAT:IDLE]"
+  else
   # Step 2: Load review-rules.json and apply type-based rules
   rules_file=".beads/review-rules.json"
 
@@ -499,7 +576,8 @@ else
         ;;
     esac
   fi
-fi
+  fi  # End of: if [[ -z "$COMPLETION_MARKER" ]]
+fi  # End of: else (no REVIEW_OVERRIDE found)
 
 echo "🏷️  Completion marker: $COMPLETION_MARKER"
 ```
@@ -536,6 +614,55 @@ echo "🏷️  Completion marker: $COMPLETION_MARKER"
 - `maxAutoPriority: 3` means P0, P1, P2, P3 can auto-proceed; P4 requires review
 - `maxAutoPriority: -1` means no auto-proceed (always review)
 - `maxAutoPriority: 4` means all priorities auto-proceed
+
+#### Session Epic Context
+
+When agents are spawned as part of an epic swarm, the dashboard writes session context to:
+```
+.claude/sessions/context-{session_id}.json
+```
+
+**Context file format:**
+```json
+{
+  "epicId": "jat-abc",
+  "reviewThreshold": "p0-p1",
+  "spawnedAt": "2025-12-08T15:30:00.000Z"
+}
+```
+
+**reviewThreshold values:**
+
+| Value | Requires Review | Auto-Proceed |
+|-------|-----------------|--------------|
+| `all` | All priorities | None |
+| `p0` | P0 only | P1-P4 |
+| `p0-p1` | P0, P1 | P2-P4 |
+| `p0-p2` | P0, P1, P2 | P3-P4 |
+| `none` | None | All priorities |
+
+**Dashboard integration:**
+
+When the dashboard spawns an agent for epic execution (via `epicQueueStore.launchEpic()`), it should:
+
+1. Call POST `/api/sessions` to spawn the agent
+2. Get the session ID from the response
+3. Write context file: `.claude/sessions/context-{session_id}.json`
+4. Include the `reviewThreshold` from `epicQueueStore.settings`
+
+**Example dashboard code:**
+```typescript
+// After spawning agent
+const contextPath = `.claude/sessions/context-${sessionId}.json`;
+const context = {
+  epicId: state.epicId,
+  reviewThreshold: state.settings.reviewThreshold,
+  spawnedAt: new Date().toISOString()
+};
+await writeFile(contextPath, JSON.stringify(context, null, 2));
+```
+
+**Note:** Epic context takes precedence over all other review rules. This allows the human commander to set a review threshold for the entire epic swarm, overriding per-project or per-task defaults.
 
 ---
 

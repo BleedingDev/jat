@@ -126,6 +126,7 @@ Temp files enable cross-process communication without sockets.
 /tmp/claude-question-tmux-{tmuxSession}.json  # Question data by tmux session
 /tmp/claude-session-{PPID}.txt            # Session ID lookup by process
 .claude/sessions/agent-{sessionId}.txt    # Agent name for session (in sessions/ subdirectory)
+.claude/sessions/context-{sessionId}.json # Session context (epic settings, reviewThreshold)
 ```
 
 **Why both session ID and tmux session?**

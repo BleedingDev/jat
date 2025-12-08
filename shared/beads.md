@@ -62,6 +62,7 @@ Add these patterns to your project's root `.gitignore`:
 # Claude Code session-specific files (per-developer, don't commit)
 .claude/sessions/agent-*.txt
 .claude/sessions/agent-*-activity.jsonl
+.claude/sessions/context-*.json  # Epic context (reviewThreshold)
 .claude/agent-*.txt  # Legacy location
 .mcp.json
 
@@ -80,6 +81,7 @@ Add these patterns to your project's root `.gitignore`:
 | `.beads/beads.db*` | ❌ No | Local SQLite cache (auto-rebuilt) |
 | `.claude/sessions/agent-*.txt` | ❌ No | Per-session agent identity |
 | `.claude/sessions/agent-*-activity.jsonl` | ❌ No | Session activity logs |
+| `.claude/sessions/context-*.json` | ❌ No | Epic context (reviewThreshold) |
 | `.mcp.json` | ❌ No | Local MCP server configuration |
 
 **Why this matters:**

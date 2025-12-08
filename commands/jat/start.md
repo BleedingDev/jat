@@ -124,6 +124,7 @@ Write(.claude/sessions/agent-{session_id}.txt, "AgentName")
 # Remove session files older than 7 days to prevent clutter
 find .claude/sessions -name "agent-*.txt" -mtime +7 -delete 2>/dev/null
 find .claude/sessions -name "*-activity.jsonl" -mtime +7 -delete 2>/dev/null
+find .claude/sessions -name "context-*.json" -mtime +7 -delete 2>/dev/null
 # Also clean legacy location
 find .claude -maxdepth 1 -name "agent-*.txt" -mtime +7 -delete 2>/dev/null
 find .claude -maxdepth 1 -name "*-activity.jsonl" -mtime +7 -delete 2>/dev/null
