@@ -26,6 +26,7 @@
 	import CommandPalette from './CommandPalette.svelte';
 	import Sparkline from './Sparkline.svelte';
 	import { getSparklineVisible } from '$lib/stores/preferences.svelte';
+	import WebSocketStatusIndicator from './WebSocketStatusIndicator.svelte';
 	import { openTaskDrawer, openTaskDetailDrawer, isSpawnModalOpen } from '$lib/stores/drawerStore';
 	import { startSpawning, stopSpawning, startBulkSpawn, endBulkSpawn } from '$lib/stores/spawningTasks';
 	import { pickNextTask, type NextTaskResult } from '$lib/utils/pickNextTask';
@@ -1691,6 +1692,9 @@
 		<div class="flex">
 			<TasksCompletedBadge compact={true} />
 		</div>
+
+		<!-- WebSocket Status Indicator -->
+		<WebSocketStatusIndicator />
 
 		<!-- User Profile -->
 		<UserProfile />
