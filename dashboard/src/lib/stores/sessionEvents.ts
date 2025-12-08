@@ -96,12 +96,36 @@ function handleSessionOutput(data: SessionEvent): void {
 
 /**
  * Handle session-state event: update session state
- * Note: State is derived from terminal output in components, so we just broadcast
+ * Updates the workSessions store with the new state for real-time UI updates
  */
-function handleSessionState(_data: SessionEvent): void {
-	// State is derived from terminal output in components, not stored directly
-	// But we broadcast the event for components that want to react immediately
-	// The output update will also trigger state re-detection in components
+function handleSessionState(data: SessionEvent): void {
+	const { sessionName, state, previousState } = data;
+	if (!sessionName || !state) return;
+
+	// Log state transitions for debugging
+	if (previousState && previousState !== state) {
+		console.log(`[SessionEvents] State transition: ${sessionName} ${previousState} → ${state}`);
+	}
+
+	// Update the session state in workSessions store
+	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
+	if (sessionIndex === -1) {
+		// Session not in state yet - might be new, will be added by session-created
+		return;
+	}
+
+	// Store the state in a custom property for components to access
+	// This provides real-time state updates without re-parsing output
+	workSessionsState.sessions = workSessionsState.sessions.map((session, idx) => {
+		if (idx === sessionIndex) {
+			return {
+				...session,
+				_sseState: state,
+				_sseStateTimestamp: data.timestamp
+			};
+		}
+		return session;
+	});
 }
 
 /**

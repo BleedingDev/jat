@@ -47,8 +47,13 @@
 		tokens: number;
 		cost: number;
 		sparklineData?: SparklineDataPoint[];
+		contextPercent?: number | null;
 		created: string;
 		attached: boolean;
+		/** Real-time state from SSE (working, needs-input, ready-for-review, etc.) */
+		_sseState?: string;
+		/** Timestamp when SSE state was last updated */
+		_sseStateTimestamp?: number;
 	}
 
 	interface Props {
@@ -91,6 +96,25 @@
 	// State priority for sorting (lower = more attention needed):
 	// 0 = needs-input, 1 = review, 2 = working, 3 = starting, 4 = completed, 5 = idle
 	function getSessionState(session: WorkSession): number {
+		// Use SSE state if available and recent (within 5 seconds)
+		const SSE_STATE_TTL_MS = 5000;
+		if (session._sseState && session._sseStateTimestamp && (Date.now() - session._sseStateTimestamp) < SSE_STATE_TTL_MS) {
+			const stateMap: Record<string, number> = {
+				'needs-input': 0,
+				'ready-for-review': 1,
+				'completing': 1,  // Same priority as review
+				'compacting': 2,  // Same priority as working
+				'working': 2,
+				'starting': 3,
+				'completed': 4,
+				'idle': 5
+			};
+			if (session._sseState in stateMap) {
+				return stateMap[session._sseState];
+			}
+		}
+
+		// Fall back to output parsing
 		const output = session.output || '';
 		const recentOutput = output.slice(-3000);
 
@@ -238,7 +262,7 @@
 	{:else}
 		<!-- WorkCards -->
 		<div class="flex-1 min-h-0 px-2">
-			<!-- Horizontal scrolling row (640px per card for full terminal output) -->
+			<!-- Horizontal scrolling row (720px per card for full terminal output / 80 columns) -->
 			<!-- pt-10 reserves space above cards for agent tabs that use negative margin -->
 			<!-- min-h-0 is critical for proper flex height calculation -->
 			<div class="flex gap-4 overflow-x-auto h-full pt-10 pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
@@ -256,8 +280,11 @@
 							tokens={session.tokens}
 							cost={session.cost}
 							sparklineData={session.sparklineData}
+							contextPercent={session.contextPercent}
 							created={session.created}
 							attached={session.attached}
+							sseState={session._sseState}
+							sseStateTimestamp={session._sseStateTimestamp}
 							onKillSession={createKillHandler(session.sessionName)}
 							onInterrupt={createInterruptHandler(session.sessionName)}
 							onContinue={createContinueHandler(session.sessionName)}

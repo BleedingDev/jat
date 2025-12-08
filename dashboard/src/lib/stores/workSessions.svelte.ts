@@ -67,6 +67,10 @@ export interface WorkSession {
 	contextPercent?: number | null;
 	created: string;
 	attached: boolean;
+	/** Real-time state from SSE (working, needs-input, ready-for-review, etc.) */
+	_sseState?: string;
+	/** Timestamp when SSE state was last updated */
+	_sseStateTimestamp?: number;
 }
 
 interface WorkSessionsState {
@@ -150,16 +154,33 @@ export async function fetch(includeUsage: boolean = false): Promise<void> {
 	}
 }
 
+// Track consecutive usage fetch failures for exponential backoff
+let usageFailureCount = 0;
+let usageBackoffUntil = 0;
+const MAX_BACKOFF_MS = 120000; // Max 2 minute backoff
+const BASE_BACKOFF_MS = 5000;  // Start with 5 second backoff
+
 /**
  * Fetch usage data for all sessions (lazy load after initial fetch)
+ * Implements exponential backoff when requests fail to prevent server overload
  */
 export async function fetchUsage(): Promise<void> {
+	// Check if we're in backoff period
+	const now = Date.now();
+	if (now < usageBackoffUntil) {
+		// Skip this request - server is overloaded
+		return;
+	}
+
 	try {
 		const lines = getTerminalScrollback() || 2000;
 		const response = await throttledFetch(`/api/work?lines=${lines}&usage=true`);
 		const data = await response.json();
 
 		if (!response.ok || !data.sessions) return;
+
+		// Success - reset failure count
+		usageFailureCount = 0;
 
 		// Merge usage data into existing sessions
 		type UsageData = { tokens: number; cost: number; sparklineData: SparklineDataPoint[]; contextPercent: number | null };
@@ -181,7 +202,11 @@ export async function fetchUsage(): Promise<void> {
 			return session;
 		});
 	} catch (err) {
-		console.error('workSessions.fetchUsage error:', err);
+		// Increment failure count and calculate backoff
+		usageFailureCount++;
+		const backoffMs = Math.min(BASE_BACKOFF_MS * Math.pow(2, usageFailureCount - 1), MAX_BACKOFF_MS);
+		usageBackoffUntil = Date.now() + backoffMs;
+		console.error(`workSessions.fetchUsage error (backing off ${backoffMs / 1000}s):`, err);
 	}
 }
 
@@ -319,11 +344,21 @@ export async function sendInput(
 	type: 'text' | 'enter' | 'up' | 'down' | 'escape' | 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'tab' | 'raw' = 'text'
 ): Promise<boolean> {
 	try {
+		// Use a 30-second timeout for input requests
+		// This is longer because user actions should complete even if server is slow
+		// Uses fetch with keepalive to give it priority over polling requests
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 30000);
+
 		const response = await globalThis.fetch(`/api/sessions/${sessionName}/input`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ input, type })
+			body: JSON.stringify({ input, type }),
+			signal: controller.signal,
+			keepalive: true // Priority hint for browser
 		});
+
+		clearTimeout(timeoutId);
 
 		if (!response.ok) {
 			const data = await response.json();
@@ -332,8 +367,14 @@ export async function sendInput(
 
 		return true;
 	} catch (err) {
-		state.error = err instanceof Error ? err.message : 'Failed to send input';
-		console.error('workSessions.sendInput error:', err);
+		// Handle abort errors specially
+		if (err instanceof Error && err.name === 'AbortError') {
+			state.error = 'Request timed out - server may be overloaded';
+			console.error('workSessions.sendInput timeout:', sessionName);
+		} else {
+			state.error = err instanceof Error ? err.message : 'Failed to send input';
+			console.error('workSessions.sendInput error:', err);
+		}
 		return false;
 	}
 }

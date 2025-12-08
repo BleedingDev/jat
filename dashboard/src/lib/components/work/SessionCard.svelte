@@ -146,6 +146,10 @@
 		cardWidth?: number;
 		/** Called when user drags the resize handle */
 		onWidthChange?: (newWidth: number) => void;
+		/** Real-time state from SSE (if available, used instead of output parsing) */
+		sseState?: string;
+		/** Timestamp when SSE state was last updated */
+		sseStateTimestamp?: number;
 	}
 
 	let {
@@ -192,6 +196,9 @@
 		isHighlighted = false,
 		cardWidth,
 		onWidthChange,
+		// SSE real-time state
+		sseState,
+		sseStateTimestamp,
 	}: Props = $props();
 
 	// Derived mode helpers
@@ -470,6 +477,7 @@
 		// This prevents N sessions from all polling simultaneously when not needed
 
 		// Load saved card width from localStorage
+		// Migrate old narrow widths (<=680px) to new default (720px) for 80-column support
 		if (sessionName && !cardWidth) {
 			const savedWidth = localStorage.getItem(
 				`${STORAGE_KEY_PREFIX}${sessionName}`,
@@ -481,7 +489,18 @@
 					parsed >= MIN_CARD_WIDTH &&
 					parsed <= MAX_CARD_WIDTH
 				) {
-					internalWidth = parsed;
+					// Migrate old default (640px) to new default (720px)
+					// Only migrate if width was near old default, preserve user-customized widths
+					if (parsed <= 680) {
+						internalWidth = DEFAULT_CARD_WIDTH;
+						// Update localStorage with new default
+						localStorage.setItem(
+							`${STORAGE_KEY_PREFIX}${sessionName}`,
+							DEFAULT_CARD_WIDTH.toString(),
+						);
+					} else {
+						internalWidth = parsed;
+					}
 				}
 			}
 		}
@@ -731,6 +750,7 @@
 	let internalWidth = $state<number | undefined>(undefined);
 	const MIN_CARD_WIDTH = 300; // Minimum card width in pixels
 	const MAX_CARD_WIDTH = 1200; // Maximum card width in pixels
+	const DEFAULT_CARD_WIDTH = 720; // Default width for 80-column terminal output
 	const STORAGE_KEY_PREFIX = "workcard-width-";
 
 	// Tmux height configuration (from unified preferences store)
@@ -1492,6 +1512,18 @@
 		| "idle";
 
 	const sessionState = $derived.by((): SessionState => {
+		// If we have a recent SSE state (within last 5 seconds), use it directly
+		// This provides real-time updates without re-parsing output
+		const SSE_STATE_TTL_MS = 5000;
+		if (sseState && sseStateTimestamp && (Date.now() - sseStateTimestamp) < SSE_STATE_TTL_MS) {
+			// Map SSE state to our SessionState type
+			const validStates: SessionState[] = ['starting', 'working', 'compacting', 'needs-input', 'ready-for-review', 'completing', 'completed', 'idle'];
+			if (validStates.includes(sseState as SessionState)) {
+				return sseState as SessionState;
+			}
+		}
+
+		// Fall back to parsing output for state detection
 		// Check for markers in recent output
 		const recentOutput = output ? output.slice(-3000) : "";
 
@@ -2552,9 +2584,8 @@
 					await new Promise((r) => setTimeout(r, 30));
 				}
 				// Send the complete message and submit
+				// Note: "text" type already includes Enter in the API, so we don't need to send it separately
 				await onSendInput(message, "text");
-				await new Promise((r) => setTimeout(r, 100));
-				await onSendInput("enter", "key");
 			}
 
 			// Clear input and attached files on success
@@ -3176,7 +3207,7 @@
 			: isJumpHighlighted
 				? '0 0 20px oklch(0.60 0.15 220 / 0.6), inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'
 				: 'inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'};
-			width: {effectiveWidth ?? 640}px;
+			width: {effectiveWidth ?? DEFAULT_CARD_WIDTH}px;
 			flex-shrink: 0;
 		"
 		data-agent-name={agentName}

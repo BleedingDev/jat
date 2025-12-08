@@ -261,27 +261,35 @@
 		}
 	}
 
-	// Auto-refresh data every 15 seconds (layout also polls at 30s)
+	// Auto-refresh data every 30 seconds (reduced from 15s since SSE handles state updates)
 	// Include usage data on background refresh (user won't notice delay)
 	$effect(() => {
-		const interval = setInterval(() => fetchData(true), 15000);
+		const interval = setInterval(() => fetchData(true), 30000);
 		return () => clearInterval(interval);
 	});
 
-	// React to session events from other pages (e.g., session killed on /work)
+	// React to session events from SSE
+	// Only refetch for structural changes (create/destroy), not state changes
+	// State changes are handled in real-time via SSE → sessionEvents store
 	$effect(() => {
 		const event = $lastSessionEvent;
 		if (event) {
-			// Immediately refresh data when a session is killed or spawned
-			fetchData();
+			// Only refresh for structural changes that affect agent/task list
+			const structuralEvents = ['session-created', 'session-destroyed', 'session-killed', 'session-spawned'];
+			if (structuralEvents.includes(event.type)) {
+				fetchData();
+			}
+			// session-state and session-output are handled by SSE real-time updates
+			// No need to refetch the entire agent list for state changes
 		}
 	});
 
-	// Auto-refresh sparkline every 30 seconds
-	$effect(() => {
-		const interval = setInterval(fetchSparklineData, 30000);
-		return () => clearInterval(interval);
-	});
+	// DISABLED: Sparkline refresh was taking 109+ seconds and blocking the server
+	// The sparkline API needs optimization before re-enabling
+	// $effect(() => {
+	// 	const interval = setInterval(fetchSparklineData, 30000);
+	// 	return () => clearInterval(interval);
+	// });
 
 	// Track previous drawer state to detect close transition
 	let wasDrawerOpen = false;
@@ -299,10 +307,10 @@
 		await fetchData();
 		updateContainerHeight();
 
-		// Phase 2: Load sparkline and usage data in background (don't block UI)
-		// Sparkline takes ~1.5s on cache miss, so fetch it after UI renders
-		fetchSparklineData();
-		setTimeout(() => fetchUsageData(), 100);
+		// Phase 2: Load usage data in background (don't block UI)
+		// DISABLED fetchSparklineData() - taking 109+ seconds and blocking server
+		// fetchSparklineData();
+		setTimeout(() => fetchUsageData(), 5000);
 	});
 </script>
 
