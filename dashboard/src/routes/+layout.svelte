@@ -175,13 +175,15 @@
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
 		connectSessionEvents(); // Connect to real-time session events SSE
 		connectTaskEvents(); // Connect to real-time task events SSE
-		Promise.all([loadAllTasks(), loadSparklineData(), loadReadyTaskCount(), loadConfigProjects(), loadStateCounts(), loadEpicsWithReady(), loadReviewRules()]);
+		// Load sparkline data (worker thread prevents event loop blocking)
+		Promise.all([loadAllTasks(), loadReadyTaskCount(), loadConfigProjects(), loadStateCounts(), loadEpicsWithReady(), loadReviewRules(), loadSparklineData()]);
 
-		// Set up polling for token usage and sparkline (every 30 seconds)
-		// Note: Task data is now refreshed via SSE events, but we keep polling for sparkline
+		// Sparkline polling - 5 minute refresh (matches cache TTL)
+		// Multi-project sparkline takes 5+ seconds to generate, so polling more frequently
+		// would cause periodic UI freezes as the server blocks during generation
 		const sparklineInterval = setInterval(() => {
 			loadSparklineData();
-		}, 30_000);
+		}, 5 * 60 * 1000);
 
 		// Poll for session state counts more frequently (every 5 seconds) for responsive badge updates
 		const stateCountsInterval = setInterval(() => {

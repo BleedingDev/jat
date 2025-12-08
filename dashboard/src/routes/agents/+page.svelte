@@ -284,12 +284,11 @@
 		}
 	});
 
-	// DISABLED: Sparkline refresh was taking 109+ seconds and blocking the server
-	// The sparkline API needs optimization before re-enabling
-	// $effect(() => {
-	// 	const interval = setInterval(fetchSparklineData, 30000);
-	// 	return () => clearInterval(interval);
-	// });
+	// Sparkline refresh - now safe with worker threads (30 second refresh)
+	$effect(() => {
+		const interval = setInterval(fetchSparklineData, 30000);
+		return () => clearInterval(interval);
+	});
 
 	// Track previous drawer state to detect close transition
 	let wasDrawerOpen = false;
@@ -308,8 +307,8 @@
 		updateContainerHeight();
 
 		// Phase 2: Load usage data in background (don't block UI)
-		// DISABLED fetchSparklineData() - taking 109+ seconds and blocking server
-		// fetchSparklineData();
+		// Sparkline now uses worker threads (non-blocking)
+		fetchSparklineData();
 		setTimeout(() => fetchUsageData(), 5000);
 	});
 </script>
