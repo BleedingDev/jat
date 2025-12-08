@@ -15,7 +15,8 @@ PERSISTENT_AGENT_FILE="$CLAUDE_DIR/.agent-identity-${WINDOW_KEY}"
 
 # Find the current session's agent file
 SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt 2>/dev/null | tr -d '\n')
-AGENT_FILE="$CLAUDE_DIR/agent-${SESSION_ID}.txt"
+# Use sessions/ subdirectory to keep .claude/ clean
+AGENT_FILE="$CLAUDE_DIR/sessions/agent-${SESSION_ID}.txt"
 
 if [[ -f "$AGENT_FILE" ]]; then
     AGENT_NAME=$(cat "$AGENT_FILE" | tr -d '\n')

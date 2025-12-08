@@ -25,7 +25,9 @@ fi
 # Also update the PPID-based session file for other tools
 echo "$SESSION_ID" > "/tmp/claude-session-${PPID}.txt"
 
-AGENT_FILE="$CLAUDE_DIR/agent-${SESSION_ID}.txt"
+# Use sessions/ subdirectory to keep .claude/ clean
+mkdir -p "$CLAUDE_DIR/sessions"
+AGENT_FILE="$CLAUDE_DIR/sessions/agent-${SESSION_ID}.txt"
 
 # Track if we restored or already had agent
 AGENT_NAME=""

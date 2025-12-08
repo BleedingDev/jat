@@ -20,8 +20,9 @@ if [[ -z "$AGENT_NAME" ]]; then
     exit 2
 fi
 
-# Find session files for this agent
-session_files=$(grep -l "^${AGENT_NAME}$" .claude/agent-*.txt 2>/dev/null || true)
+# Find session files for this agent (check sessions/ first, then legacy location)
+session_files=$(grep -l "^${AGENT_NAME}$" .claude/sessions/agent-*.txt 2>/dev/null || \
+                grep -l "^${AGENT_NAME}$" .claude/agent-*.txt 2>/dev/null || true)
 
 if [[ -z "$session_files" ]]; then
     # No session files found

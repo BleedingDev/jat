@@ -101,15 +101,17 @@ if [[ -z "$SESSION_ID" ]]; then
     exit 1
 fi
 
-# Get agent name for this session
-AGENT_NAME=$(cat ".claude/agent-${SESSION_ID}.txt" 2>/dev/null | tr -d '\n' || echo "")
+# Get agent name for this session (check sessions/ first, then legacy location)
+AGENT_NAME=$(cat ".claude/sessions/agent-${SESSION_ID}.txt" 2>/dev/null | tr -d '\n' || \
+             cat ".claude/agent-${SESSION_ID}.txt" 2>/dev/null | tr -d '\n' || echo "")
 if [[ -z "$AGENT_NAME" ]]; then
     # No agent registered yet - skip logging
     exit 0
 fi
 
-# Create activity log file path
-ACTIVITY_LOG=".claude/agent-${SESSION_ID}-activity.jsonl"
+# Create activity log file path (in sessions/ subdirectory)
+mkdir -p .claude/sessions
+ACTIVITY_LOG=".claude/sessions/agent-${SESSION_ID}-activity.jsonl"
 
 # Ensure .claude directory exists
 mkdir -p .claude

@@ -6,16 +6,17 @@
 #
 # Multi-line status display for agent orchestration workflows
 #
-# Line 1: Agent Name · [Priority] Task ID - Task Title ⏲ ActiveTime
-# Line 2: ▪▪▪▪▪▪▫▫▫▫ · ⎇ folder@branch · 🔒 N  📬 N  ⏱ Xm
-# Line 3: 💬 Xm Last user prompt...
+# Line 1: Agent Name · [Priority] TaskIcon TaskID ⏲ ActiveTime  (NO WRAPPING)
+# Line 2: ▪▪▪▪▪▪▫▫▫▫ · ⎇ folder@branch · 🔒 N  📬 N  ⏱ Xm       (NO WRAPPING)
+# Line 3: 💬 Xm Last user prompt...                              (can wrap)
 #
 # Features:
-#   Agent Status (Line 1):
+#   Agent Status (Line 1) - COMPACT, NO WRAPPING:
 #     1. Agent identification (set by /jat:start via .claude/agent-{session_id}.txt)
 #     2. Task priority badge [P0/P1/P2] with color coding (Red/Yellow/Green)
-#     3. Task ID and title from Beads database (dynamic project prefix)
+#     3. Task type icon (🐛/✨/🔧/🎯) and task ID from Beads database
 #     4. Active time on task (⏲ since updated_at)
+#     NOTE: Task title removed to prevent wrapping that breaks avatar alignment
 #
 #   Context & Git (Line 2):
 #     5. Context remaining as battery bar (color-coded: >50% green, >25% yellow, <25% red)
@@ -40,11 +41,10 @@
 #   Priority P1:    Bold Yellow (\033[1m\033[1;33m)
 #   Priority P2:    Bold Green  (\033[1m\033[0;32m)
 #   Task ID:        Green       (\033[0;32m)
-#   Task title:     Yellow      (\033[1;33m)
 #   Idle status:    Gray        (\033[0;37m)
 #
 # Example output:
-#   GreatWind · [P1] 🔧 jat-4p0 - Demo: Frontend... ⏲ 1h23m
+#   GreatWind · [P1] 🔧 jat-4p0 ⏲ 1h23m
 #   ▪▪▪▪▪▪▫▫▫▫ · ⎇ jat@master* · 🔒 2  📬 1  ⏱ 45m
 #   💬 12m yes implement top 3
 #
@@ -126,9 +126,10 @@ context_limit=200000
 
 if [[ -n "$transcript_path" ]] && [[ -f "$transcript_path" ]]; then
     # Get the most recent assistant message with usage info
+    # Total context = input_tokens + cache_creation_input_tokens + cache_read_input_tokens
     last_usage=$(tail -20 "$transcript_path" 2>/dev/null | \
         jq -r 'select(.message.role == "assistant") | .message.usage |
-               (.input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null | \
+               (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null | \
         tail -1)
 
     if [[ -n "$last_usage" ]] && [[ "$last_usage" != "null" ]] && [[ "$last_usage" != "0" ]]; then
@@ -255,12 +256,15 @@ if [[ -n "$transcript_path" ]] && [[ -f "$transcript_path" ]]; then
 fi
 
 # Calculate context remaining percentage
-context_remaining=""
-context_percent=0
+# Default to 100% when no usage data (full context available)
+context_percent=100
 if [[ $context_used -gt 0 ]] && [[ $context_limit -gt 0 ]]; then
     context_percent=$((100 - (context_used * 100 / context_limit)))
-    context_remaining="${context_percent}%"
+    # Clamp to 0-100 range
+    [[ $context_percent -lt 0 ]] && context_percent=0
+    [[ $context_percent -gt 100 ]] && context_percent=100
 fi
+context_remaining="${context_percent}%"
 
 # Generate battery/progress bar representation (10 segments, each = 10%)
 # Filled: ▪  Empty: ▫
@@ -336,7 +340,6 @@ fi
 # ============================================================================
 
 task_id=""
-task_title=""
 task_priority=""
 task_progress=""
 task_type=""
@@ -357,17 +360,10 @@ if command -v bd &>/dev/null; then
 
     if [[ -n "$task_json" ]]; then
         task_id=$(echo "$task_json" | jq -r '.id // empty')
-        task_title=$(echo "$task_json" | jq -r '.title // empty')
         task_priority=$(echo "$task_json" | jq -r '.priority // empty')
         task_progress=$(echo "$task_json" | jq -r '.progress // empty')
         task_type=$(echo "$task_json" | jq -r '.issue_type // empty')
         task_updated_at=$(echo "$task_json" | jq -r '.updated_at // empty')
-
-        # Truncate title if too long (33 chars + "..." = 36 total)
-        # Config: dashboard/src/lib/config/constants.ts → STATUSLINE.TASK_TITLE_MAX_CHARS
-        if [[ ${#task_title} -gt 33 ]]; then
-            task_title="${task_title:0:33}..."
-        fi
     fi
 fi
 
@@ -386,17 +382,10 @@ if [[ -z "$task_id" ]] && command -v am-reservations &>/dev/null; then
         # If we found a task ID from reservation, get its details from Beads
         if [[ -n "$task_id" ]] && command -v bd &>/dev/null; then
             task_json=$(bd show "$task_id" --json 2>/dev/null)
-            task_title=$(echo "$task_json" | jq -r '.[0].title // empty')
             task_priority=$(echo "$task_json" | jq -r '.[0].priority // empty')
             task_progress=$(echo "$task_json" | jq -r '.[0].progress // empty')
             task_type=$(echo "$task_json" | jq -r '.[0].issue_type // empty')
             task_updated_at=$(echo "$task_json" | jq -r '.[0].updated_at // empty')
-
-            # Truncate title if too long (33 chars + "..." = 36 total)
-            # Config: dashboard/src/lib/config/constants.ts → STATUSLINE.TASK_TITLE_MAX_CHARS
-            if [[ ${#task_title} -gt 33 ]]; then
-                task_title="${task_title:0:33}..."
-            fi
         fi
     fi
 fi
@@ -626,10 +615,8 @@ if [[ -n "$task_id" ]]; then
     # Add task ID
     status_line="${status_line} ${GREEN}${task_id}${RESET}"
 
-    # Add task title if available
-    if [[ -n "$task_title" ]]; then
-        status_line="${status_line} ${GRAY}-${RESET} ${YELLOW}${task_title}${RESET}"
-    fi
+    # Task title removed from line 1 to prevent wrapping that breaks avatar alignment
+    # Title is available via: dashboard, bd show <task-id>, or line 3 (optional)
 
     # Add active time if available
     if [[ -n "$active_time" ]]; then

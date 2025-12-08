@@ -25,8 +25,11 @@ check_agent_registered() {
         return 0
     fi
 
-    # Check if agent file exists
-    AGENT_FILE=".claude/agent-${SESSION_ID}.txt"
+    # Check if agent file exists (check sessions/ first, then legacy location)
+    AGENT_FILE=".claude/sessions/agent-${SESSION_ID}.txt"
+    if [ ! -f "$AGENT_FILE" ]; then
+        AGENT_FILE=".claude/agent-${SESSION_ID}.txt"
+    fi
     if [ ! -f "$AGENT_FILE" ]; then
         echo "❌ No agent registered for this session!" >&2
         echo "" >&2

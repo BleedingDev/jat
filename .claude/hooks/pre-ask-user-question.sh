@@ -29,15 +29,22 @@ fi
 # Method 2: From agent session file (more reliable)
 if [[ -z "$TMUX_SESSION" ]]; then
     # Try multiple possible locations for agent file
+    # Check both .claude/agent-{id}.txt (legacy) and .claude/sessions/agent-{id}.txt (current)
     for BASE_DIR in "." "/home/jw/code/jat" "/home/jw/code/chimaro" "/home/jw/code/jomarchy"; do
-        AGENT_FILE="${BASE_DIR}/.claude/agent-${SESSION_ID}.txt"
-        if [[ -f "$AGENT_FILE" ]]; then
-            AGENT_NAME=$(cat "$AGENT_FILE" 2>/dev/null | tr -d '\n')
-            if [[ -n "$AGENT_NAME" ]]; then
-                TMUX_SESSION="jat-${AGENT_NAME}"
-                break
+        for SUBDIR in "sessions" ""; do
+            if [[ -n "$SUBDIR" ]]; then
+                AGENT_FILE="${BASE_DIR}/.claude/${SUBDIR}/agent-${SESSION_ID}.txt"
+            else
+                AGENT_FILE="${BASE_DIR}/.claude/agent-${SESSION_ID}.txt"
             fi
-        fi
+            if [[ -f "$AGENT_FILE" ]]; then
+                AGENT_NAME=$(cat "$AGENT_FILE" 2>/dev/null | tr -d '\n')
+                if [[ -n "$AGENT_NAME" ]]; then
+                    TMUX_SESSION="jat-${AGENT_NAME}"
+                    break 2
+                fi
+            fi
+        done
     done
 fi
 
