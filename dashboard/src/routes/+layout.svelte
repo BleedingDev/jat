@@ -7,6 +7,7 @@
 	import { goto } from '$app/navigation';
 	import TaskCreationDrawer from '$lib/components/TaskCreationDrawer.svelte';
 	import SpawnModal from '$lib/components/SpawnModal.svelte';
+	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
 	import OutputDrawer from '$lib/components/OutputDrawer.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
@@ -59,6 +60,10 @@
 		totalCount: number;
 	}
 	let epicsWithReady = $state<EpicWithReady[]>([]);
+
+	// Epic Swarm Modal state (for testing - Alt+E to open)
+	let epicSwarmModalOpen = $state(false);
+	let epicSwarmModalEpicId = $state('jat-2ywa'); // Default test epic
 
 	// Review rules for settings preview
 	interface ReviewRule {
@@ -432,6 +437,13 @@
 			return;
 		}
 
+		// Alt+E = Open Epic Swarm Modal (for testing)
+		if (event.altKey && event.code === 'KeyE') {
+			event.preventDefault();
+			epicSwarmModalOpen = true;
+			return;
+		}
+
 		// Alt+A = Attach terminal to hovered session
 		if (event.altKey && event.code === 'KeyA') {
 			event.preventDefault();
@@ -687,6 +699,13 @@
 
 	<!-- Spawn Modal (must be inside drawer for proper z-index) -->
 	<SpawnModal />
+
+	<!-- Epic Swarm Modal (Alt+E to test) -->
+	<EpicSwarmModal
+		epicId={epicSwarmModalEpicId}
+		bind:isOpen={epicSwarmModalOpen}
+		onClose={() => epicSwarmModalOpen = false}
+	/>
 
 	<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
 	<Sidebar />

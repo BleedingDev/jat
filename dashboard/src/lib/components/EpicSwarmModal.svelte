@@ -27,6 +27,14 @@
 		DEFAULT_AGENT_COUNT,
 		MIN_AGENT_COUNT
 	} from '$lib/config/spawnConfig';
+	import {
+		loadEpicSwarmSettings,
+		saveEpicSwarmSettings,
+		resetEpicSwarmSettings,
+		hasCustomSettings,
+		DEFAULT_EPIC_SWARM_SETTINGS,
+		type EpicSwarmSettings
+	} from '$lib/utils/epicSwarmSettings';
 
 	// Props
 	interface Props {
@@ -77,11 +85,32 @@
 	let submitError = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
 
-	// Execution settings
+	// Execution settings (loaded from localStorage)
 	let executionMode = $state<ExecutionMode>('parallel');
 	let maxConcurrent = $state(DEFAULT_AGENT_COUNT);
 	let reviewThreshold = $state<ReviewThreshold>('p0-p1');
 	let autoSpawnBlocked = $state(true);
+	let showCustomSettingsIndicator = $state(false);
+
+	// Load settings from localStorage when modal opens
+	function loadSettings() {
+		const savedSettings = loadEpicSwarmSettings(epicId);
+		executionMode = savedSettings.executionMode;
+		maxConcurrent = savedSettings.maxConcurrent;
+		reviewThreshold = savedSettings.reviewThreshold;
+		autoSpawnBlocked = savedSettings.autoSpawnBlocked;
+		showCustomSettingsIndicator = hasCustomSettings(epicId);
+	}
+
+	// Handle reset to defaults
+	function handleResetToDefaults() {
+		const defaults = resetEpicSwarmSettings(epicId);
+		executionMode = defaults.executionMode;
+		maxConcurrent = defaults.maxConcurrent;
+		reviewThreshold = defaults.reviewThreshold;
+		autoSpawnBlocked = defaults.autoSpawnBlocked;
+		showCustomSettingsIndicator = false;
+	}
 
 	// Derived values
 	const selectableChildren = $derived(
@@ -102,9 +131,10 @@
 		{ value: 'none', label: 'None', description: 'Auto-complete all tasks (no review)' }
 	];
 
-	// Load epic children on mount/epicId change
+	// Load epic children and settings on mount/epicId change
 	$effect(() => {
 		if (isOpen && epicId) {
+			loadSettings();
 			loadChildren();
 		}
 	});
@@ -165,6 +195,18 @@
 		isSubmitting = true;
 		submitError = null;
 		successMessage = null;
+
+		// Save settings to localStorage for future use
+		saveEpicSwarmSettings(
+			{
+				executionMode,
+				maxConcurrent,
+				reviewThreshold,
+				autoSpawnBlocked
+			},
+			epicId
+		);
+		showCustomSettingsIndicator = hasCustomSettings(epicId);
 
 		try {
 			const settings: Partial<ExecutionSettings> = {
@@ -268,19 +310,12 @@
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between mb-4">
-				<div>
-					<h3
-						class="text-lg font-bold font-mono uppercase tracking-wider"
-						style="color: oklch(0.85 0.02 250);"
-					>
-						Epic Swarm
-					</h3>
-					{#if epicTitle}
-						<p class="text-sm mt-1 truncate max-w-md" style="color: oklch(0.60 0.02 250);">
-							{epicTitle}
-						</p>
-					{/if}
-				</div>
+				<h3
+					class="text-lg font-bold font-mono uppercase tracking-wider"
+					style="color: oklch(0.85 0.02 250);"
+				>
+					Epic Swarm
+				</h3>
 				<button
 					class="btn btn-sm btn-circle btn-ghost"
 					onclick={handleClose}
@@ -398,12 +433,23 @@
 				<!-- Children List Section -->
 				<div class="mb-4">
 					<div class="flex items-center justify-between mb-2">
-						<label
-							class="text-xs font-semibold font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
-						>
-							Tasks ({selectedCount} selected)
-						</label>
+						<div class="flex items-center gap-2">
+							<code
+								class="text-xs font-mono px-1.5 py-0.5 rounded"
+								style="background: oklch(0.30 0.08 270 / 0.5); color: oklch(0.75 0.12 270);"
+							>
+								{epicId}
+							</code>
+							<span class="text-sm truncate max-w-xs" style="color: oklch(0.70 0.02 250);">
+								{epicTitle}
+							</span>
+							<span
+								class="text-xs font-mono"
+								style="color: oklch(0.55 0.02 250);"
+							>
+								({selectedCount} selected)
+							</span>
+						</div>
 						<div class="flex gap-1">
 							<button
 								class="btn btn-xs btn-ghost font-mono"
@@ -539,9 +585,54 @@
 
 				<!-- Execution Settings -->
 				<div
-					class="grid grid-cols-2 gap-4 mb-4 p-4 rounded-lg"
+					class="mb-4 p-4 rounded-lg"
 					style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.28 0.02 250);"
 				>
+					<!-- Settings Header -->
+					<div class="flex items-center justify-between mb-4">
+						<div class="flex items-center gap-2">
+							<span
+								class="text-xs font-semibold font-mono uppercase tracking-wider"
+								style="color: oklch(0.55 0.02 250);"
+							>
+								Execution Settings
+							</span>
+							{#if showCustomSettingsIndicator}
+								<span
+									class="text-xs font-mono px-1.5 py-0.5 rounded"
+									style="background: oklch(0.45 0.12 200 / 0.3); color: oklch(0.75 0.12 200);"
+								>
+									Saved
+								</span>
+							{/if}
+						</div>
+						{#if showCustomSettingsIndicator}
+							<button
+								class="btn btn-xs btn-ghost font-mono gap-1"
+								onclick={handleResetToDefaults}
+								disabled={isSubmitting}
+								title="Reset to default settings"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke-width="1.5"
+									stroke="currentColor"
+									class="w-3.5 h-3.5"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+									/>
+								</svg>
+								Reset
+							</button>
+						{/if}
+					</div>
+
+					<div class="grid grid-cols-2 gap-4">
 					<!-- Execution Mode Toggle -->
 					<div>
 						<label
@@ -679,6 +770,7 @@
 								? 'Agents will be spawned as blocked tasks become ready'
 								: 'Only spawn agents for currently ready tasks'}
 						</p>
+					</div>
 					</div>
 				</div>
 
