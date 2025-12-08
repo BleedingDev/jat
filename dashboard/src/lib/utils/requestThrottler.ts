@@ -70,9 +70,15 @@ async function executeRequest(request: QueuedRequest): Promise<void> {
 	activeRequests++;
 
 	try {
+		// Check if signal is already aborted before making request
+		const signal = request.options.signal;
+		if (signal?.aborted) {
+			throw new DOMException('The operation was aborted.', 'AbortError');
+		}
+
 		const response = await globalThis.fetch(request.url, {
 			...request.options,
-			signal: request.options.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+			signal: signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 		});
 		request.resolve(response);
 	} catch (error) {
@@ -96,6 +102,8 @@ export async function throttledFetch(url: string, options?: RequestInit): Promis
 		const existing = inFlightRequests.get(cacheKey);
 		if (existing) {
 			// Return the existing promise - deduplicate the request
+			// The existing promise already has a no-op catch attached below,
+			// so we just chain .then() for the clone operation
 			return existing.then(r => r.clone());
 		}
 	}
@@ -110,9 +118,27 @@ export async function throttledFetch(url: string, options?: RequestInit): Promis
 			timestamp: Date.now()
 		};
 
+		// If signal is already aborted, reject immediately
+		const signal = options?.signal;
+		if (signal?.aborted) {
+			reject(new DOMException('The operation was aborted.', 'AbortError'));
+			return;
+		}
+
 		if (activeRequests < MAX_CONCURRENT_REQUESTS) {
 			executeRequest(queuedRequest);
 		} else {
+			// For queued requests, listen for abort to reject early
+			if (signal) {
+				const abortHandler = () => {
+					const index = requestQueue.indexOf(queuedRequest);
+					if (index !== -1) {
+						requestQueue.splice(index, 1);
+						reject(new DOMException('The operation was aborted.', 'AbortError'));
+					}
+				};
+				signal.addEventListener('abort', abortHandler, { once: true });
+			}
 			requestQueue.push(queuedRequest);
 		}
 	});
@@ -120,6 +146,11 @@ export async function throttledFetch(url: string, options?: RequestInit): Promis
 	// Track GET requests for deduplication
 	if (method === 'GET') {
 		inFlightRequests.set(cacheKey, requestPromise);
+		// Add no-op catch to prevent "Uncaught (in promise)" browser warnings
+		// The actual error handling is done by the caller - this just silences
+		// the warning that occurs when a Promise rejects before the caller
+		// has attached their catch handler (e.g., during abort)
+		requestPromise.catch(() => {});
 		requestPromise.finally(() => {
 			inFlightRequests.delete(cacheKey);
 		});

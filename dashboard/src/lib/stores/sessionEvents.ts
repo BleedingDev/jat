@@ -70,8 +70,12 @@ const RECONNECT_DELAY = 3000;
 
 /**
  * Handle session-output event: update terminal output for a session
+ *
+ * PERFORMANCE: Only creates new array if output actually changed.
+ * Creating new array triggers all SessionCard's expensive $derived computations.
  */
 function handleSessionOutput(data: SessionEvent): void {
+	const start = performance.now();
 	const { sessionName, output, lineCount } = data;
 	if (!sessionName || output === undefined) return;
 
@@ -79,6 +83,13 @@ function handleSessionOutput(data: SessionEvent): void {
 	if (sessionIndex === -1) {
 		// Session not in state yet - might be new, will be added by session-created
 		return;
+	}
+
+	// PERFORMANCE: Check if output actually changed before triggering re-render
+	const currentSession = workSessionsState.sessions[sessionIndex];
+	if (currentSession.output === output && currentSession.lineCount === (lineCount ?? currentSession.lineCount)) {
+		console.log(`[PERF] handleSessionOutput SKIPPED (no change) in ${(performance.now() - start).toFixed(1)}ms`);
+		return; // No change, skip expensive array update
 	}
 
 	// Update the session output reactively
@@ -92,11 +103,14 @@ function handleSessionOutput(data: SessionEvent): void {
 		}
 		return session;
 	});
+	console.log(`[PERF] handleSessionOutput UPDATED in ${(performance.now() - start).toFixed(1)}ms`);
 }
 
 /**
  * Handle session-state event: update session state
  * Updates the workSessions store with the new state for real-time UI updates
+ *
+ * PERFORMANCE: Only creates new array if state actually changed.
  */
 function handleSessionState(data: SessionEvent): void {
 	const { sessionName, state, previousState } = data;
@@ -112,6 +126,12 @@ function handleSessionState(data: SessionEvent): void {
 	if (sessionIndex === -1) {
 		// Session not in state yet - might be new, will be added by session-created
 		return;
+	}
+
+	// PERFORMANCE: Check if state actually changed before triggering re-render
+	const currentSession = workSessionsState.sessions[sessionIndex];
+	if (currentSession._sseState === state) {
+		return; // No change, skip expensive array update
 	}
 
 	// Store the state in a custom property for components to access

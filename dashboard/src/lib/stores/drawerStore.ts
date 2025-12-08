@@ -39,6 +39,20 @@ export function closeSpawnModal() {
 	isSpawnModalOpen.set(false);
 }
 
+// Task detail drawer state (global, for inspecting tasks from anywhere)
+export const isTaskDetailDrawerOpen = writable(false);
+export const taskDetailDrawerTaskId = writable<string | null>(null);
+
+export function openTaskDetailDrawer(taskId: string) {
+	taskDetailDrawerTaskId.set(taskId);
+	isTaskDetailDrawerOpen.set(true);
+}
+
+export function closeTaskDetailDrawer() {
+	isTaskDetailDrawerOpen.set(false);
+	taskDetailDrawerTaskId.set(null);
+}
+
 // Output drawer state
 export const isOutputDrawerOpen = writable(false);
 

@@ -13,7 +13,7 @@
  * - Output: $15.00 per million tokens
  */
 
-import { readdir, readFile } from 'fs/promises';
+import { readdir, readFile, stat } from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -174,9 +174,13 @@ export async function buildSessionAgentMap(projectPath: string): Promise<Map<str
 	];
 
 	for (const scanPath of projectsToScan) {
-		// Scan .claude/sessions/ for agent files
+		// Scan .claude/sessions/ for agent files (new location)
 		const sessionsDir = path.join(scanPath, '.claude', 'sessions');
 		await scanDirectoryForAgentFiles(sessionsDir, map);
+
+		// Also scan .claude/ directly (legacy location)
+		const claudeDir = path.join(scanPath, '.claude');
+		await scanDirectoryForAgentFiles(claudeDir, map);
 	}
 
 	return map;
@@ -858,4 +862,316 @@ export async function getSessionHourlyUsage(sessionId: string, projectPath: stri
 			tokens: data.tokens,
 			cost: data.cost
 		}));
+}
+
+// ============================================================================
+// Context Remaining Percentage
+// ============================================================================
+
+const CONTEXT_LIMIT = 200_000; // Claude's context window
+
+/**
+ * Get context remaining percentage for an agent's most recent session.
+ * Parses the last 20 lines of the JSONL file to find the most recent usage.
+ *
+ * Input: agentName (string), projectPath (string)
+ * Output: Number 0-100 representing context remaining, or null if unavailable
+ * State: Read-only, parses JSONL files
+ */
+export async function getAgentContextPercent(
+	agentName: string,
+	projectPath: string
+): Promise<number | null> {
+	try {
+		// Build session → agent mapping
+		const sessionAgentMap = await buildSessionAgentMap(projectPath);
+
+		// Find sessions for this agent
+		const agentSessions = Array.from(sessionAgentMap.entries())
+			.filter(([_, name]) => name === agentName)
+			.map(([sessionId, _]) => sessionId);
+
+		if (agentSessions.length === 0) {
+			return null;
+		}
+
+		// Try each session file to find the most recent usage
+		let mostRecentUsage: number | null = null;
+		let mostRecentTimestamp = 0;
+
+		for (const sessionId of agentSessions) {
+			try {
+				const sessionFile = await findSessionJSONL(sessionId, projectPath);
+				if (!sessionFile) continue;
+
+				// Read file and get last 20 lines (more efficient than parsing entire file)
+				const content = await readFile(sessionFile, 'utf-8');
+				const lines = content.trim().split('\n');
+				const lastLines = lines.slice(-20);
+
+				// Find the most recent assistant message with usage info
+				for (let i = lastLines.length - 1; i >= 0; i--) {
+					const line = lastLines[i];
+					if (!line.trim()) continue;
+
+					try {
+						const entry = JSON.parse(line);
+						if (entry.message?.role === 'assistant' && entry.message?.usage) {
+							const usage = entry.message.usage;
+							const totalContext =
+								(usage.input_tokens || 0) +
+								(usage.cache_creation_input_tokens || 0) +
+								(usage.cache_read_input_tokens || 0);
+
+							// Check if this is more recent by file mtime
+							const fileStat = await stat(sessionFile);
+							const mtime = fileStat.mtimeMs;
+
+							if (mtime > mostRecentTimestamp) {
+								mostRecentTimestamp = mtime;
+								// Calculate remaining percentage (clamped 0-100)
+								const percent = Math.max(0, Math.min(100,
+									Math.round(100 - (totalContext * 100 / CONTEXT_LIMIT))
+								));
+								mostRecentUsage = percent;
+							}
+							break; // Found usage in this file, move to next session
+						}
+					} catch {
+						// Invalid JSON line, skip
+					}
+				}
+			} catch {
+				// Session file error, continue to next
+			}
+		}
+
+		return mostRecentUsage;
+	} catch (err) {
+		console.error('Error getting context percent:', err);
+		return null;
+	}
+}
+
+// ============================================================================
+// Worker Thread-Based Functions (Non-Blocking)
+// ============================================================================
+
+// Flag to control whether worker threads are used
+let useWorkerThreads = true;
+
+/**
+ * Enable or disable worker threads for JSONL parsing.
+ * When disabled, falls back to synchronous parsing (blocks event loop).
+ */
+export function setUseWorkerThreads(enabled: boolean): void {
+	useWorkerThreads = enabled;
+}
+
+/**
+ * Check if worker threads are enabled
+ */
+export function isUsingWorkerThreads(): boolean {
+	return useWorkerThreads;
+}
+
+/**
+ * Get all JSONL file paths for a project
+ */
+async function getAllSessionFilePaths(projectPath: string): Promise<string[]> {
+	const homeDir = os.homedir();
+	const projectSlug = projectPath.replace(/\//g, '-');
+	const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
+
+	try {
+		const files = await readdir(projectsDir);
+		return files
+			.filter(f => f.endsWith('.jsonl'))
+			.map(f => path.join(projectsDir, f));
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Get JSONL file paths for a specific agent
+ */
+async function getAgentSessionFilePaths(
+	agentName: string,
+	projectPath: string
+): Promise<string[]> {
+	const sessionAgentMap = await buildSessionAgentMap(projectPath);
+	const homeDir = os.homedir();
+
+	const filePaths: string[] = [];
+
+	for (const [sessionId, agent] of sessionAgentMap.entries()) {
+		if (agent !== agentName) continue;
+
+		// Try to find the JSONL file
+		const sessionFile = await findSessionJSONL(sessionId, projectPath);
+		if (sessionFile) {
+			filePaths.push(sessionFile);
+		}
+	}
+
+	return filePaths;
+}
+
+/**
+ * Get token usage using worker threads (non-blocking)
+ *
+ * This is the preferred method for API endpoints as it doesn't block
+ * the main event loop during JSONL parsing.
+ */
+export async function getAgentUsageAsync(
+	agentName: string,
+	timeRange: TimeRange,
+	projectPath: string
+): Promise<TokenUsage> {
+	if (!useWorkerThreads) {
+		// Fall back to synchronous version
+		return getAgentUsage(agentName, timeRange, projectPath);
+	}
+
+	try {
+		// Dynamically import worker pool to avoid issues in non-server contexts
+		const { parseMultipleSessionsAsync } = await import('$lib/server/workers');
+
+		const filePaths = await getAgentSessionFilePaths(agentName, projectPath);
+		if (filePaths.length === 0) {
+			return {
+				input_tokens: 0,
+				cache_creation_input_tokens: 0,
+				cache_read_input_tokens: 0,
+				output_tokens: 0,
+				total_tokens: 0,
+				cost: 0,
+				sessionCount: 0
+			};
+		}
+
+		return await parseMultipleSessionsAsync(filePaths, timeRange);
+	} catch (error) {
+		console.warn('[tokenUsage] Worker thread failed, falling back to sync:', error);
+		return getAgentUsage(agentName, timeRange, projectPath);
+	}
+}
+
+/**
+ * Get all agents' token usage using worker threads (non-blocking)
+ */
+export async function getAllAgentUsageAsync(
+	timeRange: TimeRange,
+	projectPath: string
+): Promise<Map<string, TokenUsage>> {
+	if (!useWorkerThreads) {
+		return getAllAgentUsage(timeRange, projectPath);
+	}
+
+	try {
+		const { parseMultipleSessionsAsync } = await import('$lib/server/workers');
+
+		const usageMap = new Map<string, TokenUsage>();
+		const sessionAgentMap = await buildSessionAgentMap(projectPath);
+		const agentNames = Array.from(new Set(sessionAgentMap.values()));
+
+		// Process each agent in parallel (workers handle the heavy lifting)
+		const results = await Promise.all(
+			agentNames.map(async (agentName) => {
+				const filePaths = await getAgentSessionFilePaths(agentName, projectPath);
+				if (filePaths.length === 0) {
+					return {
+						agentName,
+						usage: {
+							input_tokens: 0,
+							cache_creation_input_tokens: 0,
+							cache_read_input_tokens: 0,
+							output_tokens: 0,
+							total_tokens: 0,
+							cost: 0,
+							sessionCount: 0
+						}
+					};
+				}
+
+				const usage = await parseMultipleSessionsAsync(filePaths, timeRange);
+				return { agentName, usage };
+			})
+		);
+
+		for (const { agentName, usage } of results) {
+			usageMap.set(agentName, usage);
+		}
+
+		return usageMap;
+	} catch (error) {
+		console.warn('[tokenUsage] Worker thread failed, falling back to sync:', error);
+		return getAllAgentUsage(timeRange, projectPath);
+	}
+}
+
+/**
+ * Get hourly usage data using worker threads (non-blocking)
+ */
+export async function getHourlyUsageAsync(projectPath: string): Promise<HourlyUsage[]> {
+	if (!useWorkerThreads) {
+		return getHourlyUsage(projectPath);
+	}
+
+	try {
+		const { aggregateHourlyUsageAsync } = await import('$lib/server/workers');
+
+		const filePaths = await getAllSessionFilePaths(projectPath);
+		if (filePaths.length === 0) {
+			// Return 24 hours of empty buckets
+			const now = new Date();
+			const buckets: HourlyUsage[] = [];
+			for (let i = 23; i >= 0; i--) {
+				const hourTime = new Date(now.getTime() - i * 60 * 60 * 1000);
+				hourTime.setMinutes(0, 0, 0);
+				buckets.push({ timestamp: hourTime.toISOString(), tokens: 0, cost: 0 });
+			}
+			return buckets;
+		}
+
+		return await aggregateHourlyUsageAsync(filePaths, 24);
+	} catch (error) {
+		console.warn('[tokenUsage] Worker thread failed, falling back to sync:', error);
+		return getHourlyUsage(projectPath);
+	}
+}
+
+/**
+ * Get agent hourly usage using worker threads (non-blocking)
+ */
+export async function getAgentHourlyUsageAsync(
+	agentName: string,
+	projectPath: string
+): Promise<HourlyUsage[]> {
+	if (!useWorkerThreads) {
+		return getAgentHourlyUsage(agentName, projectPath);
+	}
+
+	try {
+		const { aggregateHourlyUsageAsync } = await import('$lib/server/workers');
+
+		const filePaths = await getAgentSessionFilePaths(agentName, projectPath);
+		if (filePaths.length === 0) {
+			// Return 24 hours of empty buckets
+			const now = new Date();
+			const buckets: HourlyUsage[] = [];
+			for (let i = 23; i >= 0; i--) {
+				const hourTime = new Date(now.getTime() - i * 60 * 60 * 1000);
+				hourTime.setMinutes(0, 0, 0);
+				buckets.push({ timestamp: hourTime.toISOString(), tokens: 0, cost: 0 });
+			}
+			return buckets;
+		}
+
+		return await aggregateHourlyUsageAsync(filePaths, 24);
+	} catch (error) {
+		console.warn('[tokenUsage] Worker thread failed, falling back to sync:', error);
+		return getAgentHourlyUsage(agentName, projectPath);
+	}
 }

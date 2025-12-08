@@ -955,3 +955,145 @@ export async function getMultiProjectTimeSeries(
 		projectColors
 	};
 }
+
+// ============================================================================
+// Worker Thread-Based Functions (Non-Blocking)
+// ============================================================================
+
+/**
+ * Get multi-project time series using worker threads (non-blocking)
+ *
+ * This is the preferred method for the sparkline API as it doesn't block
+ * the main event loop during JSONL parsing. The heavy parsing work is
+ * offloaded to worker threads.
+ *
+ * @param options - Aggregation options
+ * @returns Multi-project time-series result with per-project breakdown
+ */
+export async function getMultiProjectTimeSeriesAsync(
+	options: MultiProjectTimeSeriesOptions = {}
+): Promise<MultiProjectTimeSeriesResult> {
+	const { range = '24h', bucketSize = '30min' } = options;
+
+	try {
+		// Dynamically import worker pool to avoid issues in non-server contexts
+		const { parseAllProjectsAsync } = await import('$lib/server/workers');
+
+		// Get all projects from config
+		const projects = getAllProjects();
+		const projectKeys = Array.from(projects.keys());
+
+		// Build project colors map
+		const projectColors: Record<string, string> = {};
+		for (const [key, config] of projects) {
+			projectColors[key] = config.activeColor;
+		}
+
+		// Prepare project paths for worker
+		const projectPaths = Array.from(projects.entries()).map(([key, config]) => ({
+			key,
+			path: config.path,
+			color: config.activeColor
+		}));
+
+		// Calculate bucket size in milliseconds
+		const bucketSizeMs = bucketSize === '30min' ? 30 * 60 * 1000 :
+		                     bucketSize === 'hour' ? 60 * 60 * 1000 :
+		                     0; // session mode
+
+		// Offload heavy parsing to worker thread
+		const workerResult = await parseAllProjectsAsync(projectPaths, range, bucketSizeMs);
+
+		// Get date range boundaries
+		const { start: startTime, end: endTime } = getDateRange(range);
+
+		// Convert worker result to MultiProjectTimeSeriesPoint array
+		const result: MultiProjectTimeSeriesPoint[] = [];
+
+		if (bucketSize === 'session') {
+			// Session-based: use actual data only
+			const sortedKeys = Object.keys(workerResult.buckets).sort();
+			for (const bucketKey of sortedKeys) {
+				const projectMap = workerResult.buckets[bucketKey];
+				const projectsData: ProjectTokenData[] = [];
+				let totalTokens = 0;
+				let totalCost = 0;
+
+				for (const [projectKey, data] of Object.entries(projectMap)) {
+					projectsData.push({
+						project: projectKey,
+						tokens: data.tokens,
+						cost: data.cost,
+						color: projectColors[projectKey] || '#888888'
+					});
+					totalTokens += data.tokens;
+					totalCost += data.cost;
+				}
+
+				result.push({
+					timestamp: bucketKey,
+					totalTokens,
+					totalCost,
+					projects: projectsData
+				});
+			}
+		} else {
+			// Time-based: fill gaps with zero values
+			let currentBucketStart = roundToBucketStart(startTime, bucketSize);
+			const endBucketStart = roundToBucketStart(endTime, bucketSize);
+
+			while (currentBucketStart <= endBucketStart) {
+				const key = getBucketKey(currentBucketStart, bucketSize);
+				const projectMap = workerResult.buckets[key];
+
+				const projectsData: ProjectTokenData[] = [];
+				let totalTokens = 0;
+				let totalCost = 0;
+
+				for (const projectKey of projectKeys) {
+					const data = projectMap?.[projectKey];
+					const tokens = data?.tokens || 0;
+					const cost = data?.cost || 0;
+
+					projectsData.push({
+						project: projectKey,
+						tokens,
+						cost,
+						color: projectColors[projectKey] || '#888888'
+					});
+					totalTokens += tokens;
+					totalCost += cost;
+				}
+
+				result.push({
+					timestamp: currentBucketStart.toISOString(),
+					totalTokens,
+					totalCost,
+					projects: projectsData
+				});
+
+				currentBucketStart = new Date(currentBucketStart.getTime() + getBucketDurationMs(bucketSize));
+			}
+		}
+
+		// Calculate totals
+		const grandTotalTokens = result.reduce((sum, point) => sum + point.totalTokens, 0);
+		const grandTotalCost = result.reduce((sum, point) => sum + point.totalCost, 0);
+
+		return {
+			data: result,
+			totalTokens: grandTotalTokens,
+			totalCost: grandTotalCost,
+			bucketCount: result.length,
+			bucketSize,
+			startTime: startTime.toISOString(),
+			endTime: endTime.toISOString(),
+			projectKeys: workerResult.projectKeys.length > 0 ? workerResult.projectKeys : projectKeys,
+			projectColors
+		};
+	} catch (error) {
+		console.warn('[tokenUsageTimeSeries] Worker thread failed, falling back to sync:', error);
+		// Fall back to synchronous version
+		return getMultiProjectTimeSeries(options);
+	}
+}
