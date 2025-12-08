@@ -90,10 +90,15 @@ let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Fetch all active server sessions from the API
+ * Uses smart merging to avoid unnecessary re-renders when data hasn't changed.
  * @param lines - Number of output lines to capture (default: 50)
  */
 export async function fetch(lines: number = 50): Promise<void> {
-	state.isLoading = true;
+	// Don't set isLoading on subsequent fetches to avoid flashing
+	// Only set it on initial load when there are no sessions
+	if (state.sessions.length === 0) {
+		state.isLoading = true;
+	}
 	state.error = null;
 
 	try {
@@ -104,21 +109,16 @@ export async function fetch(lines: number = 50): Promise<void> {
 			throw new Error(data.message || data.error || 'Failed to fetch server sessions');
 		}
 
-		const sessions: ServerSession[] = data.sessions || [];
+		const newSessions: ServerSession[] = data.sessions || [];
 
 		// Track activity by detecting output changes
-		for (const session of sessions) {
+		for (const session of newSessions) {
 			const currentHash = hashOutput(session.output || '');
 			const prevHash = previousOutputHashes.get(session.sessionName);
 
 			// Activity: 0 = no change, 1 = output changed (could enhance with diff size later)
 			const hasActivity = prevHash !== undefined && prevHash !== currentHash;
 			const activityValue = hasActivity ? 1 : 0;
-
-			// Debug logging
-			if (hasActivity) {
-				console.log(`[Activity] ${session.sessionName}: output changed`);
-			}
 
 			// Update previous hash
 			previousOutputHashes.set(session.sessionName, currentHash);
@@ -131,7 +131,7 @@ export async function fetch(lines: number = 50): Promise<void> {
 		}
 
 		// Clean up history for sessions that no longer exist
-		const activeSessionNames = new Set(sessions.map((s) => s.sessionName));
+		const activeSessionNames = new Set(newSessions.map((s) => s.sessionName));
 		for (const sessionName of activityHistory.keys()) {
 			if (!activeSessionNames.has(sessionName)) {
 				activityHistory.delete(sessionName);
@@ -142,7 +142,47 @@ export async function fetch(lines: number = 50): Promise<void> {
 		// Trigger reactivity by creating new Map
 		activityHistory = new Map(activityHistory);
 
-		state.sessions = sessions;
+		// SMART MERGE: Use in-place mutation to avoid re-rendering unchanged components
+		// Only replace the array when sessions are added/removed
+		const existingSessionMap = new Map(state.sessions.map((s, i) => [s.sessionName, { session: s, index: i }]));
+		const newSessionNames = new Set(newSessions.map(s => s.sessionName));
+
+		// Check if we need to add/remove sessions (requires new array)
+		const sessionsAdded = newSessions.some(s => !existingSessionMap.has(s.sessionName));
+		const sessionsRemoved = state.sessions.some(s => !newSessionNames.has(s.sessionName));
+
+		if (sessionsAdded || sessionsRemoved) {
+			// Sessions added or removed - need new array
+			state.sessions = newSessions;
+		} else {
+			// Same sessions - update in-place for fine-grained reactivity
+			for (const newSession of newSessions) {
+				const existing = existingSessionMap.get(newSession.sessionName);
+				if (existing) {
+					const idx = existing.index;
+					// Only update fields that changed (Svelte 5 $state tracks individual properties)
+					if (state.sessions[idx].status !== newSession.status) {
+						state.sessions[idx].status = newSession.status;
+					}
+					if (state.sessions[idx].portRunning !== newSession.portRunning) {
+						state.sessions[idx].portRunning = newSession.portRunning;
+					}
+					if (state.sessions[idx].port !== newSession.port) {
+						state.sessions[idx].port = newSession.port;
+					}
+					if (state.sessions[idx].lineCount !== newSession.lineCount) {
+						state.sessions[idx].lineCount = newSession.lineCount;
+					}
+					if (state.sessions[idx].attached !== newSession.attached) {
+						state.sessions[idx].attached = newSession.attached;
+					}
+					if (state.sessions[idx].output !== newSession.output) {
+						state.sessions[idx].output = newSession.output;
+					}
+				}
+			}
+		}
+
 		state.lastFetch = new Date();
 	} catch (err) {
 		state.error = err instanceof Error ? err.message : 'Failed to fetch server sessions';

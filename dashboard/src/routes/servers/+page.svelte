@@ -252,7 +252,8 @@
 
 	// Handle ServerStatusBadge actions
 	async function handleServerAction(projectName: string, actionId: string) {
-		const sessionName = getServerSessionName(projectName);
+		// Use fallback session name if not in store yet (server-{projectName} is the naming convention)
+		const sessionName = getServerSessionName(projectName) || `server-${projectName}`;
 
 		switch (actionId) {
 			case 'start':
@@ -260,16 +261,12 @@
 				await fetchProjects();
 				break;
 			case 'stop':
-				if (sessionName) {
-					await stopServerSession(sessionName);
-					await fetchProjects();
-				}
+				await stopServerSession(sessionName);
+				await fetchProjects();
 				break;
 			case 'restart':
-				if (sessionName) {
-					await restartServerSession(sessionName);
-					await fetchProjects();
-				}
+				await restartServerSession(sessionName);
+				await fetchProjects();
 				break;
 			case 'attach':
 				if (sessionName) {
@@ -532,7 +529,10 @@
 	onMount(async () => {
 		// Phase 1: Fast initial load (no stats)
 		await fetchProjects();
-		startServerPolling(2000);
+		// Poll every 5 seconds instead of 2 seconds
+		// Server sessions don't need real-time updates like work sessions
+		// The store now uses smart merging to prevent UI flashing
+		startServerPolling(5000);
 		updateContainerHeight();
 		window.addEventListener('resize', updateContainerHeight);
 		window.addEventListener('keydown', handleKeydown);
