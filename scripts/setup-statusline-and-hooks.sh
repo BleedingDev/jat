@@ -148,7 +148,18 @@ fi
 cp "$HOOK_SOURCE" "$GLOBAL_HOOKS_DIR/post-bash-agent-state-refresh.sh"
 chmod +x "$GLOBAL_HOOKS_DIR/post-bash-agent-state-refresh.sh"
 
-echo -e "  ${GREEN}✓ Installed post-bash hook to ~/.claude/hooks/${NC}"
+echo -e "  ${GREEN}✓ Installed post-bash-agent-state-refresh.sh to ~/.claude/hooks/${NC}"
+
+# Copy jat-signal hook to global directory
+JAT_SIGNAL_HOOK="$JAT_DIR/.claude/hooks/post-bash-jat-signal.sh"
+if [ -f "$JAT_SIGNAL_HOOK" ]; then
+    cp "$JAT_SIGNAL_HOOK" "$GLOBAL_HOOKS_DIR/post-bash-jat-signal.sh"
+    chmod +x "$GLOBAL_HOOKS_DIR/post-bash-jat-signal.sh"
+    echo -e "  ${GREEN}✓ Installed post-bash-jat-signal.sh to ~/.claude/hooks/${NC}"
+else
+    echo -e "  ${YELLOW}⚠ jat-signal hook not found: $JAT_SIGNAL_HOOK${NC}"
+fi
+
 echo ""
 
 # ============================================================================
@@ -233,6 +244,12 @@ for repo_dir in "$CODE_DIR"/*; do
                                     "command": "~/.claude/hooks/post-bash-agent-state-refresh.sh",
                                     "statusMessage": "Checking agent state changes...",
                                     "streamStdinJson": true
+                                },
+                                {
+                                    "type": "command",
+                                    "command": "~/.claude/hooks/post-bash-jat-signal.sh",
+                                    "statusMessage": "",
+                                    "streamStdinJson": true
                                 }
                             ]
                         }
@@ -267,6 +284,12 @@ for repo_dir in "$CODE_DIR"/*; do
             "command": "~/.claude/hooks/post-bash-agent-state-refresh.sh",
             "statusMessage": "Checking agent state changes...",
             "streamStdinJson": true
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/post-bash-jat-signal.sh",
+            "statusMessage": "",
+            "streamStdinJson": true
           }
         ]
       }
@@ -286,7 +309,9 @@ echo -e "${GREEN}Statusline and Hooks Setup Complete${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo "  Global statusline: ~/.claude/statusline.sh"
-echo "  Global hook: ~/.claude/hooks/post-bash-agent-state-refresh.sh"
+echo "  Global hooks:"
+echo "    - ~/.claude/hooks/post-bash-agent-state-refresh.sh"
+echo "    - ~/.claude/hooks/post-bash-jat-signal.sh"
 echo ""
 echo "  Total repos found: $REPOS_FOUND"
 echo "  Settings.json configured: $SETTINGS_CONFIGURED"
