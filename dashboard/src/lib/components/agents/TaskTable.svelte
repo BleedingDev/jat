@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import { replaceState } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { slide } from 'svelte/transition';
+	import { slide, fade } from 'svelte/transition';
 	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
 	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
 	import LabelBadges from '$lib/components/LabelBadges.svelte';
@@ -2559,7 +2559,7 @@
 
 								<!-- Tasks within epic -->
 								{#if !showEpicHeader || !isEpicCollapsed}
-									<tbody transition:slide={{ duration: 150 }}>
+									<tbody transition:fade={{ duration: 150 }}>
 										{#each epicTasks as task, taskIndex (task.id)}
 											{@const depStatus = analyzeDependencies(task)}
 											{@const taskIsActive = task.status === 'in_progress' && task.assignee}
@@ -2934,7 +2934,7 @@
 						{/if}
 						<!-- Show tasks if: no header (standalone task), or header exists and not collapsed -->
 						{#if !showGroupHeader || !isCollapsed}
-						<tbody transition:slide={{ duration: 150 }}>
+						<tbody transition:fade={{ duration: 150 }}>
 							{#each typeTasks as task, taskIndex (task.id)}
 								{@const depStatus = analyzeDependencies(task)}
 									{@const taskIsActive = task.status === 'in_progress' && task.assignee}

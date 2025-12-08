@@ -77,16 +77,16 @@ export async function POST({ params, request }) {
 
 			case 'raw':
 				// Send raw keys without Enter
-				// Escape special characters for shell
-				const escapedRaw = input.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+				// Escape: backslashes, quotes, $, and backticks (command substitution)
+				const escapedRaw = input.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
 				command = `tmux send-keys -t "${sessionName}" -- "${escapedRaw}"`;
 				break;
 
 			case 'text':
 			default:
 				// Send text followed by Enter
-				// Escape special characters for shell
-				const escapedText = input.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+				// Escape: backslashes, quotes, $, and backticks (command substitution)
+				const escapedText = input.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
 				command = `tmux send-keys -t "${sessionName}" -- "${escapedText}" Enter`;
 				break;
 		}
