@@ -1397,6 +1397,62 @@ GreatWind | [P1] jat-4p0 - Demo: Frontend... [🔒2 📬1 ⏱45m]
 
 **See also:** `CLAUDE.md` section "Global Statusline" for complete documentation.
 
+### 10. Signal System
+
+**Real-time agent-to-dashboard communication via structured signals.**
+
+The jat-signal system replaces fragile terminal marker parsing with hook-based signals. Agents emit signals via commands, PostToolUse hooks capture them, and the dashboard receives real-time updates via SSE.
+
+**Quick Usage:**
+```bash
+# Signal that you're working on a task
+jat-signal working jat-abc
+
+# Signal that you need user input
+jat-signal needs_input
+
+# Signal that you're ready for review
+jat-signal review
+
+# Signal task completion
+jat-signal completed
+
+# Suggest follow-up tasks
+jat-signal tasks '[{"title": "Add tests", "priority": 2}]'
+```
+
+**Available Signals:**
+
+| Signal | Command | Dashboard Effect |
+|--------|---------|-----------------|
+| `working` | `jat-signal working <task-id>` | Amber "Working" state |
+| `needs_input` | `jat-signal needs_input` | Purple "Needs Input" state |
+| `review` | `jat-signal review` | Cyan "Ready for Review" state |
+| `completed` | `jat-signal completed` | Green "Completed" state |
+| `idle` | `jat-signal idle` | Gray "Idle" state |
+| `tasks` | `jat-signal tasks '[...]'` | Shows suggested tasks in UI |
+| `action` | `jat-signal action '{...}'` | Shows human action request |
+
+**How It Works:**
+
+1. **Agent runs** `jat-signal working jat-abc`
+2. **Command outputs** marker: `[JAT-SIGNAL:STATE] working:jat-abc`
+3. **PostToolUse hook** (`post-bash-jat-signal.sh`) captures output
+4. **Hook writes** JSON to `/tmp/jat-signal-{session}.json`
+5. **Dashboard SSE** broadcasts state change to all clients
+6. **UI updates** in real-time (no polling needed)
+
+**Why Signals over Terminal Markers:**
+
+| Approach | Reliability | How It Works |
+|----------|-------------|--------------|
+| Terminal markers | Fragile | Regex parsing tmux output, breaks easily |
+| Hook-based signals | Reliable | Structured JSON via PostToolUse hooks |
+
+**Critical Usage:** Always signal `review` before telling the user you're done. Without signals, the dashboard shows stale state and users don't know you're waiting for them.
+
+**Full Documentation:** See `shared/signals.md` for complete signal reference, hook architecture, and troubleshooting.
+
 ---
 
 ## How It Works
