@@ -21,11 +21,67 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { readFileSync, existsSync, statSync } from 'fs';
 import { getTasks } from '$lib/server/beads.js';
 import { getAgentUsageAsync, getAgentHourlyUsageAsync, getAgentContextPercent } from '$lib/utils/tokenUsage.js';
 import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
 
 const execAsync = promisify(exec);
+
+// ============================================================================
+// Signal File Support - Read state from jat-signal hook output
+// ============================================================================
+const SIGNAL_TTL_MS = 60 * 1000; // 1 minute
+
+/**
+ * Map jat-signal states to SessionCard states
+ * Signal uses short names, SessionCard expects hyphenated names
+ */
+const SIGNAL_STATE_MAP = {
+	'working': 'working',
+	'review': 'ready-for-review',
+	'needs_input': 'needs-input',
+	'idle': 'idle',
+	'completed': 'completed',
+	'auto_proceed': 'completed',
+	'starting': 'starting',
+	'compacting': 'compacting',
+	'completing': 'completing',
+};
+
+/**
+ * Read signal state from /tmp/jat-signal-tmux-{sessionName}.json
+ * @param {string} sessionName - tmux session name
+ * @returns {string|null} Session state or null if no valid signal
+ */
+function readSignalState(sessionName) {
+	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+
+	try {
+		if (!existsSync(signalFile)) {
+			return null;
+		}
+
+		// Check file age - signals older than TTL are stale
+		const stats = statSync(signalFile);
+		const ageMs = Date.now() - stats.mtimeMs;
+		if (ageMs > SIGNAL_TTL_MS) {
+			return null;
+		}
+
+		const content = readFileSync(signalFile, 'utf-8');
+		const signal = JSON.parse(content);
+
+		// Only use state signals
+		if (signal.type === 'state' && signal.state) {
+			return SIGNAL_STATE_MAP[signal.state] || signal.state;
+		}
+
+		return null;
+	} catch {
+		return null;
+	}
+}
 
 // ============================================================================
 // Task Cache - getTasks() is expensive (parses 800+ line JSONL on each call)
@@ -144,14 +200,35 @@ function extractContextPercentFromOutput(output) {
 }
 
 /**
- * Detect session state from terminal output
+ * Detect session state - prefers signal file over marker parsing
+ * @param {string} output - Terminal output
+ * @param {Task|null} task - Current task
+ * @param {Task|null} lastCompletedTask - Last completed task
+ * @param {string} [sessionName] - tmux session name (for signal lookup)
+ * @returns {string} Session state
+ */
+function detectSessionState(output, task, lastCompletedTask, sessionName) {
+	// First, try to read state from signal file (authoritative source)
+	if (sessionName) {
+		const signalState = readSignalState(sessionName);
+		if (signalState) {
+			return signalState;
+		}
+	}
+
+	// Fall back to marker parsing for legacy support
+	return detectSessionStateFromOutput(output, task, lastCompletedTask);
+}
+
+/**
+ * Detect session state from terminal output (legacy fallback)
  * Uses the same logic as SessionCard.svelte for consistency
  * @param {string} output - Terminal output
  * @param {Task|null} task - Current task
  * @param {Task|null} lastCompletedTask - Last completed task
  * @returns {string} Session state
  */
-function detectSessionState(output, task, lastCompletedTask) {
+function detectSessionStateFromOutput(output, task, lastCompletedTask) {
 	// Strip ANSI escape codes before pattern matching (they can appear mid-marker)
 	const stripAnsi = (str) => str.replace(/\x1b\[[0-9;]*m/g, '');
 	const recentOutput = output ? stripAnsi(output.slice(-3000)) : '';
@@ -455,8 +532,8 @@ export async function GET({ url }) {
 					}
 				}
 
-				// Detect session state from output
-				const sessionState = detectSessionState(output, task, lastCompletedTask);
+				// Detect session state - prefers signal file over marker parsing
+				const sessionState = detectSessionState(output, task, lastCompletedTask, session.name);
 
 				return {
 					sessionName: session.name,

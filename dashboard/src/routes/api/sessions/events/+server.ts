@@ -109,10 +109,85 @@ function simpleHash(str: string): string {
 }
 
 /**
- * Detect session state from terminal output
+ * Signal file TTL - signals older than this are stale
+ */
+const SIGNAL_TTL_MS = 60 * 1000; // 1 minute
+
+/**
+ * Map jat-signal states to SessionCard states
+ * Signal uses short names, SessionCard expects hyphenated names
+ */
+const SIGNAL_STATE_MAP: Record<string, string> = {
+	'working': 'working',
+	'review': 'ready-for-review',
+	'needs_input': 'needs-input',
+	'idle': 'idle',
+	'completed': 'completed',
+	'auto_proceed': 'completed',  // auto_proceed means task is done
+	'starting': 'starting',
+	'compacting': 'compacting',
+	'completing': 'completing',
+};
+
+/**
+ * Read signal state from /tmp/jat-signal-tmux-{sessionName}.json
+ * Returns null if no valid signal file exists or signal is stale
+ */
+function readSignalState(sessionName: string): string | null {
+	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+
+	try {
+		if (!existsSync(signalFile)) {
+			return null;
+		}
+
+		// Check file age - signals older than TTL are stale
+		const stats = statSync(signalFile);
+		const ageMs = Date.now() - stats.mtimeMs;
+		if (ageMs > SIGNAL_TTL_MS) {
+			return null;
+		}
+
+		const content = readFileSync(signalFile, 'utf-8');
+		const signal = JSON.parse(content);
+
+		// Only use state signals
+		if (signal.type === 'state' && signal.state) {
+			// Map signal state to SessionCard state
+			return SIGNAL_STATE_MAP[signal.state] || signal.state;
+		}
+
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Detect session state - prefers signal file over marker parsing
+ *
+ * State priority:
+ * 1. Signal file (authoritative - written by jat-signal hook)
+ * 2. Marker parsing (fallback - legacy support)
+ */
+function detectSessionState(output: string, task: Task | null, sessionName?: string): string {
+	// First, try to read state from signal file (authoritative source)
+	if (sessionName) {
+		const signalState = readSignalState(sessionName);
+		if (signalState) {
+			return signalState;
+		}
+	}
+
+	// Fall back to marker parsing for legacy support
+	return detectSessionStateFromOutput(output, task);
+}
+
+/**
+ * Detect session state from terminal output (legacy fallback)
  * Uses the same logic as /api/work for consistency
  */
-function detectSessionState(output: string, task: Task | null): string {
+function detectSessionStateFromOutput(output: string, task: Task | null): string {
 	const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
 	const recentOutput = output ? stripAnsi(output.slice(-3000)) : '';
 
@@ -345,8 +420,8 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 		const outputHash = simpleHash(output);
 		const lineCount = output.split('\n').length;
 
-		// Detect state
-		const state = detectSessionState(output, task);
+		// Detect state - prefers signal file over marker parsing
+		const state = detectSessionState(output, task, session.name);
 
 		// Read question data
 		const { hasQuestion, questionData } = readQuestionData(session.name);
