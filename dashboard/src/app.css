@@ -231,6 +231,25 @@
 	animation: epic-completed 2s ease-out forwards;
 }
 
+/* Epic running animation - subtle amber pulsing glow for active epic execution */
+@keyframes epic-running {
+	0%, 100% {
+		background: linear-gradient(90deg, oklch(0.75 0.15 85 / 0.08), transparent);
+		box-shadow: inset 0 0 10px oklch(0.75 0.15 85 / 0.1);
+		border-left-color: oklch(0.75 0.18 85);
+	}
+	50% {
+		background: linear-gradient(90deg, oklch(0.75 0.18 85 / 0.15), oklch(0.70 0.12 85 / 0.05), transparent);
+		box-shadow: inset 0 0 15px oklch(0.75 0.18 85 / 0.2), 0 0 8px oklch(0.75 0.15 85 / 0.3);
+		border-left-color: oklch(0.80 0.22 85);
+	}
+}
+
+.epic-running {
+	animation: epic-running 2s ease-in-out infinite;
+	border-left: 3px solid oklch(0.75 0.18 85);
+}
+
 /* Radar sweep animation for empty state */
 @keyframes radar-sweep {
 	from {

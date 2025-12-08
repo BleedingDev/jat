@@ -31,6 +31,7 @@
 	import { getFileTypeInfo, formatFileSize, type FileCategory } from '$lib/utils/fileUtils';
 	import { calculateRecommendationScore, type RecommendationScore } from '$lib/utils/recommendationUtils';
 	import RecommendedBadge from '$lib/components/RecommendedBadge.svelte';
+	import { getEpicId, getProgress, getRunningAgents, getIsActive } from '$lib/stores/epicQueueStore.svelte';
 
 	// Type definitions for task files (images, PDFs, text, etc.)
 	interface TaskFile {
@@ -2426,14 +2427,19 @@
 								{@const hasChildTasks = epicTasks.some(t => extractParentId(t.id) === epicKey)}
 								{@const showEpicHeader = epicTasks.length >= 2 || hasChildTasks}
 								{@const isEpicJustCompleted = completedEpicIds.includes(epicKey)}
+								{@const isRunningEpic = getIsActive() && getEpicId() === epicKey}
+								{@const epicQueueAgents = isRunningEpic ? getRunningAgents() : []}
+								{@const closedChildrenCount = epicTasks.filter(t => t.status === 'closed').length}
+								{@const totalChildrenCount = epicTasks.length}
+								{@const isEpicFullyComplete = closedChildrenCount === totalChildrenCount && totalChildrenCount > 0}
 
 								<!-- Epic Header (nested under project) -->
 								{#if showEpicHeader}
 									<thead class="sticky z-10" style="top: 40px;">
 										<tr
-											class="cursor-pointer select-none hover:brightness-110 transition-all {isEpicJustCompleted ? 'epic-completed-celebration' : ''}"
+											class="cursor-pointer select-none hover:brightness-110 transition-all {isEpicJustCompleted ? 'epic-completed-celebration' : ''} {isRunningEpic ? 'epic-running' : ''}"
 											onclick={() => toggleGroupCollapse(`${projectKey}::${epicKey}`)}
-											title={isEpicCollapsed ? 'Click to expand epic' : 'Click to collapse epic'}
+											title={isEpicCollapsed ? 'Click to expand epic' : isRunningEpic ? 'Epic is actively executing - click to collapse' : 'Click to collapse epic'}
 										>
 											<th
 												colspan="8"
@@ -2499,19 +2505,44 @@
 													{/if}
 
 													<!-- Progress bar -->
-													{#if epicTasks.length > 1}
-														{@const closedCount = epicTasks.filter(t => t.status === 'closed').length}
-														{@const progressPercent = Math.round((closedCount / epicTasks.length) * 100)}
-														<div class="flex items-center gap-2 ml-3" title="{closedCount} of {epicTasks.length} tasks completed">
-															<div class="w-20 h-1.5 bg-base-content/10 rounded-full overflow-hidden">
+													{#if totalChildrenCount > 1}
+														{@const progressPercent = Math.round((closedChildrenCount / totalChildrenCount) * 100)}
+														<div class="flex items-center gap-2 ml-3" title="{closedChildrenCount} of {totalChildrenCount} tasks completed">
+															<!-- Checkmark for fully complete -->
+															{#if isEpicFullyComplete}
+																<span
+																	class="flex items-center justify-center w-5 h-5 rounded-full"
+																	style="background: oklch(0.55 0.18 145 / 0.25);"
+																>
+																	<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+																	</svg>
+																</span>
+															{/if}
+															<!-- Progress bar -->
+															<div class="w-20 h-1.5 bg-base-content/10 rounded-full overflow-hidden {isRunningEpic ? 'ring-1 ring-primary/30' : ''}">
 																<div
-																	class="h-full rounded-full transition-all duration-300"
-																	style="width: {progressPercent}%; background: {progressPercent === 100 ? 'oklch(0.72 0.20 142)' : epicVisual.accent};"
+																	class="h-full rounded-full transition-all duration-300 {isRunningEpic ? 'animate-pulse' : ''}"
+																	style="width: {progressPercent}%; background: {isEpicFullyComplete ? 'oklch(0.72 0.20 142)' : isRunningEpic ? 'oklch(0.75 0.18 85)' : epicVisual.accent};"
 																></div>
 															</div>
-															<span class="font-mono text-[10px] text-base-content/50">
-																{progressPercent}%
+															<!-- X/Y complete text -->
+															<span class="font-mono text-[10px] {isRunningEpic ? 'text-warning' : 'text-base-content/50'}">
+																{closedChildrenCount}/{totalChildrenCount}
 															</span>
+															<!-- Running agent count (only when epic is active) -->
+															{#if isRunningEpic && epicQueueAgents.length > 0}
+																<span
+																	class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono animate-pulse"
+																	style="background: oklch(0.75 0.18 85 / 0.2); color: oklch(0.85 0.15 85);"
+																	title="Agents working on this epic: {epicQueueAgents.join(', ')}"
+																>
+																	<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+																	</svg>
+																	{epicQueueAgents.length}
+																</span>
+															{/if}
 														</div>
 													{/if}
 
@@ -2756,10 +2787,14 @@
 						{@const showGroupHeader = groupingMode !== 'parent' || typeTasks.length >= 2 || hasChildTasks}
 						{@const groupIndex = visibleGroupKeys.indexOf(groupKey)}
 						{@const isEpicJustCompleted = groupingMode === 'parent' && groupKey && completedEpicIds.includes(groupKey)}
+						{@const isParentRunningEpic = groupingMode === 'parent' && getIsActive() && getEpicId() === groupKey}
+						{@const parentEpicQueueAgents = isParentRunningEpic ? getRunningAgents() : []}
+						{@const parentClosedCount = typeTasks.filter(t => t.status === 'closed').length}
+						{@const parentIsFullyComplete = parentClosedCount === typeTasks.length && typeTasks.length > 0}
 						{#if showGroupHeader}
 						<thead>
 							<tr
-								class="cursor-pointer select-none hover:brightness-110 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset {isEpicJustCompleted ? 'epic-completed-celebration' : ''}"
+								class="cursor-pointer select-none hover:brightness-110 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset {isEpicJustCompleted ? 'epic-completed-celebration' : ''} {isParentRunningEpic ? 'epic-running' : ''}"
 								tabindex="0"
 								role="button"
 								aria-expanded={!isCollapsed}
@@ -2768,7 +2803,7 @@
 								onclick={() => toggleGroupCollapse(groupKey)}
 								onkeydown={(e) => handleGroupKeyDown(e, groupKey, groupIndex)}
 								onfocus={() => handleGroupFocus(groupIndex)}
-								title={isCollapsed ? 'Click to expand (Enter/Space)' : 'Click to collapse (Enter/Space). Arrow keys to navigate groups.'}
+								title={isCollapsed ? 'Click to expand (Enter/Space)' : isParentRunningEpic ? 'Epic is actively executing - click to collapse' : 'Click to collapse (Enter/Space). Arrow keys to navigate groups.'}
 							>
 								<th
 									colspan="8"
@@ -2839,18 +2874,43 @@
 
 										<!-- Epic progress bar (only in parent mode with >1 tasks) -->
 										{#if groupingMode === 'parent' && typeTasks.length > 1}
-											{@const closedCount = typeTasks.filter(t => t.status === 'closed').length}
-											{@const progressPercent = Math.round((closedCount / typeTasks.length) * 100)}
-											<div class="flex items-center gap-2 ml-3" title="{closedCount} of {typeTasks.length} tasks completed ({progressPercent}%)">
-												<div class="w-24 h-1.5 bg-base-content/10 rounded-full overflow-hidden">
+											{@const progressPercent = Math.round((parentClosedCount / typeTasks.length) * 100)}
+											<div class="flex items-center gap-2 ml-3" title="{parentClosedCount} of {typeTasks.length} tasks completed">
+												<!-- Checkmark for fully complete -->
+												{#if parentIsFullyComplete}
+													<span
+														class="flex items-center justify-center w-5 h-5 rounded-full"
+														style="background: oklch(0.55 0.18 145 / 0.25);"
+													>
+														<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+														</svg>
+													</span>
+												{/if}
+												<!-- Progress bar -->
+												<div class="w-24 h-1.5 bg-base-content/10 rounded-full overflow-hidden {isParentRunningEpic ? 'ring-1 ring-primary/30' : ''}">
 													<div
-														class="h-full rounded-full transition-all duration-300"
-														style="width: {progressPercent}%; background: {progressPercent === 100 ? 'oklch(0.72 0.20 142)' : typeVisual.accent};"
+														class="h-full rounded-full transition-all duration-300 {isParentRunningEpic ? 'animate-pulse' : ''}"
+														style="width: {progressPercent}%; background: {parentIsFullyComplete ? 'oklch(0.72 0.20 142)' : isParentRunningEpic ? 'oklch(0.75 0.18 85)' : typeVisual.accent};"
 													></div>
 												</div>
-												<span class="font-mono text-[10px] text-base-content/50">
-													{progressPercent}%
+												<!-- X/Y complete text -->
+												<span class="font-mono text-[10px] {isParentRunningEpic ? 'text-warning' : 'text-base-content/50'}">
+													{parentClosedCount}/{typeTasks.length}
 												</span>
+												<!-- Running agent count (only when epic is active) -->
+												{#if isParentRunningEpic && parentEpicQueueAgents.length > 0}
+													<span
+														class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono animate-pulse"
+														style="background: oklch(0.75 0.18 85 / 0.2); color: oklch(0.85 0.15 85);"
+														title="Agents working on this epic: {parentEpicQueueAgents.join(', ')}"
+													>
+														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+														</svg>
+														{parentEpicQueueAgents.length}
+													</span>
+												{/if}
 											</div>
 										{/if}
 
