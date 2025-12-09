@@ -304,16 +304,19 @@ export async function GET({ url }) {
 				// Detect port from deep output (better chance of finding startup line)
 				let port = detectPort(deepOutput || output);
 
-				// Try to get project config (path and port) from jat config
+				// Try to get project config (path, server_path, and port) from jat config
 				let projectPath = null;
 				let configPort = null;
 				try {
 					const configPath = `${process.env.HOME}/.config/jat/projects.json`;
+					// Note: \\( creates literal \( for jq interpolation
 					const { stdout: configOutput } = await execAsync(
-						`jq -r '.projects["${projectName}"] | "\\(.path // empty)|\\(.port // empty)"' "${configPath}" 2>/dev/null`
+						`jq -r '.projects["${projectName}"] | "\\(.path // empty)|\\(.server_path // empty)|\\(.port // empty)"' "${configPath}" 2>/dev/null`
 					);
-					const [pathPart, portPart] = configOutput.trim().split('|');
-					projectPath = pathPart ? pathPart.replace(/^~/, process.env.HOME || '') : null;
+					const [pathPart, serverPathPart, portPart] = configOutput.trim().split('|');
+					// Use server_path if available, otherwise use path
+					const effectivePath = serverPathPart || pathPart;
+					projectPath = effectivePath ? effectivePath.replace(/^~/, process.env.HOME || '') : null;
 					configPort = portPart ? parseInt(portPart, 10) : null;
 				} catch {
 					// Config not available, use default path

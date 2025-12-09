@@ -57,16 +57,26 @@ export async function POST({ request }) {
 			// tmux might not be running, continue
 		}
 
-		// Get project path from jat config or use default
+		// Get project settings from jat config
 		let projectPath = null;
+		let serverPath = null;
+		let configPort = null;
 		try {
 			const configPath = `${process.env.HOME}/.config/jat/projects.json`;
+			// Read all project settings at once
+			// Note: \\n creates literal \n for jq to interpret as newline
 			const { stdout: configOutput } = await execAsync(
-				`jq -r '.projects["${projectName}"].path // empty' "${configPath}" 2>/dev/null`
+				`jq -r '.projects["${projectName}"] | "\\(.path // "")\\n\\(.server_path // "")\\n\\(.port // "")"' "${configPath}" 2>/dev/null`
 			);
-			const path = configOutput.trim();
+			const [path, srvPath, portStr] = configOutput.trim().split('\n');
 			if (path) {
 				projectPath = path.replace(/^~/, process.env.HOME || '');
+			}
+			if (srvPath) {
+				serverPath = srvPath.replace(/^~/, process.env.HOME || '');
+			}
+			if (portStr && portStr !== 'null') {
+				configPort = parseInt(portStr, 10);
 			}
 		} catch {
 			// Config not available
@@ -77,14 +87,17 @@ export async function POST({ request }) {
 			projectPath = `${process.env.HOME}/code/${projectName}`;
 		}
 
-		// Verify project path exists
+		// Use server_path if specified, otherwise use project path
+		const executionPath = serverPath || projectPath;
+
+		// Verify execution path exists
 		try {
-			const { stdout } = await execAsync(`test -d "${projectPath}" && echo "exists" || echo "no"`);
+			const { stdout } = await execAsync(`test -d "${executionPath}" && echo "exists" || echo "no"`);
 			if (stdout.trim() !== 'exists') {
 				return json(
 					{
 						error: 'Project directory not found',
-						message: `Directory does not exist: ${projectPath}`
+						message: `Directory does not exist: ${executionPath}`
 					},
 					{ status: 404 }
 				);
@@ -93,21 +106,24 @@ export async function POST({ request }) {
 			return json(
 				{
 					error: 'Failed to verify project path',
-					message: `Could not check directory: ${projectPath}`
+					message: `Could not check directory: ${executionPath}`
 				},
 				{ status: 500 }
 			);
 		}
 
-		// Build the command with optional port
+		// Use port from request, config, or nothing (let vite pick default)
+		const effectivePort = port || configPort;
+
+		// Build the command with port if specified
 		let serverCommand = command;
-		if (port && !command.includes('--port')) {
-			serverCommand = `${command} -- --port ${port}`;
+		if (effectivePort && !command.includes('--port')) {
+			serverCommand = `${command} -- --port ${effectivePort}`;
 		}
 
 		// Create tmux session and start the server
 		const createCmd = `
-			tmux new-session -d -s "${sessionName}" -c "${projectPath}" && \
+			tmux new-session -d -s "${sessionName}" -c "${executionPath}" && \
 			tmux send-keys -t "${sessionName}" "${serverCommand}" Enter
 		`;
 
@@ -146,14 +162,14 @@ export async function POST({ request }) {
 				sessionName,
 				projectName,
 				displayName: `${projectName.charAt(0).toUpperCase() + projectName.slice(1)} Dev Server`,
-				port: port || null,
+				port: effectivePort || null,
 				portRunning: false,
 				status: 'starting',
 				output,
 				lineCount,
 				created: new Date().toISOString(),
 				attached: false,
-				projectPath,
+				projectPath: executionPath,
 				command: serverCommand
 			},
 			message: `Started server session: ${sessionName}`
