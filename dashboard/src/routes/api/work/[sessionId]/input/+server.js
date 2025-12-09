@@ -7,10 +7,13 @@
  * - enter: Just Enter key (accept highlighted option)
  * - down: Down arrow key
  * - up: Up arrow key
+ * - left: Left arrow key
+ * - right: Right arrow key
  * - escape: Escape key
  * - ctrl-c: Sends Ctrl+C interrupt signal
  * - ctrl-d: Sends Ctrl+D (EOF)
  * - ctrl-u: Sends Ctrl+U (clear line from cursor to beginning)
+ * - ctrl-l: Sends Ctrl+L (clear screen)
  * - tab: Sends Tab key (for autocomplete)
  * - raw: Send exact keys without Enter
  *
@@ -83,6 +86,21 @@ export async function POST({ params, request }) {
 				command = `tmux send-keys -t "${sessionId}" Tab`;
 				break;
 
+			case 'left':
+				// Send Left arrow
+				command = `tmux send-keys -t "${sessionId}" Left`;
+				break;
+
+			case 'right':
+				// Send Right arrow
+				command = `tmux send-keys -t "${sessionId}" Right`;
+				break;
+
+			case 'ctrl-l':
+				// Send Ctrl+L (clear screen)
+				command = `tmux send-keys -t "${sessionId}" C-l`;
+				break;
+
 			case 'raw':
 				// Send raw keys without Enter
 				// Escape special characters for shell
@@ -106,7 +124,7 @@ export async function POST({ params, request }) {
 				success: true,
 				sessionId,
 				type,
-				input: ['ctrl-c', 'ctrl-d', 'ctrl-u', 'tab', 'enter', 'down', 'up', 'escape'].includes(type) ? type : input,
+				input: ['ctrl-c', 'ctrl-d', 'ctrl-u', 'ctrl-l', 'tab', 'enter', 'down', 'up', 'left', 'right', 'escape'].includes(type) ? type : input,
 				message: `Input sent to session ${sessionId}`,
 				timestamp: new Date().toISOString()
 			});

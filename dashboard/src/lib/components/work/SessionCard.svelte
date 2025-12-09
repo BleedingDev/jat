@@ -48,9 +48,11 @@
 	import StatusActionBadge from "./StatusActionBadge.svelte";
 	import ServerStatusBadge from "./ServerStatusBadge.svelte";
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
+	import EventStack from "./EventStack.svelte";
 	import StreakCelebration from "$lib/components/StreakCelebration.svelte";
 	import SuggestedTasksSection from "./SuggestedTasksSection.svelte";
 	import SuggestedTasksModal from "./SuggestedTasksModal.svelte";
+	import RollbackConfirmModal from "./RollbackConfirmModal.svelte";
 	import {
 		SESSION_STATE_VISUALS,
 		SERVER_STATE_VISUALS,
@@ -61,7 +63,7 @@
 	} from "$lib/config/statusColors";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
 	import { setHoveredSession, completingSessionFlash, highlightedSessionName, jumpToSession } from "$lib/stores/hoveredSession";
-	import type { SuggestedTask } from "$lib/types/signals";
+	import type { SuggestedTask, SuggestedTaskWithState } from "$lib/types/signals";
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
 	import { getFileTypeInfo, formatFileSize, type FileCategory } from "$lib/utils/fileUtils";
 	import { getTerminalHeight, getCtrlCIntercept, setCtrlCIntercept } from "$lib/stores/preferences.svelte";
@@ -160,6 +162,40 @@
 		}>;
 		/** Timestamp when signal suggested tasks were last updated */
 		signalSuggestedTasksTimestamp?: number;
+		/** Completion bundle from jat-signal complete (via SSE session-complete event) */
+		completionBundle?: {
+			taskId: string;
+			agentName: string;
+			summary: string[];
+			quality: {
+				tests: 'passing' | 'failing' | 'none' | 'skipped';
+				build: 'clean' | 'warnings' | 'errors';
+				preExisting?: string;
+			};
+			humanActions?: Array<{
+				title: string;
+				description?: string;
+				items?: string[];
+			}>;
+			suggestedTasks?: Array<{
+				id?: string;
+				type: string;
+				title: string;
+				description: string;
+				priority: number;
+				reason?: string;
+				project?: string;
+				labels?: string;
+				depends_on?: string[];
+			}>;
+			crossAgentIntel?: {
+				files?: string[];
+				patterns?: string[];
+				gotchas?: string[];
+			};
+		};
+		/** Timestamp when completion bundle was received */
+		completionBundleTimestamp?: number;
 	}
 
 	let {
@@ -212,6 +248,9 @@
 		// Signal data (from jat-signal via SSE)
 		signalSuggestedTasks,
 		signalSuggestedTasksTimestamp,
+		// Completion bundle (from jat-signal complete via SSE)
+		completionBundle,
+		completionBundleTimestamp,
 	}: Props = $props();
 
 	// Derived mode helpers
@@ -535,6 +574,10 @@
 			currentTime = Date.now();
 		}, tickInterval);
 
+		// Fetch existing task titles for "already created" detection in suggested tasks
+		// Run on mount to ensure we have the data when suggested tasks appear
+		fetchExistingTaskTitles();
+
 		// Question polling is now managed by $effect based on sessionState
 		// This prevents N sessions from all polling simultaneously when not needed
 
@@ -614,6 +657,7 @@
 	let previousOutputLength = $state(0);
 
 	// Clear textarea when streamed text is submitted in terminal
+	// Uses high water mark (maxStreamedLength) to prevent re-sending text after clearing
 	$effect(() => {
 		if (!liveStreamEnabled || !lastStreamedText || !output) {
 			previousOutputLength = output?.length || 0;
@@ -642,8 +686,10 @@
 			lastStreamedText.length >= 2
 		) {
 			// Text was likely submitted in terminal - clear textarea
+			// IMPORTANT: Also reset maxStreamedLength so new typing will be streamed fresh
 			inputText = "";
 			lastStreamedText = "";
+			maxStreamedLength = 0; // Reset high water mark - submission confirmed
 			setTimeout(autoResizeTextarea, 0);
 		}
 
@@ -788,6 +834,52 @@
 	// Suggested tasks panel expanded state (inline) and modal state
 	let suggestedTasksExpanded = $state(false);
 	let suggestedTasksModalOpen = $state(false);
+
+	// Rollback confirmation modal state
+	let rollbackModalOpen = $state(false);
+	let rollbackEvent = $state<{ git_sha: string; timestamp?: string } | null>(null);
+
+	// Track existing task titles for "already created" detection
+	let existingTaskTitles = $state<Set<string>>(new Set());
+	// Version counter to force $derived reactivity when existingTaskTitles is updated
+	let existingTaskTitlesVersion = $state(0);
+
+	// Fetch existing task titles from Beads (normalized for comparison)
+	async function fetchExistingTaskTitles(): Promise<void> {
+		try {
+			// Use repeated status params (API doesn't support comma-separated)
+			const response = await fetch("/api/tasks?status=open&status=in_progress&status=closed");
+			if (!response.ok) {
+				console.warn("[SessionCard] fetchExistingTaskTitles: response not ok", response.status);
+				return;
+			}
+
+			const data = await response.json();
+			const titles = new Set<string>();
+			for (const task of data.tasks || []) {
+				if (task.title) {
+					// Normalize: lowercase and trim for comparison
+					titles.add(task.title.toLowerCase().trim());
+				}
+			}
+			existingTaskTitles = titles;
+			existingTaskTitlesVersion++; // Bump version to trigger $derived reactivity
+			console.log("[SessionCard]", sessionName, "- Loaded", titles.size, "existing task titles for alreadyCreated detection (v" + existingTaskTitlesVersion + ")");
+		} catch (error) {
+			console.error("[SessionCard] Error fetching existing task titles:", error);
+		}
+	}
+
+	// Fetch existing task titles when modal opens or when suggested tasks appear
+	// Note: We check signalSuggestedTasks directly (not hasSuggestedTasks) to avoid circular dependency
+	// since hasSuggestedTasks depends on detectedSuggestedTasks which depends on existingTaskTitles
+	$effect(() => {
+		const hasSignalTasks = signalSuggestedTasks && signalSuggestedTasks.length > 0;
+		if (hasSignalTasks || suggestedTasksModalOpen) {
+			console.log("[SessionCard] Triggering fetchExistingTaskTitles - hasSignalTasks:", hasSignalTasks, "modalOpen:", suggestedTasksModalOpen);
+			fetchExistingTaskTitles();
+		}
+	});
 
 	// Available projects for suggested task editor dropdown
 	let availableProjects = $state<string[]>([]);
@@ -1027,10 +1119,14 @@
 	// When enabled, characters are streamed to terminal as user types
 	// This enables instant slash command filtering in Claude Code
 	let liveStreamEnabled = $state(true); // Default ON for better UX
-	let lastStreamedText = $state(""); // Track what we've already sent
+	let lastStreamedText = $state(""); // Track what we've already sent to terminal
 	let streamDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const STREAM_DEBOUNCE_MS = 50; // Short debounce for responsive feel
 	let isStreaming = $state(false); // Track if we're actively streaming
+
+	// Track the "high water mark" of text we've sent - this prevents re-sending
+	// even if lastStreamedText gets cleared by submission detection
+	let maxStreamedLength = $state(0);
 
 	// Ctrl+C behavior toggle (reactive from preferences store)
 	// When true, Ctrl+C sends interrupt to tmux; when false, Ctrl+C copies as usual
@@ -1136,12 +1232,13 @@
 		// Don't stream if text is empty (user cleared input)
 		if (!currentText) {
 			// If we had text before, clear the terminal input
-			if (previousText) {
+			if (previousText || maxStreamedLength > 0) {
 				isStreaming = true;
 				try {
 					// Send Ctrl+U to clear the current line
 					await onSendInput("ctrl-u", "key");
 					lastStreamedText = "";
+					maxStreamedLength = 0; // Reset high water mark when user clears
 				} finally {
 					isStreaming = false;
 				}
@@ -1151,12 +1248,18 @@
 
 		isStreaming = true;
 		try {
-			if (currentText.startsWith(previousText)) {
+			if (currentText.startsWith(previousText) && previousText.length > 0) {
 				// Text was appended - send only the new characters (most common case)
 				const newChars = currentText.slice(previousText.length);
 				if (newChars) {
 					await onSendInput(newChars, "raw");
 				}
+			} else if (previousText.length === 0 && currentText.length <= maxStreamedLength) {
+				// GUARD: lastStreamedText was reset but we already sent this text
+				// This happens when submission detection clears lastStreamedText
+				// but the text hasn't actually been submitted - don't resend!
+				// Just restore lastStreamedText to current state
+				// (no terminal command needed)
 			} else {
 				// Text was modified (deletion, paste, or edit in middle)
 				// Clear line and resend entire text
@@ -1168,6 +1271,10 @@
 			}
 
 			lastStreamedText = currentText;
+			// Update high water mark
+			if (currentText.length > maxStreamedLength) {
+				maxStreamedLength = currentText.length;
+			}
 		} catch (error) {
 			console.error("Error streaming input:", error);
 		} finally {
@@ -1574,13 +1681,19 @@
 		| "idle";
 
 	const sessionState = $derived.by((): SessionState => {
-		// If we have a recent SSE state (within last 5 seconds), use it directly
-		// This provides real-time updates without re-parsing output
+		// If we have an SSE state, check if it should be used
+		// "completed" state persists until task changes (no TTL) - this ensures completion UI stays visible
+		// Other states use 5-second TTL for real-time responsiveness
 		const SSE_STATE_TTL_MS = 5000;
-		if (sseState && sseStateTimestamp && (Date.now() - sseStateTimestamp) < SSE_STATE_TTL_MS) {
-			// Map SSE state to our SessionState type
-			const validStates: SessionState[] = ['starting', 'working', 'compacting', 'needs-input', 'ready-for-review', 'completing', 'completed', 'idle'];
-			if (validStates.includes(sseState as SessionState)) {
+		const validStates: SessionState[] = ['starting', 'working', 'compacting', 'needs-input', 'ready-for-review', 'completing', 'completed', 'idle'];
+
+		if (sseState && validStates.includes(sseState as SessionState)) {
+			// "completed" state should persist - it comes from signal files or closed task, not momentary events
+			if (sseState === 'completed') {
+				return 'completed';
+			}
+			// Other states use TTL for freshness
+			if (sseStateTimestamp && (Date.now() - sseStateTimestamp) < SSE_STATE_TTL_MS) {
 				return sseState as SessionState;
 			}
 		}
@@ -1859,6 +1972,8 @@
 		selected: boolean;
 		/** Whether user has edited this task */
 		edited: boolean;
+		/** Whether this task already exists in Beads (matched by title) */
+		alreadyCreated?: boolean;
 		/** Local edits (if edited=true, these override the original values) */
 		edits?: {
 			type?: string;
@@ -1878,8 +1993,12 @@
 	 * Signal data comes directly from the jat-signal hook without terminal parsing.
 	 */
 	const detectedSuggestedTasks = $derived.by((): SuggestedTaskWithState[] => {
-		// TTL for signal data (1 minute - matches SSE server SIGNAL_TTL_MS)
-		const SIGNAL_TTL_MS = 60 * 1000;
+		// Reference version counter to ensure this derived re-runs when titles are fetched
+		// Without this, Svelte may not detect changes to the Set contents
+		const _titlesVersion = existingTaskTitlesVersion;
+
+		// Use longer TTL for suggested tasks since they should persist until user acts
+		const SIGNAL_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 		// Only process signal-based suggested tasks
 		if (!signalSuggestedTasks || signalSuggestedTasks.length === 0 || !signalSuggestedTasksTimestamp) {
@@ -1891,12 +2010,31 @@
 			return [];
 		}
 
+		// Debug: log existingTaskTitles size to verify it's populated
+		console.log("[SessionCard]", sessionName, "- detectedSuggestedTasks derived (v" + _titlesVersion + ") - existingTaskTitles.size:", existingTaskTitles.size);
+
 		// Map signal tasks to tasks with local UI state
 		return signalSuggestedTasks.map((task, index) => {
 			const key = task.title || `task-${index}`;
 			const isSelected = suggestedTaskSelections.get(key) ?? false;
 			const edits = suggestedTaskEdits.get(key);
 			const hasEdits = edits && Object.keys(edits).length > 0;
+
+			// Check if task title already exists in Beads (normalized comparison)
+			const effectiveTitle = hasEdits && edits.title ? edits.title : task.title;
+			const normalizedTitle = effectiveTitle?.toLowerCase().trim() || '';
+			const alreadyCreated = normalizedTitle ? existingTaskTitles.has(normalizedTitle) : false;
+
+			// Debug: log the check
+			if (index === 0) {
+				console.log("[SessionCard]", sessionName, "- First task alreadyCreated check:", {
+					effectiveTitle,
+					normalizedTitle,
+					alreadyCreated,
+					existingTitlesSize: existingTaskTitles.size,
+					hasTitle: existingTaskTitles.has(normalizedTitle)
+				});
+			}
 
 			return {
 				...task,
@@ -1911,6 +2049,7 @@
 					: {}),
 				selected: isSelected,
 				edited: hasEdits ?? false,
+				alreadyCreated,
 			};
 		});
 	});
@@ -1952,6 +2091,55 @@
 
 	/** Check if any suggested tasks are detected */
 	const hasSuggestedTasks = $derived(detectedSuggestedTasks.length > 0);
+
+	/**
+	 * Check if completion bundle is available and fresh (within TTL)
+	 * Uses longer TTL (30 min) since completion data should persist until user acts
+	 */
+	const hasCompletionBundle = $derived.by(() => {
+		const BUNDLE_TTL_MS = 30 * 60 * 1000; // 30 minutes for completion bundles
+		if (!completionBundle || !completionBundleTimestamp) return false;
+		const ageMs = Date.now() - completionBundleTimestamp;
+		return ageMs < BUNDLE_TTL_MS;
+	});
+
+	/** Quality signal color mapping */
+	function getQualityColor(type: 'tests' | 'build', value: string): string {
+		if (type === 'tests') {
+			switch (value) {
+				case 'passing': return 'oklch(0.70 0.18 145)'; // green
+				case 'failing': return 'oklch(0.65 0.20 25)';  // red
+				case 'skipped': return 'oklch(0.70 0.15 85)';  // amber
+				default: return 'oklch(0.65 0.08 250)';        // gray
+			}
+		} else {
+			switch (value) {
+				case 'clean': return 'oklch(0.70 0.18 145)';   // green
+				case 'warnings': return 'oklch(0.70 0.15 85)'; // amber
+				case 'errors': return 'oklch(0.65 0.20 25)';   // red
+				default: return 'oklch(0.65 0.08 250)';        // gray
+			}
+		}
+	}
+
+	/** Get icon for quality signal */
+	function getQualityIcon(type: 'tests' | 'build', value: string): string {
+		if (type === 'tests') {
+			switch (value) {
+				case 'passing': return '✓';
+				case 'failing': return '✗';
+				case 'skipped': return '⊘';
+				default: return '○';
+			}
+		} else {
+			switch (value) {
+				case 'clean': return '✓';
+				case 'warnings': return '⚠';
+				case 'errors': return '✗';
+				default: return '○';
+			}
+		}
+	}
 
 	/** Whether task creation is in progress */
 	let isCreatingSuggestedTasks = $state(false);
@@ -2041,6 +2229,8 @@
 					`Created ${createResults.success.length} task${createResults.success.length > 1 ? 's' : ''}`,
 					createResults.success.map((r) => r.taskId).filter(Boolean).join(', ')
 				);
+				// Refresh existing task titles so newly created tasks show as "Created"
+				fetchExistingTaskTitles();
 			}
 
 			// If all succeeded, clear selections after a short delay
@@ -2114,6 +2304,74 @@
 		}
 
 		console.log(`[SuggestedTasks] Created ${result.created} tasks via bulk API`);
+
+		// Refresh existing task titles so newly created tasks show as "Created"
+		fetchExistingTaskTitles();
+	}
+
+	/** Create tasks from EventStack timeline events - returns results for feedback UI */
+	async function createTimelineEventTasks(selectedTasks: SuggestedTaskWithState[]): Promise<{ success: any[]; failed: any[] }> {
+		if (selectedTasks.length === 0) {
+			return { success: [], failed: [] };
+		}
+
+		// Determine default project from current task ID if available
+		const currentTaskId = task?.id || displayTask?.id;
+		const defaultProject = currentTaskId ? getProjectFromTaskId(currentTaskId) : undefined;
+
+		// Map tasks to the bulk API format
+		const tasksToCreate = selectedTasks.map((t) => ({
+			type: t.edits?.type || t.type || 'task',
+			title: t.edits?.title || t.title,
+			description: t.edits?.description || t.description || '',
+			priority: t.edits?.priority ?? t.priority ?? 2,
+			project: t.edits?.project || t.project || defaultProject || undefined,
+			labels: t.edits?.labels || t.labels || undefined,
+			depends_on: t.edits?.depends_on || t.depends_on || undefined,
+		}));
+
+		try {
+			const response = await fetch('/api/tasks/bulk', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tasks: tasksToCreate })
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				return {
+					success: [],
+					failed: tasksToCreate.map((t) => ({
+						title: t.title,
+						success: false,
+						error: result.message || 'API error'
+					}))
+				};
+			}
+
+			// Parse results - bulk API returns { created, failed, tasks, errors }
+			const successTasks = (result.tasks || []).map((t: any) => ({
+				title: t.title,
+				taskId: t.id,
+				success: true
+			}));
+
+			const failedTasks = (result.errors || []).map((err: any) => ({
+				title: err.title || 'Unknown',
+				success: false,
+				error: err.error || err.message
+			}));
+
+			console.log(`[EventStack] Created ${successTasks.length} tasks, ${failedTasks.length} failed`);
+
+			return { success: successTasks, failed: failedTasks };
+		} catch (err: any) {
+			return {
+				success: [],
+				failed: [{ title: 'Error', success: false, error: err.message }]
+			};
+		}
 	}
 
 	// Task to display - either active task or last completed task
@@ -2697,6 +2955,7 @@
 			// Clear input and attached files on success
 			inputText = "";
 			lastStreamedText = ""; // Reset streamed text tracking
+			maxStreamedLength = 0; // Reset high water mark after submit
 			// Reset textarea height after clearing
 			setTimeout(autoResizeTextarea, 0);
 			// Revoke object URLs to prevent memory leaks
@@ -2732,6 +2991,7 @@
 				onSendInput("ctrl-u", "key");
 			}
 			lastStreamedText = ""; // Reset streamed text tracking
+			maxStreamedLength = 0; // Reset high water mark on Escape
 			// Reset textarea height
 			setTimeout(autoResizeTextarea, 0);
 		} else if (e.key === "c" && e.ctrlKey && ctrlCInterceptEnabled) {
@@ -2740,6 +3000,7 @@
 			e.preventDefault();
 			inputText = "";
 			lastStreamedText = "";
+			maxStreamedLength = 0; // Reset high water mark on Ctrl+C
 			setTimeout(autoResizeTextarea, 0);
 			// Send Ctrl+C to tmux to interrupt Claude
 			if (onSendInput) {
@@ -3352,7 +3613,7 @@
 		/>
 		<!-- Status accent bar - left edge (color reflects session state) -->
 		<div
-			class="absolute left-0 top-0 bottom-0 w-1"
+			class="absolute left-0 top-0 bottom-0 w-1 z-20"
 			style="
 			background: {sessionState === 'needs-input'
 				? 'oklch(0.70 0.20 45)' /* Orange for needs input - urgent attention */
@@ -3872,6 +4133,134 @@
 				{/if}
 			</div>
 
+			<!-- Completion Bundle Section (when agent completes task with structured data) -->
+			{#if hasCompletionBundle && completionBundle && isAgentMode}
+				<div class="px-3 py-2 flex-shrink-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: linear-gradient(135deg, oklch(0.20 0.05 145 / 0.3) 0%, oklch(0.18 0.03 145 / 0.2) 100%);">
+					<!-- Header -->
+					<div class="flex items-center gap-2 mb-2">
+						<span class="font-semibold text-sm" style="color: oklch(0.85 0.12 145);">
+							✅ Task Completed
+						</span>
+						{#if completionBundle.quality}
+							<!-- Quality badges inline -->
+							<span
+								class="badge badge-xs font-mono"
+								style="background: {getQualityColor('tests', completionBundle.quality.tests)}20; color: {getQualityColor('tests', completionBundle.quality.tests)}; border: 1px solid {getQualityColor('tests', completionBundle.quality.tests)}40;"
+								title="Tests: {completionBundle.quality.tests}"
+							>
+								{getQualityIcon('tests', completionBundle.quality.tests)} tests
+							</span>
+							<span
+								class="badge badge-xs font-mono"
+								style="background: {getQualityColor('build', completionBundle.quality.build)}20; color: {getQualityColor('build', completionBundle.quality.build)}; border: 1px solid {getQualityColor('build', completionBundle.quality.build)}40;"
+								title="Build: {completionBundle.quality.build}"
+							>
+								{getQualityIcon('build', completionBundle.quality.build)} build
+							</span>
+						{/if}
+					</div>
+
+					<!-- Summary bullets -->
+					{#if completionBundle.summary && completionBundle.summary.length > 0}
+						<div class="mb-2">
+							<ul class="list-none m-0 p-0 space-y-0.5">
+								{#each completionBundle.summary as item}
+									<li class="flex items-start gap-1.5 text-xs" style="color: oklch(0.80 0.03 250);">
+										<span style="color: oklch(0.70 0.12 145);">•</span>
+										<span>{item}</span>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+
+					<!-- Human Actions (if any) -->
+					{#if completionBundle.humanActions && completionBundle.humanActions.length > 0}
+						<div class="mb-2 p-2 rounded" style="background: oklch(0.25 0.08 45 / 0.3); border: 1px solid oklch(0.50 0.12 45 / 0.3);">
+							<div class="flex items-center gap-1.5 mb-1.5">
+								<span class="text-xs font-semibold" style="color: oklch(0.85 0.12 45);">
+									👤 Human Actions Required
+								</span>
+							</div>
+							{#each completionBundle.humanActions as action}
+								<div class="mb-1.5 last:mb-0">
+									{#if action.title}
+										<div class="text-xs font-medium" style="color: oklch(0.80 0.08 45);">
+											{action.title}
+										</div>
+									{/if}
+									{#if action.description}
+										<div class="text-xs" style="color: oklch(0.70 0.04 250);">
+											{action.description}
+										</div>
+									{/if}
+									{#if action.items && action.items.length > 0}
+										<ul class="list-none m-0 p-0 mt-1 space-y-0.5">
+											{#each action.items as item}
+												<li class="flex items-center gap-1.5 text-xs" style="color: oklch(0.75 0.04 250);">
+													<input type="checkbox" class="checkbox checkbox-xs" />
+													<span>{item}</span>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<!-- Cross-Agent Intel (if any) -->
+					{#if completionBundle.crossAgentIntel && (completionBundle.crossAgentIntel.files?.length || completionBundle.crossAgentIntel.patterns?.length || completionBundle.crossAgentIntel.gotchas?.length)}
+						<div class="p-2 rounded" style="background: oklch(0.22 0.06 250 / 0.5); border: 1px solid oklch(0.40 0.08 250 / 0.3);">
+							<div class="flex items-center gap-1.5 mb-1.5">
+								<span class="text-xs font-semibold" style="color: oklch(0.80 0.10 250);">
+									🤖 Cross-Agent Intel
+								</span>
+							</div>
+							{#if completionBundle.crossAgentIntel.files && completionBundle.crossAgentIntel.files.length > 0}
+								<div class="mb-1">
+									<span class="text-[10px] uppercase font-semibold" style="color: oklch(0.60 0.06 250);">Files Modified</span>
+									<div class="flex flex-wrap gap-1 mt-0.5">
+										{#each completionBundle.crossAgentIntel.files as file}
+											<span class="badge badge-xs font-mono" style="background: oklch(0.28 0.04 250); color: oklch(0.75 0.04 250);">
+												{file}
+											</span>
+										{/each}
+									</div>
+								</div>
+							{/if}
+							{#if completionBundle.crossAgentIntel.patterns && completionBundle.crossAgentIntel.patterns.length > 0}
+								<div class="mb-1">
+									<span class="text-[10px] uppercase font-semibold" style="color: oklch(0.60 0.06 250);">Patterns</span>
+									<ul class="list-none m-0 p-0 mt-0.5 space-y-0.5">
+										{#each completionBundle.crossAgentIntel.patterns as pattern}
+											<li class="text-xs" style="color: oklch(0.75 0.04 250);">• {pattern}</li>
+										{/each}
+									</ul>
+								</div>
+							{/if}
+							{#if completionBundle.crossAgentIntel.gotchas && completionBundle.crossAgentIntel.gotchas.length > 0}
+								<div>
+									<span class="text-[10px] uppercase font-semibold" style="color: oklch(0.65 0.10 25);">⚠ Gotchas</span>
+									<ul class="list-none m-0 p-0 mt-0.5 space-y-0.5">
+										{#each completionBundle.crossAgentIntel.gotchas as gotcha}
+											<li class="text-xs" style="color: oklch(0.75 0.08 25);">• {gotcha}</li>
+										{/each}
+									</ul>
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					<!-- Pre-existing issues note -->
+					{#if completionBundle.quality?.preExisting}
+						<div class="mt-2 text-[10px] italic" style="color: oklch(0.60 0.08 45);">
+							Note: {completionBundle.quality.preExisting}
+						</div>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- Suggested Tasks Section (when detected in output) -->
 			{#if hasSuggestedTasks && isAgentMode}
 				<div class="px-3 py-2 flex-shrink-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
@@ -3892,9 +4281,32 @@
 				</div>
 			{/if}
 
-			<!-- Input Section -->
+			<!-- Event Timeline Stack (peeks above input, expands on hover) -->
+			{#if mode === 'agent' && sessionName}
+				<div class="relative px-3 bg-base-300">
+					<EventStack
+						{sessionName}
+						maxEvents={20}
+						pollInterval={5000}
+						onRollback={(event) => {
+							// Open confirmation modal before rolling back
+							if (event.git_sha) {
+								rollbackEvent = {
+									git_sha: event.git_sha,
+									timestamp: event.timestamp
+								};
+								rollbackModalOpen = true;
+							}
+						}}
+						onCreateTasks={createTimelineEventTasks}
+						{availableProjects}
+					/>
+				</div>
+			{/if}
+
+			<!-- Input Section (z-10 to layer above collapsed stack) -->
 			<div
-				class="px-3 py-2 flex-shrink-0"
+				class="relative px-3 py-2 flex-shrink-0 z-10"
 				style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);"
 			>
 				<!-- Attached Files Preview -->
@@ -4622,20 +5034,50 @@
 					</div>
 				{/if}
 
-				<!-- Text input: [autoscroll][stream][esc][^c] LEFT | input MIDDLE | [action buttons] RIGHT -->
+				<!-- Text input: [attach][autoscroll][stream][keybd▼] LEFT | input MIDDLE | [action buttons] RIGHT -->
 				<div class="flex gap-1.5 items-end">
 					<!-- LEFT: Control buttons (always visible) -->
 					<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">
+						<!-- Attach Terminal button -->
+						<button
+							class="btn btn-xs btn-ghost"
+							onclick={async () => {
+								if (sessionName) {
+									try {
+										await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+											method: "POST",
+										});
+									} catch (e) {
+										console.error("[SessionCard] Failed to attach terminal:", e);
+									}
+								}
+							}}
+							title="Attach terminal (open in tmux)"
+							disabled={!sessionName}
+						>
+							<svg
+								class="w-3 h-3"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z"
+								/>
+							</svg>
+						</button>
 						<!-- Auto-scroll toggle -->
 						<button
-							class="btn btn-xs"
-							class:btn-primary={autoScroll}
-							class:btn-ghost={!autoScroll}
+							class="btn btn-xs btn-ghost"
 							onclick={toggleAutoScroll}
 							title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
 						>
 							<svg
-								class="w-3 h-3"
+								class="w-3 h-3 transition-colors"
+								class:text-primary={autoScroll}
 								fill="none"
 								viewBox="0 0 24 24"
 								stroke="currentColor"
@@ -4650,13 +5092,12 @@
 						</button>
 						<!-- Live stream toggle -->
 						<button
-							class="btn btn-xs"
-							class:btn-info={liveStreamEnabled}
-							class:btn-ghost={!liveStreamEnabled}
+							class="btn btn-xs btn-ghost"
 							onclick={() => {
 								liveStreamEnabled = !liveStreamEnabled;
 								if (!liveStreamEnabled && lastStreamedText) {
 									lastStreamedText = "";
+									maxStreamedLength = 0;
 								}
 							}}
 							title={liveStreamEnabled
@@ -4664,7 +5105,8 @@
 								: "Live streaming OFF - Send on Enter only"}
 						>
 							<svg
-								class="w-3 h-3"
+								class="w-3 h-3 transition-colors"
+								class:text-info={liveStreamEnabled}
 								fill="none"
 								viewBox="0 0 24 24"
 								stroke="currentColor"
@@ -4677,30 +5119,113 @@
 								/>
 							</svg>
 						</button>
-						<button
-							onclick={() => sendKey("escape")}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
-							style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
-							title="Escape (cancel prompt)"
-							disabled={sendingInput || !onSendInput}
-						>
-							Esc
-						</button>
-						<button
-							onclick={() => sendKey("ctrl-c")}
-							oncontextmenu={(e) => {
-								e.preventDefault();
-								setCtrlCIntercept(!ctrlCInterceptEnabled);
-							}}
-							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase {!ctrlCInterceptEnabled ? 'opacity-50' : ''}"
-							style="background: {ctrlCInterceptEnabled ? 'oklch(0.30 0.12 25)' : 'oklch(0.25 0.05 250)'}; border: none; color: oklch(0.95 0.02 250); {!ctrlCInterceptEnabled ? 'text-decoration: line-through;' : ''}"
-							title={ctrlCInterceptEnabled
-								? "Send Ctrl+C (interrupt) — Right-click to allow Ctrl+C to copy"
-								: "Ctrl+C copies to clipboard — Right-click to re-enable interrupt"}
-							disabled={sendingInput || !onSendInput}
-						>
-							^C
-						</button>
+						<!-- Keyboard keys dropdown (hover to show ESC, ^C, Enter) -->
+						<div class="dropdown dropdown-hover dropdown-top">
+							<button
+								tabindex="0"
+								class="btn btn-xs btn-ghost font-mono text-[10px]"
+								title="Keyboard shortcuts (hover for menu)"
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg
+									class="w-3.5 h-3.5"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+									stroke-width="1.5"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M2.25 6.75A2.25 2.25 0 014.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25h-15A2.25 2.25 0 012.25 17.25V6.75zM6 9.75h.008v.008H6V9.75zm0 3h.008v.008H6v-.008zm0 3h.008v.008H6v-.008zm3-6h.008v.008H9V9.75zm0 3h.008v.008H9v-.008zm3-3h.008v.008H12V9.75zm0 3h.008v.008H12v-.008zm3-3h.008v.008H15V9.75zm0 3h.008v.008H15v-.008zm3-3h.008v.008H18V9.75zm0 3h.008v.008H18v-.008zM9 15.75h6"
+									/>
+								</svg>
+							</button>
+							<ul tabindex="0" class="dropdown-content z-[100] menu menu-xs p-1 shadow-lg bg-base-200 rounded-box w-auto min-w-[100px]">
+								<li class="menu-title px-2 py-0.5 text-[9px] opacity-60">Arrows</li>
+								<li>
+									<div class="flex gap-0.5 p-0.5">
+										<button
+											onclick={() => sendKey("up")}
+											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
+											disabled={sendingInput || !onSendInput}
+											title="Up Arrow"
+										>↑</button>
+										<button
+											onclick={() => sendKey("down")}
+											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
+											disabled={sendingInput || !onSendInput}
+											title="Down Arrow"
+										>↓</button>
+										<button
+											onclick={() => sendKey("left")}
+											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
+											disabled={sendingInput || !onSendInput}
+											title="Left Arrow"
+										>←</button>
+										<button
+											onclick={() => sendKey("right")}
+											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
+											disabled={sendingInput || !onSendInput}
+											title="Right Arrow"
+										>→</button>
+									</div>
+								</li>
+								<li>
+									<button
+										onclick={() => sendKey("ctrl-l")}
+										class="font-mono text-[10px] tracking-wider uppercase whitespace-nowrap"
+										disabled={sendingInput || !onSendInput}
+										title="Clear screen"
+									>
+										^L Clear
+									</button>
+								</li>
+								<li>
+									<button
+										onclick={() => sendKey("tab")}
+										class="font-mono text-[10px] tracking-wider uppercase whitespace-nowrap"
+										disabled={sendingInput || !onSendInput}
+									>
+										Tab ⇥
+									</button>
+								</li>
+								<li>
+									<button
+										onclick={() => sendKey("enter")}
+										class="font-mono text-[10px] tracking-wider whitespace-nowrap"
+										disabled={sendingInput || !onSendInput}
+									>
+										Enter ⤶
+									</button>
+								</li>
+								<li>
+									<button
+										onclick={() => sendKey("escape")}
+										class="font-mono text-[10px] tracking-wider uppercase whitespace-nowrap"
+										disabled={sendingInput || !onSendInput}
+									>
+										ESC
+									</button>
+								</li>
+								<li>
+									<button
+										onclick={() => sendKey("ctrl-c")}
+										oncontextmenu={(e) => {
+											e.preventDefault();
+											setCtrlCIntercept(!ctrlCInterceptEnabled);
+										}}
+										class="font-mono text-[10px] tracking-wider uppercase whitespace-nowrap {!ctrlCInterceptEnabled ? 'opacity-50 line-through' : ''}"
+										title={ctrlCInterceptEnabled
+											? "Send Ctrl+C — Right-click to allow copy"
+											: "Ctrl+C copies — Right-click to enable interrupt"}
+										disabled={sendingInput || !onSendInput}
+									>
+										^C
+									</button>
+								</li>
+							</ul>
+						</div>
 					</div>
 
 					<!-- MIDDLE: Text input (flexible width) with clear button and streaming indicator -->
@@ -4734,6 +5259,7 @@
 								onclick={() => {
 									inputText = "";
 									lastStreamedText = "";
+									maxStreamedLength = 0;
 									setTimeout(handleInputChange, 0);
 								}}
 								aria-label="Clear input"
@@ -5026,6 +5552,21 @@
 	onCreateTasks={createSuggestedTasksViaBulkApi}
 	{agentName}
 	{sessionName}
+/>
+
+<!-- Rollback Confirmation Modal -->
+<RollbackConfirmModal
+	bind:isOpen={rollbackModalOpen}
+	gitSha={rollbackEvent?.git_sha || ''}
+	timestamp={rollbackEvent?.timestamp}
+	{sessionName}
+	onClose={() => {
+		rollbackModalOpen = false;
+		rollbackEvent = null;
+	}}
+	onConfirm={() => {
+		successToast(`Rolled back to ${rollbackEvent?.git_sha?.slice(0, 7)}`);
+	}}
 />
 
 <style>
