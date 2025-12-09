@@ -1,0 +1,16 @@
+{
+  "jat-vozz": {
+    "taskId": "jat-vozz",
+    "agentName": "TrueFalls",
+    "summary": [
+      "Fixed tmux send-keys flag issue"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "sessionName": "jat-TrueFalls",
+    "completedAt": "2025-12-09T13:46:20.716Z",
+    "persistedAt": "2025-12-09T13:46:20.716Z"
+  }
+}

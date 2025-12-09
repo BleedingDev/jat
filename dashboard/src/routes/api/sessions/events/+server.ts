@@ -1,28 +1,37 @@
 /**
  * SSE endpoint for real-time session events
  *
- * Watches tmux sessions and pushes events to connected clients.
- * Also watches signal files in /tmp for instant signal updates.
+ * ## Architecture
  *
- * Events emitted:
+ * Uses a hybrid approach for optimal responsiveness:
+ *
+ * 1. **fs.watch() for instant file updates (~50ms latency)**
+ *    - Signal files: /tmp/jat-signal-tmux-*.json (state, tasks, actions, completion)
+ *    - Question files: /tmp/claude-question-tmux-*.json (agent questions)
+ *    - These are the PRIMARY source for state/question updates
+ *
+ * 2. **Polling for terminal output and session lifecycle (1000ms interval)**
+ *    - tmux pane capture (can't be file-watched)
+ *    - Session creation/destruction detection
+ *    - Fallback state detection from output markers (when no signal file)
+ *
+ * ## Events Emitted
+ *
  * - connected: Initial connection acknowledgment
- * - session-output: { sessionName, output, lineCount, timestamp }
- * - session-state: { sessionName, state, timestamp } - from polling OR signal file changes
+ * - session-output: { sessionName, output, lineCount, isDelta?, timestamp }
+ * - session-state: { sessionName, state, previousState, timestamp }
  * - session-question: { sessionName, question, timestamp }
- * - session-signal: { sessionName, signalType, suggestedTasks?, action?, timestamp } (legacy)
- * - session-complete: { sessionName, taskId, agentName, summary, quality, humanActions?, suggestedTasks?, crossAgentIntel? }
+ * - session-signal: { sessionName, signalType, suggestedTasks?, action?, timestamp }
+ * - session-complete: { sessionName, completionBundle: { taskId, agentName, summary, quality, ... } }
  * - session-created: { sessionName, agentName, task, timestamp }
  * - session-destroyed: { sessionName, timestamp }
  *
- * Signal file watching:
- * - Monitors /tmp/jat-signal-tmux-*.json files for changes
- * - Broadcasts session-state events instantly when state signals change
- * - Broadcasts session-complete events for full completion bundles (new)
- * - Broadcasts session-signal events for legacy tasks and action signals
- * - No polling delay - updates are pushed within ~50ms of file write
+ * ## Performance Notes
  *
- * The watcher only runs when at least one client is connected.
- * Output changes are debounced (configurable via query param, default 250ms).
+ * - Signal/question file watching eliminates 1-second polling delay for state changes
+ * - Output changes are debounced (configurable, default 250ms)
+ * - Delta updates for output minimize bandwidth
+ * - Watcher only runs when at least one client is connected
  */
 
 import { exec } from 'child_process';
@@ -30,6 +39,7 @@ import { promisify } from 'util';
 import { readFileSync, existsSync, statSync, readdirSync, watch, type FSWatcher } from 'fs';
 import { join } from 'path';
 import { getTasks } from '$lib/server/beads.js';
+import { persistCompletionBundle } from '$lib/server/completionBundles.js';
 
 const execAsync = promisify(exec);
 
@@ -170,6 +180,13 @@ const signalFileStates = new Map<string, { state: string | null; tasksHash: stri
 const signalDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const SIGNAL_DEBOUNCE_MS = 50; // Quick debounce for file write completion
 
+// Track question file states for change detection (keyed by sessionName)
+const questionFileStates = new Map<string, { hasQuestion: boolean; questionHash: string | null }>();
+
+// Debounce timers for question file changes
+const questionDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const QUESTION_DEBOUNCE_MS = 50; // Quick debounce for question file writes
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -213,6 +230,7 @@ const SIGNAL_STATE_MAP: Record<string, string> = {
 
 /**
  * Read signal state from /tmp/jat-signal-tmux-{sessionName}.json
+ * Handles both state signals (type: "state") and completion bundles (type: "complete")
  * Returns null if no valid signal file exists or signal is stale
  */
 function readSignalState(sessionName: string): string | null {
@@ -223,20 +241,27 @@ function readSignalState(sessionName: string): string | null {
 			return null;
 		}
 
-		// Check file age - signals older than TTL are stale
-		const stats = statSync(signalFile);
-		const ageMs = Date.now() - stats.mtimeMs;
-		if (ageMs > SIGNAL_TTL_MS) {
-			return null;
-		}
-
 		const content = readFileSync(signalFile, 'utf-8');
 		const signal = JSON.parse(content);
 
-		// Only use state signals
+		// Check file age - use different TTL based on signal type
+		// State signals expire quickly (1 min), completion bundles persist (30 min)
+		const stats = statSync(signalFile);
+		const ageMs = Date.now() - stats.mtimeMs;
+		const ttl = signal.type === 'complete' ? COMPLETION_TTL_MS : SIGNAL_TTL_MS;
+		if (ageMs > ttl) {
+			return null;
+		}
+
+		// Handle state signals (working, review, needs_input, etc.)
 		if (signal.type === 'state' && signal.state) {
 			// Map signal state to SessionCard state
 			return SIGNAL_STATE_MAP[signal.state] || signal.state;
+		}
+
+		// Handle completion bundles - these should show as "completed" state
+		if (signal.type === 'complete') {
+			return 'completed';
 		}
 
 		return null;
@@ -406,15 +431,22 @@ function readSignalFile(sessionName: string): { type: string; state?: string; da
 			return null;
 		}
 
-		// Check file age - signals older than TTL are stale
+		// Read and parse first to determine signal type
+		const content = readFileSync(signalFile, 'utf-8');
+		const signal = JSON.parse(content);
+
+		// Apply TTL based on signal type:
+		// - State signals (working, idle, etc.) use short TTL (1 min) since they change frequently
+		// - Completion bundles use long TTL (30 min) since they should persist for human review
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		if (ageMs > SIGNAL_TTL_MS) {
+		const ttl = signal.type === 'complete' ? COMPLETION_TTL_MS : SIGNAL_TTL_MS;
+
+		if (ageMs > ttl) {
 			return null;
 		}
 
-		const content = readFileSync(signalFile, 'utf-8');
-		return JSON.parse(content);
+		return signal;
 	} catch {
 		return null;
 	}
@@ -453,6 +485,17 @@ function processSignalFileChange(sessionName: string): void {
 		if (completeHash !== prevFileState.completeHash) {
 			currentFileState.completeHash = completeHash;
 			if (bundle) {
+				// Persist the completion bundle to .beads/completions.json
+				// This ensures the bundle survives session restarts
+				if (bundle.taskId) {
+					const persistResult = persistCompletionBundle(bundle.taskId, bundle, sessionName);
+					if (persistResult.success) {
+						console.log(`[SSE Signal] Persisted completion bundle for task ${bundle.taskId}`);
+					} else {
+						console.error(`[SSE Signal] Failed to persist bundle for ${bundle.taskId}: ${persistResult.error}`);
+					}
+				}
+
 				// Broadcast the full completion bundle (wrapped for client extraction)
 				broadcast('session-complete', {
 					sessionName,
@@ -531,37 +574,78 @@ function processExistingSignalFiles(): void {
 }
 
 /**
- * Start watching signal files in /tmp for real-time updates
+ * Process a question file change and broadcast if question appeared/changed
+ */
+function processQuestionFileChange(sessionName: string): void {
+	if (clients.size === 0) return;
+
+	const { hasQuestion, questionData } = readQuestionData(sessionName);
+	const questionHash = hasQuestion && questionData ? simpleHash(JSON.stringify(questionData)) : null;
+
+	const prevState = questionFileStates.get(sessionName) || { hasQuestion: false, questionHash: null };
+
+	// Only broadcast if question appeared or changed
+	if (hasQuestion && (!prevState.hasQuestion || questionHash !== prevState.questionHash)) {
+		broadcast('session-question', {
+			sessionName,
+			question: questionData
+		});
+		console.log(`[SSE Question] Question appeared/changed for ${sessionName}`);
+	}
+
+	// Update tracked state
+	questionFileStates.set(sessionName, { hasQuestion, questionHash });
+}
+
+/**
+ * Start watching signal and question files in /tmp for real-time updates
  */
 function startSignalWatcher(): void {
 	if (signalWatcher) return;
 
-	console.log('[SSE Signal] Starting signal file watcher on /tmp');
+	console.log('[SSE Signal] Starting file watcher on /tmp for signals and questions');
 
 	// Process existing signal files first (broadcasts current state to clients)
 	processExistingSignalFiles();
 
 	try {
 		signalWatcher = watch('/tmp', (eventType, filename) => {
-			// Only process jat-signal files for tmux sessions
-			if (!filename || !filename.startsWith('jat-signal-tmux-') || !filename.endsWith('.json')) {
+			if (!filename || !filename.endsWith('.json')) return;
+
+			// Handle signal files: jat-signal-tmux-{sessionName}.json
+			if (filename.startsWith('jat-signal-tmux-')) {
+				const sessionName = filename.replace('jat-signal-tmux-', '').replace('.json', '');
+				if (!sessionName) return;
+
+				// Debounce to handle rapid file writes (file systems may emit multiple events)
+				const existingTimer = signalDebounceTimers.get(sessionName);
+				if (existingTimer) {
+					clearTimeout(existingTimer);
+				}
+
+				signalDebounceTimers.set(sessionName, setTimeout(() => {
+					signalDebounceTimers.delete(sessionName);
+					processSignalFileChange(sessionName);
+				}, SIGNAL_DEBOUNCE_MS));
 				return;
 			}
 
-			// Extract session name from filename: jat-signal-tmux-{sessionName}.json
-			const sessionName = filename.replace('jat-signal-tmux-', '').replace('.json', '');
-			if (!sessionName) return;
+			// Handle question files: claude-question-tmux-{sessionName}.json
+			if (filename.startsWith('claude-question-tmux-')) {
+				const sessionName = filename.replace('claude-question-tmux-', '').replace('.json', '');
+				if (!sessionName) return;
 
-			// Debounce to handle rapid file writes (file systems may emit multiple events)
-			const existingTimer = signalDebounceTimers.get(sessionName);
-			if (existingTimer) {
-				clearTimeout(existingTimer);
+				// Debounce to handle rapid file writes
+				const existingTimer = questionDebounceTimers.get(sessionName);
+				if (existingTimer) {
+					clearTimeout(existingTimer);
+				}
+
+				questionDebounceTimers.set(sessionName, setTimeout(() => {
+					questionDebounceTimers.delete(sessionName);
+					processQuestionFileChange(sessionName);
+				}, QUESTION_DEBOUNCE_MS));
 			}
-
-			signalDebounceTimers.set(sessionName, setTimeout(() => {
-				signalDebounceTimers.delete(sessionName);
-				processSignalFileChange(sessionName);
-			}, SIGNAL_DEBOUNCE_MS));
 		});
 
 		signalWatcher.on('error', (err) => {
@@ -581,12 +665,17 @@ function stopSignalWatcher(): void {
 	signalWatcher.close();
 	signalWatcher = null;
 
-	// Clear debounce timers
+	// Clear signal debounce timers
 	signalDebounceTimers.forEach(timer => clearTimeout(timer));
 	signalDebounceTimers.clear();
 
+	// Clear question debounce timers
+	questionDebounceTimers.forEach(timer => clearTimeout(timer));
+	questionDebounceTimers.clear();
+
 	// Clear tracked state
 	signalFileStates.clear();
+	questionFileStates.clear();
 
 	console.log('[SSE Signal] Stopped signal file watcher');
 }
@@ -956,6 +1045,9 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 	knownSessions = currentSessionNames;
 
 	// Process each session
+	// NOTE: Signal file state (working/review/completed) and suggested tasks are handled
+	// by the fs.watch() signal watcher (startSignalWatcher) for instant ~50ms updates.
+	// This polling loop only handles: terminal output, questions, and session metadata.
 	for (const session of sessions) {
 		const agentName = session.name.replace(/^jat-/, '');
 		const task = agentTaskMap.get(agentName) || null;
@@ -965,20 +1057,17 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 		const outputHash = simpleHash(output);
 		const lineCount = output.split('\n').length;
 
-		// Detect state - prefers signal file over marker parsing
-		const state = detectSessionState(output, task, session.name);
+		// Detect state from output markers (fallback when signal file not present)
+		// Signal file state is handled instantly by fs.watch() watcher
+		const state = detectSessionStateFromOutput(output, task);
 
 		// Read question data
 		const { hasQuestion, questionData } = readQuestionData(session.name);
 
-		// Read suggested tasks from signal file
-		const suggestedTasks = readSignalSuggestedTasks(session.name);
-		const suggestedTasksHash = suggestedTasks ? simpleHash(JSON.stringify(suggestedTasks)) : undefined;
-
 		// Get previous state
 		const prevState = sessionStates.get(session.name);
 
-		// Update stored state
+		// Update stored state (without signal file data - that's handled by watcher)
 		sessionStates.set(session.name, {
 			output,
 			outputHash,
@@ -988,8 +1077,8 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 			questionData,
 			task,
 			agentName,
-			suggestedTasks: suggestedTasks || undefined,
-			suggestedTasksHash
+			suggestedTasks: prevState?.suggestedTasks,
+			suggestedTasksHash: prevState?.suggestedTasksHash
 		});
 
 		// Check for output changes (debounced)
@@ -1015,7 +1104,8 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 			}, debounceMs));
 		}
 
-		// Check for state changes (immediate, not debounced)
+		// Check for state changes from output markers (fallback detection)
+		// NOTE: Signal file state changes are broadcast instantly by fs.watch() watcher
 		if (!prevState || prevState.state !== state) {
 			broadcast('session-state', {
 				sessionName: session.name,
@@ -1032,15 +1122,8 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 			});
 		}
 
-		// Check for suggested tasks changes (immediate)
-		// Broadcast when tasks appear, change, or disappear
-		if (suggestedTasksHash !== prevState?.suggestedTasksHash) {
-			broadcast('session-signal', {
-				sessionName: session.name,
-				signalType: 'tasks',
-				suggestedTasks: suggestedTasks || []
-			});
-		}
+		// NOTE: Suggested tasks are now handled exclusively by fs.watch() watcher
+		// No need to poll signal files every second - watcher broadcasts within ~50ms
 	}
 }
 
