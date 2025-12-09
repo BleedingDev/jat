@@ -38,6 +38,13 @@ fi
 # Note: PostToolUse hooks receive tool_response.stdout, not .output
 OUTPUT=$(echo "$TOOL_INFO" | jq -r '.tool_response.stdout // ""' 2>/dev/null || echo "")
 
+# Check for validation warnings in stderr (captured in tool_response.stderr)
+STDERR=$(echo "$TOOL_INFO" | jq -r '.tool_response.stderr // ""' 2>/dev/null || echo "")
+VALIDATION_WARNING=""
+if echo "$STDERR" | grep -q 'Validation warning:'; then
+    VALIDATION_WARNING=$(echo "$STDERR" | grep -o 'Validation warning: .*' | head -1)
+fi
+
 # Parse the signal from output
 SIGNAL_TYPE=""
 SIGNAL_DATA=""
@@ -97,27 +104,31 @@ if [[ "$SIGNAL_TYPE" == "state" ]]; then
         --arg tmux "$TMUX_SESSION" \
         --arg state "${SIGNAL_DATA:-idle}" \
         --arg task "${TASK_ID:-}" \
+        --arg warning "${VALIDATION_WARNING:-}" \
         '{
             type: $type,
             session_id: $session,
             tmux_session: $tmux,
             timestamp: (now | todate),
             state: $state
-        } + (if $task != "" then {task_id: $task} else {} end)' 2>/dev/null || echo "{}")
+        } + (if $task != "" then {task_id: $task} else {} end)
+          + (if $warning != "" then {validation_warning: $warning} else {} end)' 2>/dev/null || echo "{}")
 else
     # Data signals: try to parse data as JSON
+    PARSED_DATA=$(echo "${SIGNAL_DATA:-null}" | jq -c . 2>/dev/null || echo 'null')
     SIGNAL_JSON=$(jq -n \
         --arg type "$SIGNAL_TYPE" \
         --arg session "$SESSION_ID" \
         --arg tmux "$TMUX_SESSION" \
-        --argjson data "$(echo "${SIGNAL_DATA:-null}" | jq . 2>/dev/null || echo 'null')" \
+        --argjson data "$PARSED_DATA" \
+        --arg warning "${VALIDATION_WARNING:-}" \
         '{
             type: $type,
             session_id: $session,
             tmux_session: $tmux,
             timestamp: (now | todate),
             data: $data
-        }' 2>/dev/null || echo "{}")
+        } + (if $warning != "" then {validation_warning: $warning} else {} end)' 2>/dev/null || echo "{}")
 fi
 
 # Write to temp file by session ID
