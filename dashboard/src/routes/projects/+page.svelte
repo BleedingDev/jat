@@ -35,6 +35,7 @@
 	import { lastTaskEvent } from '$lib/stores/taskEvents';
 	import { getProjectFromTaskId, filterTasksByProject } from '$lib/utils/projectUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
 
 	// Types
 	interface Task {
@@ -85,6 +86,7 @@
 	let agents = $state<Agent[]>([]);
 	let reservations = $state<Reservation[]>([]);
 	let isInitialLoad = $state(true);
+	let configProjects = $state<string[]>([]); // Projects from JAT config
 
 	// Drawer state
 	let drawerOpen = $state(false);
@@ -109,11 +111,16 @@
 
 	// Keyboard navigation state
 	let focusedProjectIndex = $state<number>(-1);
-	const focusedProject = $derived(focusedProjectIndex >= 0 ? sortedProjects[focusedProjectIndex] : null);
 
-	// Derive all projects (from sessions OR tasks)
+	// Derive all projects (from JAT config, sessions, AND tasks)
+	// Config projects are shown even if empty (for onboarding new projects)
 	const allProjects = $derived.by(() => {
 		const projects = new Set<string>();
+		// Add all config projects (these show even without tasks/sessions)
+		for (const project of configProjects) {
+			projects.add(project);
+		}
+		// Add projects from active sessions
 		for (const session of workSessionsState.sessions) {
 			if (session.task?.id) {
 				const project = getProjectFromTaskId(session.task.id);
@@ -126,6 +133,7 @@
 				if (match && match[1]) projects.add(match[1]);
 			}
 		}
+		// Add projects from tasks
 		for (const task of tasks) {
 			const project = getProjectFromTaskId(task.id);
 			if (project) projects.add(project);
@@ -145,6 +153,9 @@
 		}
 		return ordered;
 	});
+
+	// Focused project (for keyboard navigation)
+	const focusedProject = $derived(focusedProjectIndex >= 0 ? sortedProjects[focusedProjectIndex] : null);
 
 	// Group sessions by project
 	const sessionsByProject = $derived.by(() => {
@@ -605,8 +616,27 @@
 		}
 	}
 
+	// Fetch JAT config projects (for showing all configured projects)
+	async function fetchConfigProjects() {
+		try {
+			const response = await fetch('/api/projects?visible=true');
+			const data = await response.json();
+			// Extract project names from the config
+			configProjects = (data.projects || []).map((p: { name: string }) => p.name);
+		} catch (error) {
+			console.error('Failed to fetch config projects:', error);
+			configProjects = [];
+		}
+	}
+
+	// Open task creation drawer with project pre-selected
+	function handleCreateTaskForProject(project: string) {
+		openTaskDrawer(project);
+	}
+
 	onMount(async () => {
 		customProjectOrder = loadProjectOrder();
+		fetchConfigProjects(); // Load all configured projects
 		fetchTaskData();
 		await fetchSessions();
 		setTimeout(() => fetchSessionUsage(), 5000);
@@ -802,6 +832,8 @@
 							<!-- Tasks Section -->
 							{#if true}
 							{@const taskState = getSectionState(project, 'tasks')}
+							{@const openTaskCount = projectTasks.filter(t => t.status !== 'closed').length}
+							{@const isEmptyProject = !hasSessions && projectTasks.length === 0}
 							<div>
 								<!-- Tasks header (double-click to auto-size) -->
 								<button
@@ -818,7 +850,7 @@
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 									</svg>
 									<span class="text-xs font-medium text-base-content/70 uppercase tracking-wide">
-										Tasks ({projectTasks.filter(t => t.status !== 'closed').length})
+										Tasks ({openTaskCount})
 									</span>
 								</button>
 
@@ -828,17 +860,36 @@
 									class:hidden={taskState.collapsed}
 									style="height: {taskState.height}px;"
 								>
-									<div class="h-full overflow-auto">
-										<TaskTable
-											tasks={projectTasks}
-											allTasks={allTasks}
-											{agents}
-											{reservations}
-											completedTasksFromActiveSessions={getCompletedTasksForProject(project)}
-											ontaskclick={handleTaskClick}
-											onagentclick={handleAgentClick}
-										/>
-									</div>
+									{#if isEmptyProject}
+										<!-- Empty project state - show create task button -->
+										<div class="h-full flex flex-col items-center justify-center p-8 text-center">
+											<svg class="w-12 h-12 text-base-content/20 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+											</svg>
+											<p class="text-sm text-base-content/50 mb-4">No tasks yet for this project</p>
+											<button
+												class="btn btn-primary btn-sm gap-2"
+												onclick={() => handleCreateTaskForProject(project)}
+											>
+												<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+												</svg>
+												Create Task
+											</button>
+										</div>
+									{:else}
+										<div class="h-full overflow-auto">
+											<TaskTable
+												tasks={projectTasks}
+												allTasks={allTasks}
+												{agents}
+												{reservations}
+												completedTasksFromActiveSessions={getCompletedTasksForProject(project)}
+												ontaskclick={handleTaskClick}
+												onagentclick={handleAgentClick}
+											/>
+										</div>
+									{/if}
 								</div>
 
 								<!-- Tasks resize handle -->
@@ -849,7 +900,7 @@
 									/>
 								{/if}
 							</div>
-						{/if}
+							{/if}
 						</div>
 					{/if}
 				</div>
