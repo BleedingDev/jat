@@ -14,6 +14,7 @@
 	 */
 
 	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
@@ -36,6 +37,7 @@
 	import { getProjectFromTaskId, filterTasksByProject } from '$lib/utils/projectUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
+	import { SORT_OPTIONS, getSortBy, getSortDir, handleSortClick, initSort, type SortOption } from '$lib/stores/workSort.svelte';
 
 	// Types
 	interface Task {
@@ -74,6 +76,7 @@
 	const PROJECT_COLLAPSE_KEY = 'projects-collapse-';
 	const SECTION_STATE_KEY = 'projects-section-';
 	const PROJECT_ORDER_KEY = 'projects-order';
+	const SESSION_ORDER_KEY = 'projects-session-order-';
 
 	// Section defaults
 	const DEFAULT_SESSION_HEIGHT = 300;
@@ -108,6 +111,16 @@
 	let draggedProject = $state<string | null>(null);
 	let dragOverProject = $state<string | null>(null);
 	let customProjectOrder = $state<string[]>([]);
+
+	// Per-project search state
+	let projectSearchTerms = $state<Map<string, string>>(new Map());
+
+	// Per-project session order (for manual sorting)
+	let sessionOrderByProject = $state<Map<string, string[]>>(new Map());
+
+	// Session drag state (separate from project drag)
+	let draggedSession = $state<{ project: string; sessionName: string } | null>(null);
+	let dragOverSession = $state<{ project: string; sessionName: string } | null>(null);
 
 	// Keyboard navigation state
 	let focusedProjectIndex = $state<number>(-1);
@@ -238,6 +251,32 @@
 	function saveProjectOrder(order: string[]) {
 		if (!browser) return;
 		localStorage.setItem(PROJECT_ORDER_KEY, JSON.stringify(order));
+	}
+
+	// Load/save session order per project (for manual sort)
+	function loadSessionOrder(project: string): string[] {
+		if (!browser) return [];
+		const saved = localStorage.getItem(SESSION_ORDER_KEY + project);
+		if (saved) {
+			try { return JSON.parse(saved); } catch { return []; }
+		}
+		return [];
+	}
+
+	function saveSessionOrder(project: string, order: string[]) {
+		if (!browser) return;
+		localStorage.setItem(SESSION_ORDER_KEY + project, JSON.stringify(order));
+	}
+
+	function getSessionOrder(project: string): string[] {
+		return sessionOrderByProject.get(project) || loadSessionOrder(project);
+	}
+
+	function setSessionOrder(project: string, order: string[]) {
+		const newMap = new Map(sessionOrderByProject);
+		newMap.set(project, order);
+		sessionOrderByProject = newMap;
+		saveSessionOrder(project, order);
 	}
 
 	// Get section state (pure read - returns default if not initialized)
@@ -560,6 +599,169 @@
 		return completedIds;
 	}
 
+	// Get search term for a project
+	function getSearchTerm(project: string): string {
+		return projectSearchTerms.get(project) || '';
+	}
+
+	// Set search term for a project
+	function setSearchTerm(project: string, term: string) {
+		const newTerms = new Map(projectSearchTerms);
+		if (term) {
+			newTerms.set(project, term);
+		} else {
+			newTerms.delete(project);
+		}
+		projectSearchTerms = newTerms;
+	}
+
+	// Filter sessions by search term
+	function filterSessions(sessions: typeof workSessionsState.sessions, searchTerm: string) {
+		if (!searchTerm) return sessions;
+		const term = searchTerm.toLowerCase();
+		return sessions.filter(session => {
+			const agentName = (session.agentName || '').toLowerCase();
+			const taskId = (session.task?.id || '').toLowerCase();
+			const taskTitle = (session.task?.title || '').toLowerCase();
+			const lastTaskId = (session.lastCompletedTask?.id || '').toLowerCase();
+			const lastTaskTitle = (session.lastCompletedTask?.title || '').toLowerCase();
+			return agentName.includes(term) ||
+				taskId.includes(term) ||
+				taskTitle.includes(term) ||
+				lastTaskId.includes(term) ||
+				lastTaskTitle.includes(term);
+		});
+	}
+
+	// Filter tasks by search term
+	function filterTasks(tasks: Task[], searchTerm: string): Task[] {
+		if (!searchTerm) return tasks;
+		const term = searchTerm.toLowerCase();
+		return tasks.filter(task => {
+			const id = (task.id || '').toLowerCase();
+			const title = (task.title || '').toLowerCase();
+			const description = (task.description || '').toLowerCase();
+			const assignee = (task.assignee || '').toLowerCase();
+			return id.includes(term) || title.includes(term) || description.includes(term) || assignee.includes(term);
+		});
+	}
+
+	// Sort sessions based on current sort settings
+	// sessionOrder is passed explicitly for Svelte reactivity tracking
+	function sortSessionsWithOrder(sessions: typeof workSessionsState.sessions, project: string, sessionOrder: string[]) {
+		const sortBy = getSortBy();
+		const sortDir = getSortDir();
+		const multiplier = sortDir === 'asc' ? 1 : -1;
+
+		// Manual sort - use custom order
+		if (sortBy === 'manual') {
+			// Use passed order, or load from localStorage if empty
+			const customOrder = sessionOrder.length > 0 ? sessionOrder : loadSessionOrder(project);
+			if (customOrder.length > 0) {
+				return [...sessions].sort((a, b) => {
+					const aIndex = customOrder.indexOf(a.sessionName);
+					const bIndex = customOrder.indexOf(b.sessionName);
+					// Items not in custom order go to the end
+					const aPos = aIndex === -1 ? 999 : aIndex;
+					const bPos = bIndex === -1 ? 999 : bIndex;
+					return aPos - bPos;
+				});
+			}
+			// No custom order yet - return as-is
+			return sessions;
+		}
+
+		// State priority for sorting (lower = show first when asc)
+		const stateOrder: Record<string, number> = {
+			needs_input: 1,
+			review: 2,
+			working: 3,
+			idle: 4,
+			offline: 5
+		};
+
+		return [...sessions].sort((a, b) => {
+			switch (sortBy) {
+				case 'state': {
+					const aState = a._sseState || 'offline';
+					const bState = b._sseState || 'offline';
+					const aOrder = stateOrder[aState] ?? 99;
+					const bOrder = stateOrder[bState] ?? 99;
+					return (aOrder - bOrder) * multiplier;
+				}
+				case 'priority': {
+					const aPriority = a.task?.priority ?? 999;
+					const bPriority = b.task?.priority ?? 999;
+					return (aPriority - bPriority) * multiplier;
+				}
+				case 'created': {
+					const aCreated = a.created ? new Date(a.created).getTime() : 0;
+					const bCreated = b.created ? new Date(b.created).getTime() : 0;
+					return (aCreated - bCreated) * multiplier;
+				}
+				case 'cost': {
+					const aCost = a.cost ?? 0;
+					const bCost = b.cost ?? 0;
+					return (aCost - bCost) * multiplier;
+				}
+				default:
+					return 0;
+			}
+		});
+	}
+
+	// Handle session drag and drop for manual ordering
+	function handleSessionDragStart(e: DragEvent, project: string, sessionName: string) {
+		if (getSortBy() !== 'manual') return;
+		draggedSession = { project, sessionName };
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', sessionName);
+		}
+	}
+
+	function handleSessionDragOver(e: DragEvent, project: string, sessionName: string) {
+		e.preventDefault(); // Required to allow drop
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		if (!draggedSession || draggedSession.project !== project) return;
+		dragOverSession = { project, sessionName };
+	}
+
+	function handleSessionDragLeave() {
+		dragOverSession = null;
+	}
+
+	function handleSessionDrop(e: DragEvent, project: string, targetSessionName: string) {
+		e.preventDefault();
+		if (!draggedSession || draggedSession.project !== project) return;
+
+		const sessions = sessionsByProject.get(project) || [];
+		const currentOrder = getSessionOrder(project);
+
+		// Build order array if empty
+		let order = currentOrder.length > 0
+			? [...currentOrder]
+			: sessions.map(s => s.sessionName);
+
+		// Remove dragged item and insert at new position
+		const draggedIndex = order.indexOf(draggedSession.sessionName);
+		const targetIndex = order.indexOf(targetSessionName);
+
+		if (draggedIndex !== -1 && targetIndex !== -1 && draggedIndex !== targetIndex) {
+			order.splice(draggedIndex, 1);
+			order.splice(targetIndex, 0, draggedSession.sessionName);
+			setSessionOrder(project, order);
+		}
+
+		draggedSession = null;
+		dragOverSession = null;
+	}
+
+	function handleSessionDragEnd() {
+		draggedSession = null;
+		dragOverSession = null;
+	}
+
 	// Keyboard navigation handler
 	function handleKeydown(e: KeyboardEvent) {
 		// Don't handle if user is typing in an input
@@ -641,6 +843,7 @@
 
 	onMount(async () => {
 		customProjectOrder = loadProjectOrder();
+		initSort(); // Initialize session sort from localStorage
 		fetchConfigProjects(); // Load all configured projects
 		fetchTaskData();
 		await fetchSessions();
@@ -682,6 +885,18 @@
 				{@const isDragging = draggedProject === project}
 				{@const isDragOver = dragOverProject === project}
 				{@const isFocused = focusedProject === project}
+				{@const sessionsExpanded = !isProjectCollapsed && !getSectionState(project, 'sessions').collapsed}
+				{@const tasksExpanded = !isProjectCollapsed && !getSectionState(project, 'tasks').collapsed}
+				{@const searchTerm = getSearchTerm(project)}
+				{@const currentSort = getSortBy()}
+				{@const currentDir = getSortDir()}
+				{@const currentSortOption = SORT_OPTIONS.find(o => o.value === currentSort)}
+				{@const isManualSort = currentSort === 'manual'}
+				{@const sessionOrder = sessionOrderByProject.get(project) || []}
+				{@const filteredSessions = sortSessionsWithOrder(filterSessions(sessions, searchTerm), project, sessionOrder)}
+				{@const filteredTasks = filterTasks(projectTasks, searchTerm)}
+				{@const openTaskCount = projectTasks.filter(t => t.status !== 'closed').length}
+				{@const filteredOpenTaskCount = filteredTasks.filter(t => t.status !== 'closed').length}
 
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
@@ -738,10 +953,11 @@
 							<span class="font-semibold text-base-content uppercase tracking-wide">{project}</span>
 
 							<!-- Sessions badge - clickable to toggle sessions section -->
+							{#if hasSessions}
 							<span
 								role="button"
 								tabindex="0"
-								class="badge badge-ghost badge-sm hover:badge-primary transition-colors cursor-pointer"
+								class="badge badge-sm transition-all duration-200 cursor-pointer select-none {sessionsExpanded ? 'badge-primary shadow-inner' : 'badge-ghost hover:badge-primary'}"
 								onclick={(e) => {
 									e.stopPropagation();
 									// If project is collapsed, expand it first
@@ -755,90 +971,135 @@
 								}}
 								onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSectionCollapse(project, 'sessions'); } }}
 								title="Click to expand/collapse sessions"
-							>{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
+							>{#if searchTerm && filteredSessions.length !== sessions.length}{filteredSessions.length}/{/if}{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
+							{/if}
 
 							<!-- Tasks badge - clickable to toggle tasks section -->
-							{#if projectTasks.length > 0}
-								<span
-									role="button"
-									tabindex="0"
-									class="badge badge-outline badge-sm hover:badge-primary transition-colors cursor-pointer"
-									onclick={(e) => {
-										e.stopPropagation();
-										// If project is collapsed, expand it first
-										if (isProjectCollapsed) toggleProjectCollapse(project);
-										// Toggle tasks section (with slight delay if expanding project)
-										if (isProjectCollapsed) {
-											setTimeout(() => toggleSectionCollapse(project, 'tasks'), 50);
-										} else {
-											toggleSectionCollapse(project, 'tasks');
-										}
-									}}
-									onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSectionCollapse(project, 'tasks'); } }}
-									title="Click to expand/collapse tasks"
-								>{projectTasks.filter(t => t.status !== 'closed').length} tasks</span>
-							{/if}
-
-							<!-- Mini session avatars (shown when collapsed) -->
-							{#if isProjectCollapsed && hasSessions}
-								<div class="flex items-center -space-x-1 ml-2 pl-2 border-l border-base-300">
-									{#each sessions.slice(0, 5) as session (session.sessionName)}
-										{@const isWorking = session._sseState === 'working' || session._sseState === 'needs_input' || session._sseState === 'review'}
-										<WorkingAgentBadge
-											name={session.agentName || ''}
-											size={22}
-											{isWorking}
-											variant="avatar"
-											onClick={() => {
-												// Expand project and scroll to session
-												if (isProjectCollapsed) toggleProjectCollapse(project);
-												setTimeout(() => handleAgentClick(session.agentName), 100);
-											}}
-										/>
-									{/each}
-									{#if sessions.length > 5}
-										<span class="text-xs text-base-content/50 ml-2">+{sessions.length - 5}</span>
-									{/if}
-								</div>
-							{/if}
+							<span
+								role="button"
+								tabindex="0"
+								class="badge badge-sm transition-all duration-200 cursor-pointer select-none {tasksExpanded ? 'badge-primary shadow-inner' : 'badge-outline hover:badge-primary'}"
+								onclick={(e) => {
+									e.stopPropagation();
+									// If project is collapsed, expand it first
+									if (isProjectCollapsed) toggleProjectCollapse(project);
+									// Toggle tasks section (with slight delay if expanding project)
+									if (isProjectCollapsed) {
+										setTimeout(() => toggleSectionCollapse(project, 'tasks'), 50);
+									} else {
+										toggleSectionCollapse(project, 'tasks');
+									}
+								}}
+								onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSectionCollapse(project, 'tasks'); } }}
+								title="Click to expand/collapse tasks"
+							>{#if searchTerm && filteredOpenTaskCount !== openTaskCount}{filteredOpenTaskCount}/{/if}{openTaskCount} task{openTaskCount !== 1 ? 's' : ''}</span>
 						</button>
+
+						<!-- Mini session avatars (shown when project collapsed) -->
+						{#if isProjectCollapsed && hasSessions}
+							<div class="flex items-center -space-x-1 ml-auto">
+								{#each filteredSessions.slice(0, 5) as session (session.sessionName)}
+									{@const isWorking = session._sseState === 'working' || session._sseState === 'needs_input' || session._sseState === 'review'}
+									<WorkingAgentBadge
+										name={session.agentName || ''}
+										size={22}
+										{isWorking}
+										variant="avatar"
+										onClick={() => {
+											// Expand project and scroll to session
+											if (isProjectCollapsed) toggleProjectCollapse(project);
+											setTimeout(() => handleAgentClick(session.agentName), 100);
+										}}
+									/>
+								{/each}
+								{#if filteredSessions.length > 5}
+									<span class="text-xs text-base-content/50 ml-2">+{filteredSessions.length - 5}</span>
+								{/if}
+							</div>
+						{/if}
+
+						<!-- Sort dropdown (only show if has sessions) -->
+						{#if hasSessions}
+						<div class="dropdown dropdown-end flex-shrink-0 {isProjectCollapsed ? '' : 'ml-auto'}" onclick={(e) => e.stopPropagation()}>
+							<button
+								tabindex="0"
+								class="btn btn-xs btn-ghost gap-1 font-mono text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100"
+								title="Sort sessions"
+							>
+								<span>{currentSortOption?.icon || '🔔'}</span>
+								<span class="hidden sm:inline">{currentSortOption?.label || 'State'}</span>
+								<span class="text-[9px]">{currentDir === 'asc' ? '▲' : '▼'}</span>
+							</button>
+							<ul tabindex="0" class="dropdown-content menu menu-xs bg-base-200 rounded-box z-50 w-36 p-1 shadow-lg border border-base-300">
+								{#each SORT_OPTIONS as opt (opt.value)}
+									<li>
+										<button
+											class="flex items-center gap-2 {currentSort === opt.value ? 'active' : ''}"
+											onclick={() => handleSortClick(opt.value)}
+										>
+											<span>{opt.icon}</span>
+											<span class="flex-1">{opt.label}</span>
+											{#if currentSort === opt.value}
+												<span class="text-[9px] opacity-70">{currentDir === 'asc' ? '▲' : '▼'}</span>
+											{/if}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						</div>
+						{/if}
+
+						<!-- Search input -->
+						<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+							<input
+								type="text"
+								placeholder="Filter..."
+								value={searchTerm}
+								oninput={(e) => setSearchTerm(project, e.currentTarget.value)}
+								class="input input-xs input-bordered w-24 focus:w-40 transition-all duration-200 bg-base-200/50"
+							/>
+						</div>
 					</div>
 
 					<!-- Project content (collapsible) -->
 					{#if !isProjectCollapsed}
+						{@const sessionState = getSectionState(project, 'sessions')}
+						{@const taskState = getSectionState(project, 'tasks')}
+						{@const isEmptyProject = !hasSessions && projectTasks.length === 0}
 						<div class="flex flex-col">
-							<!-- Sessions Section -->
-							{#if hasSessions}
-								{@const sessionState = getSectionState(project, 'sessions')}
-								<div class="border-b border-base-300">
-									<!-- Sessions header (double-click to auto-size) -->
-									<button
-										class="w-full flex items-center gap-2 px-6 py-1.5 bg-base-200/30 hover:bg-base-200/60 transition-colors"
-										onclick={() => toggleSectionCollapse(project, 'sessions')}
-										ondblclick={() => autoSizeSection(project, 'sessions')}
-										title="Click to collapse/expand, double-click to auto-size"
-									>
-										<svg
-											class="w-3 h-3 transition-transform duration-200"
-											class:rotate-90={!sessionState.collapsed}
-											fill="none" viewBox="0 0 24 24" stroke="currentColor"
-										>
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-										</svg>
-										<span class="text-xs font-medium text-base-content/70 uppercase tracking-wide">
-											Sessions ({sessions.length})
-										</span>
-									</button>
-
+							<!-- Sessions Section (no header row - controlled by badge) -->
+							{#if filteredSessions.length > 0 && !sessionState.collapsed}
+								<div class="border-b border-base-300" transition:slide={{ duration: 200 }}>
 									<!-- Sessions content -->
 									<div
 										class="overflow-hidden transition-all duration-200"
-										class:hidden={sessionState.collapsed}
 										style="height: {sessionState.height}px;"
 									>
 										<div class="flex gap-3 overflow-x-auto h-full p-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
-											{#each sessions as session (session.sessionName)}
-												<div class="h-[calc(100%-8px)]">
+											{#each filteredSessions as session (session.sessionName)}
+												{@const isSessionDragging = draggedSession?.sessionName === session.sessionName}
+												{@const isSessionDragOver = dragOverSession?.sessionName === session.sessionName && dragOverSession?.project === project}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<div
+													class="h-[calc(100%-8px)] transition-all duration-150 relative"
+													class:opacity-50={isSessionDragging}
+													class:ring-2={isSessionDragOver}
+													class:ring-primary={isSessionDragOver}
+													class:cursor-grab={isManualSort}
+													draggable={isManualSort}
+													ondragstart={(e) => handleSessionDragStart(e, project, session.sessionName)}
+													ondragend={handleSessionDragEnd}
+												>
+													<!-- Drop zone overlay - captures drop events during drag -->
+													{#if isManualSort && draggedSession && !isSessionDragging}
+														<!-- svelte-ignore a11y_no_static_element_interactions -->
+														<div
+															class="absolute inset-0 z-50"
+															ondragover={(e) => handleSessionDragOver(e, project, session.sessionName)}
+															ondragleave={handleSessionDragLeave}
+															ondrop={(e) => handleSessionDrop(e, project, session.sessionName)}
+														></div>
+													{/if}
 													<SessionCard
 														mode="agent"
 														sessionName={session.sessionName}
@@ -872,44 +1133,19 @@
 									</div>
 
 									<!-- Sessions resize handle -->
-									{#if !sessionState.collapsed}
-										<ResizableDivider
-											onResize={(deltaY) => handleSectionResize(project, 'sessions', deltaY)}
-											class="bg-base-300/50 hover:bg-base-300"
-										/>
-									{/if}
+									<ResizableDivider
+										onResize={(deltaY) => handleSectionResize(project, 'sessions', deltaY)}
+										class="bg-base-300/50 hover:bg-base-300"
+									/>
 								</div>
 							{/if}
 
-							<!-- Tasks Section -->
-							{#if true}
-							{@const taskState = getSectionState(project, 'tasks')}
-							{@const openTaskCount = projectTasks.filter(t => t.status !== 'closed').length}
-							{@const isEmptyProject = !hasSessions && projectTasks.length === 0}
-							<div>
-								<!-- Tasks header (double-click to auto-size) -->
-								<button
-									class="w-full flex items-center gap-2 px-6 py-1.5 bg-base-200/30 hover:bg-base-200/60 transition-colors"
-									onclick={() => toggleSectionCollapse(project, 'tasks')}
-									ondblclick={() => autoSizeSection(project, 'tasks')}
-									title="Click to collapse/expand, double-click to auto-size"
-								>
-									<svg
-										class="w-3 h-3 transition-transform duration-200"
-										class:rotate-90={!taskState.collapsed}
-										fill="none" viewBox="0 0 24 24" stroke="currentColor"
-									>
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-									</svg>
-									<span class="text-xs font-medium text-base-content/70 uppercase tracking-wide">
-										Tasks ({openTaskCount})
-									</span>
-								</button>
-
+							<!-- Tasks Section (no header row - controlled by badge) -->
+							{#if !taskState.collapsed}
+							<div transition:slide={{ duration: 200 }}>
 								<!-- Tasks content -->
 								<div
 									class="overflow-hidden transition-all duration-200"
-									class:hidden={taskState.collapsed}
 									style="height: {taskState.height}px;"
 								>
 									{#if isEmptyProject}
@@ -929,28 +1165,32 @@
 												Create Task
 											</button>
 										</div>
-									{:else}
+									{:else if filteredTasks.length > 0}
 										<div class="h-full overflow-auto">
 											<TaskTable
-												tasks={projectTasks}
+												tasks={filteredTasks}
 												allTasks={allTasks}
 												{agents}
 												{reservations}
 												completedTasksFromActiveSessions={getCompletedTasksForProject(project)}
 												ontaskclick={handleTaskClick}
 												onagentclick={handleAgentClick}
+												hideProjectFilter={true}
+												hideSearch={true}
 											/>
+										</div>
+									{:else}
+										<div class="h-full flex items-center justify-center text-base-content/50 text-sm">
+											No tasks match "{searchTerm}"
 										</div>
 									{/if}
 								</div>
 
 								<!-- Tasks resize handle -->
-								{#if !taskState.collapsed}
-									<ResizableDivider
-										onResize={(deltaY) => handleSectionResize(project, 'tasks', deltaY)}
-										class="bg-base-300/50 hover:bg-base-300"
-									/>
-								{/if}
+								<ResizableDivider
+									onResize={(deltaY) => handleSectionResize(project, 'tasks', deltaY)}
+									class="bg-base-300/50 hover:bg-base-300"
+								/>
 							</div>
 							{/if}
 						</div>

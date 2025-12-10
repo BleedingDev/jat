@@ -86,9 +86,13 @@
 		ontaskclick?: (taskId: string) => void;
 		/** Callback when user clicks on an agent avatar/name */
 		onagentclick?: (agentName: string) => void;
+		/** Hide the project filter dropdown (for project-scoped views) */
+		hideProjectFilter?: boolean;
+		/** Hide the search input (for views that have their own search) */
+		hideSearch?: boolean;
 	}
 
-	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick }: Props = $props();
+	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false }: Props = $props();
 
 	// Track previously seen task IDs and statuses for animations
 	// Using regular variables (not $state) to avoid effect loops
@@ -1752,6 +1756,7 @@
 
 		<div class="flex flex-wrap items-center gap-3">
 			<!-- Search - Industrial -->
+			{#if !hideSearch}
 			<div class="relative">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -1799,9 +1804,10 @@
 					</button>
 				{/if}
 			</div>
+			{/if}
 
 			<!-- Project Filter -->
-			{#if projectOptions.length > 0}
+			{#if !hideProjectFilter && projectOptions.length > 0}
 				<FilterDropdown
 					label="Project"
 					options={projectOptions}

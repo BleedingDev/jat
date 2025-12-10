@@ -6,7 +6,7 @@
 
 import { browser } from '$app/environment';
 
-export type SortOption = 'state' | 'priority' | 'created' | 'cost';
+export type SortOption = 'state' | 'priority' | 'created' | 'cost' | 'manual';
 export type SortDirection = 'asc' | 'desc';
 
 export interface SortConfig {
@@ -20,7 +20,8 @@ export const SORT_OPTIONS: SortConfig[] = [
 	{ value: 'state', label: 'State', icon: '🔔', defaultDir: 'asc' },
 	{ value: 'priority', label: 'Priority', icon: '⚡', defaultDir: 'asc' },
 	{ value: 'created', label: 'Time', icon: '⏱', defaultDir: 'desc' },
-	{ value: 'cost', label: 'Cost', icon: '💰', defaultDir: 'desc' }
+	{ value: 'cost', label: 'Cost', icon: '💰', defaultDir: 'desc' },
+	{ value: 'manual', label: 'Manual', icon: '✋', defaultDir: 'asc' }
 ];
 
 // Storage keys
