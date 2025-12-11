@@ -27,12 +27,13 @@
 	import { playNewTaskChime, playTaskExitSound, playTaskStartSound, playTaskCompleteSound, playEpicCompleteSound } from '$lib/utils/soundEffects';
 	import { spawningTaskIds, isBulkSpawning } from '$lib/stores/spawningTasks';
 	import { successToast } from '$lib/stores/toasts.svelte';
-	import { getEpicCelebration, getEpicAutoClose } from '$lib/stores/preferences.svelte';
+	import { getEpicCelebration, getEpicAutoClose, getCollapsedEpics, setCollapsedEpics } from '$lib/stores/preferences.svelte';
 	import { getFileTypeInfo, formatFileSize, type FileCategory } from '$lib/utils/fileUtils';
 	import { calculateRecommendationScore, type RecommendationScore } from '$lib/utils/recommendationUtils';
 	import RecommendedBadge from '$lib/components/RecommendedBadge.svelte';
 	import { getEpicId, getProgress, getRunningAgents, getIsActive } from '$lib/stores/epicQueueStore.svelte';
 	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
+	import { computeReviewStatus, type ReviewRule, type ReviewStatus } from '$lib/utils/reviewStatusUtils';
 
 	// Type definitions for task files (images, PDFs, text, etc.)
 	interface TaskFile {
@@ -126,6 +127,9 @@
 	let epicSwarmModalOpen = $state(false);
 	let epicSwarmModalId = $state<string | null>(null);
 
+	// Review rules state - fetched on mount for review status column
+	let reviewRules = $state<ReviewRule[]>([]);
+
 	// Timer state for elapsed time display under rockets
 	let now = $state(Date.now());
 
@@ -135,6 +139,19 @@
 			now = Date.now();
 		}, 30000);
 		return () => clearInterval(timerInterval);
+	});
+
+	// Fetch review rules on mount
+	onMount(async () => {
+		try {
+			const response = await fetch('/api/review-rules');
+			if (response.ok) {
+				const data = await response.json();
+				reviewRules = data.rules || [];
+			}
+		} catch (error) {
+			console.error('Failed to fetch review rules:', error);
+		}
 	});
 
 	// Keyboard shortcuts for collapse/expand all groups
@@ -177,8 +194,8 @@
 	// 'label' - group by first label
 	let groupingMode = $state<GroupingMode>('project');
 
-	// Track collapsed groups (by group key)
-	let collapsedGroups = $state<Set<string | null>>(new Set());
+	// Track collapsed groups (by group key) - initialized from localStorage
+	let collapsedGroups = $state<Set<string | null>>(new Set(getCollapsedEpics()));
 
 	// Track collapsed projects (for project mode's two-level hierarchy)
 	let collapsedProjects = $state<Set<string>>(new Set());
@@ -269,6 +286,8 @@
 			newSet.add(groupKey);
 		}
 		collapsedGroups = newSet;
+		// Persist to localStorage (filter out null values for storage)
+		setCollapsedEpics(Array.from(newSet).filter((k): k is string => k !== null));
 	}
 
 	// Toggle project collapse state (for project mode)
@@ -289,6 +308,8 @@
 			collapsedProjects = new Set(Array.from(nestedGroupedTasks.keys()));
 		} else {
 			collapsedGroups = new Set(visibleGroupKeys);
+			// Persist to localStorage
+			setCollapsedEpics(Array.from(collapsedGroups).filter((k): k is string => k !== null));
 		}
 	}
 
@@ -296,6 +317,8 @@
 	function expandAll() {
 		collapsedGroups = new Set();
 		collapsedProjects = new Set();
+		// Clear persisted collapsed state
+		setCollapsedEpics([]);
 	}
 
 	// Check if all groups are collapsed
@@ -306,10 +329,11 @@
 	// Check if any groups are collapsed
 	const anyGroupsCollapsed = $derived(collapsedGroups.size > 0);
 
-	// Reset collapsed groups when grouping mode changes
+	// Reload collapsed groups from localStorage when grouping mode changes
+	// This preserves user's collapse preferences when switching views
 	$effect(() => {
 		groupingMode; // dependency
-		collapsedGroups = new Set();
+		collapsedGroups = new Set(getCollapsedEpics());
 		collapsedProjects = new Set();
 	});
 
@@ -2210,6 +2234,15 @@
 					<td class="w-32" style="background: inherit;">
 						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">Labels</span>
 					</td>
+					<td class="w-16 text-center" style="background: inherit;" title="Review status: Auto-proceed or Requires Review">
+						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
+							<!-- Eye icon for Review column -->
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mx-auto">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+							</svg>
+						</span>
+					</td>
 					<td
 						class="cursor-pointer w-16 industrial-hover"
 						style="background: inherit;"
@@ -2229,7 +2262,7 @@
 				<!-- Empty state - Mission Control Style -->
 				<tbody>
 					<tr>
-						<td colspan="8" class="p-0">
+						<td colspan="9" class="p-0">
 							<div
 								class="relative flex flex-col items-center justify-center py-16 overflow-hidden"
 								style="
@@ -2374,7 +2407,7 @@
 								title={isProjectCollapsed ? 'Click to expand project' : 'Click to collapse project'}
 							>
 								<th
-									colspan="8"
+									colspan="9"
 									class="p-0 border-b-2 border-base-content/20"
 									style="background: linear-gradient(90deg, oklch(0.70 0.15 140 / 0.15) 0%, oklch(0.20 0.01 250) 80%);"
 								>
@@ -2480,7 +2513,7 @@
 											title={isEpicCollapsed ? 'Click to expand epic' : isRunningEpic ? 'Epic is actively executing - click to collapse' : 'Click to collapse epic'}
 										>
 											<th
-												colspan="8"
+												colspan="9"
 												class="p-0 border-b border-base-content/10"
 												style="background: linear-gradient(90deg, {epicVisual.bgTint} 0%, oklch(0.18 0.01 250) 70%);"
 											>
@@ -2640,6 +2673,7 @@
 											{@const criticalPathResult = epicKey ? criticalPaths.get(epicKey) : undefined}
 											{@const isOnCriticalPath = criticalPathResult?.criticalPathIds.has(task.id) && task.status !== 'closed'}
 											{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
+											{@const reviewStatus = computeReviewStatus(task, reviewRules)}
 											<tr
 												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''}"
 												onclick={() => handleRowClick(task.id)}
@@ -2827,6 +2861,32 @@
 													{/if}
 												</td>
 
+												<!-- Review Status -->
+												<td class="text-center" style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+													<div
+														class="tooltip tooltip-left"
+														data-tip="{reviewStatus.reason}{reviewStatus.hasOverride ? ' (Override)' : ''}"
+													>
+														<div class="flex items-center justify-center gap-1">
+															{#if reviewStatus.action === 'review'}
+																<!-- Eye icon for Review -->
+																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.80 0.15 45);">
+																	<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+																	<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+																</svg>
+															{:else}
+																<!-- Checkmark icon for Auto -->
+																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
+																	<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+																</svg>
+															{/if}
+															{#if reviewStatus.hasOverride}
+																<span class="badge badge-xs" style="background: oklch(0.70 0.15 280 / 0.2); color: oklch(0.80 0.12 280); font-size: 9px; padding: 1px 4px;">O</span>
+															{/if}
+														</div>
+													</div>
+												</td>
+
 												<!-- Age -->
 												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 													<span class="text-xs font-mono {getAgeColorClass(task.updated_ts)}" title={formatFullDate(task.updated_ts)}>
@@ -2884,7 +2944,7 @@
 								title={isCollapsed ? 'Click to expand (Enter/Space)' : isParentRunningEpic ? 'Epic is actively executing - click to collapse' : 'Click to collapse (Enter/Space). Arrow keys to navigate groups.'}
 							>
 								<th
-									colspan="8"
+									colspan="9"
 									class="p-0 border-b border-base-content/10"
 									style="background: linear-gradient(90deg, {typeVisual.bgTint} 0%, transparent 60%);"
 								>
@@ -3056,6 +3116,7 @@
 									{@const criticalPathResult = parentEpicId ? criticalPaths.get(parentEpicId) : undefined}
 									{@const isOnCriticalPath = criticalPathResult?.criticalPathIds.has(task.id) && task.status !== 'closed'}
 									{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
+									{@const reviewStatusStd = computeReviewStatus(task, reviewRules)}
 									<!-- Main task row -->
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''}"
@@ -3243,6 +3304,31 @@
 											<span style="color: oklch(0.40 0.02 250);">-</span>
 										{/if}
 									</td>
+									<!-- Review Status -->
+									<td class="text-center" style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+										<div
+											class="tooltip tooltip-left"
+											data-tip="{reviewStatusStd.reason}{reviewStatusStd.hasOverride ? ' (Override)' : ''}"
+										>
+											<div class="flex items-center justify-center gap-1">
+												{#if reviewStatusStd.action === 'review'}
+													<!-- Eye icon for Review -->
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.80 0.15 45);">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+														<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+													</svg>
+												{:else}
+													<!-- Checkmark icon for Auto -->
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
+														<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+													</svg>
+												{/if}
+												{#if reviewStatusStd.hasOverride}
+													<span class="badge badge-xs" style="background: oklch(0.70 0.15 280 / 0.2); color: oklch(0.80 0.12 280); font-size: 9px; padding: 1px 4px;">O</span>
+												{/if}
+											</div>
+										</div>
+									</td>
 									<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 										<span class="text-xs font-mono {getAgeColorClass(task.updated_ts)}" title={formatFullDate(task.updated_ts)}>
 											{formatRelativeTime(task.updated_ts)}
@@ -3256,7 +3342,7 @@
 						{#if showGroupHeader && loopIndex < groupEntries.length - 1}
 							<tbody>
 								<tr>
-									<td colspan="8" class="h-3" style="background: transparent; border: none;"></td>
+									<td colspan="9" class="h-3" style="background: transparent; border: none;"></td>
 								</tr>
 							</tbody>
 						{/if}
@@ -3341,9 +3427,9 @@
 										{/if}
 									</div>
 								</td>
-								<td style="background: transparent;"></td>
-								<td style="background: transparent;"></td>
-								<td style="background: transparent;"></td>
+								<td style="background: transparent;"></td><!-- Labels -->
+								<td style="background: transparent;"></td><!-- Review -->
+								<td style="background: transparent;"></td><!-- Age -->
 							</tr>
 						{/each}
 					</tbody>
