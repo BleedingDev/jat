@@ -217,8 +217,8 @@
 			const data = await response.json();
 			const tasks = data.tasks || [];
 
-			// Filter to epics only
-			const epics = tasks.filter((t: any) => t.issue_type === 'epic' && t.status !== 'closed');
+			// Filter to epics only (include selected epic even if closed, so user can see what they clicked)
+			const epics = tasks.filter((t: any) => t.issue_type === 'epic' && (t.status !== 'closed' || t.id === selectedEpicId));
 
 			// Fetch children summaries in PARALLEL (not sequentially) for faster loading
 			const childPromises = epics.map(async (epic: any) => {
@@ -274,7 +274,7 @@
 				// Ignore errors - this is just cleanup
 			});
 
-			// Auto-select first epic if none selected
+			// Auto-select first epic if none selected (e.g., opened via Alt+E)
 			if (!selectedEpicId && actionableEpics.length > 0) {
 				selectedEpicId = actionableEpics[0].id;
 			}
@@ -553,13 +553,13 @@
 					</label>
 					<select
 						class="select select-bordered w-full font-mono"
-						value={selectedEpicId}
+						bind:value={selectedEpicId}
 						onchange={(e) => handleEpicChange(e.currentTarget.value)}
 						disabled={isSubmitting}
 						style="background: oklch(0.22 0.02 250); border-color: oklch(0.35 0.02 250);"
 					>
 						{#each availableEpics as epic}
-							<option value={epic.id}>
+							<option value={epic.id} selected={epic.id === selectedEpicId}>
 								{epic.id} - {epic.title} ({epic.ready} ready / {epic.total} total)
 							</option>
 						{/each}
