@@ -321,8 +321,21 @@ done
 
 ### STEP 3: Verify Task
 
+**Emit `completing` signal to show progress during verification.**
+
 ```bash
 echo "Verifying task before completion..."
+
+# Emit completing signal: verifying (0% progress)
+jat-signal completing '{
+  "taskId": "'"$task_id"'",
+  "taskTitle": "'"$task_title"'",
+  "currentStep": "verifying",
+  "stepsCompleted": [],
+  "stepsRemaining": ["committing", "closing", "releasing", "announcing"],
+  "progress": 0,
+  "stepDescription": "Running verification checks (tests, lint, security)"
+}'
 
 # Run verification checks:
 # - Tests
@@ -338,8 +351,21 @@ echo "Verifying task before completion..."
 
 ### STEP 4: Commit Changes
 
+**Emit `completing` signal for the committing step.**
+
 ```bash
 echo "Committing changes..."
+
+# Emit completing signal: committing (20% progress)
+jat-signal completing '{
+  "taskId": "'"$task_id"'",
+  "taskTitle": "'"$task_title"'",
+  "currentStep": "committing",
+  "stepsCompleted": ["verifying"],
+  "stepsRemaining": ["closing", "releasing", "announcing"],
+  "progress": 20,
+  "stepDescription": "Committing changes to git"
+}'
 
 # Get task details for commit message
 task_json=$(bd show "$task_id" --json)
@@ -370,7 +396,20 @@ fi
 
 ### STEP 5: Mark Task Complete in Beads
 
+**Emit `completing` signal for the closing step.**
+
 ```bash
+# Emit completing signal: closing (40% progress)
+jat-signal completing '{
+  "taskId": "'"$task_id"'",
+  "taskTitle": "'"$task_title"'",
+  "currentStep": "closing",
+  "stepsCompleted": ["verifying", "committing"],
+  "stepsRemaining": ["releasing", "announcing"],
+  "progress": 40,
+  "stepDescription": "Marking task complete in Beads"
+}'
+
 bd close "$task_id" --reason "Completed by $agent_name"
 ```
 
@@ -402,7 +441,20 @@ bd epic close-eligible
 
 ### STEP 6: Release File Reservations
 
+**Emit `completing` signal for the releasing step.**
+
 ```bash
+# Emit completing signal: releasing (60% progress)
+jat-signal completing '{
+  "taskId": "'"$task_id"'",
+  "taskTitle": "'"$task_title"'",
+  "currentStep": "releasing",
+  "stepsCompleted": ["verifying", "committing", "closing"],
+  "stepsRemaining": ["announcing"],
+  "progress": 60,
+  "stepDescription": "Releasing file reservations"
+}'
+
 # Release all file reservations for this agent
 am-reservations --agent "$agent_name" --json | jq -r '.[].path_pattern' | while read pattern; do
   am-release "$pattern" --agent "$agent_name"
@@ -413,7 +465,20 @@ done
 
 ### STEP 7: Announce Completion
 
+**Emit `completing` signal for the announcing step.**
+
 ```bash
+# Emit completing signal: announcing (80% progress)
+jat-signal completing '{
+  "taskId": "'"$task_id"'",
+  "taskTitle": "'"$task_title"'",
+  "currentStep": "announcing",
+  "stepsCompleted": ["verifying", "committing", "closing", "releasing"],
+  "stepsRemaining": [],
+  "progress": 80,
+  "stepDescription": "Announcing completion to other agents"
+}'
+
 am-send "[$task_id] Completed: $task_title" \
   "Task completed by $agent_name.
 
@@ -1156,11 +1221,40 @@ The completion flow uses these signals (captured by PostToolUse hook):
 
 | Signal Command | When to Run | Dashboard Effect |
 |----------------|-------------|------------------|
+| `jat-signal completing '{...}'` | During each completion step | Shows progress bar and current step |
 | `jat-signal idle '{"readyForWork":true}'` | After `bd close`, when review required | Shows "Completed" state (green), session stays open |
 | `jat-signal auto_proceed '{"taskId":"..."}'` | After `bd close`, when auto-proceed enabled | Dashboard can auto-close session, optionally spawn next |
 | `jat-signal action '{...}'` | When manual steps are required | Shows prominent action checklist |
 | `jat-signal tasks '[...]'` | When follow-up work discovered | Shows "N Suggested Tasks" badge, offers Beads creation |
 | `jat-signal completed '{"taskId":"...","outcome":"success"}'` | After all completion steps | Final completion signal |
+
+### Completing Signal Progress Sequence
+
+The `completing` signal is emitted at each step of the completion workflow:
+
+| Step | currentStep | progress | stepsCompleted | stepsRemaining |
+|------|-------------|----------|----------------|----------------|
+| 3 | `verifying` | 0% | [] | [committing, closing, releasing, announcing] |
+| 4 | `committing` | 20% | [verifying] | [closing, releasing, announcing] |
+| 5 | `closing` | 40% | [verifying, committing] | [releasing, announcing] |
+| 6 | `releasing` | 60% | [verifying, committing, closing] | [announcing] |
+| 7 | `announcing` | 80% | [verifying, committing, closing, releasing] | [] |
+| 8 | (complete) | 100% | All steps | [] |
+
+**Completing Signal Payload:**
+```bash
+jat-signal completing '{
+  "taskId": "jat-abc",
+  "taskTitle": "Add user authentication",
+  "currentStep": "committing",
+  "stepsCompleted": ["verifying"],
+  "stepsRemaining": ["closing", "releasing", "announcing"],
+  "progress": 20,
+  "stepDescription": "Committing changes to git"
+}'
+```
+
+**Dashboard renders:** Progress bar at 20%, "Step 2/5: Committing changes to git"
 
 **Signal selection is automatic** - Step 7.5 determines which signal to run based on:
 1. Per-task override in notes (`[REVIEW_OVERRIDE:...]`)
@@ -1403,20 +1497,20 @@ Or run /jat:verify to see detailed error report
 
 ## Step Summary
 
-| Step | Name | When |
-|------|------|------|
-| 1A-C | Get Task and Agent Identity | ALWAYS |
-| 1D | Spontaneous Work Detection | If no in_progress task found |
-| 2 | Read & Respond to Mail | ALWAYS (after task identified) |
-| 3 | Verify Task | ALWAYS |
-| 4 | Commit Changes | ALWAYS |
-| 5 | Mark Task Complete | ALWAYS |
-| 5.5 | Auto-Close Eligible Epics | ALWAYS |
-| 6 | Release Reservations | ALWAYS |
-| 7 | Announce Completion | ALWAYS |
-| 7.5 | Determine Review Action | ALWAYS (sets COMPLETION_MARKER) |
-| 8 | Show Final Summary with Reflection | ALWAYS |
-| 9 | Handle CREATE_TASKS Input | If dashboard sends task creation request |
+| Step | Name | When | Completing Signal |
+|------|------|------|-------------------|
+| 1A-C | Get Task and Agent Identity | ALWAYS | - |
+| 1D | Spontaneous Work Detection | If no in_progress task found | - |
+| 2 | Read & Respond to Mail | ALWAYS (after task identified) | - |
+| 3 | Verify Task | ALWAYS | `verifying` (0%) |
+| 4 | Commit Changes | ALWAYS | `committing` (20%) |
+| 5 | Mark Task Complete | ALWAYS | `closing` (40%) |
+| 5.5 | Auto-Close Eligible Epics | ALWAYS | - |
+| 6 | Release Reservations | ALWAYS | `releasing` (60%) |
+| 7 | Announce Completion | ALWAYS | `announcing` (80%) |
+| 7.5 | Determine Review Action | ALWAYS (sets COMPLETION_MARKER) | - |
+| 8 | Show Final Summary with Reflection | ALWAYS | (100% implied) |
+| 9 | Handle CREATE_TASKS Input | If dashboard sends task creation request | - |
 
 ---
 
