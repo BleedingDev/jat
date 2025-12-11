@@ -1073,10 +1073,59 @@ The individual signal commands can be used separately if needed:
 # Separate signals (prefer jat-signal complete bundle)
 jat-signal action '{"title":"...","description":"..."}'
 jat-signal tasks '[{"type":"feature","title":"...","priority":2}]'
-jat-signal completed '{"taskId":"...","outcome":"success"}'
+jat-signal completed '{"taskId":"...","agentName":"...","sessionStats":{...},"finalCommit":"..."}'
 ```
 
 **Prefer `jat-signal complete '{...}'`** - it bundles everything in one call and provides a better dashboard experience.
+
+### Enhanced Completed Signal
+
+The `completed` signal now includes session statistics and final state information:
+
+```bash
+jat-signal completed '{
+  "taskId": "jat-abc",
+  "agentName": "WisePrairie",
+  "summary": ["Implemented OAuth flow", "Added login page"],
+  "quality": {
+    "tests": "passing",
+    "build": "clean"
+  },
+  "suggestedTasks": [
+    {
+      "type": "feature",
+      "title": "Add Apple Sign-In support",
+      "priority": 2
+    }
+  ],
+  "sessionStats": {
+    "duration": 45,
+    "tokensUsed": 150000,
+    "filesModified": 5,
+    "linesChanged": 320,
+    "commitsCreated": 2
+  },
+  "finalCommit": "abc123def456",
+  "prLink": "https://github.com/org/repo/pull/123"
+}'
+```
+
+#### Session Stats Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `duration` | integer | Minutes spent working on the task |
+| `tokensUsed` | integer | API tokens consumed during the session |
+| `filesModified` | integer | Number of files modified |
+| `linesChanged` | integer | Total lines changed (added + removed) |
+| `commitsCreated` | integer | Number of commits created |
+
+#### Final State Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `finalCommit` | string | Yes | Git SHA of the final committed state |
+| `prLink` | string | No | Pull request URL if one was created |
 
 ---
 
@@ -1226,7 +1275,7 @@ The completion flow uses these signals (captured by PostToolUse hook):
 | `jat-signal auto_proceed '{"taskId":"..."}'` | After `bd close`, when auto-proceed enabled | Dashboard can auto-close session, optionally spawn next |
 | `jat-signal action '{...}'` | When manual steps are required | Shows prominent action checklist |
 | `jat-signal tasks '[...]'` | When follow-up work discovered | Shows "N Suggested Tasks" badge, offers Beads creation |
-| `jat-signal completed '{"taskId":"...","outcome":"success"}'` | After all completion steps | Final completion signal |
+| `jat-signal completed '{"taskId":"...","sessionStats":{...},"finalCommit":"..."}'` | After all completion steps | Final completion signal with session stats |
 
 ### Completing Signal Progress Sequence
 
