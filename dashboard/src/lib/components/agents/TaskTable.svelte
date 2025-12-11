@@ -2463,8 +2463,10 @@
 								{@const isEpicJustCompleted = completedEpicIds.includes(epicKey)}
 								{@const isRunningEpic = getIsActive() && getEpicId() === epicKey}
 								{@const epicQueueAgents = isRunningEpic ? getRunningAgents() : []}
-								{@const closedChildrenCount = epicTasks.filter(t => t.status === 'closed').length}
-								{@const totalChildrenCount = epicTasks.length}
+								{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
+								{@const allEpicChildren = allTasksList.filter(t => t.id !== epicKey && (extractParentId(t.id) === epicKey || epicChildMap.get(t.id) === epicKey))}
+								{@const closedChildrenCount = allEpicChildren.filter(t => t.status === 'closed').length}
+								{@const totalChildrenCount = allEpicChildren.length}
 								{@const isEpicFullyComplete = closedChildrenCount === totalChildrenCount && totalChildrenCount > 0}
 								{@const hasReadyChildren = epicTasks.some(t => t.status === 'open' && !t.depends_on?.some(d => d.status !== 'closed'))}
 								{@const canRunEpic = !isRunningEpic && !isEpicFullyComplete && hasReadyChildren}
@@ -2860,8 +2862,11 @@
 						{@const isEpicJustCompleted = groupingMode === 'parent' && groupKey && completedEpicIds.includes(groupKey)}
 						{@const isParentRunningEpic = groupingMode === 'parent' && getIsActive() && getEpicId() === groupKey}
 						{@const parentEpicQueueAgents = isParentRunningEpic ? getRunningAgents() : []}
-						{@const parentClosedCount = typeTasks.filter(t => t.status === 'closed').length}
-						{@const parentIsFullyComplete = parentClosedCount === typeTasks.length && typeTasks.length > 0}
+						{@const parentAllTasksList = allTasks.length > 0 ? allTasks : tasks}
+						{@const parentAllChildren = parentAllTasksList.filter(t => t.id !== groupKey && (extractParentId(t.id) === groupKey || epicChildMap.get(t.id) === groupKey))}
+						{@const parentClosedCount = parentAllChildren.filter(t => t.status === 'closed').length}
+						{@const parentTotalCount = parentAllChildren.length}
+						{@const parentIsFullyComplete = parentClosedCount === parentTotalCount && parentTotalCount > 0}
 						{@const hasParentReadyChildren = typeTasks.some(t => t.status === 'open' && !t.depends_on?.some(d => d.status !== 'closed'))}
 						{@const canRunParentEpic = groupingMode === 'parent' && !isParentRunningEpic && !parentIsFullyComplete && hasParentReadyChildren}
 						{#if showGroupHeader}
@@ -2946,9 +2951,9 @@
 										{/if}
 
 										<!-- Epic progress bar (only in parent mode with >1 tasks) -->
-										{#if groupingMode === 'parent' && typeTasks.length > 1}
-											{@const progressPercent = Math.round((parentClosedCount / typeTasks.length) * 100)}
-											<div class="flex items-center gap-2 ml-3" title="{parentClosedCount} of {typeTasks.length} tasks completed">
+										{#if groupingMode === 'parent' && parentTotalCount > 1}
+											{@const progressPercent = Math.round((parentClosedCount / parentTotalCount) * 100)}
+											<div class="flex items-center gap-2 ml-3" title="{parentClosedCount} of {parentTotalCount} tasks completed">
 												<!-- Checkmark for fully complete -->
 												{#if parentIsFullyComplete}
 													<span
@@ -2969,7 +2974,7 @@
 												</div>
 												<!-- X/Y complete text -->
 												<span class="font-mono text-[10px] {isParentRunningEpic ? 'text-warning' : 'text-base-content/50'}">
-													{parentClosedCount}/{typeTasks.length}
+													{parentClosedCount}/{parentTotalCount}
 												</span>
 												<!-- Running agent count (only when epic is active) -->
 												{#if isParentRunningEpic && parentEpicQueueAgents.length > 0}
