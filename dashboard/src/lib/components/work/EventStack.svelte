@@ -11,14 +11,27 @@
 	 * - Click event to expand JSON details
 	 * - Rollback button for events with git_sha
 	 * - Auto-refresh polling
-	 * - Rich SuggestedTasksSection for tasks events
+	 * - Rich signal card rendering for each signal type
+	 * - Event filtering by signal type, task, and time range
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import SuggestedTasksSection from './SuggestedTasksSection.svelte';
+	import {
+		WorkingSignalCard,
+		ReviewSignalCard,
+		NeedsInputSignalCard,
+		CompletingSignalCard
+	} from '$lib/components/signals';
 	import type { SuggestedTask } from '$lib/types/signals';
+	import type {
+		WorkingSignal,
+		ReviewSignal,
+		NeedsInputSignal,
+		CompletingSignal
+	} from '$lib/types/richSignals';
 
 	/** Extended SuggestedTask with local UI state */
 	interface SuggestedTaskWithState extends SuggestedTask {
@@ -47,36 +60,111 @@
 		validation_warning?: string;
 	}
 
+	/** Filter options for event timeline */
+	interface EventFilters {
+		/** Filter by signal type(s) */
+		signalTypes?: string[];
+		/** Filter by task ID */
+		taskId?: string;
+		/** Filter events after this timestamp */
+		startTime?: Date;
+		/** Filter events before this timestamp */
+		endTime?: Date;
+	}
+
 	let {
 		sessionName,
 		maxEvents = 20,
 		pollInterval = 5000,
 		onRollback,
 		onCreateTasks,
+		onTaskClick,
+		onFileClick,
+		onDiffClick,
+		onApprove,
+		onRequestChanges,
+		onAskQuestion,
+		onSelectOption,
+		onSubmitText,
 		availableProjects = [],
 		class: className = '',
-		autoExpand = false
+		autoExpand = false,
+		filters = {}
 	}: {
 		sessionName: string;
 		maxEvents?: number;
 		pollInterval?: number;
 		onRollback?: (event: TimelineEvent) => void;
 		onCreateTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: any[]; failed: any[] }>;
+		/** Callback when a task ID is clicked */
+		onTaskClick?: (taskId: string) => void;
+		/** Callback when a file path is clicked */
+		onFileClick?: (filePath: string) => void;
+		/** Callback when diff link is clicked */
+		onDiffClick?: (filePath: string, changeType: string) => void;
+		/** Callback when user approves review */
+		onApprove?: () => void;
+		/** Callback when user requests changes */
+		onRequestChanges?: (feedback: string) => void;
+		/** Callback when user asks a question */
+		onAskQuestion?: (question: string) => void;
+		/** Callback when user selects an option (needs_input) */
+		onSelectOption?: (optionId: string) => void;
+		/** Callback when user submits text (needs_input) */
+		onSubmitText?: (text: string) => void;
 		availableProjects?: string[];
 		class?: string;
 		/** Auto-expand when completion or tasks event is latest */
 		autoExpand?: boolean;
+		/** Event filters */
+		filters?: EventFilters;
 	} = $props();
 
 	let events = $state<TimelineEvent[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isExpanded = $state(false);
+	let actionSubmitting = $state(false);
+
+	// Filtered events based on filter props
+	const filteredEvents = $derived.by(() => {
+		let result = events;
+
+		// Filter by signal types
+		if (filters.signalTypes && filters.signalTypes.length > 0) {
+			result = result.filter((e) => {
+				const signalType = e.type || e.state || '';
+				return filters.signalTypes!.includes(signalType);
+			});
+		}
+
+		// Filter by task ID
+		if (filters.taskId) {
+			result = result.filter((e) => e.task_id === filters.taskId);
+		}
+
+		// Filter by time range
+		if (filters.startTime) {
+			const startTs = filters.startTime.getTime();
+			result = result.filter((e) => new Date(e.timestamp).getTime() >= startTs);
+		}
+		if (filters.endTime) {
+			const endTs = filters.endTime.getTime();
+			result = result.filter((e) => new Date(e.timestamp).getTime() <= endTs);
+		}
+
+		return result;
+	});
+
+	// Helper to check if event has rich signal data
+	function hasRichSignalData(event: TimelineEvent): boolean {
+		return event.data && typeof event.data === 'object' && !Array.isArray(event.data);
+	}
 
 	// Auto-expand when latest event is completion or tasks and autoExpand is enabled
 	$effect(() => {
-		if (autoExpand && events.length > 0) {
-			const latestEvent = events[0];
+		if (autoExpand && filteredEvents.length > 0) {
+			const latestEvent = filteredEvents[0];
 			// Check both new format (type=completed) and legacy (state=completed)
 			const isCompletion = latestEvent?.type === 'complete' ||
 				latestEvent?.type === 'completed' ||
@@ -673,8 +761,35 @@
 												</div>
 											{/if}
 										</div>
-									{:else if event.state === 'review'}
-										<!-- Review state - show structured info -->
+									{:else if (event.state === 'review' || event.type === 'review') && hasRichSignalData(event)}
+										<!-- Rich Review Signal Card -->
+										{@const reviewSignal = {
+											type: 'review',
+											taskId: event.task_id || event.data?.taskId || '',
+											taskTitle: event.data?.taskTitle || '',
+											summary: event.data?.summary || [],
+											approach: event.data?.approach || '',
+											keyDecisions: event.data?.keyDecisions || [],
+											filesModified: event.data?.filesModified || [],
+											totalLinesAdded: event.data?.totalLinesAdded || 0,
+											totalLinesRemoved: event.data?.totalLinesRemoved || 0,
+											testsStatus: event.data?.testsStatus || 'none',
+											buildStatus: event.data?.buildStatus || 'clean',
+											reviewFocus: event.data?.reviewFocus || [],
+											commits: event.data?.commits || []
+										} as ReviewSignal}
+										<ReviewSignalCard
+											signal={reviewSignal}
+											{onTaskClick}
+											{onFileClick}
+											{onDiffClick}
+											{onApprove}
+											{onRequestChanges}
+											{onAskQuestion}
+											submitting={actionSubmitting}
+										/>
+									{:else if event.state === 'review' || event.type === 'review'}
+										<!-- Fallback Review state - show structured info -->
 										<div class="space-y-2">
 											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.12 200);">
 												<span>👁</span>
@@ -689,8 +804,31 @@
 												Agent has completed work and is awaiting your review. Check the terminal for details.
 											</div>
 										</div>
-									{:else if event.state === 'working'}
-										<!-- Working state - show task info -->
+									{:else if (event.state === 'working' || event.type === 'working') && hasRichSignalData(event)}
+										<!-- Rich Working Signal Card -->
+										{@const workingSignal = {
+											type: 'working',
+											taskId: event.task_id || event.data?.taskId || '',
+											taskTitle: event.data?.taskTitle || '',
+											taskDescription: event.data?.taskDescription || '',
+											taskPriority: event.data?.taskPriority ?? 2,
+											taskType: event.data?.taskType || 'task',
+											approach: event.data?.approach || '',
+											expectedFiles: event.data?.expectedFiles || [],
+											estimatedScope: event.data?.estimatedScope || 'medium',
+											baselineCommit: event.data?.baselineCommit || event.git_sha || '',
+											baselineBranch: event.data?.baselineBranch || '',
+											dependencies: event.data?.dependencies || [],
+											blockers: event.data?.blockers
+										} as WorkingSignal}
+										<WorkingSignalCard
+											signal={workingSignal}
+											{onTaskClick}
+											{onFileClick}
+											onRollbackClick={onRollback ? (commit) => onRollback({ ...event, git_sha: commit }) : undefined}
+										/>
+									{:else if event.state === 'working' || event.type === 'working'}
+										<!-- Fallback Working state - show task info -->
 										<div class="space-y-2">
 											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.85 0.15 85);">
 												<span>⚡</span>
@@ -707,8 +845,33 @@
 												</div>
 											{/if}
 										</div>
-									{:else if event.state === 'needs_input'}
-										<!-- Needs Input state -->
+									{:else if (event.state === 'needs_input' || event.type === 'needs_input') && hasRichSignalData(event)}
+										<!-- Rich Needs Input Signal Card -->
+										{@const needsInputSignal = {
+											type: 'needs_input',
+											taskId: event.task_id || event.data?.taskId || '',
+											taskTitle: event.data?.taskTitle || '',
+											question: event.data?.question || '',
+											questionType: event.data?.questionType || 'text',
+											context: event.data?.context || '',
+											relevantCode: event.data?.relevantCode,
+											relevantFiles: event.data?.relevantFiles,
+											options: event.data?.options,
+											impact: event.data?.impact || '',
+											blocking: event.data?.blocking || [],
+											timeoutAction: event.data?.timeoutAction,
+											timeoutMinutes: event.data?.timeoutMinutes
+										} as NeedsInputSignal}
+										<NeedsInputSignalCard
+											signal={needsInputSignal}
+											{onSelectOption}
+											{onSubmitText}
+											{onFileClick}
+											{onTaskClick}
+											submitting={actionSubmitting}
+										/>
+									{:else if event.state === 'needs_input' || event.type === 'needs_input'}
+										<!-- Fallback Needs Input state -->
 										<div class="space-y-2">
 											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.15 310);">
 												<span>❓</span>
@@ -718,7 +881,7 @@
 												Agent has a question and is waiting for your response. Check the terminal or use the Quick Answer buttons if available.
 											</div>
 										</div>
-									{:else if event.state === 'idle'}
+									{:else if event.state === 'idle' || event.type === 'idle'}
 										<!-- Idle state -->
 										<div class="space-y-2">
 											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.65 0.02 250);">
@@ -751,8 +914,22 @@
 												Agent is summarizing conversation to free up context space.
 											</div>
 										</div>
-									{:else if event.state === 'completing'}
-										<!-- Completing state -->
+									{:else if (event.state === 'completing' || event.type === 'completing') && hasRichSignalData(event)}
+										<!-- Rich Completing Signal Card -->
+										{@const completingSignal = {
+											type: 'completing',
+											taskId: event.task_id || event.data?.taskId || '',
+											taskTitle: event.data?.taskTitle || '',
+											currentStep: event.data?.currentStep || 'verifying',
+											stepsCompleted: event.data?.stepsCompleted || [],
+											stepsRemaining: event.data?.stepsRemaining || [],
+											progress: event.data?.progress || 0,
+											stepDescription: event.data?.stepDescription || '',
+											stepStartedAt: event.data?.stepStartedAt || ''
+										} as CompletingSignal}
+										<CompletingSignalCard signal={completingSignal} />
+									{:else if event.state === 'completing' || event.type === 'completing'}
+										<!-- Fallback Completing state -->
 										<div class="space-y-2">
 											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.75 0.12 145);">
 												<span>⏳</span>
