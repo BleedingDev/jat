@@ -2,27 +2,16 @@
 #
 # jat-signal - Emit structured signals for dashboard consumption
 #
-# Usage (Thin Signals - backward compatible):
-#   jat-signal working <task-id>                    # Started working on task
-#   jat-signal review                               # Ready for review
-#   jat-signal idle                                 # Session idle
-#   jat-signal auto_proceed                         # OK to auto-close
-#   jat-signal completed                            # Task done
-#   jat-signal needs_input                          # Waiting for user
-#   jat-signal completing <task-id>                 # Running completion steps
-#   jat-signal starting                             # Session initializing
-#   jat-signal compacting                           # Summarizing context
-#
-# Usage (Rich Signals - JSON payloads):
-#   jat-signal working '{"taskId":"jat-abc","taskTitle":"...","approach":"..."}'
-#   jat-signal review '{"taskId":"jat-abc","summary":["..."],"filesModified":[...]}'
-#   jat-signal needs_input '{"taskId":"jat-abc","question":"...","options":[...]}'
-#   jat-signal idle '{"sessionSummary":{...},"suggestedNextTask":{...}}'
-#   jat-signal completing '{"taskId":"jat-abc","currentStep":"committing",...}'
-#   jat-signal completed '{"taskId":"jat-abc","sessionStats":{...}}'
-#   jat-signal starting '{"agentName":"...","project":"...","model":"..."}'
-#   jat-signal compacting '{"reason":"...","contextSizeBefore":180000,...}'
-#   jat-signal auto_proceed '{"taskId":"jat-abc","nextTaskId":"jat-def"}'
+# Usage (State Signals - require JSON payload):
+#   jat-signal working '{"taskId":"jat-abc","taskTitle":"..."}'
+#   jat-signal review '{"taskId":"jat-abc","summary":["..."]}'
+#   jat-signal needs_input '{"taskId":"jat-abc","question":"...","questionType":"choice"}'
+#   jat-signal idle '{"readyForWork":true}'
+#   jat-signal completing '{"taskId":"jat-abc","currentStep":"committing"}'
+#   jat-signal completed '{"taskId":"jat-abc","outcome":"success"}'
+#   jat-signal starting '{"agentName":"...","project":"..."}'
+#   jat-signal compacting '{"reason":"...","contextSizeBefore":180000}'
+#   jat-signal auto_proceed '{"taskId":"jat-abc"}'
 #
 # Usage (Data Signals - always JSON):
 #   jat-signal tasks '[{...}]'                      # Suggest follow-up tasks
@@ -30,28 +19,17 @@
 #   jat-signal complete '{"suggestedTasks":[...]}'  # Full completion bundle
 #
 # Options:
-#   --no-validate    Skip JSON schema validation for data signals
-#   --strict         Fail on validation warnings (default: just warn)
+#   --no-validate    Skip JSON schema validation
+#   --strict         Fail on validation errors (default: warn)
 #
-# The PostToolUse hook captures this command and writes to temp file.
+# All signals emit: [JAT-SIGNAL:<TYPE>] <json-payload>
+# The PostToolUse hook captures this and writes to temp file.
 # Dashboard reads /tmp/jat-signal-{session}.json via SSE.
 
 set -euo pipefail
 
 # Script directory for finding validation tool
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
-
-# Check if a string is valid JSON object or array
-# Returns 0 (true) if JSON, 1 (false) otherwise
-is_json() {
-    local str="$1"
-    # Must start with { or [ to be considered JSON
-    if [[ "$str" =~ ^[[:space:]]*[\{\[] ]]; then
-        echo "$str" | jq . >/dev/null 2>&1
-        return $?
-    fi
-    return 1
-}
 
 # Try to find validation script in multiple locations
 find_validator() {
@@ -69,64 +47,45 @@ find_validator() {
 }
 
 show_usage() {
-    echo "Usage: jat-signal <signal> [data] [--no-validate] [--strict]"
+    echo "Usage: jat-signal <signal> <json-payload> [--no-validate] [--strict]"
     echo ""
-    echo "State Signals (Thin - backward compatible):"
-    echo "  starting              - Session initializing"
-    echo "  working <task-id>     - Started working on task"
-    echo "  compacting            - Summarizing context"
-    echo "  completing <task-id>  - Running completion steps"
-    echo "  review                - Ready for human review"
-    echo "  idle                  - Session idle, no active task"
-    echo "  auto_proceed          - OK for dashboard to auto-close"
-    echo "  completed             - Task completed"
-    echo "  needs_input           - Waiting for user input"
-    echo ""
-    echo "State Signals (Rich - JSON payloads):"
-    echo "  working '{...}'       - Rich working signal with task context"
-    echo "  review '{...}'        - Rich review signal with summary/changes"
-    echo "  needs_input '{...}'   - Rich needs_input with question/options"
-    echo "  idle '{...}'          - Rich idle with session summary"
-    echo "  completing '{...}'    - Rich completing with progress"
-    echo "  completed '{...}'     - Rich completed with session stats"
-    echo "  starting '{...}'      - Rich starting with capabilities"
-    echo "  compacting '{...}'    - Rich compacting with context info"
-    echo "  auto_proceed '{...}'  - Rich auto_proceed with next task"
+    echo "State Signals (require JSON payload):"
+    echo "  working '{...}'       - Working on task"
+    echo "  review '{...}'        - Ready for human review"
+    echo "  needs_input '{...}'   - Waiting for user input"
+    echo "  idle '{...}'          - Session idle"
+    echo "  completing '{...}'    - Running completion steps"
+    echo "  completed '{...}'     - Task completed"
+    echo "  starting '{...}'      - Session initializing"
+    echo "  compacting '{...}'    - Summarizing context"
+    echo "  auto_proceed '{...}'  - OK to auto-close"
     echo ""
     echo "Data Signals (always JSON):"
-    echo "  tasks '[{...}]'       - Suggest follow-up tasks (JSON array)"
-    echo "  action '{...}'        - Request human action (JSON object)"
-    echo "  complete '{...}'      - Full completion bundle (JSON object)"
+    echo "  tasks '[{...}]'       - Suggest follow-up tasks"
+    echo "  action '{...}'        - Request human action"
+    echo "  complete '{...}'      - Full completion bundle"
     echo ""
     echo "Options:"
-    echo "  --no-validate         Skip schema validation for data signals"
-    echo "  --strict              Fail on validation errors (default: warn and continue)"
+    echo "  --no-validate         Skip schema validation"
+    echo "  --strict              Fail on validation errors (default: warn)"
     echo ""
-    echo "Thin Signal Examples:"
-    echo "  jat-signal working jat-abc"
-    echo "  jat-signal review"
-    echo "  jat-signal needs_input"
-    echo ""
-    echo "Rich Signal Examples:"
-    echo "  jat-signal working '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Add auth\",\"approach\":\"Using OAuth\"}'"
-    echo "  jat-signal review '{\"taskId\":\"jat-abc\",\"summary\":[\"Added login\"],\"testsStatus\":\"passing\"}'"
+    echo "Examples:"
+    echo "  jat-signal working '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Add auth\"}'"
+    echo "  jat-signal review '{\"taskId\":\"jat-abc\",\"summary\":[\"Added login\"]}'"
     echo "  jat-signal needs_input '{\"taskId\":\"jat-abc\",\"question\":\"Which lib?\",\"questionType\":\"choice\"}'"
+    echo "  jat-signal idle '{\"readyForWork\":true}'"
+    echo "  jat-signal completed '{\"taskId\":\"jat-abc\",\"outcome\":\"success\"}'"
     echo ""
-    echo "Data Signal Examples:"
-    echo "  jat-signal tasks '[{\"title\":\"Add tests\",\"priority\":2}]'"
-    echo "  jat-signal action '{\"title\":\"Run migration\",\"description\":\"...\"}'"
-    echo ""
-    echo "Rich Signal Required Fields:"
-    echo ""
-    echo "  working: taskId, taskTitle (all other fields optional)"
-    echo "  review: taskId (summary, filesModified, etc. optional)"
-    echo "  needs_input: taskId, question, questionType (options, context optional)"
-    echo "  completing: taskId, currentStep (progress, stepDescription optional)"
-    echo "  completed: taskId (sessionStats, finalCommit optional)"
-    echo "  idle: readyForWork (sessionSummary, suggestedNextTask optional)"
-    echo "  starting: agentName (project, model, tools optional)"
-    echo "  compacting: reason, contextSizeBefore (estimatedAfter, preserving optional)"
-    echo "  auto_proceed: taskId (nextTaskId optional)"
+    echo "Required Fields by Signal Type:"
+    echo "  working:     taskId, taskTitle"
+    echo "  review:      taskId"
+    echo "  needs_input: taskId, question, questionType"
+    echo "  idle:        readyForWork"
+    echo "  completing:  taskId, currentStep"
+    echo "  completed:   taskId, outcome"
+    echo "  starting:    agentName"
+    echo "  compacting:  reason, contextSizeBefore"
+    echo "  auto_proceed: taskId"
 }
 
 # Parse options
@@ -160,7 +119,7 @@ set -- "${POSITIONAL_ARGS[@]:-}"
 SIGNAL_TYPE="${1:-}"
 SIGNAL_DATA="${2:-}"
 
-# Validate data signal payload
+# Validate signal payload
 validate_payload() {
     local signal_type="$1"
     local payload="$2"
@@ -171,8 +130,7 @@ validate_payload() {
 
     local validator
     if ! validator=$(find_validator); then
-        # Validator not found, skip validation with warning
-        echo "⚠ Warning: jat-signal-validate not found, skipping schema validation" >&2
+        echo "Warning: jat-signal-validate not found, skipping validation" >&2
         return 0
     fi
 
@@ -183,15 +141,31 @@ validate_payload() {
 
     if [[ $validation_exit -ne 0 ]]; then
         if [[ "$STRICT" == "true" ]]; then
-            echo "✗ Validation failed: $validation_output" >&2
+            echo "Error: Validation failed: $validation_output" >&2
             exit 1
         else
-            echo "⚠ Validation warning: $validation_output" >&2
-            echo "  (Use --strict to fail on validation errors)" >&2
+            echo "Warning: $validation_output" >&2
         fi
     fi
 
     return 0
+}
+
+# Require JSON payload for state signals
+require_json() {
+    local signal_type="$1"
+    local data="$2"
+
+    if [[ -z "$data" ]]; then
+        echo "Error: $signal_type requires JSON payload"
+        echo "Example: jat-signal $signal_type '{\"taskId\":\"...\"}'"
+        exit 1
+    fi
+
+    if ! echo "$data" | jq . >/dev/null 2>&1; then
+        echo "Error: Invalid JSON for $signal_type signal"
+        exit 1
+    fi
 }
 
 if [[ -z "$SIGNAL_TYPE" ]]; then
@@ -200,236 +174,129 @@ if [[ -z "$SIGNAL_TYPE" ]]; then
 fi
 
 case "$SIGNAL_TYPE" in
-    # State signals (support both thin and rich formats)
     working)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "working" "$SIGNAL_DATA"
-            TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-            TASK_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.taskTitle // ""')
-            if [[ -n "$TASK_TITLE" ]]; then
-                echo "✓ Signal: working (task: ${TASK_ID} - ${TASK_TITLE})"
-            else
-                echo "✓ Signal: working (task: ${TASK_ID})"
-            fi
-            echo "[JAT-SIGNAL:RICH:working] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible task-id only
-            TASK_ID="${SIGNAL_DATA:-}"
-            if [[ -n "$TASK_ID" ]]; then
-                echo "✓ Signal: working (task: ${TASK_ID})"
-                echo "[JAT-SIGNAL:STATE] working:${TASK_ID}"
-            else
-                echo "✓ Signal: working"
-                echo "[JAT-SIGNAL:STATE] working"
-            fi
-        fi
-        ;;
-    review|needs_review)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "review" "$SIGNAL_DATA"
-            TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-            SUMMARY_COUNT=$(echo "$SIGNAL_DATA" | jq '.summary // [] | length')
-            if [[ -n "$TASK_ID" ]]; then
-                echo "✓ Signal: review (task: ${TASK_ID}, ${SUMMARY_COUNT} summary items)"
-            else
-                echo "✓ Signal: review (${SUMMARY_COUNT} summary items)"
-            fi
-            echo "[JAT-SIGNAL:RICH:review] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible
-            echo "✓ Signal: review (ready for human review)"
-            echo "[JAT-SIGNAL:STATE] review"
-        fi
-        ;;
-    idle)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "idle" "$SIGNAL_DATA"
-            TASKS_COMPLETED=$(echo "$SIGNAL_DATA" | jq '.sessionSummary.tasksCompleted // [] | length')
-            READY=$(echo "$SIGNAL_DATA" | jq -r '.readyForWork // true')
-            echo "✓ Signal: idle (${TASKS_COMPLETED} tasks completed, ready: ${READY})"
-            echo "[JAT-SIGNAL:RICH:idle] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible
-            echo "✓ Signal: idle (session idle)"
-            echo "[JAT-SIGNAL:STATE] idle"
-        fi
-        ;;
-    auto_proceed|auto-proceed)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "auto_proceed" "$SIGNAL_DATA"
-            TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-            NEXT_TASK=$(echo "$SIGNAL_DATA" | jq -r '.nextTaskId // ""')
-            if [[ -n "$NEXT_TASK" ]]; then
-                echo "✓ Signal: auto_proceed (completed: ${TASK_ID}, next: ${NEXT_TASK})"
-            else
-                echo "✓ Signal: auto_proceed (completed: ${TASK_ID})"
-            fi
-            echo "[JAT-SIGNAL:RICH:auto_proceed] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible
-            echo "✓ Signal: auto_proceed (OK to auto-close)"
-            echo "[JAT-SIGNAL:STATE] auto_proceed"
-        fi
-        ;;
-    completed|done)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "completed" "$SIGNAL_DATA"
-            TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-            DURATION=$(echo "$SIGNAL_DATA" | jq -r '.sessionStats.duration // 0')
-            echo "✓ Signal: completed (task: ${TASK_ID}, duration: ${DURATION}min)"
-            echo "[JAT-SIGNAL:RICH:completed] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible
-            echo "✓ Signal: completed (task done)"
-            echo "[JAT-SIGNAL:STATE] completed"
-        fi
-        ;;
-    needs_input|input)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "needs_input" "$SIGNAL_DATA"
-            TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-            QUESTION=$(echo "$SIGNAL_DATA" | jq -r '.question // ""' | head -c 50)
-            QUESTION_TYPE=$(echo "$SIGNAL_DATA" | jq -r '.questionType // "text"')
-            echo "✓ Signal: needs_input (task: ${TASK_ID}, type: ${QUESTION_TYPE})"
-            echo "[JAT-SIGNAL:RICH:needs_input] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible
-            echo "✓ Signal: needs_input (waiting for user)"
-            echo "[JAT-SIGNAL:STATE] needs_input"
-        fi
-        ;;
-    starting)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "starting" "$SIGNAL_DATA"
-            AGENT_NAME=$(echo "$SIGNAL_DATA" | jq -r '.agentName // ""')
-            PROJECT=$(echo "$SIGNAL_DATA" | jq -r '.project // ""')
-            MODEL=$(echo "$SIGNAL_DATA" | jq -r '.model // ""')
-            echo "✓ Signal: starting (agent: ${AGENT_NAME}, project: ${PROJECT}, model: ${MODEL})"
-            echo "[JAT-SIGNAL:RICH:starting] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible
-            echo "✓ Signal: starting (session initializing)"
-            echo "[JAT-SIGNAL:STATE] starting"
-        fi
-        ;;
-    compacting)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "compacting" "$SIGNAL_DATA"
-            REASON=$(echo "$SIGNAL_DATA" | jq -r '.reason // ""')
-            CONTEXT_BEFORE=$(echo "$SIGNAL_DATA" | jq -r '.contextSizeBefore // 0')
-            echo "✓ Signal: compacting (reason: ${REASON}, context: ${CONTEXT_BEFORE} tokens)"
-            echo "[JAT-SIGNAL:RICH:compacting] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible
-            echo "✓ Signal: compacting (summarizing context)"
-            echo "[JAT-SIGNAL:STATE] compacting"
-        fi
-        ;;
-    completing)
-        if [[ -n "$SIGNAL_DATA" ]] && is_json "$SIGNAL_DATA"; then
-            # Rich signal - validate and emit JSON payload
-            validate_payload "completing" "$SIGNAL_DATA"
-            TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-            STEP=$(echo "$SIGNAL_DATA" | jq -r '.currentStep // ""')
-            PROGRESS=$(echo "$SIGNAL_DATA" | jq -r '.progress // 0')
-            echo "✓ Signal: completing (task: ${TASK_ID}, step: ${STEP}, ${PROGRESS}%)"
-            echo "[JAT-SIGNAL:RICH:completing] $SIGNAL_DATA"
-        else
-            # Thin signal - backward compatible task-id only
-            TASK_ID="${SIGNAL_DATA:-}"
-            if [[ -n "$TASK_ID" ]]; then
-                echo "✓ Signal: completing (task: ${TASK_ID})"
-                echo "[JAT-SIGNAL:STATE] completing:${TASK_ID}"
-            else
-                echo "✓ Signal: completing"
-                echo "[JAT-SIGNAL:STATE] completing"
-            fi
-        fi
+        require_json "working" "$SIGNAL_DATA"
+        validate_payload "working" "$SIGNAL_DATA"
+        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
+        TASK_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.taskTitle // ""')
+        echo "Signal: working (task: ${TASK_ID} - ${TASK_TITLE})"
+        echo "[JAT-SIGNAL:working] $SIGNAL_DATA"
         ;;
 
-    # Legacy 'state' subcommand for compatibility
-    state)
-        STATE="${SIGNAL_DATA:-idle}"
-        case "$STATE" in
-            working|review|idle|auto_proceed|needs_input|completed|starting|compacting|completing)
-                echo "✓ Signal: $STATE"
-                echo "[JAT-SIGNAL:STATE] $STATE"
-                ;;
-            *)
-                echo "Error: Unknown state '$STATE'"
-                echo "Use: working, review, idle, auto_proceed, needs_input, completed, starting, compacting, completing"
-                exit 1
-                ;;
-        esac
+    review|needs_review)
+        require_json "review" "$SIGNAL_DATA"
+        validate_payload "review" "$SIGNAL_DATA"
+        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
+        SUMMARY_COUNT=$(echo "$SIGNAL_DATA" | jq '.summary // [] | length')
+        echo "Signal: review (task: ${TASK_ID}, ${SUMMARY_COUNT} items)"
+        echo "[JAT-SIGNAL:review] $SIGNAL_DATA"
+        ;;
+
+    needs_input|input)
+        require_json "needs_input" "$SIGNAL_DATA"
+        validate_payload "needs_input" "$SIGNAL_DATA"
+        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
+        QUESTION_TYPE=$(echo "$SIGNAL_DATA" | jq -r '.questionType // "text"')
+        echo "Signal: needs_input (task: ${TASK_ID}, type: ${QUESTION_TYPE})"
+        echo "[JAT-SIGNAL:needs_input] $SIGNAL_DATA"
+        ;;
+
+    idle)
+        require_json "idle" "$SIGNAL_DATA"
+        validate_payload "idle" "$SIGNAL_DATA"
+        READY=$(echo "$SIGNAL_DATA" | jq -r '.readyForWork // true')
+        echo "Signal: idle (ready: ${READY})"
+        echo "[JAT-SIGNAL:idle] $SIGNAL_DATA"
+        ;;
+
+    completing)
+        require_json "completing" "$SIGNAL_DATA"
+        validate_payload "completing" "$SIGNAL_DATA"
+        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
+        STEP=$(echo "$SIGNAL_DATA" | jq -r '.currentStep // ""')
+        echo "Signal: completing (task: ${TASK_ID}, step: ${STEP})"
+        echo "[JAT-SIGNAL:completing] $SIGNAL_DATA"
+        ;;
+
+    completed|done)
+        require_json "completed" "$SIGNAL_DATA"
+        validate_payload "completed" "$SIGNAL_DATA"
+        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
+        OUTCOME=$(echo "$SIGNAL_DATA" | jq -r '.outcome // ""')
+        echo "Signal: completed (task: ${TASK_ID}, outcome: ${OUTCOME})"
+        echo "[JAT-SIGNAL:completed] $SIGNAL_DATA"
+        ;;
+
+    starting)
+        require_json "starting" "$SIGNAL_DATA"
+        validate_payload "starting" "$SIGNAL_DATA"
+        AGENT_NAME=$(echo "$SIGNAL_DATA" | jq -r '.agentName // ""')
+        PROJECT=$(echo "$SIGNAL_DATA" | jq -r '.project // ""')
+        echo "Signal: starting (agent: ${AGENT_NAME}, project: ${PROJECT})"
+        echo "[JAT-SIGNAL:starting] $SIGNAL_DATA"
+        ;;
+
+    compacting)
+        require_json "compacting" "$SIGNAL_DATA"
+        validate_payload "compacting" "$SIGNAL_DATA"
+        REASON=$(echo "$SIGNAL_DATA" | jq -r '.reason // ""')
+        CONTEXT_BEFORE=$(echo "$SIGNAL_DATA" | jq -r '.contextSizeBefore // 0')
+        echo "Signal: compacting (reason: ${REASON}, context: ${CONTEXT_BEFORE})"
+        echo "[JAT-SIGNAL:compacting] $SIGNAL_DATA"
+        ;;
+
+    auto_proceed|auto-proceed)
+        require_json "auto_proceed" "$SIGNAL_DATA"
+        validate_payload "auto_proceed" "$SIGNAL_DATA"
+        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
+        NEXT_TASK=$(echo "$SIGNAL_DATA" | jq -r '.nextTaskId // ""')
+        if [[ -n "$NEXT_TASK" ]]; then
+            echo "Signal: auto_proceed (task: ${TASK_ID}, next: ${NEXT_TASK})"
+        else
+            echo "Signal: auto_proceed (task: ${TASK_ID})"
+        fi
+        echo "[JAT-SIGNAL:auto_proceed] $SIGNAL_DATA"
         ;;
 
     # Data signals
     tasks)
-        if [[ -z "$SIGNAL_DATA" ]]; then
-            echo "Error: tasks signal requires JSON array"
-            exit 1
-        fi
-        if ! echo "$SIGNAL_DATA" | jq . >/dev/null 2>&1; then
-            echo "Error: Invalid JSON for tasks signal"
-            exit 1
-        fi
-
-        # Validate against schema
+        require_json "tasks" "$SIGNAL_DATA"
         validate_payload "tasks" "$SIGNAL_DATA"
-
         TASK_COUNT=$(echo "$SIGNAL_DATA" | jq 'length')
-        echo "✓ Signal: tasks (${TASK_COUNT} suggested)"
-        echo "[JAT-SIGNAL:TASKS] $SIGNAL_DATA"
+        echo "Signal: tasks (${TASK_COUNT} suggested)"
+        echo "[JAT-SIGNAL:tasks] $SIGNAL_DATA"
         ;;
+
     action)
-        if [[ -z "$SIGNAL_DATA" ]]; then
-            echo "Error: action signal requires JSON object"
-            exit 1
-        fi
-        if ! echo "$SIGNAL_DATA" | jq . >/dev/null 2>&1; then
-            echo "Error: Invalid JSON for action signal"
-            exit 1
-        fi
-
-        # Validate against schema
+        require_json "action" "$SIGNAL_DATA"
         validate_payload "action" "$SIGNAL_DATA"
-
         ACTION_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.title // "untitled"')
-        echo "✓ Signal: action (${ACTION_TITLE})"
-        echo "[JAT-SIGNAL:ACTION] $SIGNAL_DATA"
+        echo "Signal: action (${ACTION_TITLE})"
+        echo "[JAT-SIGNAL:action] $SIGNAL_DATA"
         ;;
+
     complete)
-        # Full completion bundle with optional suggested tasks and human actions
         if [[ -n "$SIGNAL_DATA" ]]; then
             if ! echo "$SIGNAL_DATA" | jq . >/dev/null 2>&1; then
                 echo "Error: Invalid JSON for complete signal"
                 exit 1
             fi
-
-            # Validate against schema
             validate_payload "complete" "$SIGNAL_DATA"
-
             TASK_COUNT=$(echo "$SIGNAL_DATA" | jq '.suggestedTasks // [] | length')
             ACTION_COUNT=$(echo "$SIGNAL_DATA" | jq '.humanActions // [] | length')
-            echo "✓ Signal: complete (${TASK_COUNT} tasks, ${ACTION_COUNT} actions)"
+            echo "Signal: complete (${TASK_COUNT} tasks, ${ACTION_COUNT} actions)"
         else
-            echo "✓ Signal: complete"
+            SIGNAL_DATA="{}"
+            echo "Signal: complete"
         fi
-        echo "[JAT-SIGNAL:COMPLETE] ${SIGNAL_DATA:-"{}"}"
+        echo "[JAT-SIGNAL:complete] $SIGNAL_DATA"
         ;;
 
     -h|--help|help)
         show_usage
         exit 0
         ;;
+
     *)
         echo "Error: Unknown signal type '$SIGNAL_TYPE'"
         show_usage

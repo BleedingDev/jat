@@ -2,42 +2,42 @@
 
 **Hook-based agent-to-dashboard communication for real-time state tracking.**
 
-The jat-signal system replaces fragile terminal marker parsing with structured signals delivered via PostToolUse hooks. Agents emit signals, hooks capture them, and the dashboard receives real-time updates via SSE.
+Agents emit signals via `jat-signal` command, PostToolUse hooks capture them, and the dashboard receives real-time updates via SSE.
 
 ### Why Signals?
 
-**Before (Terminal Markers):**
-```
-[JAT:WORKING task=jat-abc]    ← Parsed from tmux output
-[JAT:NEEDS_REVIEW]            ← Fragile regex matching
-[JAT:COMPLETED]               ← Breaks with output changes
-```
-
-**After (Hook-Based Signals):**
-```bash
-jat-signal working jat-abc    ← Structured command
-jat-signal review             ← Hook captures reliably
-jat-signal completed          ← JSON written to /tmp
-```
-
 **Benefits:**
-- Reliable delivery (hooks fire on every command)
-- Structured data (JSON, not regex parsing)
+- Reliable delivery (hooks fire on every Bash command)
+- Structured data (JSON payloads)
 - Real-time SSE events to dashboard
-- Extensible (tasks, actions, custom data)
+- Extensible (states, tasks, actions, custom data)
+- No terminal parsing - direct hook capture
+
+### Signal Format
+
+All signals require JSON payloads:
+
+```bash
+jat-signal <type> '<json-payload>'
+```
+
+Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 
 ### Signal Types
 
-**State Signals** - Agent lifecycle states:
+**State Signals** - Agent lifecycle states (all require JSON):
 
-| Signal | Command | Description |
-|--------|---------|-------------|
-| `working` | `jat-signal working <task-id>` | Started working on task |
-| `review` | `jat-signal review` | Ready for human review |
-| `idle` | `jat-signal idle` | Session idle, no active task |
-| `auto_proceed` | `jat-signal auto_proceed` | OK for dashboard to auto-close |
-| `completed` | `jat-signal completed` | Task done |
-| `needs_input` | `jat-signal needs_input` | Waiting for user input |
+| Signal | Command | Required Fields |
+|--------|---------|-----------------|
+| `starting` | `jat-signal starting '{...}'` | agentName |
+| `working` | `jat-signal working '{...}'` | taskId, taskTitle |
+| `compacting` | `jat-signal compacting '{...}'` | reason, contextSizeBefore |
+| `completing` | `jat-signal completing '{...}'` | taskId, currentStep |
+| `review` | `jat-signal review '{...}'` | taskId |
+| `needs_input` | `jat-signal needs_input '{...}'` | taskId, question, questionType |
+| `completed` | `jat-signal completed '{...}'` | taskId, outcome |
+| `auto_proceed` | `jat-signal auto_proceed '{...}'` | taskId |
+| `idle` | `jat-signal idle '{...}'` | readyForWork |
 
 **Data Signals** - Structured payloads:
 
@@ -45,23 +45,38 @@ jat-signal completed          ← JSON written to /tmp
 |--------|---------|-------------|
 | `tasks` | `jat-signal tasks '[{...}]'` | Suggest follow-up tasks (JSON array) |
 | `action` | `jat-signal action '{...}'` | Request human action (JSON object) |
-| `complete` | `jat-signal complete '{...}'` | Full completion bundle (state + tasks + actions) |
+| `complete` | `jat-signal complete '{...}'` | Full completion bundle |
 
-### Usage
+### Usage Examples
 
-**Basic State Signals:**
+**State Signals:**
 ```bash
+# Session starting up
+jat-signal starting '{"agentName":"FairBay","project":"chimaro","model":"sonnet-4"}'
+
 # Starting work on a task
-jat-signal working jat-abc
+jat-signal working '{"taskId":"jat-abc","taskTitle":"Add auth flow"}'
+
+# Context compacting (auto-summarization)
+jat-signal compacting '{"reason":"context_limit","contextSizeBefore":180000}'
+
+# Running completion steps
+jat-signal completing '{"taskId":"jat-abc","currentStep":"committing"}'
 
 # Waiting for user input
-jat-signal needs_input
+jat-signal needs_input '{"taskId":"jat-abc","question":"Which auth library?","questionType":"choice"}'
 
 # Ready for review
-jat-signal review
+jat-signal review '{"taskId":"jat-abc","summary":["Added login page","Implemented OAuth"]}'
 
 # Task completed
-jat-signal completed
+jat-signal completed '{"taskId":"jat-abc","outcome":"success"}'
+
+# Auto-proceed (will auto-close and pick next task)
+jat-signal auto_proceed '{"taskId":"jat-abc","nextTaskId":"jat-def"}'
+
+# Session idle
+jat-signal idle '{"readyForWork":true}'
 ```
 
 **Suggesting Follow-up Tasks:**
@@ -95,30 +110,24 @@ jat-signal complete '{
 ### How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        SIGNAL FLOW ARCHITECTURE                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  1. Agent runs jat-signal command                                          │
-│     └─► jat-signal working jat-abc                                         │
-│                                                                             │
-│  2. Command outputs marker line                                            │
-│     └─► [JAT-SIGNAL:STATE] working:jat-abc                                │
-│                                                                             │
-│  3. PostToolUse hook fires (post-bash-jat-signal.sh)                       │
-│     └─► Parses output, extracts signal type and data                       │
-│     └─► Writes JSON to /tmp/jat-signal-{session}.json                      │
-│     └─► Also writes /tmp/jat-signal-tmux-{sessionName}.json                │
-│                                                                             │
-│  4. Dashboard SSE server watches signal files                              │
-│     └─► /api/sessions/events endpoint                                      │
-│     └─► Broadcasts session-signal event to all clients                     │
-│                                                                             │
-│  5. Dashboard UI updates in real-time                                      │
-│     └─► SessionCard shows current state                                    │
-│     └─► Suggested tasks appear in UI                                       │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+1. Agent runs jat-signal command
+   └─► jat-signal working '{"taskId":"jat-abc","taskTitle":"Add auth"}'
+
+2. Command outputs marker line
+   └─► [JAT-SIGNAL:working] {"taskId":"jat-abc","taskTitle":"Add auth"}
+
+3. PostToolUse hook fires (post-bash-jat-signal.sh)
+   └─► Parses output, extracts signal type and JSON payload
+   └─► Writes JSON to /tmp/jat-signal-{session}.json
+   └─► Also writes /tmp/jat-signal-tmux-{sessionName}.json
+
+4. Dashboard SSE server watches signal files
+   └─► /api/sessions/events endpoint
+   └─► Broadcasts session-signal event to all clients
+
+5. Dashboard UI updates in real-time
+   └─► SessionCard shows current state
+   └─► Suggested tasks appear in UI
 ```
 
 ### Hook Architecture
@@ -128,9 +137,12 @@ jat-signal complete '{
 The hook is triggered after every Bash tool call. It:
 1. Checks if command was `jat-signal *`
 2. Extracts `session_id` from hook input JSON
-3. Parses `[JAT-SIGNAL:*]` marker from output
-4. Looks up agent name from `.claude/sessions/agent-{session_id}.txt`
-5. Writes structured JSON to `/tmp/jat-signal-{session}.json`
+3. Parses `[JAT-SIGNAL:<type>]` marker and JSON payload from output
+4. Reads project paths from `~/.config/jat/projects.json` and searches each project's `.claude/sessions/` for `agent-{session_id}.txt`
+5. Writes structured JSON to `/tmp/jat-signal-{session}.json` and `/tmp/jat-signal-tmux-{tmuxSession}.json`
+6. Appends to timeline JSONL at `/tmp/jat-timeline-{tmuxSession}.jsonl`
+
+**Note:** Projects must be registered in `~/.config/jat/projects.json` for signals to work. Add new projects with their path to enable signal tracking.
 
 **Hook Configuration:** `.claude/settings.json`
 
@@ -156,12 +168,15 @@ The hook is triggered after every Bash tool call. It:
 
 ```json
 {
-  "type": "state",
+  "type": "working",
   "session_id": "abc123-def456",
   "tmux_session": "jat-FairBay",
   "timestamp": "2025-12-08T15:30:00Z",
-  "state": "working",
-  "task_id": "jat-abc"
+  "task_id": "jat-abc",
+  "data": {
+    "taskId": "jat-abc",
+    "taskTitle": "Add auth flow"
+  }
 }
 ```
 
@@ -170,8 +185,7 @@ The hook is triggered after every Bash tool call. It:
 **SSE Endpoint:** `/api/sessions/events`
 
 Broadcasts real-time events to connected clients:
-- `session-state` - State change (working, review, etc.)
-- `session-signal` - Data signal (tasks, actions)
+- `session-signal` - Any signal (working, review, tasks, etc.)
 
 **Signal API:** `/api/sessions/[name]/signal`
 
@@ -194,15 +208,56 @@ $effect(() => {
 
 ### Session States in Dashboard
 
-| State | Signal | Dashboard Color | Description |
-|-------|--------|-----------------|-------------|
-| Starting | (none) | Cyan | Agent initializing |
-| Working | `working` | Amber | Actively working on task |
-| Needs Input | `needs_input` | Purple | Waiting for user response |
-| Ready for Review | `review` | Cyan | Asking to mark complete |
-| Completing | - | Teal | Running /jat:complete |
-| Completed | `completed` | Green | Task finished |
-| Idle | `idle` | Gray | No active task |
+| State | Signal Type | Icon | Color | Description |
+|-------|-------------|------|-------|-------------|
+| Starting | `starting` | 🚀 | Cyan | Agent initializing |
+| Working | `working` | ⚡ | Amber | Actively working on task |
+| Compacting | `compacting` | 📦 | Orange | Summarizing context |
+| Needs Input | `needs_input` | ❓ | Purple | Waiting for user response |
+| Ready for Review | `review` | 👁 | Cyan | Asking to mark complete |
+| Completing | `completing` | ⏳ | Teal | Running /jat:complete steps |
+| Completed | `completed` | ✅ | Green | Task finished |
+| Auto-Proceed | `auto_proceed` | 🚀 | Green | Will auto-close and pick next |
+| Idle | `idle` | 💤 | Gray | No active task |
+
+### Timeline / EventStack
+
+All signals are also written to a timeline JSONL file (`/tmp/jat-timeline-jat-{AgentName}.jsonl`) for historical tracking. The dashboard's **EventStack** component displays this timeline in a stacked card UI.
+
+**Features:**
+- Shows most recent event in collapsed view
+- Hover to expand and see full timeline
+- Click event to see rich details
+- Rollback button for events with git_sha
+- Auto-refresh polling
+
+**Rich Event Views:**
+
+Each event type has a custom UI in the expanded timeline:
+
+| Event Type | Rich View |
+|------------|-----------|
+| `tasks` | Full SuggestedTasksSection with checkboxes, priority dropdowns, editable titles, "Create Tasks" button |
+| `complete` | Summary bullets, quality badges (tests/build), human actions, suggested tasks, cross-agent intel |
+| `action` | Title and description card |
+| `working` | Task title, task ID, git SHA where work started |
+| `review` | Summary items, files modified, tests status |
+| `needs_input` | Question, question type, options if provided |
+| `completing` | Current step, progress percentage |
+| `starting` | Agent name, project, model |
+| `compacting` | Reason, context size before |
+| `idle` | Ready for work status, session summary |
+| `auto_proceed` | Current task ID, next task ID |
+
+**JSONL Format:**
+
+Signals must be written as compact single-line JSON (JSONL format), one event per line:
+```jsonl
+{"type":"working","session_id":"abc123","tmux_session":"jat-FairBay","timestamp":"2025-12-09T15:30:00Z","task_id":"jat-abc","data":{"taskId":"jat-abc","taskTitle":"Add auth"},"git_sha":"2ce771d"}
+{"type":"review","session_id":"abc123","tmux_session":"jat-FairBay","timestamp":"2025-12-09T16:00:00Z","task_id":"jat-abc","data":{"taskId":"jat-abc","summary":["Added login"]},"git_sha":"b8fe242"}
+```
+
+**Important:** The hook uses `jq -c` (compact output) to ensure proper JSONL format. Pretty-printed JSON will break timeline parsing.
 
 ### When to Signal
 
@@ -210,53 +265,46 @@ $effect(() => {
 
 | Situation | Signal |
 |-----------|--------|
-| Starting work on task | `jat-signal working <task-id>` |
-| Need user input | `jat-signal needs_input` |
-| Done coding, awaiting review | `jat-signal review` |
-| Task fully completed | `jat-signal completed` |
+| Session just started | `jat-signal starting '{"agentName":"...","project":"..."}'` |
+| Starting work on task | `jat-signal working '{"taskId":"...","taskTitle":"..."}'` |
+| Context is compacting | `jat-signal compacting '{"reason":"...","contextSizeBefore":...}'` |
+| Running completion steps | `jat-signal completing '{"taskId":"...","currentStep":"..."}'` |
+| Need user input | `jat-signal needs_input '{"taskId":"...","question":"...","questionType":"..."}'` |
+| Done coding, awaiting review | `jat-signal review '{"taskId":"..."}'` |
+| Task fully completed | `jat-signal completed '{"taskId":"...","outcome":"success"}'` |
+| OK to auto-close session | `jat-signal auto_proceed '{"taskId":"..."}'` |
+| Session idle | `jat-signal idle '{"readyForWork":true}'` |
 | Suggesting follow-up work | `jat-signal tasks '[...]'` |
+| Human action required | `jat-signal action '{...}'` |
 
 **Critical:** Without signals, dashboard shows stale state. Always signal when:
-- You finish substantial work
+- You start or finish substantial work
 - You're waiting for user input
 - You transition between states
-
-### Migration from Markers
-
-**Old Marker System:**
-```
-[JAT:WORKING task=xxx]     → jat-signal working xxx
-[JAT:NEEDS_REVIEW]         → jat-signal review
-[JAT:IDLE]                 → jat-signal idle
-[JAT:AUTO_PROCEED]         → jat-signal auto_proceed
-[JAT:COMPLETED]            → jat-signal completed
-[JAT:NEEDS_INPUT]          → jat-signal needs_input
-[JAT:SUGGESTED_TASKS {...}] → jat-signal tasks '[...]'
-[JAT:HUMAN_ACTION {...}]   → jat-signal action '{...}'
-```
-
-**Migration Steps:**
-1. Replace marker output with `jat-signal` command
-2. Ensure hook is installed (check `.claude/settings.json`)
-3. Verify signal files appear in `/tmp/`
+- Context compaction begins
 
 ### Files Reference
 
 **Signal Tool:**
-- `tools/jat-signal` - Main signal command
+- `signal/jat-signal` - Main signal command (symlinked to ~/bin/)
+- `signal/jat-signal-validate` - JSON schema validation
+- `signal/jat-signal-schema.json` - JSON schemas for all signal types
 
 **Hooks:**
 - `.claude/hooks/post-bash-jat-signal.sh` - PostToolUse hook
 
 **Dashboard:**
 - `dashboard/src/lib/stores/sessionEvents.ts` - SSE client store
+- `dashboard/src/lib/components/work/EventStack.svelte` - Timeline UI component
 - `dashboard/src/routes/api/sessions/events/+server.ts` - SSE endpoint
 - `dashboard/src/routes/api/sessions/[name]/signal/+server.js` - Signal API
+- `dashboard/src/routes/api/sessions/[name]/timeline/+server.ts` - Timeline API
 - `dashboard/src/routes/api/signals/+server.js` - All signals API
 
 **Signal Files:**
-- `/tmp/jat-signal-{session_id}.json` - By Claude session ID
-- `/tmp/jat-signal-tmux-{sessionName}.json` - By tmux session name
+- `/tmp/jat-signal-{session_id}.json` - Current signal by Claude session ID
+- `/tmp/jat-signal-tmux-{sessionName}.json` - Current signal by tmux session name
+- `/tmp/jat-timeline-jat-{AgentName}.jsonl` - Timeline history (JSONL format)
 
 ### Troubleshooting
 
@@ -266,6 +314,8 @@ $effect(() => {
 | "No signal file found" | Hook not firing | Check `.claude/settings.json` has PostToolUse hook |
 | Signal file not written | Agent file missing | Ensure `.claude/sessions/agent-{id}.txt` exists |
 | SSE not updating | Connection dropped | Refresh page, check `/api/sessions/events` |
+| Timeline not showing events | Pretty-printed JSON | Fix with `jq -c '.' file.jsonl > fixed.jsonl && mv fixed.jsonl file.jsonl` |
+| "requires JSON payload" error | Using old thin format | Update to new JSON format |
 
 **Debug Steps:**
 ```bash
@@ -276,41 +326,53 @@ ls /tmp/jat-signal-*.json
 cat /tmp/jat-signal-tmux-jat-FairBay.json
 
 # Test signal command
-jat-signal working test-123
-cat /tmp/jat-signal-debug.log
+jat-signal working '{"taskId":"test-123","taskTitle":"Test task"}'
 
 # Verify hook is installed
 grep -A5 'PostToolUse' .claude/settings.json
+
+# Check timeline files
+ls /tmp/jat-timeline-*.jsonl
+
+# View timeline for an agent
+cat /tmp/jat-timeline-jat-FairBay.jsonl
+
+# Verify JSONL format (each line should be valid JSON)
+head -3 /tmp/jat-timeline-jat-FairBay.jsonl | jq .
+
+# Check validation
+jat-signal --help
 ```
 
 ### Best Practices
 
 1. **Signal immediately** when state changes (don't batch)
-2. **Use task ID** with `working` signal for dashboard tracking
+2. **Include all required fields** in JSON payload
 3. **Signal `review`** before saying "I'm done" to user
 4. **Include context** in suggested tasks (priority, description)
-5. **Clear old signals** when starting new work
+5. **Use validation** - run with `--strict` in CI/tests
 
 ### Example Workflow
 
 ```bash
-# Agent starts working
-/jat:start jat-abc
-# Internally runs: jat-signal working jat-abc
+# Agent starts session
+jat-signal starting '{"agentName":"FairBay","project":"chimaro","model":"sonnet-4"}'
+
+# Agent picks up task via /jat:start
+jat-signal working '{"taskId":"jat-abc","taskTitle":"Add auth flow"}'
 
 # Agent needs clarification
-jat-signal needs_input
-# User provides answer
-jat-signal working jat-abc
+jat-signal needs_input '{"taskId":"jat-abc","question":"OAuth or JWT?","questionType":"choice"}'
+
+# User provides answer, agent resumes
+jat-signal working '{"taskId":"jat-abc","taskTitle":"Add auth flow"}'
 
 # Agent finishes coding
-jat-signal review
-# Shows summary, waits for user
+jat-signal review '{"taskId":"jat-abc","summary":["Added OAuth login","Created user session"]}'
 
 # Agent suggests follow-up tasks
 jat-signal tasks '[{"title":"Add tests","priority":2}]'
 
-# User approves completion
-/jat:complete
-# Internally runs: jat-signal completed
+# User approves completion via /jat:complete
+jat-signal completed '{"taskId":"jat-abc","outcome":"success"}'
 ```

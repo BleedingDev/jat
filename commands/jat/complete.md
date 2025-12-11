@@ -603,8 +603,12 @@ if [[ -z "$COMPLETION_SIGNAL" ]]; then
   fi  # End of: if [[ -z "$COMPLETION_SIGNAL" ]]
 fi  # End of: else (no REVIEW_OVERRIDE found)
 
-# Emit the completion signal
-jat-signal "$COMPLETION_SIGNAL"
+# Emit the completion signal with JSON payload
+if [[ "$COMPLETION_SIGNAL" == "idle" ]]; then
+  jat-signal idle '{"readyForWork":true}'
+elif [[ "$COMPLETION_SIGNAL" == "auto_proceed" ]]; then
+  jat-signal auto_proceed '{"taskId":"'"$task_id"'"}'
+fi
 ```
 
 #### Review Override Values
@@ -691,18 +695,119 @@ await writeFile(contextPath, JSON.stringify(context, null, 2));
 
 ---
 
-### STEP 8: Show Final Summary (Single Unified Box)
+### STEP 8: Emit Structured Completion Signal
 
-Output this SINGLE box containing everything - task info AND reflection together.
+**CRITICAL: Emit a structured completion signal so the dashboard can render an interactive UI.**
 
-**Important:** Run `jat-signal completed` to signal task completion. Step 7.5 already emitted the review action signal (`idle` or `auto_proceed`).
+Instead of just outputting text, you MUST build a JSON completion bundle and emit it via `jat-signal complete`. This enables:
+- One-click task creation for suggested follow-up work
+- Interactive checklist for human actions
+- Structured display of quality signals and cross-agent intel
 
-```bash
-# Signal task completion (captured by PostToolUse hook)
-jat-signal completed
+**Before building the bundle, actively search for follow-up work.** Look at:
+- Files you modified - any related issues?
+- Adjacent code - tech debt or improvements?
+- Test coverage - gaps you noticed?
+- Documentation - needs updating?
+
+You MUST include at least one suggested task (see suggestedTasks below).
+
+#### Build the Completion Bundle
+
+Analyze your work and build a JSON object with these fields:
+
+```typescript
+interface CompletionBundle {
+  // REQUIRED
+  taskId: string;           // The task ID (e.g., "jat-abc")
+  agentName: string;        // Your agent name
+  summary: string[];        // Array of accomplishment bullet points
+
+  // REQUIRED - Quality signals
+  quality: {
+    tests: "passing" | "failing" | "none" | "skipped";
+    build: "clean" | "warnings" | "errors";
+    preExisting?: string;   // Note if issues were pre-existing
+  };
+
+  // OPTIONAL - Only if manual steps needed
+  humanActions?: Array<{
+    title: string;          // Short title (3-8 words)
+    description: string;    // Detailed steps
+  }>;
+
+  // REQUIRED - Always look for follow-up work!
+  // If you genuinely found nothing, explain why in a single task with type "task"
+  suggestedTasks: Array<{
+    type: "feature" | "bug" | "task" | "chore";
+    title: string;          // Task title
+    description: string;    // What needs to be done
+    priority: number;       // 0-4 (P0=critical, P4=backlog)
+    reason?: string;        // Why this was discovered
+  }>;
+
+  // OPTIONAL - Intel for other agents
+  crossAgentIntel?: {
+    files?: string[];       // Key files modified
+    patterns?: string[];    // Conventions to follow
+    gotchas?: string[];     // Surprises or tricky areas
+  };
+}
 ```
 
-Then output the summary:
+#### Emit the Signal
+
+```bash
+# Build the JSON (escape quotes properly!)
+jat-signal complete '{
+  "taskId": "jat-abc",
+  "agentName": "WisePrairie",
+  "summary": [
+    "Fixed authentication flow for OAuth providers",
+    "Added retry logic for failed token refreshes"
+  ],
+  "quality": {
+    "tests": "passing",
+    "build": "clean"
+  },
+  "humanActions": [
+    {
+      "title": "Enable OAuth in Supabase",
+      "description": "Go to Authentication > Providers and enable Google OAuth"
+    }
+  ],
+  "suggestedTasks": [
+    {
+      "type": "feature",
+      "title": "Add Apple Sign-In support",
+      "description": "Similar flow to Google OAuth, needs Apple Developer account setup",
+      "priority": 2,
+      "reason": "Discovered while implementing Google OAuth"
+    },
+    {
+      "type": "task",
+      "title": "Add OAuth error tracking",
+      "description": "Log failed OAuth attempts to Sentry for debugging",
+      "priority": 3
+    }
+  ],
+  "crossAgentIntel": {
+    "files": ["src/lib/auth/oauth.ts", "src/routes/auth/callback/+server.ts"],
+    "patterns": ["Use authError() helper for consistent error responses"],
+    "gotchas": ["Token refresh can fail silently - always check response.ok"]
+  }
+}'
+```
+
+**JSON Escaping Rules:**
+- Use single quotes around the entire JSON argument
+- Use double quotes inside JSON (standard JSON format)
+- Escape any internal single quotes with `'\''` if needed
+- Test with `echo '...' | jq .` to validate
+
+#### Then Output Terminal Summary
+
+After emitting the signal, output a brief terminal summary for the agent's log:
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -711,71 +816,144 @@ Then output the summary:
 └────────────────────────────────────────────────────────┘
 
 📋 What was accomplished:
-   • [Brief summary of work completed]
-   • [Key changes made]
+   • [Brief summary - same as signal]
 
-🧑 Human actions required: (ONLY if manual steps needed)
-   → Run: jat-signal action '{"title":"...","description":"..."}'
+🧑 Human actions: [N action(s) signaled to dashboard]
 
-⚡ Quality: Tests [pass/fail] | Build [clean/warn]
+📊 Suggested tasks: [N task(s) signaled to dashboard]
 
-🔗 Cross-agent intel:
-   • Files: [key files modified]
-   • Gotchas: [surprises or tricky areas]
+⚡ Quality: Tests [status] | Build [status]
 
-💡 Session complete. Close terminal when ready.
+💡 Session complete. Dashboard will show interactive completion UI.
 ```
 
-**Guidelines:**
-- Everything goes in ONE box - do not output a second box or "Next steps" menu
-- Be specific about what was accomplished
-- Surface conflicts - files touched that parallel agents might need
-- Share discoveries - patterns and gotchas help the whole swarm
-- Keep it actionable - insights should help the commander make decisions
+**The terminal output is just a log.** The dashboard reads the structured signal and renders:
+- Human actions as a checklist with checkboxes
+- Suggested tasks as cards with "Create in Beads" buttons
+- Quality signals with visual indicators
+- Cross-agent intel in a collapsible section
 
 ---
 
-### Human Actions (CRITICAL)
+### Field Guidelines
 
-**When to include human actions:**
+#### Human Actions (humanActions)
 
-If your task requires ANY manual steps by the user that cannot be automated, you MUST run `jat-signal action` commands. This ensures the dashboard displays them prominently.
-
-**Common examples of human actions:**
-- Run migration in production database
-- Enable feature flag in admin dashboard
-- Configure third-party service (Supabase Auth, Stripe, etc.)
-- Update environment variables on production server
+Include when the user must take manual steps for the task to be truly complete:
+- Run migration in production
+- Enable feature flags
+- Configure third-party services
+- Update environment variables
 - Deploy to production
-- Review and merge PR
-- Manual testing in staging environment
+- Manual testing required
 
-**Signal format:**
+**Do NOT include:**
+- "Review the code" (that's implied)
+- "Test in browser" (you should have done this)
+- General suggestions (those go in suggestedTasks)
 
-```bash
-jat-signal action '{"title":"Short action title","description":"Detailed steps to complete this action"}'
+#### Suggested Tasks (suggestedTasks) - REQUIRED
+
+**You MUST always include suggested tasks.** Before completing, actively search for:
+- Similar code that needs the same fix
+- Tech debt you noticed while working
+- Features that would improve the area you worked on
+- Bugs you found but didn't fix (out of scope)
+- Documentation that needs updating
+- Tests that should be added
+- Error handling improvements
+- Performance optimizations noticed
+
+**If you genuinely found nothing after searching**, include one task explaining this:
+```json
+{
+  "type": "task",
+  "title": "Review [area] for improvements",
+  "description": "Completed [task] - code was clean, no obvious follow-up needed. Future reviewer should check for edge cases.",
+  "priority": 4,
+  "reason": "No immediate follow-up discovered during task completion"
+}
 ```
 
-**Rules:**
-1. Each action gets its own `jat-signal action` command
-2. Title should be 3-8 words (shows as header in dashboard)
-3. Description can be multi-line but keep it concise
-4. JSON must be valid (escape quotes if needed)
-5. Run signals BEFORE outputting the completion box summary
+**Priority Guide:**
+- P0: Critical - blocks other work or has security implications
+- P1: High - should be done soon, impacts users
+- P2: Medium - normal backlog priority
+- P3: Low - nice to have
+- P4: Backlog - someday/maybe
 
-**Example with human actions:**
+#### Cross-Agent Intel (crossAgentIntel)
+
+Share knowledge that helps other agents working in the same codebase:
+- **files**: Key files you modified (helps avoid conflicts)
+- **patterns**: Conventions you followed or established
+- **gotchas**: Non-obvious issues you encountered
+
+---
+
+### Example: Full Completion Flow
 
 ```bash
-# Signal human actions required
-jat-signal action '{"title":"Run migration","description":"Run npx prisma migrate deploy"}'
-jat-signal action '{"title":"Enable Anon Auth","description":"Enable anonymous auth in Supabase dashboard"}'
+# Step 7.5 already ran and emitted idle or auto_proceed
 
-# Then signal completion
-jat-signal completed
+# Step 8: Emit structured completion signal
+jat-signal complete '{
+  "taskId": "chimaro-xyz",
+  "agentName": "CalmMeadow",
+  "summary": [
+    "Created migration for auth_mode column",
+    "Added anonymous session handling",
+    "Updated session middleware to detect auth mode"
+  ],
+  "quality": {
+    "tests": "passing",
+    "build": "warnings",
+    "preExisting": "Build warnings pre-existing (unrelated type errors)"
+  },
+  "humanActions": [
+    {
+      "title": "Run database migration",
+      "description": "Run: npx prisma migrate deploy\nThis adds the auth_mode column to the sessions table."
+    },
+    {
+      "title": "Enable Anonymous Auth",
+      "description": "In Supabase dashboard:\n1. Go to Authentication > Providers\n2. Enable Anonymous Sign-ins\n3. Set session duration to 24 hours"
+    }
+  ],
+  "suggestedTasks": [
+    {
+      "type": "feature",
+      "title": "Add auth mode indicator to UI",
+      "description": "Show users whether they are in anonymous or authenticated mode. Display upgrade prompt for anon users.",
+      "priority": 2,
+      "reason": "UX improvement discovered while implementing auth modes"
+    },
+    {
+      "type": "task",
+      "title": "Add anon session cleanup job",
+      "description": "Cron job to delete anonymous sessions older than 7 days to prevent database bloat.",
+      "priority": 3,
+      "reason": "Tech debt - anon sessions will accumulate without cleanup"
+    }
+  ],
+  "crossAgentIntel": {
+    "files": [
+      "prisma/migrations/20251208_add_auth_mode.sql",
+      "src/lib/server/session.ts",
+      "src/hooks.server.ts"
+    ],
+    "patterns": [
+      "Session objects now have authMode: anon | authenticated",
+      "Use isAnonymous(session) helper to check auth state"
+    ],
+    "gotchas": [
+      "Supabase anon sessions have different JWT structure - check for aud claim"
+    ]
+  }
+}'
 ```
 
-Then output the summary:
-
+Terminal output:
 ```
 ┌────────────────────────────────────────────────────────┐
 │  ✅ Task Completed: chimaro-xyz                        │
@@ -785,122 +963,55 @@ Then output the summary:
 📋 What was accomplished:
    • Created migration for auth_mode column
    • Added anonymous session handling
+   • Updated session middleware to detect auth mode
 
-🧑 Human actions required:
-   → Run migration (npx prisma migrate deploy)
-   → Enable Anon Auth in Supabase dashboard
+🧑 Human actions: 2 action(s) signaled to dashboard
 
-⚡ Quality: Tests passing | Build clean
+📊 Suggested tasks: 2 task(s) signaled to dashboard
 
-💡 Session complete. Close terminal when ready.
+⚡ Quality: Tests passing | Build warnings (pre-existing)
+
+💡 Session complete. Dashboard will show interactive completion UI.
 ```
-
-**What the dashboard does with these signals:**
-- Displays a prominent "Human Actions Required" badge on the session card
-- Shows each action as a checklist item the user can mark as done
-- Persists action completion state until session is closed
-- Prevents accidental "task complete" assumption when manual work remains
 
 ---
 
-### Suggested Tasks (RECOMMENDED)
+### What the Dashboard Does
 
-**When to include suggested tasks:**
+When it receives the `complete` signal:
 
-If your task uncovered follow-up work (bugs, improvements, tech debt, new features), you SHOULD run `jat-signal tasks`. This helps the commander make informed decisions about what to tackle next.
+1. **Human Actions Panel** - Shows checklist with checkboxes
+   - User can check off actions as they complete them
+   - Uncompleted actions show warning indicator
 
-**Signal format:**
+2. **Suggested Tasks Panel** - Shows task cards
+   - Each task has "Create in Beads" button
+   - One-click creation with all fields pre-filled
+   - Bulk "Create All" option
 
-```bash
-jat-signal tasks '[{"type":"agent","title":"...","description":"...","priority":1},{"type":"human","title":"...","description":"...","priority":2}]'
-```
+3. **Quality Badge** - Visual indicator
+   - Green checkmark for passing/clean
+   - Yellow warning for warnings/pre-existing issues
+   - Red X for failures
 
-**Field Reference:**
+4. **Cross-Agent Intel** - Collapsible section
+   - Files listed with copy buttons
+   - Patterns and gotchas displayed for reference
 
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `type` | ✅ Yes | `"agent"` or `"human"` | Who should do this work |
-| `title` | ✅ Yes | string | Short task title (3-10 words) |
-| `priority` | ✅ Yes | number | 0-4 (P0=critical, P4=backlog) |
-| `description` | ❌ No | string | Detailed description of work needed |
-| `labels` | ❌ No | string[] | Labels for categorization (e.g., `["bug", "security"]`) |
-| `dependencies` | ❌ No | string[] | Task IDs this depends on (e.g., `["jat-abc"]`) |
-| `effort` | ❌ No | `"small"`, `"medium"`, `"large"` | Estimated effort |
-| `project` | ❌ No | string | Project name (auto-detected if omitted) |
+---
 
-**Task Types:**
+### Individual Signal Commands
 
-- **`agent`** - Work that can be auto-assigned to the next available agent
-  - Examples: bug fixes, refactoring, adding tests, implementing features
-  - Dashboard can auto-spawn agents for these tasks
-
-- **`human`** - Work that requires human judgment or access
-  - Examples: design decisions, production deployments, security reviews
-  - Dashboard shows these prominently but won't auto-assign to agents
-
-**Rules:**
-
-1. JSON must be valid (escape quotes, no trailing commas)
-2. One `jat-signal tasks` call per completion
-3. Multiple tasks go in the array
-4. Run signal BEFORE the completion box summary
-5. Dashboard reads from signal file and offers to create tasks in Beads
-
-**Example with suggested tasks:**
+The individual signal commands can be used separately if needed:
 
 ```bash
-# Signal suggested tasks discovered during work
-jat-signal tasks '[{"type":"agent","title":"Cache /api/agents","priority":2},{"type":"human","title":"Decide cache TTL","priority":2}]'
-
-# Then signal completion
-jat-signal completed
+# Separate signals (prefer jat-signal complete bundle)
+jat-signal action '{"title":"...","description":"..."}'
+jat-signal tasks '[{"type":"feature","title":"...","priority":2}]'
+jat-signal completed '{"taskId":"...","outcome":"success"}'
 ```
 
-Then output the summary:
-
-```
-┌────────────────────────────────────────────────────────┐
-│  ✅ Task Completed: jat-xyz                            │
-│  👤 Agent: SwiftMeadow                                 │
-└────────────────────────────────────────────────────────┘
-
-📋 What was accomplished:
-   • Added Redis caching to /api/tasks endpoint
-   • Reduced P99 latency from 450ms to 12ms
-
-📊 Backlog impact:
-   • Discovered: Other endpoints need same pattern
-   • Suggested: Cache /api/agents, Decide cache TTL
-
-💡 Session complete. Close terminal when ready.
-```
-
-**What the dashboard does with suggested tasks:**
-
-- Reads tasks from signal file when session completes
-- Displays "N Suggested Tasks" badge on session card
-- Shows task list in a modal when clicked
-- Offers one-click creation in Beads (with confirmation)
-- Agent tasks can be auto-spawned if user enables swarm mode
-- Human tasks are highlighted differently (won't auto-assign)
-
-**Comparison with jat-signal action vs jat-signal tasks:**
-
-| Aspect | `jat-signal action` | `jat-signal tasks` |
-|--------|---------------------|-------------------|
-| **Purpose** | Manual steps for THIS task | Follow-up work from THIS task |
-| **Timing** | Must be done before task is truly complete | Can be done later, separate work |
-| **Urgency** | Blocking - task isn't done without these | Non-blocking - backlog items |
-| **Creation** | Displayed as checklist | Offered for Beads creation |
-| **Auto-assign** | N/A | Agent tasks can auto-spawn |
-
-**When to use each:**
-
-- Use `jat-signal action` when: "The user needs to do X for this task to be complete"
-  - Example: "Run migration in production" - task isn't done until migration runs
-
-- Use `jat-signal tasks` when: "I discovered Y that should be done separately"
-  - Example: "Found similar code that needs same fix" - different task, do later
+**Prefer `jat-signal complete '{...}'`** - it bundles everything in one call and provides a better dashboard experience.
 
 ---
 
@@ -958,11 +1069,8 @@ Create a backfilled task record? [Proceed? Y/n] Y
 📢 Announcing task completion...
    ✅ Sent to @active
 
-✓ Signal: idle
-[JAT-SIGNAL:STATE] idle
-
-✓ Signal: completed
-[JAT-SIGNAL:STATE] completed
+Signal: idle (ready: true)
+[JAT-SIGNAL:idle] {"readyForWork":true}
 
 ┌────────────────────────────────────────────────────────┐
 │  ✅ Task Completed: jat-abc                            │
@@ -1012,11 +1120,8 @@ Create a backfilled task record? [Proceed? Y/n] Y
 📢 Announcing task completion...
    ✅ Sent to @active
 
-✓ Signal: idle
-[JAT-SIGNAL:STATE] idle
-
-✓ Signal: completed
-[JAT-SIGNAL:STATE] completed
+Signal: idle (ready: true)
+[JAT-SIGNAL:idle] {"readyForWork":true}
 
 ┌────────────────────────────────────────────────────────┐
 │  ✅ Task Completed: jat-abc                            │
@@ -1037,8 +1142,8 @@ Create a backfilled task record? [Proceed? Y/n] Y
 ```
 
 **Signals explained:**
-- `jat-signal idle` - Requires human review; dashboard shows completion state, session stays open
-- `jat-signal auto_proceed` - Auto-proceed enabled; dashboard can auto-close session
+- `jat-signal idle '{"readyForWork":true}'` - Requires human review; dashboard shows completion state, session stays open
+- `jat-signal auto_proceed '{"taskId":"..."}'` - Auto-proceed enabled; dashboard can auto-close session
 - `jat-signal tasks '[...]'` - Follow-up tasks discovered during work
 
 The signal used depends on review rules (see Step 7.5).
@@ -1051,11 +1156,11 @@ The completion flow uses these signals (captured by PostToolUse hook):
 
 | Signal Command | When to Run | Dashboard Effect |
 |----------------|-------------|------------------|
-| `jat-signal idle` | After `bd close`, when review required | Shows "Completed" state (green), session stays open |
-| `jat-signal auto_proceed` | After `bd close`, when auto-proceed enabled | Dashboard can auto-close session, optionally spawn next |
+| `jat-signal idle '{"readyForWork":true}'` | After `bd close`, when review required | Shows "Completed" state (green), session stays open |
+| `jat-signal auto_proceed '{"taskId":"..."}'` | After `bd close`, when auto-proceed enabled | Dashboard can auto-close session, optionally spawn next |
 | `jat-signal action '{...}'` | When manual steps are required | Shows prominent action checklist |
 | `jat-signal tasks '[...]'` | When follow-up work discovered | Shows "N Suggested Tasks" badge, offers Beads creation |
-| `jat-signal completed` | After all completion steps | Final completion signal |
+| `jat-signal completed '{"taskId":"...","outcome":"success"}'` | After all completion steps | Final completion signal |
 
 **Signal selection is automatic** - Step 7.5 determines which signal to run based on:
 1. Per-task override in notes (`[REVIEW_OVERRIDE:...]`)
@@ -1063,7 +1168,7 @@ The completion flow uses these signals (captured by PostToolUse hook):
 3. Hardcoded defaults (epics require review, chores auto-proceed, others P0-P3 auto)
 
 **Critical timing:**
-- Do NOT run `jat-signal idle` or `jat-signal completed` until AFTER all completion steps succeed
+- Do NOT run completion signals until AFTER all completion steps succeed
 - If you signal early, dashboard shows "complete" but task is still open in Beads
 - This causes confusion - other agents think task is done when it isn't
 

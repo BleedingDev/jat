@@ -29,6 +29,8 @@ argument-hint: [agent-name | task-id | agent-name task-id]
 2. **Check Agent Mail** - Read messages before starting work
 3. **Select task** - From parameter or show recommendations
 4. **Start work** - Reserve files, update Beads, announce start
+5. **Plan approach** - Analyze task, describe implementation strategy
+6. **Emit rich signal** - Send structured working signal with task context, approach, and baseline
 
 ---
 
@@ -226,14 +228,79 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" \
 
 ---
 
-### STEP 7: Display Start Banner
+### STEP 7: Plan Approach & Emit Rich Signal
 
-**You MUST output the `[JAT:WORKING]` marker for dashboard state tracking.**
+**You MUST emit a rich `working` signal for dashboard state tracking.**
+
+After reading the task details, plan your approach before starting work:
+
+1. **Analyze the task** - Understand what needs to be done
+2. **Plan your approach** - Write a brief description of how you'll tackle it
+3. **Identify expected files** - List files you'll likely modify
+4. **Get baseline commit** - Capture the git SHA for rollback capability
+
+```bash
+# Get baseline commit
+git rev-parse HEAD
+# → Save this value as BASELINE_COMMIT
+
+# Get task details (if not already captured)
+bd show "$TASK_ID" --json | jq -r '.[0] | "\(.title)|\(.description)|\(.priority)|\(.type)|\(.dependencies // [] | join(","))"'
+```
+
+**Emit rich working signal:**
+
+```bash
+# Build the rich signal payload
+# Required fields: taskId, taskTitle
+# Recommended fields: approach, expectedFiles, baselineCommit
+
+jat-signal working '{
+  "taskId": "{TASK_ID}",
+  "taskTitle": "{TASK_TITLE}",
+  "taskDescription": "{TASK_DESCRIPTION}",
+  "taskPriority": {PRIORITY},
+  "taskType": "{TYPE}",
+  "approach": "{YOUR_APPROACH_DESCRIPTION}",
+  "expectedFiles": ["{FILE1}", "{FILE2}", "..."],
+  "estimatedScope": "small|medium|large",
+  "baselineCommit": "{BASELINE_COMMIT}",
+  "baselineBranch": "{CURRENT_BRANCH}",
+  "dependencies": ["{DEP_TASK_ID}", "..."]
+}'
+```
+
+**Approach planning guidance:**
+- **approach**: 1-2 sentences describing your implementation strategy
+- **expectedFiles**: Array of file patterns you expect to modify
+- **estimatedScope**:
+  - `small` = 1-2 files, few lines
+  - `medium` = 3-10 files, moderate changes
+  - `large` = 10+ files, significant refactoring
+
+**Example rich working signal:**
+
+```bash
+jat-signal working '{
+  "taskId": "jat-123",
+  "taskTitle": "Add user authentication",
+  "taskDescription": "Implement login/logout with session management",
+  "taskPriority": 1,
+  "taskType": "feature",
+  "approach": "Will implement OAuth flow using Supabase auth, add login page, protect routes with middleware",
+  "expectedFiles": ["src/lib/auth/*", "src/routes/login/*", "src/hooks.server.ts"],
+  "estimatedScope": "medium",
+  "baselineCommit": "abc123def",
+  "baselineBranch": "main",
+  "dependencies": []
+}'
+```
+
+Then output the banner:
 
 ```
 ╔════════════════════════════════════════════════════════╗
 ║         🚀 STARTING WORK: {TASK_ID}                    ║
-║  [JAT:WORKING task={TASK_ID}]                          ║
 ╚════════════════════════════════════════════════════════╝
 
 ✅ Agent: {AGENT_NAME}
@@ -244,6 +311,13 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" \
 ┌─ TASK DETAILS ──────────────────────────────────────────┐
 │  {DESCRIPTION}                                          │
 └─────────────────────────────────────────────────────────┘
+
+┌─ APPROACH ──────────────────────────────────────────────┐
+│  {YOUR_APPROACH_DESCRIPTION}                            │
+├─ EXPECTED FILES ────────────────────────────────────────┤
+│  • {FILE1}                                              │
+│  • {FILE2}                                              │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -252,19 +326,25 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" \
 
 **Before coding, check if the task is clear.**
 
-If unclear, request clarification:
+If unclear, signal and request clarification:
+
+```bash
+# Signal that you need user input
+jat-signal needs_input '{"taskId":"{TASK_ID}","question":"[Your question]","questionType":"text"}'
+```
+
+Then output the clarification request:
 
 ```
 ┌────────────────────────────────────────────────────────┐
 │  ❓ NEED CLARIFICATION: {TASK_ID}                      │
-│  [JAT:NEEDS_INPUT]                                     │
 └────────────────────────────────────────────────────────┘
 
 Questions:
   1. [Specific question]
 ```
 
-**Wait for user response.** When they answer, output `[JAT:WORKING task={TASK_ID}]` to resume.
+**Wait for user response.** When they answer, re-emit the working signal to resume.
 
 ---
 
@@ -280,16 +360,22 @@ Read the full task details and start coding.
 
 ## When You Finish Working
 
-**🚨 CRITICAL: You MUST output the `[JAT:NEEDS_REVIEW]` marker when done.**
+**🚨 CRITICAL: You MUST run `jat-signal review` when done.**
 
-The dashboard detects your state by scanning terminal output. Without this marker, you'll show "Working" even when you're done. This confuses users who don't know you're waiting for them.
+The dashboard tracks your state via signals. Without signaling, you'll show "Working" even when you're done. This confuses users who don't know you're waiting for them.
 
-**Always output this exact format:**
+**Always run the signal command and output summary:**
+
+```bash
+# Signal that you're ready for review (include summary of work)
+jat-signal review '{"taskId":"{TASK_ID}","summary":["Change 1","Change 2"]}'
+```
+
+Then output the summary:
 
 ```
 ┌────────────────────────────────────────────────────────┐
 │  🔍 READY FOR REVIEW: {TASK_ID}                        │
-│  [JAT:NEEDS_REVIEW]                                    │
 └────────────────────────────────────────────────────────┘
 
 Changes made:
@@ -299,7 +385,7 @@ Changes made:
 Run /jat:complete when ready to close this task.
 ```
 
-**When to output this marker:**
+**When to signal review:**
 - After completing any substantial code changes
 - After writing documentation or analysis
 - After fixing a bug (even if more testing is recommended)
@@ -307,7 +393,7 @@ Run /jat:complete when ready to close this task.
 - Whenever you're done and waiting for user input
 
 **Do NOT:**
-- Say "I'm done" without the marker
+- Say "I'm done" without running `jat-signal review`
 - Just stop outputting and wait
 - Use vague phrases like "let me know if you have questions"
 
@@ -330,12 +416,12 @@ The task is still `in_progress` in Beads until `/jat:complete` runs `bd close`.
 │  ┌──────────┐                                        │
 │  │ STARTING │  Running /jat:start                    │
 │  └────┬─────┘                                        │
-│       │ [JAT:WORKING task=xxx]                       │
+│       │ jat-signal working '{...}'                   │
 │       ▼                                              │
 │  ┌──────────┐      ┌─────────────┐                   │
 │  │ WORKING  │◄────►│ NEEDS INPUT │                   │
 │  └────┬─────┘      └─────────────┘                   │
-│       │ [JAT:NEEDS_REVIEW]                           │
+│       │ jat-signal review '{...}'                    │
 │       ▼                                              │
 │  ┌──────────┐                                        │
 │  │  REVIEW  │  Code done, awaiting user              │
@@ -353,23 +439,23 @@ The task is still `in_progress` in Beads until `/jat:complete` runs `bd close`.
 
 ---
 
-## Dashboard State Markers
+## Dashboard State Signals
 
-| Marker | State | Dashboard Color |
-|--------|-------|-----------------|
-| (none) | Starting | Cyan |
-| `[JAT:WORKING task=xxx]` | Working | Blue |
-| `[JAT:NEEDS_INPUT]` | Needs Input | Orange |
-| `[JAT:NEEDS_REVIEW]` | Ready for Review | Yellow |
-| `[JAT:COMPLETED]` | Done | Green |
+| Signal Command | State | Dashboard Color |
+|----------------|-------|-----------------|
+| `jat-signal starting '{...}'` | Starting | Cyan |
+| `jat-signal working '{...}'` | Working | Blue |
+| `jat-signal needs_input '{...}'` | Needs Input | Orange |
+| `jat-signal review '{...}'` | Ready for Review | Yellow |
+| `jat-signal completed '{...}'` | Done | Green |
 
-**Most recent marker wins.** Dashboard scans terminal output for these patterns.
+**Signals are captured by PostToolUse hook** and written to `/tmp/jat-signal-{session}.json`.
 
-**Why markers matter:**
-- Without explicit markers, users don't know you're waiting for them
+**Why signals matter:**
+- Without explicit signals, users don't know you're waiting for them
 - The dashboard shows "Working" indefinitely if no state change is detected
-- Agents that "go quiet" without a marker appear stuck
-- **Always output `[JAT:NEEDS_REVIEW]` when you finish working**
+- Agents that "go quiet" without a signal appear stuck
+- **Always run `jat-signal review` when you finish working**
 
 ---
 
@@ -419,11 +505,10 @@ Options:
 # Skip conflict checks
 /jat:start jat-abc quick
 
-# When done coding - ALWAYS output this:
-echo "🔍 READY FOR REVIEW: {task-id}"
-echo "[JAT:NEEDS_REVIEW]"
-echo ""
-echo "Changes made:"
-echo "  - ..."
-# → Then wait for user to run /jat:complete
+# Emit rich working signal (after reading task)
+jat-signal working '{"taskId":"jat-abc","taskTitle":"...","approach":"...","expectedFiles":["..."],"baselineCommit":"..."}'
+
+# When done coding - ALWAYS run this:
+jat-signal review '{"taskId":"jat-abc","summary":["Change 1","Change 2"]}'
+# Then output summary and wait for user to run /jat:complete
 ```
