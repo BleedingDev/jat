@@ -33,6 +33,7 @@
 	import RecommendedBadge from '$lib/components/RecommendedBadge.svelte';
 	import { getEpicId, getProgress, getRunningAgents, getIsActive } from '$lib/stores/epicQueueStore.svelte';
 	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
+	import { openEpicSwarmModal } from '$lib/stores/drawerStore';
 	import { computeReviewStatus, type ReviewRule, type ReviewStatus } from '$lib/utils/reviewStatusUtils';
 
 	// Type definitions for task files (images, PDFs, text, etc.)
@@ -122,10 +123,6 @@
 	let completedTaskIds = $state<string[]>([]);
 	let workingCompletedTaskIds = $state<string[]>([]); // Tasks that transitioned from working → completed
 	let completedEpicIds = $state<string[]>([]); // Epics that just had all children complete
-
-	// Epic Swarm Modal state
-	let epicSwarmModalOpen = $state(false);
-	let epicSwarmModalId = $state<string | null>(null);
 
 	// Review rules state - fetched on mount for review status column
 	let reviewRules = $state<ReviewRule[]>([]);
@@ -2624,8 +2621,7 @@
 															onclick={(e) => {
 																e.stopPropagation();
 																if (canRunEpic) {
-																	epicSwarmModalId = epicKey;
-																	epicSwarmModalOpen = true;
+																	openEpicSwarmModal(epicKey);
 																}
 															}}
 															disabled={!canRunEpic}
@@ -3059,8 +3055,7 @@
 												onclick={(e) => {
 													e.stopPropagation();
 													if (canRunParentEpic && groupKey) {
-														epicSwarmModalId = groupKey;
-														epicSwarmModalOpen = true;
+														openEpicSwarmModal(groupKey);
 													}
 												}}
 												disabled={!canRunParentEpic}
@@ -3439,14 +3434,5 @@
 	</div>
 </div>
 
-<!-- Epic Swarm Modal -->
-{#if epicSwarmModalId}
-	<EpicSwarmModal
-		epicId={epicSwarmModalId}
-		bind:isOpen={epicSwarmModalOpen}
-		onClose={() => {
-			epicSwarmModalOpen = false;
-			epicSwarmModalId = null;
-		}}
-	/>
-{/if}
+<!-- Epic Swarm Modal (uses store-based state from drawerStore) -->
+<EpicSwarmModal />

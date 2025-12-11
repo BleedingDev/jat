@@ -93,6 +93,12 @@
 		const unsubscribe = epicSwarmModalEpicId.subscribe((value) => {
 			if (value) {
 				selectedEpicId = value;
+				// If epics are already loaded but this one isn't in the list, reload
+				if (availableEpics.length > 0 && !availableEpics.some(e => e.id === value)) {
+					// Force reload to include the newly selected epic
+					availableEpics = [];
+					loadEpics();
+				}
 			}
 		});
 		return unsubscribe;
@@ -239,13 +245,26 @@
 
 			// Filter out epics with nothing to launch (0 ready tasks)
 			// These are either completed or have no actionable children
-			const actionableEpics = epicsWithInfo.filter(e => e.ready > 0);
+			let actionableEpics = epicsWithInfo.filter(e => e.ready > 0);
 
 			// Sort by ready tasks (most ready first), then by total
 			actionableEpics.sort((a, b) => {
 				if (b.ready !== a.ready) return b.ready - a.ready;
 				return b.total - a.total;
 			});
+
+			// If an epic was specifically requested (via store), ensure it's in the list
+			// even if it has 0 ready tasks (user explicitly clicked Run on it)
+			if (selectedEpicId) {
+				const selectedInList = actionableEpics.some(e => e.id === selectedEpicId);
+				if (!selectedInList) {
+					const selectedEpicInfo = epicsWithInfo.find(e => e.id === selectedEpicId);
+					if (selectedEpicInfo) {
+						// Add at the beginning since it was explicitly selected
+						actionableEpics = [selectedEpicInfo, ...actionableEpics];
+					}
+				}
+			}
 
 			availableEpics = actionableEpics;
 
