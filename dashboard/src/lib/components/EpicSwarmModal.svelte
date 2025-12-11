@@ -214,25 +214,28 @@
 			// Filter to epics only
 			const epics = tasks.filter((t: any) => t.issue_type === 'epic' && t.status !== 'closed');
 
-			// For each epic, get children summary
-			const epicsWithInfo: EpicInfo[] = [];
-			for (const epic of epics) {
+			// Fetch children summaries in PARALLEL (not sequentially) for faster loading
+			const childPromises = epics.map(async (epic: any) => {
 				try {
 					const childResponse = await fetch(`/api/epics/${epic.id}/children`);
 					if (childResponse.ok) {
 						const childData = await childResponse.json();
-						epicsWithInfo.push({
+						return {
 							id: epic.id,
 							title: epic.title,
 							ready: childData.summary.ready,
 							total: childData.summary.total,
 							inProgress: childData.summary.inProgress
-						});
+						};
 					}
 				} catch {
 					// Skip this epic if we can't fetch children
 				}
-			}
+				return null;
+			});
+
+			const results = await Promise.all(childPromises);
+			const epicsWithInfo: EpicInfo[] = results.filter((r): r is EpicInfo => r !== null);
 
 			// Filter out epics with nothing to launch (0 ready tasks)
 			// These are either completed or have no actionable children
