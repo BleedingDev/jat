@@ -54,6 +54,8 @@
 		_sseState?: string;
 		/** Timestamp when SSE state was last updated */
 		_sseStateTimestamp?: number;
+		/** Whether session is in recovering state (automation rule triggered recovery) */
+		_isRecovering?: boolean;
 		/** Suggested tasks from jat-signal (via SSE session-signal event) */
 		_signalSuggestedTasks?: Array<{
 			id?: string;
@@ -102,6 +104,13 @@
 		};
 		/** Timestamp when completion bundle was received */
 		_completionBundleTimestamp?: number;
+		/** Rich signal payload from SSE (for working, review, needs_input, completing states) */
+		_richSignalPayload?: {
+			type: string;
+			[key: string]: unknown;
+		};
+		/** Timestamp when rich signal payload was last updated */
+		_richSignalPayloadTimestamp?: number;
 	}
 
 	interface Props {
@@ -325,9 +334,10 @@
 			<!-- Horizontal scrolling row (720px per card for full terminal output / 80 columns) -->
 			<!-- pt-10 reserves space above cards for agent tabs that use negative margin -->
 			<!-- min-h-0 is critical for proper flex height calculation -->
+			<!-- Cards fill available height (h-full) so terminal output area can scroll -->
 			<div class="flex gap-4 overflow-x-auto h-full pt-10 pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedSessions as session (session.sessionName)}
-					<!-- Height container - SessionCard controls its own width -->
+					<!-- Height container - cards fill available height for scrollable terminal -->
 					<div class="h-[calc(100%-8px)]">
 						<SessionCard
 							mode="agent"
@@ -345,10 +355,13 @@
 							attached={session.attached}
 							sseState={session._sseState}
 							sseStateTimestamp={session._sseStateTimestamp}
+							isRecovering={session._isRecovering}
 							signalSuggestedTasks={session._signalSuggestedTasks}
 							signalSuggestedTasksTimestamp={session._signalSuggestedTasksTimestamp}
 							completionBundle={session._completionBundle}
 							completionBundleTimestamp={session._completionBundleTimestamp}
+							richSignalPayload={session._richSignalPayload}
+							richSignalPayloadTimestamp={session._richSignalPayloadTimestamp}
 							onKillSession={createKillHandler(session.sessionName)}
 							onInterrupt={createInterruptHandler(session.sessionName)}
 							onContinue={createContinueHandler(session.sessionName)}

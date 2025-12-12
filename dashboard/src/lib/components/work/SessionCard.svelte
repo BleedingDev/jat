@@ -224,6 +224,8 @@
 		};
 		/** Timestamp when rich signal payload was last updated */
 		richSignalPayloadTimestamp?: number;
+		/** Whether session is in recovering state (automation rule triggered recovery) */
+		isRecovering?: boolean;
 	}
 
 	let {
@@ -282,6 +284,8 @@
 		// Rich signal payload (from SSE session-state events)
 		richSignalPayload,
 		richSignalPayloadTimestamp,
+		// Automation recovering state
+		isRecovering = false,
 	}: Props = $props();
 
 	// Derived mode helpers
@@ -1753,14 +1757,21 @@
 		| "ready-for-review"
 		| "completing"
 		| "completed"
+		| "recovering"
 		| "idle";
 
 	const sessionState = $derived.by((): SessionState => {
+		// Check for recovering state first (automation rule triggered recovery)
+		// This takes priority over other states to show the user that recovery is in progress
+		if (isRecovering) {
+			return 'recovering';
+		}
+
 		// If we have an SSE state, check if it should be used
 		// "completed" state persists until task changes (no TTL) - this ensures completion UI stays visible
 		// Other states use 5-second TTL for real-time responsiveness
 		const SSE_STATE_TTL_MS = 5000;
-		const validStates: SessionState[] = ['starting', 'working', 'compacting', 'needs-input', 'ready-for-review', 'completing', 'completed', 'idle'];
+		const validStates: SessionState[] = ['starting', 'working', 'compacting', 'needs-input', 'ready-for-review', 'completing', 'completed', 'recovering', 'idle'];
 
 		if (sseState && validStates.includes(sseState as SessionState)) {
 			// "completed" state should persist - it comes from signal files or closed task, not momentary events

@@ -71,6 +71,12 @@ export interface WorkSession {
 	_sseState?: string;
 	/** Timestamp when SSE state was last updated */
 	_sseStateTimestamp?: number;
+	/** Whether session is in recovering state (automation rule triggered recovery) */
+	_isRecovering?: boolean;
+	/** Timestamp when recovering state was set */
+	_recoveringTimestamp?: number;
+	/** Rule ID that triggered recovery (for display) */
+	_recoveringRuleId?: string;
 	/** Suggested tasks from jat-signal (via SSE session-signal event) */
 	_signalSuggestedTasks?: Array<{
 		id?: string;
@@ -130,6 +136,69 @@ export interface WorkSession {
 	};
 	/** Timestamp when completion bundle was received */
 	_completionBundleTimestamp?: number;
+	/** Rich signal payload from jat-signal state commands (working, review, needs_input, completing) */
+	_richSignalPayload?: {
+		type: string;
+		// Working signal fields
+		taskId?: string;
+		taskTitle?: string;
+		taskDescription?: string;
+		taskPriority?: number;
+		taskType?: string;
+		approach?: string;
+		expectedFiles?: string[];
+		estimatedScope?: 'small' | 'medium' | 'large';
+		baselineCommit?: string;
+		baselineBranch?: string;
+		dependencies?: string[];
+		blockers?: string[];
+		// Review signal fields
+		summary?: string[];
+		filesModified?: Array<{
+			path: string;
+			changeType: 'added' | 'modified' | 'deleted';
+			linesAdded: number;
+			linesRemoved: number;
+			description?: string;
+		}>;
+		totalLinesAdded?: number;
+		totalLinesRemoved?: number;
+		keyDecisions?: Array<{ decision: string; rationale: string }>;
+		testsStatus?: 'passing' | 'failing' | 'none' | 'skipped';
+		testsRun?: number;
+		testsPassed?: number;
+		buildStatus?: 'clean' | 'warnings' | 'errors';
+		buildWarnings?: string[];
+		reviewFocus?: string[];
+		knownLimitations?: string[];
+		commits?: Array<{ sha: string; message: string }>;
+		// Needs input signal fields
+		question?: string;
+		questionType?: 'choice' | 'text' | 'approval' | 'clarification';
+		context?: string;
+		relevantCode?: string;
+		relevantFiles?: string[];
+		options?: Array<{
+			id: string;
+			label: string;
+			description: string;
+			recommended?: boolean;
+			tradeoffs?: string;
+		}>;
+		impact?: string;
+		blocking?: string[];
+		timeoutAction?: string;
+		timeoutMinutes?: number;
+		// Completing signal fields
+		currentStep?: 'verifying' | 'committing' | 'closing' | 'releasing' | 'announcing';
+		stepsCompleted?: string[];
+		stepsRemaining?: string[];
+		progress?: number;
+		stepDescription?: string;
+		stepStartedAt?: string;
+	};
+	/** Timestamp when rich signal payload was received */
+	_richSignalPayloadTimestamp?: number;
 }
 
 interface WorkSessionsState {
