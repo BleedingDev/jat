@@ -152,6 +152,21 @@
 			result = result.filter((e) => e.task_id === filters.taskId);
 		}
 
+		// Hide 'completing' events when there's a 'completed' event for the same task
+		// The completed event is the final state and contains all the relevant info
+		const completedTaskIds = new Set(
+			result
+				.filter((e) => e.type === 'completed' || e.state === 'completed')
+				.map((e) => e.task_id)
+		);
+		result = result.filter((e) => {
+			const eventType = e.type === 'state' ? e.state : e.type;
+			if (eventType === 'completing' && e.task_id && completedTaskIds.has(e.task_id)) {
+				return false; // Hide completing events for completed tasks
+			}
+			return true;
+		});
+
 		// Filter by time range
 		if (filters.startTime) {
 			const startTs = filters.startTime.getTime();
