@@ -127,12 +127,25 @@
 	let isExpanded = $state(false);
 	let actionSubmitting = $state(false);
 	let copiedEventKey = $state<string | null>(null);
+	let copiedField = $state<string | null>(null);  // Track which field was copied (e.g., "sessionId-abc123")
+
+	/** Copy text to clipboard with visual feedback */
+	async function copyToClipboard(text: string, fieldKey: string) {
+		try {
+			await navigator.clipboard.writeText(text);
+			copiedField = fieldKey;
+			setTimeout(() => copiedField = null, 1500);
+		} catch (err) {
+			console.error('Failed to copy:', err);
+		}
+	}
 
 	// Activity state for shimmer effect on latest event
 	// Derived from the central workSessionsState store
+	// Shimmer shows for both 'generating' (output growing) and 'thinking' (agent processing)
 	const isGenerating = $derived.by(() => {
 		const session = workSessionsState.sessions.find(s => s.sessionName === sessionName);
-		return session?._activityState === 'generating';
+		return session?._activityState === 'generating' || session?._activityState === 'thinking';
 	});
 
 	// Filtered events based on filter props
@@ -570,6 +583,17 @@
 			if (event.data.taskTitle) {
 				return truncate(event.data.taskTitle as string);
 			}
+		}
+
+		// For starting events, show agent → taskId  taskTitle
+		if (signalType === 'starting' && event.data) {
+			const agent = event.data.agentName || 'Agent';
+			const taskId = event.data.taskId || event.task_id || '';
+			const title = event.data.taskTitle || '';
+			const parts = [agent];
+			if (taskId) parts.push(`→ ${taskId}`);
+			if (title) parts.push(` ${title}`);
+			return truncate(parts.join(' '));
 		}
 
 		// Fallback to uppercase label with task ID
@@ -1060,15 +1084,37 @@
 											</div>
 										</div>
 									{:else if event.state === 'starting'}
-										<!-- Starting state -->
-										<div class="space-y-2">
-											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.12 200);">
-												<span>🚀</span>
-												<span class="font-medium">Session Starting</span>
-											</div>
-											<div class="text-[10px]" style="color: oklch(0.60 0.02 250);">
-												Agent is initializing and preparing to work.
-											</div>
+										<!-- Starting state - expanded shows full title + session ID -->
+										{@const startEventKey = getEventKey(event)}
+										<div class="space-y-1.5">
+											<!-- Full task title -->
+											{#if event.data?.taskTitle}
+												<div class="text-xs" style="color: oklch(0.70 0.02 250);">
+													{event.data.taskTitle}
+												</div>
+											{/if}
+											<!-- Session ID (abbreviated, click to copy full) -->
+											{#if event.data?.sessionId}
+												<!-- svelte-ignore a11y_click_events_have_key_events -->
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<div
+													class="text-[10px] font-mono cursor-pointer hover:brightness-125 transition-all inline-flex items-center gap-1"
+													style="color: oklch(0.50 0.02 250);"
+													onclick={() => copyToClipboard(event.data.sessionId, `${startEventKey}-session`)}
+													title="Click to copy full session ID: {event.data.sessionId}"
+												>
+													<span>📋</span>
+													<span style="color: oklch(0.60 0.08 200);">{event.data.sessionId.slice(0, 8)}...</span>
+													{#if copiedField === `${startEventKey}-session`}
+														<span class="text-[9px] px-1 py-0.5 rounded animate-pulse" style="background: oklch(0.35 0.15 145); color: oklch(0.90 0.15 145);">✓</span>
+													{/if}
+												</div>
+											{/if}
+											{#if !event.data?.taskTitle && !event.data?.sessionId}
+												<div class="text-[10px]" style="color: oklch(0.50 0.02 250);">
+													Agent initializing...
+												</div>
+											{/if}
 										</div>
 									{:else if event.state === 'compacting'}
 										<!-- Compacting state -->
