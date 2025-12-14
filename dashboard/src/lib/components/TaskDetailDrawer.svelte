@@ -455,7 +455,7 @@
 		// Save to task's images in the server
 		const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 		await fetch(`/api/tasks/${taskId}/image`, {
-			method: 'POST',
+			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ path: filePath, id: fileId })
 		});
@@ -488,6 +488,28 @@
 			});
 		} catch (err) {
 			console.error('Failed to update task notes with attachment:', err);
+		}
+	}
+
+	// Remove an attachment from the task
+	async function removeAttachment(attachmentId: string) {
+		if (!taskId) return;
+
+		try {
+			const response = await fetch(`/api/tasks/${taskId}/image`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id: attachmentId })
+			});
+
+			if (!response.ok) {
+				throw new Error(`Failed to remove attachment: ${response.statusText}`);
+			}
+
+			// Update local state
+			attachments = attachments.filter(a => a.id !== attachmentId);
+		} catch (err) {
+			console.error('Error removing attachment:', err);
 		}
 	}
 
@@ -1757,7 +1779,7 @@
 									<span class="text-sm font-medium" style="color: oklch(0.70 0.18 145);">Drop files to attach</span>
 								</div>
 							{:else if attachments.length > 0}
-								<div class="grid grid-cols-3 gap-2 p-2 rounded" style="background: oklch(0.18 0.01 250);">
+								<div class="grid grid-cols-3 gap-3 p-3 rounded overflow-visible" style="background: oklch(0.18 0.01 250);">
 									{#each attachments as attachment (attachment.id)}
 										<div class="relative group">
 											<a
@@ -1773,6 +1795,21 @@
 													style="border-color: oklch(0.35 0.02 250);"
 												/>
 											</a>
+											<!-- Delete button -->
+											<button
+												class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+												style="background: oklch(0.45 0.20 25); color: white;"
+												onclick={(e) => {
+													e.preventDefault();
+													e.stopPropagation();
+													removeAttachment(attachment.id);
+												}}
+												title="Remove attachment"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+													<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+												</svg>
+											</button>
 											<div
 												class="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[10px] truncate opacity-0 group-hover:opacity-100 transition-opacity rounded-b"
 												style="background: oklch(0.15 0.01 250 / 0.9); color: oklch(0.60 0.02 250);"

@@ -10,7 +10,16 @@
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, basename } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from 'os';
+
+/**
+ * Get persistent storage directory for task images
+ * Uses ~/.local/share/jat/task-images/ for persistence across reboots
+ * @returns {string} - Path to persistent upload directory
+ */
+function getPersistentUploadDir() {
+	return join(homedir(), '.local', 'share', 'jat', 'task-images');
+}
 
 /**
  * Get content type from file extension
@@ -103,24 +112,31 @@ export async function GET({ params, url }) {
 	try {
 		const requestedPath = params.path;
 
-		// Determine actual file path - check both old and new upload directories
+		// Determine actual file path - check directories in priority order:
+		// 1. Persistent storage (~/.local/share/jat/task-images/)
+		// 2. Legacy temp locations (/tmp/claude-dashboard-files, /tmp/claude-dashboard-images)
 		let filePath;
-		if (requestedPath.startsWith('/tmp')) {
+		if (requestedPath.startsWith('/tmp') || requestedPath.startsWith(homedir())) {
 			// Full path provided
 			filePath = requestedPath;
 		} else {
-			// Just filename provided - look in upload directories (new location first)
-			const newUploadDir = join(tmpdir(), 'claude-dashboard-files');
-			const legacyUploadDir = join(tmpdir(), 'claude-dashboard-images');
-			const newPath = join(newUploadDir, basename(requestedPath));
-			const legacyPath = join(legacyUploadDir, basename(requestedPath));
+			// Just filename provided - look in upload directories (persistent first, then legacy)
+			const persistentDir = getPersistentUploadDir();
+			const legacyTempDir = join(tmpdir(), 'claude-dashboard-files');
+			const legacyImagesDir = join(tmpdir(), 'claude-dashboard-images');
 
-			if (existsSync(newPath)) {
-				filePath = newPath;
-			} else if (existsSync(legacyPath)) {
-				filePath = legacyPath;
+			const persistentPath = join(persistentDir, basename(requestedPath));
+			const legacyTempPath = join(legacyTempDir, basename(requestedPath));
+			const legacyImagesPath = join(legacyImagesDir, basename(requestedPath));
+
+			if (existsSync(persistentPath)) {
+				filePath = persistentPath;
+			} else if (existsSync(legacyTempPath)) {
+				filePath = legacyTempPath;
+			} else if (existsSync(legacyImagesPath)) {
+				filePath = legacyImagesPath;
 			} else {
-				filePath = newPath; // Will trigger 404 below
+				filePath = persistentPath; // Will trigger 404 below
 			}
 		}
 
@@ -130,6 +146,7 @@ export async function GET({ params, url }) {
 
 		// Security: Ensure path is within allowed directories
 		const allowedDirs = [
+			getPersistentUploadDir(),
 			join(tmpdir(), 'claude-dashboard-files'),
 			join(tmpdir(), 'claude-dashboard-images'),
 			'/tmp/claude-dashboard-files',

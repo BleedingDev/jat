@@ -12,7 +12,16 @@ import { json } from '@sveltejs/kit';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, extname } from 'path';
-import { tmpdir } from 'os';
+import { homedir } from 'os';
+
+/**
+ * Get persistent storage directory for task images
+ * Uses ~/.local/share/jat/task-images/ for persistence across reboots
+ * @returns {string} - Path to persistent upload directory
+ */
+function getPersistentUploadDir() {
+	return join(homedir(), '.local', 'share', 'jat', 'task-images');
+}
 
 /**
  * Get file extension from MIME type or filename
@@ -78,8 +87,9 @@ export async function POST({ request }) {
 			);
 		}
 
-		// Create a temp directory for uploaded files
-		const uploadDir = join(tmpdir(), 'claude-dashboard-files');
+		// Create persistent directory for uploaded files
+		// Uses ~/.local/share/jat/task-images/ to survive reboots
+		const uploadDir = getPersistentUploadDir();
 		if (!existsSync(uploadDir)) {
 			await mkdir(uploadDir, { recursive: true });
 		}
