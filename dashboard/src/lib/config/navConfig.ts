@@ -5,19 +5,20 @@
  * NAVIGATION STRUCTURE:
  *
  * PRIMARY (main nav - always visible):
- *   /tasks    - Tasks (default route, tmux sessions + agent work)
- *   /agents   - Agents (agent dashboard, status, activity)
+ *   /projects - Projects (default route, multi-project sessions view)
  *   /servers  - Servers (project server sessions)
+ *   /automation - Automation rules configuration
  *
  * SECONDARY (collapsible or less prominent):
- *   /projects - Projects (multi-project sessions view)
- *   /triage   - Task triage (needs work, not ready for primetime)
+ *   /graph    - Dependency visualization
  *   /timeline - Historical view (link from /projects)
  *   /kanban   - Agent kanban (sessions grouped by activity state)
- *   /graph    - Dependency visualization
+ *   /triage   - Task triage (needs work, not ready for primetime)
+ *   /tasks    - Tasks (task list, tmux sessions + agent work)
+ *   /agents   - Agents (agent dashboard, status, activity)
  *
  * DROPPED (removed):
- *   /         - Replaced by /tasks as default
+ *   /         - Replaced by /projects as default
  */
 
 export interface NavItem {
@@ -47,17 +48,10 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 	navItems: [
 		// PRIMARY: Main navigation (always visible)
 		{
-			id: 'tasks',
-			label: 'Tasks',
-			href: '/tasks',
-			icon: 'tasks',
-			primary: true
-		},
-		{
-			id: 'agents',
-			label: 'Agents',
-			href: '/agents',
-			icon: 'agents',
+			id: 'projects',
+			label: 'Projects',
+			href: '/projects',
+			icon: 'folders',
 			primary: true
 		},
 		{
@@ -67,19 +61,19 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			icon: 'servers',
 			primary: true
 		},
+		{
+			id: 'automation',
+			label: 'Automation',
+			href: '/automation',
+			icon: 'automation',
+			primary: true
+		},
 		// SECONDARY: Less prominent routes
 		{
-			id: 'projects',
-			label: 'Projects',
-			href: '/projects',
-			icon: 'folders',
-			primary: false
-		},
-		{
-			id: 'triage',
-			label: 'Triage',
-			href: '/triage',
-			icon: 'triage',
+			id: 'graph',
+			label: 'Graph',
+			href: '/graph',
+			icon: 'graph',
 			primary: false
 		},
 		{
@@ -97,17 +91,24 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			primary: false
 		},
 		{
-			id: 'graph',
-			label: 'Graph',
-			href: '/graph',
-			icon: 'graph',
+			id: 'triage',
+			label: 'Triage',
+			href: '/triage',
+			icon: 'triage',
 			primary: false
 		},
 		{
-			id: 'automation',
-			label: 'Automation',
-			href: '/automation',
-			icon: 'automation',
+			id: 'tasks',
+			label: 'Tasks',
+			href: '/tasks',
+			icon: 'tasks',
+			primary: false
+		},
+		{
+			id: 'agents',
+			label: 'Agents',
+			href: '/agents',
+			icon: 'agents',
 			primary: false
 		}
 	],
