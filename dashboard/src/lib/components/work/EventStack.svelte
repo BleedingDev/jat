@@ -180,6 +180,15 @@
 			return true;
 		});
 
+		// Hide standalone 'tasks' events when there's a 'complete' event that already has suggestedTasks
+		// This prevents duplicate display of suggested tasks (once in 'complete' bundle, once standalone)
+		const completeEventsWithTasks = result.filter(
+			(e) => e.type === 'complete' && e.data?.suggestedTasks && e.data.suggestedTasks.length > 0
+		);
+		if (completeEventsWithTasks.length > 0) {
+			result = result.filter((e) => e.type !== 'tasks');
+		}
+
 		// Filter by time range
 		if (filters.startTime) {
 			const startTs = filters.startTime.getTime();
@@ -276,6 +285,28 @@
 		}
 
 		return event.data.map((task: SuggestedTask, idx: number) => {
+			const taskKey = getSuggestedTaskKey(task, idx);
+			const state = eventTasksState!.get(taskKey) || { selected: false, edited: false };
+			return {
+				...task,
+				selected: state.selected,
+				edited: state.edited,
+				edits: state.edits
+			};
+		});
+	}
+
+	// Get tasks with state for a complete bundle's suggestedTasks
+	function getCompleteBundleTasksWithState(suggestedTasks: SuggestedTask[], eventKey: string): SuggestedTaskWithState[] {
+		if (!suggestedTasks || suggestedTasks.length === 0) return [];
+
+		let eventTasksState = tasksStateByEvent.get(eventKey);
+		if (!eventTasksState) {
+			eventTasksState = new Map();
+			tasksStateByEvent.set(eventKey, eventTasksState);
+		}
+
+		return suggestedTasks.map((task: SuggestedTask, idx: number) => {
 			const taskKey = getSuggestedTaskKey(task, idx);
 			const state = eventTasksState!.get(taskKey) || { selected: false, edited: false };
 			return {
@@ -846,24 +877,25 @@
 
 											<!-- Suggested Tasks (from complete bundle) -->
 											{#if bundle.suggestedTasks && bundle.suggestedTasks.length > 0}
-												{@const tasksFromBundle = bundle.suggestedTasks.map((t: any, i: number) => ({ ...t, selected: false, edited: false }))}
+												{@const bundleTasksWithState = getCompleteBundleTasksWithState(bundle.suggestedTasks, eventKey)}
+												{@const bundleSelectedCount = getSelectedCount(eventKey)}
 												<div>
 													<div class="text-[10px] font-medium mb-1" style="color: oklch(0.65 0.12 280);">
 														📋 SUGGESTED FOLLOW-UP ({bundle.suggestedTasks.length})
 													</div>
 													<SuggestedTasksSection
-														tasks={tasksFromBundle}
-														selectedCount={0}
-														onToggleSelection={(taskKey) => {}}
-														getTaskKey={(t, i) => `${t.title}-${i}`}
-														onCreateTasks={undefined}
-														onEditTask={() => {}}
-														onClearEdits={() => {}}
-														isCreating={false}
-														createResults={{ success: [], failed: [] }}
-														showFeedback={false}
-														onDismissFeedback={() => {}}
-														availableProjects={[]}
+														tasks={bundleTasksWithState}
+														selectedCount={bundleSelectedCount}
+														onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
+														getTaskKey={getSuggestedTaskKey}
+														onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+														onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
+														onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
+														isCreating={isCreatingTasks}
+														{createResults}
+														showFeedback={showCreateFeedback}
+														onDismissFeedback={dismissFeedback}
+														{availableProjects}
 													/>
 												</div>
 											{/if}
