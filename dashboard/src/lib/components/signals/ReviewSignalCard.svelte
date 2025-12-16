@@ -10,18 +10,32 @@
 	 * @see src/lib/types/richSignals.ts for type definitions
 	 */
 
-	import type { ReviewSignal, FileModification, KeyDecision, CommitInfo } from '$lib/types/richSignals';
-	import { openInVSCode, openDiffInVSCode, getFileLink, getDiffLink } from '$lib/utils/fileLinks';
+	import type { ReviewSignal, FileModification, KeyDecision, CommitInfo, ReviewFocusItem } from '$lib/types/richSignals';
+	import {
+		openInVSCode,
+		openDiffInVSCode,
+		getFileLink,
+		getDiffLink,
+		getAllFileLinks,
+		openLocalhostUrl,
+		detectRouteFromPath,
+		generateLocalhostUrl,
+		type FileLinks
+	} from '$lib/utils/fileLinks';
 
 	interface Props {
 		/** The rich review signal data */
 		signal: ReviewSignal;
+		/** Project name for localhost URL generation (e.g., 'jat', 'chimaro') */
+		projectName?: string;
 		/** Callback when task ID is clicked */
 		onTaskClick?: (taskId: string) => void;
 		/** Callback when a file path is clicked (for viewing) */
 		onFileClick?: (filePath: string) => void;
 		/** Callback when diff link is clicked */
 		onDiffClick?: (filePath: string, changeType: string) => void;
+		/** Callback when localhost link is clicked */
+		onLocalhostClick?: (route: string) => void;
 		/** Callback when user approves the changes */
 		onApprove?: () => void;
 		/** Callback when user requests changes */
@@ -38,9 +52,11 @@
 
 	let {
 		signal,
+		projectName = 'jat',
 		onTaskClick,
 		onFileClick,
 		onDiffClick,
+		onLocalhostClick,
 		onApprove,
 		onRequestChanges,
 		onAskQuestion,
@@ -144,6 +160,101 @@
 		return link.description;
 	}
 
+	// Get links for a file (VS Code, diff, localhost if applicable)
+	function getFileLinksForFile(file: FileModification): FileLinks {
+		return getAllFileLinks(file.path, projectName, { localhostRoute: file.localhostRoute });
+	}
+
+	// Handle localhost click - opens localhost URL
+	function handleLocalhostClick(route: string) {
+		if (onLocalhostClick) {
+			onLocalhostClick(route);
+		} else {
+			openLocalhostUrl(route, projectName);
+		}
+	}
+
+	// Get the text from a review focus item (handles both string and ReviewFocusItem)
+	function getReviewFocusText(item: string | ReviewFocusItem): string {
+		return typeof item === 'string' ? item : item.text;
+	}
+
+	// Get review focus item as object (for link access)
+	function getReviewFocusItem(item: string | ReviewFocusItem): ReviewFocusItem | null {
+		return typeof item === 'string' ? null : item;
+	}
+
+	// Check if a file has a localhost route (either explicit or detected)
+	function hasLocalhostRoute(file: FileModification): boolean {
+		return !!(file.localhostRoute || detectRouteFromPath(file.path));
+	}
+
+	// Get the localhost route for a file
+	function getLocalhostRoute(file: FileModification): string | null {
+		return file.localhostRoute || detectRouteFromPath(file.path);
+	}
+
+	// Collect all unique links for "Open All" button
+	const allLinks = $derived.by(() => {
+		const links: { type: 'vscode' | 'diff' | 'localhost'; url: string; label: string }[] = [];
+		const seenUrls = new Set<string>();
+
+		// Add file and diff links for each modified file
+		if (signal.filesModified) {
+			for (const file of signal.filesModified) {
+				const fileLinks = getFileLinksForFile(file);
+
+				// VS Code file link
+				if (!seenUrls.has(fileLinks.vscodeUrl)) {
+					links.push({ type: 'vscode', url: fileLinks.vscodeUrl, label: file.path });
+					seenUrls.add(fileLinks.vscodeUrl);
+				}
+
+				// Localhost link (if route file or explicit route)
+				if (fileLinks.localhostUrl && !seenUrls.has(fileLinks.localhostUrl)) {
+					links.push({ type: 'localhost', url: fileLinks.localhostUrl, label: fileLinks.detectedRoute || file.path });
+					seenUrls.add(fileLinks.localhostUrl);
+				}
+			}
+		}
+
+		// Add localhost links from review focus items
+		if (signal.reviewFocus) {
+			for (const item of signal.reviewFocus) {
+				const focusItem = getReviewFocusItem(item);
+				if (focusItem?.localhostRoute) {
+					const url = generateLocalhostUrl(focusItem.localhostRoute, projectName);
+					if (url && !seenUrls.has(url)) {
+						links.push({ type: 'localhost', url, label: focusItem.localhostRoute });
+						seenUrls.add(url);
+					}
+				}
+				if (focusItem?.filePath) {
+					const route = detectRouteFromPath(focusItem.filePath);
+					if (route) {
+						const url = generateLocalhostUrl(route, projectName);
+						if (url && !seenUrls.has(url)) {
+							links.push({ type: 'localhost', url, label: route });
+							seenUrls.add(url);
+						}
+					}
+				}
+			}
+		}
+
+		return links;
+	});
+
+	// Count of localhost links for badge
+	const localhostLinkCount = $derived(allLinks.filter(l => l.type === 'localhost').length);
+
+	// Open all links
+	function openAllLinks() {
+		for (const link of allLinks) {
+			window.open(link.url, '_blank');
+		}
+	}
+
 	// Toggle review focus item
 	function toggleReviewItem(index: number) {
 		const newSet = new Set(checkedReviewItems);
@@ -232,13 +343,14 @@
 	</div>
 {:else}
 	<!-- Full mode: detailed review signal card -->
+	<!-- h-full and overflow-hidden ensure the card fits within parent's max-height constraint -->
 	<div
-		class="rounded-lg overflow-hidden {className}"
+		class="rounded-lg overflow-hidden h-full flex flex-col {className}"
 		style="background: linear-gradient(135deg, oklch(0.22 0.06 200) 0%, oklch(0.18 0.04 195) 100%); border: 1px solid oklch(0.45 0.12 200);"
 	>
-		<!-- Header -->
+		<!-- Header - flex-shrink-0 ensures it doesn't shrink when body scrolls -->
 		<div
-			class="px-3 py-2 flex items-center justify-between gap-2"
+			class="px-3 py-2 flex items-center justify-between gap-2 flex-shrink-0"
 			style="background: oklch(0.25 0.08 200); border-bottom: 1px solid oklch(0.40 0.10 200);"
 		>
 			<div class="flex items-center gap-2">
@@ -292,8 +404,8 @@
 			</div>
 		</div>
 
-		<!-- Body -->
-		<div class="p-3 flex flex-col gap-3">
+		<!-- Body - flex-1 with min-h-0 and overflow-y-auto for proper scrolling -->
+		<div class="p-3 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
 			<!-- Task Title -->
 			{#if signal.taskTitle}
 				<div class="text-sm font-semibold" style="color: oklch(0.95 0.08 200);">
@@ -333,8 +445,25 @@
 			{#if signal.filesModified && signal.filesModified.length > 0}
 				<div class="flex flex-col gap-1.5">
 					<div class="flex items-center justify-between">
-						<div class="text-[10px] font-semibold opacity-70" style="color: oklch(0.75 0.05 200);">
-							📁 FILES MODIFIED ({signal.filesModified.length})
+						<div class="flex items-center gap-2">
+							<div class="text-[10px] font-semibold opacity-70" style="color: oklch(0.75 0.05 200);">
+								📁 FILES MODIFIED ({signal.filesModified.length})
+							</div>
+							<!-- Open All Links button -->
+							{#if allLinks.length > 0}
+								<button
+									type="button"
+									onclick={openAllLinks}
+									class="text-[9px] px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity flex items-center gap-1"
+									style="background: oklch(0.35 0.12 145); color: oklch(0.95 0.05 145); border: 1px solid oklch(0.45 0.12 145);"
+									title="Open all files and routes ({allLinks.length} links)"
+								>
+									<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+									</svg>
+									Open All ({allLinks.length})
+								</button>
+							{/if}
 						</div>
 						<div class="text-[10px] font-mono" style="color: oklch(0.70 0.08 145);">
 							<span style="color: oklch(0.70 0.15 145);">+{signal.totalLinesAdded || 0}</span>
@@ -345,6 +474,7 @@
 					<div class="flex flex-col gap-1 max-h-48 overflow-y-auto">
 						{#each signal.filesModified as file}
 							{@const style = getChangeTypeStyle(file.changeType)}
+							{@const localhostRoute = getLocalhostRoute(file)}
 							<div
 								class="flex items-center gap-2 px-2 py-1.5 rounded text-[11px]"
 								style="background: oklch(0.20 0.03 200); border: 1px solid oklch(0.32 0.05 200);"
@@ -373,6 +503,21 @@
 								<span class="text-[10px] font-mono flex-shrink-0" style="color: oklch(0.65 0.06 200);">
 									{formatLinesChanged(file.linesAdded, file.linesRemoved)}
 								</span>
+
+								<!-- Localhost link (shown if route file or explicit route) -->
+								{#if localhostRoute}
+									<button
+										type="button"
+										onclick={() => handleLocalhostClick(localhostRoute)}
+										class="flex-shrink-0 px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity"
+										style="background: oklch(0.28 0.08 145); color: oklch(0.85 0.12 145); border: 1px solid oklch(0.40 0.10 145);"
+										title="Open {localhostRoute} in browser"
+									>
+										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+										</svg>
+									</button>
+								{/if}
 
 								<!-- Diff link (always shown - opens in VS Code by default) -->
 								<button
@@ -454,32 +599,75 @@
 					</div>
 					<div class="flex flex-col gap-1">
 						{#each signal.reviewFocus as item, index}
-							<button
-								type="button"
-								onclick={() => toggleReviewItem(index)}
-								class="flex items-start gap-2 p-2 rounded text-left transition-all hover:opacity-90"
+							{@const focusItem = getReviewFocusItem(item)}
+							{@const itemText = getReviewFocusText(item)}
+							{@const hasFileLink = !!focusItem?.filePath}
+							{@const hasLocalhostLink = !!focusItem?.localhostRoute || (focusItem?.filePath && detectRouteFromPath(focusItem.filePath))}
+							{@const localhostRoute = focusItem?.localhostRoute || (focusItem?.filePath ? detectRouteFromPath(focusItem.filePath) : null)}
+							<div
+								class="flex items-start gap-2 p-2 rounded text-left transition-all"
 								style="background: {checkedReviewItems.has(index) ? 'oklch(0.22 0.06 145 / 0.3)' : 'oklch(0.20 0.03 200)'}; border: 1px solid {checkedReviewItems.has(index) ? 'oklch(0.45 0.12 145)' : 'oklch(0.32 0.05 200)'};"
 							>
-								<!-- Checkbox -->
-								<span
-									class="w-4 h-4 flex items-center justify-center rounded flex-shrink-0 mt-0.5"
+								<!-- Checkbox (clickable) -->
+								<button
+									type="button"
+									onclick={() => toggleReviewItem(index)}
+									class="w-4 h-4 flex items-center justify-center rounded flex-shrink-0 mt-0.5 hover:opacity-80 transition-opacity cursor-pointer"
 									style="background: {checkedReviewItems.has(index) ? 'oklch(0.50 0.18 145)' : 'oklch(0.30 0.04 200)'}; border: 1px solid {checkedReviewItems.has(index) ? 'oklch(0.55 0.18 145)' : 'oklch(0.40 0.06 200)'};"
+									title="Mark as reviewed"
 								>
 									{#if checkedReviewItems.has(index)}
 										<svg class="w-2.5 h-2.5" style="color: oklch(0.98 0.01 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
 											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 										</svg>
 									{/if}
-								</span>
+								</button>
+
+								<!-- Review focus text -->
 								<span
 									class="text-xs flex-1"
 									class:line-through={checkedReviewItems.has(index)}
 									class:opacity-60={checkedReviewItems.has(index)}
 									style="color: oklch(0.88 0.04 200);"
 								>
-									{item}
+									{itemText}
 								</span>
-							</button>
+
+								<!-- Link buttons (if any) -->
+								{#if hasFileLink || hasLocalhostLink}
+									<div class="flex items-center gap-1 flex-shrink-0">
+										<!-- VS Code file link -->
+										{#if hasFileLink && focusItem?.filePath}
+											<button
+												type="button"
+												onclick={() => openInVSCode(focusItem.filePath!, { line: focusItem.line })}
+												class="px-1 py-0.5 rounded hover:opacity-80 transition-opacity"
+												style="background: oklch(0.28 0.06 250); color: oklch(0.80 0.10 250); border: 1px solid oklch(0.38 0.08 250);"
+												title="Open {focusItem.filePath}{focusItem.line ? `:${focusItem.line}` : ''} in VS Code"
+											>
+												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+												</svg>
+											</button>
+										{/if}
+
+										<!-- Localhost link -->
+										{#if hasLocalhostLink && localhostRoute}
+											<button
+												type="button"
+												onclick={() => handleLocalhostClick(localhostRoute)}
+												class="px-1 py-0.5 rounded hover:opacity-80 transition-opacity"
+												style="background: oklch(0.28 0.08 145); color: oklch(0.85 0.12 145); border: 1px solid oklch(0.40 0.10 145);"
+												title="Open {localhostRoute} in browser"
+											>
+												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+												</svg>
+											</button>
+										{/if}
+									</div>
+								{/if}
+							</div>
 						{/each}
 					</div>
 				</div>

@@ -2,10 +2,24 @@
  * File Link Utilities
  *
  * Generates VS Code URLs for opening files with editor integration.
- * Supports line number deep links and git diff views.
+ * Supports line number deep links, git diff views, and localhost URLs.
  *
  * @see dashboard/CLAUDE.md for usage documentation
  */
+
+// Project configuration loaded from ~/.config/jat/projects.json
+// This will be populated by getProjectConfig()
+let projectsCache: Record<string, ProjectConfig> | null = null;
+
+/**
+ * Project configuration from projects.json
+ */
+export interface ProjectConfig {
+	name: string;
+	path: string;
+	port: number | null;
+	description?: string;
+}
 
 /**
  * Options for generating file links
@@ -321,4 +335,203 @@ export function getDiffLink(filePath: string, options: DiffLinkOptions = {}): Fi
 		shellCommand,
 		description
 	};
+}
+
+// =============================================================================
+// LOCALHOST URL UTILITIES
+// =============================================================================
+
+/**
+ * Set the projects cache (called from API or server-side)
+ */
+export function setProjectsCache(projects: Record<string, ProjectConfig>): void {
+	projectsCache = projects;
+}
+
+/**
+ * Get the projects cache
+ */
+export function getProjectsCache(): Record<string, ProjectConfig> | null {
+	return projectsCache;
+}
+
+/**
+ * Get the port for a project from the cache
+ *
+ * @param projectName - Project name (e.g., 'jat', 'chimaro')
+ * @returns Port number or null if not found
+ */
+export function getProjectPort(projectName: string): number | null {
+	if (!projectsCache) return null;
+	const project = projectsCache[projectName.toLowerCase()];
+	return project?.port ?? null;
+}
+
+/**
+ * Generate a localhost URL for a route
+ *
+ * @param route - The route path (e.g., '/dashboard', '/api/users', '/login')
+ * @param projectName - Project name to get port from
+ * @returns Full localhost URL or null if port not available
+ *
+ * @example
+ * ```typescript
+ * generateLocalhostUrl('/dashboard', 'jat')
+ * // → 'http://localhost:3333/dashboard'
+ *
+ * generateLocalhostUrl('/login', 'chimaro')
+ * // → 'http://localhost:3500/login'
+ * ```
+ */
+export function generateLocalhostUrl(route: string, projectName: string): string | null {
+	const port = getProjectPort(projectName);
+	if (!port) return null;
+
+	// Ensure route starts with /
+	const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
+
+	return `http://localhost:${port}${normalizedRoute}`;
+}
+
+/**
+ * Open a localhost URL in a new browser tab
+ *
+ * @param route - The route path
+ * @param projectName - Project name to get port from
+ * @returns true if URL was opened, false if port not available
+ */
+export function openLocalhostUrl(route: string, projectName: string): boolean {
+	const url = generateLocalhostUrl(route, projectName);
+	if (!url) return false;
+
+	window.open(url, '_blank');
+	return true;
+}
+
+/**
+ * Detect a route from a file path based on common patterns
+ *
+ * Supports SvelteKit routes (+page.svelte) and API routes (+server.ts/js)
+ *
+ * @param filePath - File path relative to project root
+ * @returns Detected route or null if not a route file
+ *
+ * @example
+ * ```typescript
+ * detectRouteFromPath('src/routes/dashboard/+page.svelte')
+ * // → '/dashboard'
+ *
+ * detectRouteFromPath('src/routes/api/users/+server.ts')
+ * // → '/api/users'
+ *
+ * detectRouteFromPath('src/routes/tasks/[id]/+page.svelte')
+ * // → '/tasks/[id]'
+ *
+ * detectRouteFromPath('src/lib/utils/auth.ts')
+ * // → null (not a route)
+ * ```
+ */
+export function detectRouteFromPath(filePath: string): string | null {
+	// Normalize path separators
+	const normalized = filePath.replace(/\\/g, '/');
+
+	// Check if it's a SvelteKit route file
+	const routeMatch = normalized.match(/src\/routes\/(.+?)\/\+(?:page|server|layout)\.(?:svelte|ts|js)$/);
+	if (routeMatch) {
+		const routePath = routeMatch[1];
+		// Convert route path to URL (handle dynamic params like [id])
+		return `/${routePath}`;
+	}
+
+	// Check for root route
+	if (normalized.match(/src\/routes\/\+(?:page|server|layout)\.(?:svelte|ts|js)$/)) {
+		return '/';
+	}
+
+	return null;
+}
+
+/**
+ * Interface for all links related to a file
+ */
+export interface FileLinks {
+	/** VS Code link to open the file */
+	vscodeUrl: string;
+	/** VS Code link to show diff */
+	diffUrl: string;
+	/** Localhost URL if this is a route file */
+	localhostUrl: string | null;
+	/** Detected route from file path */
+	detectedRoute: string | null;
+}
+
+/**
+ * Generate all links for a file
+ *
+ * @param filePath - File path relative to project root
+ * @param projectName - Project name for localhost URL
+ * @param options - Additional options
+ * @returns All available links for the file
+ *
+ * @example
+ * ```typescript
+ * getAllFileLinks('src/routes/dashboard/+page.svelte', 'jat')
+ * // → {
+ * //     vscodeUrl: 'vscode://file/.../src/routes/dashboard/+page.svelte',
+ * //     diffUrl: 'vscode://vscode.git/diff?path=...',
+ * //     localhostUrl: 'http://localhost:3333/dashboard',
+ * //     detectedRoute: '/dashboard'
+ * //   }
+ * ```
+ */
+export function getAllFileLinks(
+	filePath: string,
+	projectName: string,
+	options: FileLinkOptions & { localhostRoute?: string } = {}
+): FileLinks {
+	const vscodeUrl = generateVSCodeUrl(filePath, options);
+	const diffUrl = generateDiffUrl(filePath, {});
+
+	// Use explicit localhost route if provided, otherwise try to detect
+	const detectedRoute = options.localhostRoute || detectRouteFromPath(filePath);
+	const localhostUrl = detectedRoute ? generateLocalhostUrl(detectedRoute, projectName) : null;
+
+	return {
+		vscodeUrl,
+		diffUrl,
+		localhostUrl,
+		detectedRoute
+	};
+}
+
+/**
+ * Open all links for a file
+ *
+ * @param filePath - File path relative to project root
+ * @param projectName - Project name for localhost URL
+ * @param options - Which links to open
+ */
+export function openAllFileLinks(
+	filePath: string,
+	projectName: string,
+	options: {
+		openVscode?: boolean;
+		openDiff?: boolean;
+		openLocalhost?: boolean;
+		localhostRoute?: string;
+	} = { openVscode: true, openDiff: true, openLocalhost: true }
+): void {
+	const links = getAllFileLinks(filePath, projectName, { localhostRoute: options.localhostRoute });
+
+	if (options.openVscode) {
+		window.open(links.vscodeUrl, '_blank');
+	}
+
+	if (options.openDiff) {
+		window.open(links.diffUrl, '_blank');
+	}
+
+	if (options.openLocalhost && links.localhostUrl) {
+		window.open(links.localhostUrl, '_blank');
+	}
 }

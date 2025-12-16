@@ -84,6 +84,8 @@ export interface FileModification {
 	linesRemoved: number;
 	/** Optional description of what changed */
 	description?: string;
+	/** Optional localhost route to view this file's change (e.g., /dashboard, /api/users) */
+	localhostRoute?: string;
 }
 
 /**
@@ -104,6 +106,22 @@ export interface CommitInfo {
 	sha: string;
 	/** Commit message */
 	message: string;
+}
+
+/**
+ * Review focus item with optional links.
+ *
+ * Can be either a simple string or an object with links.
+ */
+export interface ReviewFocusItem {
+	/** Description of the review focus area */
+	text: string;
+	/** Optional file path related to this focus area */
+	filePath?: string;
+	/** Optional localhost route to view this area (e.g., /dashboard, /login) */
+	localhostRoute?: string;
+	/** Optional line number in the file */
+	line?: number;
 }
 
 /**
@@ -159,8 +177,8 @@ export interface ReviewSignal {
 	buildWarnings?: string[];
 
 	// Review guidance
-	/** Areas to focus review on (e.g., "Check error handling in auth.ts") */
-	reviewFocus: string[];
+	/** Areas to focus review on - can be strings or objects with links */
+	reviewFocus: (string | ReviewFocusItem)[];
 	/** Known limitations or edge cases not handled */
 	knownLimitations?: string[];
 
