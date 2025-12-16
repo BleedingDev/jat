@@ -43,6 +43,7 @@
 		playNeedsInputSound,
 		playReadyForReviewSound,
 		playNewTaskChime,
+		playCopySound,
 	} from "$lib/utils/soundEffects";
 	import VoiceInput from "$lib/components/VoiceInput.svelte";
 	import StatusActionBadge from "./StatusActionBadge.svelte";
@@ -471,6 +472,10 @@
 	let nextTaskInfo = $state<NextTaskInfo | null>(null);
 	let nextTaskLoading = $state(false);
 	let nextTaskFetchFailed = $state(false); // Track if fetch failed (404, network error) to prevent infinite retry loop
+
+	// Copy session contents state
+	let sessionCopied = $state(false);
+	let sessionCopyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Fetch next task when session is in completed state
 	// Only recommends tasks from the same project as the completed task
@@ -2596,6 +2601,107 @@
 		}
 	});
 
+	/**
+	 * Copy session contents to clipboard
+	 * Formats a comprehensive summary including:
+	 * - Agent mode: Agent name, session state, task info
+	 * - Server mode: Project name, port, server status
+	 * - Terminal output (stripped of ANSI codes)
+	 */
+	async function copySessionContents() {
+		const lines: string[] = [];
+		const separator = '─'.repeat(50);
+
+		// Header
+		lines.push(`Session: ${sessionName}`);
+		lines.push(separator);
+
+		if (isServerMode) {
+			// Server mode info
+			if (displayName || projectName) {
+				lines.push(`Server: ${displayName || projectName}`);
+			}
+			if (port) {
+				lines.push(`Port: ${port}${portRunning ? ' (running)' : ' (stopped)'}`);
+			}
+			if (serverStatus) {
+				lines.push(`Status: ${serverStatus}`);
+			}
+			if (command) {
+				lines.push(`Command: ${command}`);
+			}
+			if (projectPath) {
+				lines.push(`Path: ${projectPath}`);
+			}
+			// Server uptime
+			const serverElapsed = serverElapsedFormatted();
+			if (serverElapsed) {
+				const timeStr = serverElapsed.showHours
+					? `${serverElapsed.hours}:${serverElapsed.minutes}:${serverElapsed.seconds}`
+					: `${serverElapsed.minutes}:${serverElapsed.seconds}`;
+				lines.push(`Uptime: ${timeStr}`);
+			}
+		} else {
+			// Agent mode info
+			if (agentName) {
+				lines.push(`Agent: ${agentName}`);
+			}
+			lines.push(`State: ${sessionState}`);
+			if (startTime) {
+				const elapsed = elapsedTimeFormatted();
+				if (elapsed) {
+					const timeStr = elapsed.showHours
+						? `${elapsed.hours}:${elapsed.minutes}:${elapsed.seconds}`
+						: `${elapsed.minutes}:${elapsed.seconds}`;
+					lines.push(`Duration: ${timeStr}`);
+				}
+			}
+
+			// Task info (use displayTask for proper task display)
+			if (displayTask) {
+				lines.push('');
+				lines.push(`Task: ${displayTask.id}`);
+				if (displayTask.title) {
+					lines.push(`Title: ${displayTask.title}`);
+				}
+				if (displayTask.status) {
+					lines.push(`Status: ${displayTask.status}`);
+				}
+				if (displayTask.description) {
+					lines.push(`Description: ${displayTask.description}`);
+				}
+			}
+		}
+
+		// Terminal output (strip ANSI codes for clean text)
+		if (output && output.trim()) {
+			lines.push('');
+			lines.push(separator);
+			lines.push('Terminal Output:');
+			lines.push(separator);
+			lines.push(stripAnsi(output));
+		}
+
+		const text = lines.join('\n');
+
+		try {
+			await navigator.clipboard.writeText(text);
+			sessionCopied = true;
+			playCopySound();
+			successToast(isServerMode ? 'Server output copied to clipboard' : 'Session contents copied to clipboard');
+
+			// Clear timeout if exists
+			if (sessionCopyTimeout) {
+				clearTimeout(sessionCopyTimeout);
+			}
+			sessionCopyTimeout = setTimeout(() => {
+				sessionCopied = false;
+			}, 2000);
+		} catch (err) {
+			console.error('Failed to copy session contents:', err);
+		}
+	}
+
 	// Capture session log to .beads/logs/ on completion
 	async function captureSessionLog() {
 		if (logCaptured || !sessionName) return;
@@ -3574,6 +3680,23 @@
 						💡 {detectedSuggestedTasks.length}
 					</button>
 				{/if}
+				<!-- Copy Session Contents button (compact) -->
+				<button
+					type="button"
+					class="p-0.5 rounded hover:bg-base-content/10 transition-colors group"
+					title={sessionCopied ? "Copied!" : "Copy session contents"}
+					onclick={copySessionContents}
+				>
+					{#if sessionCopied}
+						<svg class="w-3.5 h-3.5" style="color: oklch(0.70 0.20 145);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+						</svg>
+					{:else}
+						<svg class="w-3.5 h-3.5 opacity-40 group-hover:opacity-70 transition-opacity" style="color: oklch(0.70 0.05 250);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+						</svg>
+					{/if}
+				</button>
 				<!-- Status action dropdown or auto-close countdown -->
 				{#if sessionState === "completed" && autoCloseCountdown !== null && !autoCloseHeld}
 					<!-- Auto-close countdown UI (compact) -->
@@ -4112,6 +4235,24 @@
 					<!-- Divider -->
 					<div class="w-px h-5" style="background: oklch(0.35 0.02 250);"></div>
 
+					<!-- Copy Session Contents button -->
+					<button
+						type="button"
+						class="p-1 rounded hover:bg-base-content/10 transition-colors group"
+						title={sessionCopied ? "Copied!" : "Copy session contents to clipboard"}
+						onclick={copySessionContents}
+					>
+						{#if sessionCopied}
+							<svg class="w-4 h-4" style="color: oklch(0.70 0.20 145);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							</svg>
+						{:else}
+							<svg class="w-4 h-4 opacity-50 group-hover:opacity-80 transition-opacity" style="color: oklch(0.70 0.05 250);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+							</svg>
+						{/if}
+					</button>
+
 					<!-- Human Actions Required indicator -->
 					{#if pendingHumanActionsCount > 0}
 						<span
@@ -4279,6 +4420,24 @@
 						</div>
 					{/if}
 
+					<!-- Copy Session Contents button (server mode) -->
+					<button
+						type="button"
+						class="p-1 rounded hover:bg-base-content/10 transition-colors group"
+						title={sessionCopied ? "Copied!" : "Copy server output"}
+						onclick={copySessionContents}
+					>
+						{#if sessionCopied}
+							<svg class="w-4 h-4" style="color: oklch(0.70 0.20 145);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							</svg>
+						{:else}
+							<svg class="w-4 h-4 opacity-50 group-hover:opacity-80 transition-opacity" style="color: oklch(0.70 0.05 250);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+							</svg>
+						{/if}
+					</button>
+
 					<!-- Divider -->
 					<div class="w-px h-5" style="background: oklch(0.35 0.02 250);"></div>
 
@@ -4302,9 +4461,10 @@
 			style="border-top: 10px solid oklch(0.5 0 0 / 0.08);"
 		>
 			<!-- Rich Signal Cards - display context-aware signal information above terminal -->
-			<!-- Container has max-height and overflow-y-auto to prevent content from spilling outside card -->
+			<!-- Container uses flex-shrink-0 to prevent collapse, max-height constrains expansion -->
+			<!-- overflow-hidden ensures content stays within bounds even with nested scrolling -->
 			{#if hasRichSignal && isAgentMode}
-				<div class="px-3 py-2 overflow-y-auto overflow-x-hidden" style="border-bottom: 1px solid oklch(0.5 0 0 / 0.12); max-height: 50%;">
+				<div class="px-3 py-2 overflow-hidden flex-shrink-0" style="border-bottom: 1px solid oklch(0.5 0 0 / 0.12); max-height: min(50%, 350px);">
 					{#if workingSignal}
 						<WorkingSignalCard
 							signal={workingSignal}
