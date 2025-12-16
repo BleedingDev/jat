@@ -41,11 +41,16 @@
 	const currentStepIndex = $derived(ALL_STEPS.findIndex(s => s.id === signal.currentStep));
 
 	// Format elapsed time for current step
-	function formatElapsed(startedAt: string): string {
+	function formatElapsed(startedAt: string | undefined): string {
+		if (!startedAt) return '';
+
 		const started = new Date(startedAt);
+		if (isNaN(started.getTime())) return '';
+
 		const now = new Date();
 		const seconds = Math.floor((now.getTime() - started.getTime()) / 1000);
 
+		if (!isFinite(seconds) || seconds < 0) return '';
 		if (seconds < 60) return `${seconds}s`;
 		const minutes = Math.floor(seconds / 60);
 		const remainingSeconds = seconds % 60;
@@ -53,13 +58,18 @@
 	}
 
 	// Auto-update elapsed time
-	let elapsedTime = $state(formatElapsed(signal.stepStartedAt));
+	let elapsedTime = $state(formatElapsed(signal.stepStartedAt) || '');
 	$effect(() => {
 		const interval = setInterval(() => {
 			elapsedTime = formatElapsed(signal.stepStartedAt);
 		}, 1000);
 		return () => clearInterval(interval);
 	});
+
+	// Safe progress value (fallback to 0 if not a valid number)
+	const progressValue = $derived(
+		typeof signal.progress === 'number' && isFinite(signal.progress) ? signal.progress : 0
+	);
 </script>
 
 {#if compact}
@@ -68,13 +78,14 @@
 		<span class="loading loading-spinner loading-xs text-info"></span>
 		<span class="text-base-content/70">
 			{signal.currentStep}
-			<span class="text-base-content/50">({signal.progress}%)</span>
+			<span class="text-base-content/50">({progressValue}%)</span>
 		</span>
 	</div>
 {:else}
 	<!-- Full mode: detailed progress card -->
-	<div class="card bg-base-200 shadow-sm">
-		<div class="card-body p-4">
+	<!-- h-full and overflow-hidden ensure card fits within parent's max-height constraint -->
+	<div class="card bg-base-200 shadow-sm h-full overflow-hidden flex flex-col">
+		<div class="card-body p-4 flex-1 min-h-0 overflow-y-auto">
 			<!-- Header -->
 			<div class="flex items-center justify-between mb-4">
 				<div class="flex items-center gap-2">
@@ -97,11 +108,11 @@
 			<div class="w-full mb-4">
 				<div class="flex justify-between text-xs text-base-content/50 mb-1">
 					<span>Progress</span>
-					<span>{signal.progress}%</span>
+					<span>{progressValue}%</span>
 				</div>
 				<progress
 					class="progress progress-info w-full h-2"
-					value={signal.progress}
+					value={progressValue}
 					max="100"
 				></progress>
 			</div>

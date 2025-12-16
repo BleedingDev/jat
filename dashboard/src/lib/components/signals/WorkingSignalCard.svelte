@@ -169,13 +169,14 @@
 	</div>
 {:else}
 	<!-- Full mode: detailed working signal card -->
+	<!-- h-full and overflow-hidden ensure the card fits within parent's max-height constraint -->
 	<div
-		class="rounded-lg overflow-hidden {className}"
+		class="rounded-lg overflow-hidden h-full flex flex-col {className}"
 		style="background: linear-gradient(135deg, oklch(0.22 0.06 85) 0%, oklch(0.18 0.04 80) 100%); border: 1px solid oklch(0.45 0.12 85);"
 	>
-		<!-- Header -->
+		<!-- Header - flex-shrink-0 ensures it doesn't shrink when body scrolls -->
 		<div
-			class="px-3 py-2 flex items-center justify-between gap-2"
+			class="px-3 py-2 flex items-center justify-between gap-2 flex-shrink-0"
 			style="background: oklch(0.25 0.08 85); border-bottom: 1px solid oklch(0.40 0.10 85);"
 		>
 			<div class="flex items-center gap-2">
@@ -224,8 +225,8 @@
 			</div>
 		</div>
 
-		<!-- Body -->
-		<div class="p-3 flex flex-col gap-3">
+		<!-- Body - flex-1 with min-h-0 and overflow-y-auto for proper scrolling -->
+		<div class="p-3 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
 			<!-- Task Title & Description -->
 			<div class="flex flex-col gap-1">
 				<div class="text-sm font-semibold" style="color: oklch(0.95 0.08 85);">

@@ -160,13 +160,14 @@
 	</div>
 {:else}
 	<!-- Full mode: detailed idle signal card -->
+	<!-- h-full and overflow-hidden ensure the card fits within parent's max-height constraint -->
 	<div
-		class="rounded-lg overflow-hidden {className}"
+		class="rounded-lg overflow-hidden h-full flex flex-col {className}"
 		style="background: linear-gradient(135deg, oklch(0.22 0.04 250) 0%, oklch(0.18 0.03 245) 100%); border: 1px solid oklch(0.40 0.08 250);"
 	>
-		<!-- Header -->
+		<!-- Header - flex-shrink-0 ensures it doesn't shrink when body scrolls -->
 		<div
-			class="px-3 py-2 flex items-center justify-between gap-2"
+			class="px-3 py-2 flex items-center justify-between gap-2 flex-shrink-0"
 			style="background: oklch(0.25 0.05 250); border-bottom: 1px solid oklch(0.35 0.06 250);"
 		>
 			<div class="flex items-center gap-2">
@@ -202,8 +203,8 @@
 			{/if}
 		</div>
 
-		<!-- Body -->
-		<div class="p-3 flex flex-col gap-3">
+		<!-- Body - flex-1 with min-h-0 and overflow-y-auto for proper scrolling -->
+		<div class="p-3 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
 			<!-- Blocked Reason -->
 			{#if signal.blockedReason}
 				<div

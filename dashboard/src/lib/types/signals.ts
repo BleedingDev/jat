@@ -222,3 +222,69 @@ export interface IdleSignal {
 	/** If not ready, explanation of why (e.g., "Waiting for PR review") */
 	blockedReason?: string;
 }
+
+// =============================================================================
+// QUESTION SIGNAL TYPES
+// =============================================================================
+
+/**
+ * Type of question being asked by an agent.
+ */
+export type QuestionType = 'choice' | 'confirm' | 'input';
+
+/**
+ * Single option for a question.
+ *
+ * Used in QuestionSignal to define selectable options for choice-type questions.
+ */
+export interface QuestionOption {
+	/** Display label shown to user */
+	label: string;
+	/** Value returned when this option is selected */
+	value: string;
+	/** Optional description explaining what this option means */
+	description?: string;
+}
+
+/**
+ * Question signal emitted when agent needs user input.
+ *
+ * This is a structured representation of questions that agents ask during workflows.
+ * The dashboard can use this to render rich question UIs instead of plain text prompts.
+ *
+ * Agents emit via:
+ *   jat-signal question '{"question":"Which approach?","questionType":"choice","options":[...]}'
+ *
+ * @example Choice question
+ * {
+ *   question: "Which authentication method should we use?",
+ *   questionType: "choice",
+ *   options: [
+ *     { label: "OAuth 2.0", value: "oauth", description: "Industry standard, supports SSO" },
+ *     { label: "API Keys", value: "apikey", description: "Simple but less secure" }
+ *   ]
+ * }
+ *
+ * @example Confirm question
+ * {
+ *   question: "Should I proceed with the migration?",
+ *   questionType: "confirm"
+ * }
+ *
+ * @example Input question
+ * {
+ *   question: "What should the new component be named?",
+ *   questionType: "input",
+ *   timeout: 300
+ * }
+ */
+export interface QuestionSignal {
+	/** The question text being asked */
+	question: string;
+	/** Type of question: choice (select from options), confirm (yes/no), input (free text) */
+	questionType: QuestionType;
+	/** Available options for choice-type questions */
+	options?: QuestionOption[];
+	/** Optional timeout in seconds after which agent may take default action */
+	timeout?: number;
+}
