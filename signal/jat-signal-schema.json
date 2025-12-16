@@ -280,6 +280,31 @@
         }
       }
     },
+    "reviewFocusItem": {
+      "type": "object",
+      "description": "Review focus item with optional links",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Description of the review focus area"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "Optional file path related to this focus area"
+        },
+        "localhostRoute": {
+          "type": "string",
+          "description": "Optional localhost route to view this area (e.g., /dashboard, /login)"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional line number in the file"
+        }
+      }
+    },
     "questionOption": {
       "type": "object",
       "description": "Option for needs_input question",
@@ -522,8 +547,13 @@
         },
         "reviewFocus": {
           "type": "array",
-          "items": { "type": "string" },
-          "description": "Areas to focus review on"
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              { "$ref": "#/definitions/reviewFocusItem" }
+            ]
+          },
+          "description": "Areas to focus review on - can be strings or objects with links"
         },
         "knownLimitations": {
           "type": "array",
@@ -796,6 +826,63 @@
         "nextTaskId": {
           "type": "string",
           "description": "Next task to pick up"
+        }
+      }
+    },
+    "questionSignalQuestionType": {
+      "type": "string",
+      "enum": ["choice", "confirm", "input"],
+      "description": "Type of question: choice (select from options), confirm (yes/no), input (free text)"
+    },
+    "questionSignalOption": {
+      "type": "object",
+      "description": "Single option for a question",
+      "required": ["label", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Display label shown to user"
+        },
+        "value": {
+          "type": "string",
+          "description": "Value returned when this option is selected"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description explaining what this option means"
+        }
+      }
+    },
+    "questionSignal": {
+      "type": "object",
+      "description": "Question signal emitted when agent needs user input. Provides structured data for rich question UIs.",
+      "required": ["question", "questionType"],
+      "additionalProperties": false,
+      "properties": {
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "The question text being asked"
+        },
+        "questionType": {
+          "$ref": "#/definitions/questionSignalQuestionType"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/questionSignalOption"
+          },
+          "minItems": 1,
+          "maxItems": 10,
+          "description": "Available options for choice-type questions"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "description": "Optional timeout in seconds after which agent may take default action"
         }
       }
     }

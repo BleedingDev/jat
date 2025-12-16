@@ -513,16 +513,60 @@ validate_review() {
         done
     fi
 
-    # Validate reviewFocus is array of strings if present
+    # Validate reviewFocus is array of strings or objects with 'text' field if present
     if echo "$payload" | jq -e 'has("reviewFocus")' >/dev/null 2>&1; then
         if ! echo "$payload" | jq -e '.reviewFocus | type == "array"' >/dev/null 2>&1; then
             echo "Error: review.reviewFocus must be an array" >&2
             return 1
         fi
-        if ! echo "$payload" | jq -e '.reviewFocus | all(type == "string")' >/dev/null 2>&1; then
-            echo "Error: review.reviewFocus must contain only strings" >&2
-            return 1
-        fi
+        # Each item must be either a string or an object with 'text' field
+        local count
+        count=$(echo "$payload" | jq '.reviewFocus | length')
+        local i=0
+        while [[ $i -lt $count ]]; do
+            local item
+            item=$(echo "$payload" | jq ".reviewFocus[$i]")
+            local item_type
+            item_type=$(echo "$item" | jq -r 'type')
+
+            if [[ "$item_type" == "string" ]]; then
+                # String item is valid
+                :
+            elif [[ "$item_type" == "object" ]]; then
+                # Object must have 'text' field
+                if ! echo "$item" | jq -e 'has("text")' >/dev/null 2>&1; then
+                    echo "Error: review.reviewFocus[$i] object missing required field 'text'" >&2
+                    return 1
+                fi
+                local text
+                text=$(echo "$item" | jq -r '.text // ""')
+                if [[ -z "$text" ]]; then
+                    echo "Error: review.reviewFocus[$i].text cannot be empty" >&2
+                    return 1
+                fi
+                # Validate optional fields
+                if echo "$item" | jq -e 'has("line")' >/dev/null 2>&1; then
+                    local line
+                    line=$(echo "$item" | jq '.line')
+                    if ! echo "$line" | grep -qE '^[1-9][0-9]*$'; then
+                        echo "Error: review.reviewFocus[$i].line must be a positive integer" >&2
+                        return 1
+                    fi
+                fi
+                # Check for unknown fields
+                local unknown
+                unknown=$(echo "$item" | jq -r 'keys - ["text","filePath","localhostRoute","line"] | .[0] // ""')
+                if [[ -n "$unknown" ]]; then
+                    echo "Error: review.reviewFocus[$i] has unknown field '$unknown'" >&2
+                    return 1
+                fi
+            else
+                echo "Error: review.reviewFocus[$i] must be a string or object with 'text' field" >&2
+                return 1
+            fi
+
+            i=$((i + 1))
+        done
     fi
 
     # Validate knownLimitations is array of strings if present
