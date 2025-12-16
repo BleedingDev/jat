@@ -10,7 +10,9 @@ Lightweight bash tools for agent orchestration, database operations, monitoring,
 @~/code/jat/shared/workflow-commands.md
 @~/code/jat/shared/statusline.md
 @~/code/jat/shared/signals.md
+@~/code/jat/shared/suggested-tasks.md
 @~/code/jat/shared/agent-app-interface.md
+@~/code/jat/shared/automation.md
 
 ## Project Structure
 
