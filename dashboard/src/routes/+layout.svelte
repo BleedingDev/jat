@@ -14,14 +14,16 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
-	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime } from '$lib/utils/soundEffects';
+	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
+	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime, playCopySound } from '$lib/utils/soundEffects';
+	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
 	import { availableProjects, openTaskDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
-	import { getSessions as getWorkSessions } from '$lib/stores/workSessions.svelte';
+	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
 
 	let { children } = $props();
@@ -172,7 +174,7 @@
 	}
 
 	// Initialize theme-change, SSE, preferences, and load all tasks
-	onMount(() => {
+	onMount(async () => {
 		initPreferences(); // Initialize unified preferences store
 		themeChange(false);
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
@@ -185,10 +187,17 @@
 		// Load sparkline data after initial render (fast with SQLite, ~5ms)
 		setTimeout(() => loadSparklineData(), 200);
 
+		// Load sessions for activity polling (needs sessions before polling can work)
+		await fetchWorkSessions();
+
+		// Start activity polling for shimmer effect on all pages (200ms for responsive updates)
+		startActivityPolling(200);
+
 		return () => {
 			closeSessionEvents(); // Close cross-page BroadcastChannel
 			disconnectSessionEvents(); // Disconnect from session events SSE
 			disconnectTaskEvents(); // Disconnect from task events SSE
+			stopActivityPolling(); // Stop activity polling
 		};
 	});
 
@@ -425,8 +434,21 @@
 		try {
 			const response = await fetch('/api/projects?visible=true&stats=true');
 			const data = await response.json();
+			const projectsArray = data.projects || [];
 			// Extract project names from the config (already sorted by last activity)
-			configProjects = (data.projects || []).map((p: { name: string }) => p.name);
+			configProjects = projectsArray.map((p: { name: string }) => p.name);
+
+			// Populate the projects cache for fileLinks.ts localhost URL utilities
+			const projectsCache: Record<string, ProjectConfig> = {};
+			for (const p of projectsArray) {
+				projectsCache[p.name.toLowerCase()] = {
+					name: p.name,
+					path: p.path,
+					port: p.port ?? null,
+					description: p.description
+				};
+			}
+			setProjectsCache(projectsCache);
 		} catch (error) {
 			console.error('Failed to fetch config projects:', error);
 			if (retries > 0) {
@@ -650,6 +672,30 @@
 					}
 				} catch (err) {
 					console.error('Error restarting session:', err);
+				}
+			}
+			return;
+		}
+
+		// Alt+Shift+C = Copy hovered session contents to clipboard
+		if (event.altKey && event.shiftKey && event.code === 'KeyC') {
+			event.preventDefault();
+			const sessionName = get(hoveredSessionName);
+			if (sessionName) {
+				try {
+					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/copy`);
+					if (response.ok) {
+						const data = await response.json();
+						if (data.content) {
+							await navigator.clipboard.writeText(data.content);
+							playCopySound();
+							successToast('Session contents copied to clipboard');
+						}
+					} else {
+						console.error('Failed to get session contents:', await response.text());
+					}
+				} catch (err) {
+					console.error('Error copying session contents:', err);
 				}
 			}
 			return;
