@@ -13,7 +13,7 @@
 	 * - Expanded to viewport height (drag past max)
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
@@ -38,6 +38,8 @@
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import { SORT_OPTIONS, getSortBy, getSortDir, handleSortClick, initSort, type SortOption } from '$lib/stores/workSort.svelte';
+	import { maximizeSessionPanel } from '$lib/stores/hoveredSession';
+	import { getSessionMaximizeHeight } from '$lib/stores/preferences.svelte';
 
 	// Types (aligned with api.types.Task for TaskTable compatibility)
 	interface Task {
@@ -863,6 +865,9 @@
 		openTaskDrawer(project);
 	}
 
+	// Subscription cleanup
+	let unsubscribeMaximize: (() => void) | undefined;
+
 	onMount(async () => {
 		customProjectOrder = loadProjectOrder();
 		initSort(); // Initialize session sort from localStorage
@@ -870,6 +875,55 @@
 		fetchTaskData();
 		await fetchSessions();
 		setTimeout(() => fetchSessionUsage(), 5000);
+
+		// Subscribe to maximizeSessionPanel for click-to-center behavior
+		console.log('[projects/+page] Setting up maximizeSessionPanel subscription');
+		unsubscribeMaximize = maximizeSessionPanel.subscribe(async (sessionName) => {
+			console.log('[projects/+page] maximizeSessionPanel subscription fired:', sessionName);
+			if (sessionName) {
+				// Find which project contains this session
+				let targetProject: string | null = null;
+				for (const [project, sessions] of sessionsByProject.entries()) {
+					if (sessions.some(s => s.sessionName === sessionName)) {
+						targetProject = project;
+						break;
+					}
+				}
+
+				console.log('[projects/+page] Found project for session:', targetProject);
+				if (targetProject) {
+					// Expand the project if collapsed
+					const isProjectCollapsed = projectCollapseState.get(targetProject) ?? false;
+					if (isProjectCollapsed) {
+						console.log('[projects/+page] Expanding collapsed project:', targetProject);
+						const newState = new Map(projectCollapseState);
+						newState.set(targetProject, false);
+						projectCollapseState = newState;
+						saveProjectCollapse(targetProject, false);
+					}
+
+					// Expand the sessions section if collapsed
+					const sessionState = getSectionState(targetProject, 'sessions');
+					if (sessionState.collapsed) {
+						console.log('[projects/+page] Expanding collapsed sessions section');
+						updateSectionState(targetProject, 'sessions', { collapsed: false });
+					}
+
+					// ALWAYS maximize sessions section height when clicking (uses user preference as % of viewport)
+					const heightPercent = getSessionMaximizeHeight();
+					const maximizeHeight = Math.round(window.innerHeight * (heightPercent / 100));
+					console.log('[projects/+page] Setting session height to:', maximizeHeight, `(${heightPercent}% of viewport)`);
+					updateSectionState(targetProject, 'sessions', { height: maximizeHeight });
+
+					await tick();
+					console.log('[projects/+page] Panel maximized for project:', targetProject);
+				}
+			}
+		});
+	});
+
+	onDestroy(() => {
+		unsubscribeMaximize?.();
 	});
 </script>
 

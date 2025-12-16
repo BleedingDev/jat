@@ -13,6 +13,7 @@ const STORAGE_KEYS = {
 	soundsEnabled: 'dashboard-sounds-enabled',
 	theme: 'theme',
 	terminalHeight: 'user-terminal-height',
+	sessionMaximizeHeight: 'session-maximize-height',
 	outputDrawerOpen: 'output-drawer-open',
 	taskSaveAction: 'taskDrawer.savePreference', // Match TaskCreationDrawer
 	sparklineMode: 'sparkline-multi-series-mode',
@@ -62,12 +63,24 @@ export const MAX_SESSIONS_OPTIONS = [
 	{ value: 20, label: '20' }
 ] as const;
 
+// Session maximize height options (percentage of viewport height)
+export const SESSION_MAXIMIZE_HEIGHT_OPTIONS = [
+	{ value: 50, label: '50%' },
+	{ value: 60, label: '60%' },
+	{ value: 70, label: '70%' },
+	{ value: 80, label: '80%' },
+	{ value: 90, label: '90%' }
+] as const;
+
+export type SessionMaximizeHeight = 50 | 60 | 70 | 80 | 90;
+
 // Default values
 const DEFAULTS = {
 	sparklineVisible: true,
 	soundsEnabled: false,
 	theme: 'nord',
 	terminalHeight: 50, // Match UserProfile's DEFAULT_TERMINAL_HEIGHT
+	sessionMaximizeHeight: 70 as SessionMaximizeHeight, // Viewport % when clicking to maximize session
 	outputDrawerOpen: false,
 	taskSaveAction: 'close' as TaskSaveAction,
 	sparklineMode: 'stacked' as SparklineMode,
@@ -95,6 +108,7 @@ let sparklineVisible = $state(DEFAULTS.sparklineVisible);
 let soundsEnabled = $state(DEFAULTS.soundsEnabled);
 let theme = $state(DEFAULTS.theme);
 let terminalHeight = $state(DEFAULTS.terminalHeight);
+let sessionMaximizeHeight = $state<SessionMaximizeHeight>(DEFAULTS.sessionMaximizeHeight);
 let outputDrawerOpen = $state(DEFAULTS.outputDrawerOpen);
 let taskSaveAction = $state<TaskSaveAction>(DEFAULTS.taskSaveAction);
 let sparklineMode = $state<SparklineMode>(DEFAULTS.sparklineMode);
@@ -125,6 +139,12 @@ export function initPreferences(): void {
 
 	const storedHeight = localStorage.getItem(STORAGE_KEYS.terminalHeight);
 	terminalHeight = storedHeight ? parseInt(storedHeight, 10) || DEFAULTS.terminalHeight : DEFAULTS.terminalHeight;
+
+	const storedSessionMaxHeight = localStorage.getItem(STORAGE_KEYS.sessionMaximizeHeight);
+	const parsedSessionMaxHeight = storedSessionMaxHeight ? parseInt(storedSessionMaxHeight, 10) : null;
+	sessionMaximizeHeight = (parsedSessionMaxHeight === 50 || parsedSessionMaxHeight === 60 || parsedSessionMaxHeight === 70 || parsedSessionMaxHeight === 80 || parsedSessionMaxHeight === 90)
+		? parsedSessionMaxHeight
+		: DEFAULTS.sessionMaximizeHeight;
 
 	outputDrawerOpen = localStorage.getItem(STORAGE_KEYS.outputDrawerOpen) === 'true';
 
@@ -277,6 +297,21 @@ export function setTerminalHeight(value: number): void {
 	terminalHeight = value;
 	if (browser) {
 		localStorage.setItem(STORAGE_KEYS.terminalHeight, String(value));
+	}
+}
+
+// ============================================================================
+// Session Maximize Height (click-to-expand height for session cards)
+// ============================================================================
+
+export function getSessionMaximizeHeight(): SessionMaximizeHeight {
+	return sessionMaximizeHeight;
+}
+
+export function setSessionMaximizeHeight(value: SessionMaximizeHeight): void {
+	sessionMaximizeHeight = value;
+	if (browser) {
+		localStorage.setItem(STORAGE_KEYS.sessionMaximizeHeight, String(value));
 	}
 }
 
