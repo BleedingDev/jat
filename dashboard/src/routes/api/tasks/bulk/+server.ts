@@ -233,7 +233,7 @@ async function createTask(task: SuggestedTask, defaultProject?: string): Promise
 			}
 		} catch {
 			// Fallback to regex parsing if JSON parsing fails
-			const match = stdout.match(/Created issue: ([a-z]+-[a-z0-9]+)/i);
+			const match = stdout.match(/Created issue: ([\w]+-[\w]+)/i);
 			if (match) {
 				return {
 					title,

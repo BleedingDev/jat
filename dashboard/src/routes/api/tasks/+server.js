@@ -216,8 +216,9 @@ export async function POST({ request }) {
 		// Execute bd create command
 		const { stdout, stderr } = await execAsync(command);
 
-		// Parse task ID from output (e.g., "✓ Created issue: jat-abc")
-		const match = stdout.match(/Created issue: ([a-z]+-[a-z0-9]+)/i);
+		// Parse task ID from output (e.g., "✓ Created issue: jat-abc" or "community_connect-xyz")
+		// Support project names with underscores, hyphens, mixed case
+		const match = stdout.match(/Created issue: ([\w]+-[\w]+)/i);
 		if (!match) {
 			console.error('Failed to parse task ID from bd create output:', stdout);
 			return json(
