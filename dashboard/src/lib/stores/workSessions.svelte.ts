@@ -23,8 +23,17 @@
  */
 
 import { getTerminalScrollback } from '$lib/stores/preferences.svelte';
-import { throttledFetch } from '$lib/utils/requestThrottler';
+import { throttledFetch, getQueueStatus } from '$lib/utils/requestThrottler';
 import { subscribe as wsSubscribe, onMessage, isConnected, type WebSocketMessage } from '$lib/stores/websocket.svelte';
+
+// Debug logging for tracking request issues (unthrottled requests)
+const DEBUG_UNTHROTTLED = true;
+function debugUnthrottled(msg: string, data?: Record<string, unknown>) {
+	if (!DEBUG_UNTHROTTLED) return;
+	const timestamp = new Date().toISOString().slice(11, 23);
+	const queueStatus = getQueueStatus();
+	console.log(`[WorkSessions ${timestamp}] ${msg}`, { ...data, throttlerStatus: queueStatus });
+}
 
 /**
  * Sparkline data point for hourly token usage
@@ -572,6 +581,9 @@ export async function sendInput(
 	input: string,
 	type: 'text' | 'enter' | 'up' | 'down' | 'escape' | 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'tab' | 'raw' = 'text'
 ): Promise<boolean> {
+	debugUnthrottled('SEND_INPUT_START', { sessionName, type, inputLength: input.length });
+	const startTime = Date.now();
+
 	try {
 		// Use a 30-second timeout for input requests
 		// This is longer because user actions should complete even if server is slow
@@ -588,6 +600,8 @@ export async function sendInput(
 		});
 
 		clearTimeout(timeoutId);
+		const duration = Date.now() - startTime;
+		debugUnthrottled('SEND_INPUT_DONE', { sessionName, type, duration, status: response.status });
 
 		if (!response.ok) {
 			const data = await response.json();
@@ -596,12 +610,15 @@ export async function sendInput(
 
 		return true;
 	} catch (err) {
+		const duration = Date.now() - startTime;
 		// Handle abort errors specially
 		if (err instanceof Error && err.name === 'AbortError') {
 			state.error = 'Request timed out - server may be overloaded';
+			debugUnthrottled('SEND_INPUT_TIMEOUT', { sessionName, type, duration });
 			console.error('workSessions.sendInput timeout:', sessionName);
 		} else {
 			state.error = err instanceof Error ? err.message : 'Failed to send input';
+			debugUnthrottled('SEND_INPUT_ERROR', { sessionName, type, duration, error: err instanceof Error ? err.message : String(err) });
 			console.error('workSessions.sendInput error:', err);
 		}
 		return false;
@@ -749,6 +766,9 @@ export async function fetchActivityStates(): Promise<void> {
 		return;
 	}
 
+	const startTime = Date.now();
+	debugUnthrottled('ACTIVITY_FETCH_START', { sessionCount: sessions.length });
+
 	try {
 		// Build comma-separated list of session names for the batch endpoint
 		const sessionNames = sessions.map(s => s.sessionName).join(',');
@@ -810,11 +830,15 @@ export async function fetchActivityStates(): Promise<void> {
 		if (hasChanges) {
 			state.sessions = updatedSessions;
 		}
+		const duration = Date.now() - startTime;
+		debugUnthrottled('ACTIVITY_FETCH_DONE', { sessionCount: sessions.length, duration, hasChanges });
 	} catch (err) {
 		// Increment failure count and calculate backoff
 		activityFailureCount++;
 		const backoffMs = Math.min(ACTIVITY_BASE_BACKOFF_MS * Math.pow(2, activityFailureCount - 1), ACTIVITY_MAX_BACKOFF_MS);
 		activityBackoffUntil = Date.now() + backoffMs;
+		const duration = Date.now() - startTime;
+		debugUnthrottled('ACTIVITY_FETCH_ERROR', { sessionCount: sessions.length, duration, backoffMs, failureCount: activityFailureCount, error: err instanceof Error ? err.message : String(err) });
 
 		// Only log on first failure or after long backoff
 		if (activityFailureCount === 1 || activityFailureCount % 5 === 0) {

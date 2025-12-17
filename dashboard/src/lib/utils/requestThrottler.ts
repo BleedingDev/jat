@@ -17,6 +17,14 @@
 const MAX_CONCURRENT_REQUESTS = 4;
 const REQUEST_TIMEOUT_MS = 30000; // 30 second timeout
 
+// Debug logging for tracking request issues
+const DEBUG_REQUESTS = true;
+function debugLog(msg: string, data?: Record<string, unknown>) {
+	if (!DEBUG_REQUESTS) return;
+	const timestamp = new Date().toISOString().slice(11, 23);
+	console.log(`[RequestThrottler ${timestamp}] ${msg}`, data ? JSON.stringify(data) : '');
+}
+
 interface QueuedRequest {
 	url: string;
 	options: RequestInit;
@@ -68,6 +76,8 @@ function processQueue(): void {
  */
 async function executeRequest(request: QueuedRequest): Promise<void> {
 	activeRequests++;
+	const urlPath = request.url.split('?')[0];
+	debugLog('REQUEST_START', { url: urlPath, active: activeRequests, queued: requestQueue.length });
 
 	try {
 		// Check if signal is already aborted before making request
@@ -76,12 +86,16 @@ async function executeRequest(request: QueuedRequest): Promise<void> {
 			throw new DOMException('The operation was aborted.', 'AbortError');
 		}
 
+		const startTime = Date.now();
 		const response = await globalThis.fetch(request.url, {
 			...request.options,
 			signal: signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS)
 		});
+		const duration = Date.now() - startTime;
+		debugLog('REQUEST_DONE', { url: urlPath, duration, status: response.status, active: activeRequests - 1 });
 		request.resolve(response);
 	} catch (error) {
+		debugLog('REQUEST_ERROR', { url: urlPath, error: error instanceof Error ? error.message : String(error), active: activeRequests - 1 });
 		request.reject(error instanceof Error ? error : new Error(String(error)));
 	} finally {
 		activeRequests--;

@@ -2861,6 +2861,9 @@
 
 	// Send a workflow command (e.g., /jat:complete)
 	async function sendWorkflowCommand(command: string) {
+		const startTime = Date.now();
+		console.log(`[SessionCard] sendWorkflowCommand START: ${command} for ${sessionName}`);
+
 		if (!onSendInput) {
 			console.warn(
 				"[SessionCard] sendWorkflowCommand: onSendInput is not defined",
@@ -2870,9 +2873,11 @@
 		setSendingInput(true);
 		try {
 			// Send Ctrl+C first to clear any stray characters in input
+			console.log(`[SessionCard] sendWorkflowCommand: sending ctrl-c`);
 			await onSendInput("ctrl-c", "key");
 			await new Promise((r) => setTimeout(r, 50));
 			// Send the command text (API appends Enter for type='text')
+			console.log(`[SessionCard] sendWorkflowCommand: sending text "${command}"`);
 			const textResult = await onSendInput(command, "text");
 			if (textResult === false) {
 				console.warn(
@@ -2882,10 +2887,14 @@
 			} else {
 				// Send extra Enter after delay - Claude Code needs double Enter for slash commands
 				await new Promise((r) => setTimeout(r, 100));
+				console.log(`[SessionCard] sendWorkflowCommand: sending enter`);
 				await onSendInput("enter", "key");
 			}
+			const duration = Date.now() - startTime;
+			console.log(`[SessionCard] sendWorkflowCommand DONE: ${command} took ${duration}ms`);
 		} catch (err) {
-			console.error("[SessionCard] sendWorkflowCommand error:", err);
+			const duration = Date.now() - startTime;
+			console.error(`[SessionCard] sendWorkflowCommand ERROR after ${duration}ms:`, err);
 		} finally {
 			setSendingInput(false);
 		}
