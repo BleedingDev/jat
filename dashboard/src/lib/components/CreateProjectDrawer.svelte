@@ -138,13 +138,21 @@
 		validationStatus = 'checking';
 		validationMessage = 'Checking path...';
 
+		const trimmedPath = pathInput.trim();
+		let currentStep = 'initial';
+
 		try {
 			// Check if path exists and get its status
-			// Each fetch gets its own 5-second timeout using AbortSignal.timeout
+			// Each fetch gets its own 10-second timeout (increased from 5s)
+			currentStep = 'fetching path';
+			console.log('[CreateProjectDrawer] Validating path:', trimmedPath);
+			const startTime = Date.now();
+
 			const response = await fetch(
-				`/api/directories?path=${encodeURIComponent(pathInput.trim())}`,
-				{ signal: AbortSignal.timeout(5000) }
+				`/api/directories?path=${encodeURIComponent(trimmedPath)}`,
+				{ signal: AbortSignal.timeout(10000) }
 			);
+			console.log('[CreateProjectDrawer] Path fetch completed in', Date.now() - startTime, 'ms');
 			const data = await response.json();
 
 			if (!response.ok || data.error) {
@@ -156,17 +164,22 @@
 
 			// Check if the path itself is a valid project directory
 			// by looking for it in the parent directory listing
-			const pathParts = pathInput.trim().split('/');
+			const pathParts = trimmedPath.split('/');
 			const dirName = pathParts[pathParts.length - 1];
 			const parentPath = pathParts.slice(0, -1).join('/') || '/';
 
+			currentStep = 'fetching parent';
+			console.log('[CreateProjectDrawer] Fetching parent directory:', parentPath);
+			const parentStartTime = Date.now();
+
 			const parentResponse = await fetch(
 				`/api/directories?path=${encodeURIComponent(parentPath)}`,
-				{ signal: AbortSignal.timeout(5000) }
+				{ signal: AbortSignal.timeout(10000) }
 			);
+			console.log('[CreateProjectDrawer] Parent fetch completed in', Date.now() - parentStartTime, 'ms');
 			const parentData = await parentResponse.json();
 
-			const dirInfo = parentData.directories?.find((d: DirectoryInfo) => d.name === dirName || d.path === pathInput.trim());
+			const dirInfo = parentData.directories?.find((d: DirectoryInfo) => d.name === dirName || d.path === trimmedPath);
 
 			if (dirInfo) {
 				selectedDirectory = dirInfo;
@@ -188,12 +201,13 @@
 				selectedDirectory = null;
 			}
 		} catch (err) {
+			console.error('[CreateProjectDrawer] Validation error:', err, 'at step:', currentStep, 'for path:', trimmedPath);
 			if (err instanceof Error && err.name === 'TimeoutError') {
 				validationStatus = 'invalid';
-				validationMessage = 'Validation timed out - check path and try again';
+				validationMessage = `Validation timed out while ${currentStep}. The server may be slow or the path may be on a slow/network drive.`;
 			} else {
 				validationStatus = 'invalid';
-				validationMessage = 'Failed to validate path';
+				validationMessage = `Failed to validate path: ${err instanceof Error ? err.message : 'Unknown error'}`;
 			}
 			selectedDirectory = null;
 		}
