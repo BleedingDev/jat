@@ -2029,8 +2029,8 @@
 
 		// Start polling on mount
 		if (!signalPollInterval) {
-			fetchSignalData(); // Immediate fetch
-			signalPollInterval = setInterval(fetchSignalData, 3000);
+			fetchSignalData().catch(() => {}); // Immediate fetch (catch timeout errors)
+			signalPollInterval = setInterval(() => fetchSignalData().catch(() => {}), 3000);
 		}
 
 		// Cleanup on unmount (effect cleanup function)

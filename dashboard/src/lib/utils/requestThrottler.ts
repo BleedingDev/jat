@@ -18,7 +18,7 @@ const MAX_CONCURRENT_REQUESTS = 4;
 const REQUEST_TIMEOUT_MS = 30000; // 30 second timeout
 
 // Debug logging for tracking request issues
-const DEBUG_REQUESTS = true;
+const DEBUG_REQUESTS = false;
 function debugLog(msg: string, data?: Record<string, unknown>) {
 	if (!DEBUG_REQUESTS) return;
 	const timestamp = new Date().toISOString().slice(11, 23);
