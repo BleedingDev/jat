@@ -21,6 +21,40 @@ if [ "$EUID" -eq 0 ]; then
     exit 1
 fi
 
+# Check for required dependencies
+MISSING_DEPS=""
+
+if ! command -v tmux &> /dev/null; then
+    MISSING_DEPS="$MISSING_DEPS tmux"
+fi
+
+if ! command -v sqlite3 &> /dev/null; then
+    MISSING_DEPS="$MISSING_DEPS sqlite3"
+fi
+
+if ! command -v jq &> /dev/null; then
+    MISSING_DEPS="$MISSING_DEPS jq"
+fi
+
+if [ -n "$MISSING_DEPS" ]; then
+    echo -e "${RED}ERROR: Missing required dependencies:${NC}$MISSING_DEPS"
+    echo ""
+    echo "Install them first:"
+    echo "  # Arch/Manjaro"
+    echo "  sudo pacman -S$MISSING_DEPS"
+    echo ""
+    echo "  # Debian/Ubuntu"
+    echo "  sudo apt install$MISSING_DEPS"
+    echo ""
+    echo "  # Fedora"
+    echo "  sudo dnf install$MISSING_DEPS"
+    echo ""
+    echo "  # macOS"
+    echo "  brew install$MISSING_DEPS"
+    echo ""
+    exit 1
+fi
+
 # Determine installation directory
 # Check both old name (jomarchy-agent-tools) and new name (jat)
 if [ -d "$HOME/code/jat" ]; then
@@ -64,7 +98,7 @@ read
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 1/10: Installing Agent Mail (bash + SQLite)${NC}"
+echo -e "${BOLD}Step 1/11: Installing Agent Mail (bash + SQLite)${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -72,7 +106,7 @@ bash "$INSTALL_DIR/scripts/install-agent-mail.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 2/10: Installing Beads CLI${NC}"
+echo -e "${BOLD}Step 2/11: Installing Beads CLI${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -80,7 +114,7 @@ bash "$INSTALL_DIR/scripts/install-beads.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 3/10: Symlinking Generic Tools${NC}"
+echo -e "${BOLD}Step 3/11: Symlinking Generic Tools${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -88,7 +122,46 @@ bash "$INSTALL_DIR/scripts/symlink-tools.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 4/10: Statusline & Hooks Configuration${NC}"
+echo -e "${BOLD}Step 4/11: Installing Node.js Dependencies${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Check if npm is available
+if command -v npm &> /dev/null; then
+    # Install root jat dependencies (better-sqlite3 for lib/beads.js)
+    if [ -f "$INSTALL_DIR/package.json" ]; then
+        echo "  → Installing jat core dependencies..."
+        (cd "$INSTALL_DIR" && npm install --silent 2>/dev/null) && \
+            echo -e "  ${GREEN}✓${NC} jat core dependencies installed" || \
+            echo -e "  ${YELLOW}⚠${NC} jat npm install failed (run manually: cd ~/code/jat && npm install)"
+    fi
+
+    # Install browser-tools dependencies (puppeteer-core, cheerio)
+    if [ -f "$INSTALL_DIR/browser-tools/package.json" ]; then
+        echo "  → Installing browser-tools dependencies..."
+        (cd "$INSTALL_DIR/browser-tools" && npm install --silent 2>/dev/null) && \
+            echo -e "  ${GREEN}✓${NC} browser-tools dependencies installed" || \
+            echo -e "  ${YELLOW}⚠${NC} browser-tools npm install failed (run manually: cd browser-tools && npm install)"
+    fi
+
+    # Install dashboard dependencies (SvelteKit, etc.)
+    if [ -f "$INSTALL_DIR/dashboard/package.json" ]; then
+        echo "  → Installing dashboard dependencies..."
+        (cd "$INSTALL_DIR/dashboard" && npm install --silent 2>/dev/null) && \
+            echo -e "  ${GREEN}✓${NC} dashboard dependencies installed" || \
+            echo -e "  ${YELLOW}⚠${NC} dashboard npm install failed (run manually: cd dashboard && npm install)"
+    fi
+else
+    echo -e "${YELLOW}  ⚠ npm not found - skipping Node.js dependencies${NC}"
+    echo "  Install Node.js/npm, then run manually:"
+    echo "    cd $INSTALL_DIR && npm install"
+    echo "    cd $INSTALL_DIR/browser-tools && npm install"
+    echo "    cd $INSTALL_DIR/dashboard && npm install"
+fi
+
+echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Step 5/11: Statusline & Hooks Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -96,7 +169,7 @@ bash "$INSTALL_DIR/scripts/setup-statusline-and-hooks.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 5/10: Tmux Mouse Configuration${NC}"
+echo -e "${BOLD}Step 6/11: Tmux Mouse Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -104,7 +177,7 @@ bash "$INSTALL_DIR/scripts/setup-tmux.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 6/10: Optional Tech Stack Tools${NC}"
+echo -e "${BOLD}Step 7/11: Optional Tech Stack Tools${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -136,7 +209,7 @@ fi
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 7/10: Voice-to-Text (Optional)${NC}"
+echo -e "${BOLD}Step 8/11: Voice-to-Text (Optional)${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -166,7 +239,7 @@ fi
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 8/10: Setting Up Global Configuration${NC}"
+echo -e "${BOLD}Step 9/11: Setting Up Global Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -174,7 +247,7 @@ bash "$INSTALL_DIR/scripts/setup-global-claude-md.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 9/10: Setting Up Repositories${NC}"
+echo -e "${BOLD}Step 10/11: Setting Up Repositories${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -182,7 +255,7 @@ bash "$INSTALL_DIR/scripts/setup-repos.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 10/10: Setting Up Bash Launcher Functions${NC}"
+echo -e "${BOLD}Step 11/11: Setting Up Bash Launcher Functions${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 

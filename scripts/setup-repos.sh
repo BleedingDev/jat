@@ -4,7 +4,8 @@
 # - Initialize Beads (bd init) in each project
 # - Add jat shared documentation imports to project CLAUDE.md
 
-set -e
+# Note: Don't use 'set -e' - arithmetic (( )) can return 1 when incrementing from 0
+# This would cause premature exit on: ((REPOS_FOUND++))
 
 # Color codes
 GREEN='\033[0;32m'
