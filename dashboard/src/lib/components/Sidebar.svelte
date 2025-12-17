@@ -549,6 +549,16 @@
 										</span>
 									</div>
 									<div class="flex justify-between items-center">
+										<span class="text-sm">Add project</span>
+										<span class="flex gap-1">
+											<kbd class="kbd kbd-sm">Alt</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">Shift</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">P</kbd>
+										</span>
+									</div>
+									<div class="flex justify-between items-center">
 										<span class="text-sm">Spawn session</span>
 										<span class="flex gap-1">
 											<kbd class="kbd kbd-sm">Alt</kbd>

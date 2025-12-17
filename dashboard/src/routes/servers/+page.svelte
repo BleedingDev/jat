@@ -35,6 +35,7 @@
 		playServerStopSound
 	} from '$lib/utils/soundEffects';
 	import { SessionPanelSkeleton, ProjectsTableSkeleton } from '$lib/components/skeleton';
+	import { openProjectDrawer } from '$lib/stores/drawerStore';
 
 	interface Project {
 		name: string;
@@ -707,12 +708,45 @@
 					<p class="font-mono text-sm" style="color: oklch(0.55 0.02 250);">
 						No projects found
 					</p>
-					<p class="font-mono text-xs mt-2" style="color: oklch(0.45 0.02 250);">
-						Run <code class="px-1.5 py-0.5 rounded" style="background: oklch(0.25 0.02 250);">jat init</code> to discover projects
+					<p class="font-mono text-xs mt-2 mb-4" style="color: oklch(0.45 0.02 250);">
+						Add a project to get started with JAT
 					</p>
+					<button
+						class="btn btn-sm gap-1"
+						onclick={openProjectDrawer}
+						style="
+							color: oklch(0.70 0.18 145);
+							border: 1px solid oklch(0.70 0.18 145 / 0.3);
+							background: oklch(0.70 0.18 145 / 0.1);
+						"
+					>
+						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+						</svg>
+						Add Project
+					</button>
 				</div>
 			</div>
 		{:else}
+			<!-- Sticky header with Add Project button -->
+			<div class="sticky top-0 z-10 bg-base-100 border-b px-4 py-2 flex items-center justify-between" style="border-color: oklch(0.30 0.02 250);">
+				<span class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+					{projects.length} project{projects.length !== 1 ? 's' : ''}
+				</span>
+				<button
+					class="btn btn-xs btn-ghost gap-1"
+					onclick={openProjectDrawer}
+					style="
+						color: oklch(0.70 0.18 145);
+						border: 1px solid oklch(0.70 0.18 145 / 0.3);
+					"
+				>
+					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+					</svg>
+					Add Project
+				</button>
+			</div>
 			<!-- Projects table (no wrapper, direct integration) -->
 			<div class="overflow-x-auto">
 				<table class="w-full">

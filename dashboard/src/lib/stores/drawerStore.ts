@@ -104,3 +104,14 @@ export function closeEpicSwarmModal() {
 	isEpicSwarmModalOpen.set(false);
 	epicSwarmModalEpicId.set(null);
 }
+
+// Create project drawer state
+export const isProjectDrawerOpen = writable(false);
+
+export function openProjectDrawer() {
+	isProjectDrawerOpen.set(true);
+}
+
+export function closeProjectDrawer() {
+	isProjectDrawerOpen.set(false);
+}

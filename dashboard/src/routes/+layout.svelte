@@ -6,6 +6,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import TaskCreationDrawer from '$lib/components/TaskCreationDrawer.svelte';
+	import CreateProjectDrawer from '$lib/components/CreateProjectDrawer.svelte';
 	import SpawnModal from '$lib/components/SpawnModal.svelte';
 	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
 	import OutputDrawer from '$lib/components/OutputDrawer.svelte';
@@ -19,7 +20,7 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, openTaskDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId } from '$lib/stores/drawerStore';
+	import { availableProjects, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
@@ -490,6 +491,13 @@
 			return;
 		}
 
+		// Alt+Shift+P = Open Add Project drawer
+		if (event.altKey && event.shiftKey && event.code === 'KeyP') {
+			event.preventDefault();
+			openProjectDrawer();
+			return;
+		}
+
 		// Alt+A = Attach terminal to hovered session
 		if (event.altKey && event.code === 'KeyA') {
 			event.preventDefault();
@@ -766,6 +774,9 @@
 
 		<!-- Task Creation Drawer (must be inside drawer-content for proper positioning) -->
 		<TaskCreationDrawer />
+
+		<!-- Create Project Drawer (for adding new projects to JAT) -->
+		<CreateProjectDrawer onProjectCreated={loadConfigProjects} />
 	</div>
 
 	<!-- Spawn Modal (must be inside drawer for proper z-index) -->

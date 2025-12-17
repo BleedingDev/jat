@@ -36,7 +36,7 @@
 	import { lastTaskEvent } from '$lib/stores/taskEvents';
 	import { getProjectFromTaskId, filterTasksByProject } from '$lib/utils/projectUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
-	import { openTaskDrawer } from '$lib/stores/drawerStore';
+	import { openTaskDrawer, openProjectDrawer } from '$lib/stores/drawerStore';
 	import { SORT_OPTIONS, getSortBy, getSortDir, handleSortClick, initSort, type SortOption } from '$lib/stores/workSort.svelte';
 	import { maximizeSessionPanel } from '$lib/stores/hoveredSession';
 	import { getSessionMaximizeHeight } from '$lib/stores/preferences.svelte';
@@ -946,12 +946,37 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 				</svg>
 				<p class="text-lg font-medium mb-2">No projects found</p>
-				<p class="text-sm">Projects with tasks or sessions will appear here</p>
+				<p class="text-sm mb-4">Add a project to get started with JAT</p>
+				<button class="btn btn-primary" onclick={openProjectDrawer}>
+					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+					</svg>
+					Add Project
+				</button>
 			</div>
 		</div>
 	{:else}
 		<!-- Project list -->
 		<div class="flex flex-col">
+			<!-- Sticky header with Add Project button -->
+			<div class="sticky top-0 z-30 bg-base-200 border-b border-base-300 px-4 py-2 flex items-center justify-between">
+				<span class="text-xs font-mono uppercase tracking-wider text-base-content/60">
+					{sortedProjects.length} project{sortedProjects.length !== 1 ? 's' : ''}
+				</span>
+				<button
+					class="btn btn-xs btn-ghost gap-1"
+					onclick={openProjectDrawer}
+					style="
+						color: oklch(0.70 0.18 145);
+						border: 1px solid oklch(0.70 0.18 145 / 0.3);
+					"
+				>
+					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+					</svg>
+					Add Project
+				</button>
+			</div>
 			{#each sortedProjects as project (project)}
 				{@const isProjectCollapsed = projectCollapseState.get(project) ?? false}
 				{@const sessions = sessionsByProject.get(project) || []}
