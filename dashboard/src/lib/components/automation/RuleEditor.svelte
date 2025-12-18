@@ -588,6 +588,101 @@
 											'Text to send...'}
 									/>
 								{/if}
+								<!-- Signal Help Section -->
+								{#if action.type === 'signal'}
+									<details class="signal-help">
+										<summary class="signal-help-toggle">
+											<svg class="help-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+											</svg>
+											Signal Types, Variables & Payloads
+										</summary>
+										<div class="signal-help-content">
+											<p class="signal-help-intro">
+												Format: <code>type payload</code> (type followed by space, then JSON)
+											</p>
+
+											<!-- Template Variables Section -->
+											<div class="signal-vars-section">
+												<div class="signal-vars-title">Template Variables</div>
+												<div class="signal-vars-grid">
+													<code class="signal-var">{'{session}'}</code>
+													<span class="signal-var-desc">Tmux session name (e.g., "jat-FairBay")</span>
+
+													<code class="signal-var">{'{agent}'}</code>
+													<span class="signal-var-desc">Agent name (e.g., "FairBay")</span>
+
+													<code class="signal-var">{'{timestamp}'}</code>
+													<span class="signal-var-desc">ISO timestamp when rule triggered</span>
+
+													<code class="signal-var">{'{match}'}</code>
+													<span class="signal-var-desc">Full text matched by pattern</span>
+
+													<code class="signal-var">{'{$0}'}</code>
+													<span class="signal-var-desc">Same as {'{match}'} (full match)</span>
+
+													<code class="signal-var">{'{$1}'}, {'{$2}'}, ...</code>
+													<span class="signal-var-desc">Regex capture groups</span>
+												</div>
+											</div>
+
+											<!-- Example with Variables -->
+											<div class="signal-vars-example">
+												<div class="signal-vars-title">Example: Extract task ID from output</div>
+												<div class="signal-vars-example-content">
+													<div class="signal-vars-example-row">
+														<span class="signal-vars-example-label">Pattern (regex):</span>
+														<code class="signal-vars-example-code">Working on task (jat-[a-z0-9]+)</code>
+													</div>
+													<div class="signal-vars-example-row">
+														<span class="signal-vars-example-label">Signal payload:</span>
+														<code class="signal-vars-example-code">{`working {"taskId":"{$1}","agentName":"{agent}"}`}</code>
+													</div>
+													<div class="signal-vars-example-row">
+														<span class="signal-vars-example-label">Result:</span>
+														<code class="signal-vars-example-code">{`working {"taskId":"jat-abc","agentName":"FairBay"}`}</code>
+													</div>
+												</div>
+											</div>
+
+											<div class="signal-types-title">Signal Types</div>
+											<div class="signal-examples">
+												<div class="signal-example">
+													<span class="signal-type">working</span>
+													<code class="signal-payload">{`{"taskId":"{$1}","taskTitle":"..."}`}</code>
+												</div>
+												<div class="signal-example">
+													<span class="signal-type">idle</span>
+													<code class="signal-payload">{`{"readyForWork":true}`}</code>
+												</div>
+												<div class="signal-example">
+													<span class="signal-type">needs_input</span>
+													<code class="signal-payload">{`{"taskId":"...","question":"...","questionType":"choice"}`}</code>
+												</div>
+												<div class="signal-example">
+													<span class="signal-type">review</span>
+													<code class="signal-payload">{`{"taskId":"...","summary":["..."]}`}</code>
+												</div>
+												<div class="signal-example">
+													<span class="signal-type">completing</span>
+													<code class="signal-payload">{`{"taskId":"...","currentStep":"..."}`}</code>
+												</div>
+												<div class="signal-example">
+													<span class="signal-type">completed</span>
+													<code class="signal-payload">{`{"taskId":"...","outcome":"success"}`}</code>
+												</div>
+												<div class="signal-example">
+													<span class="signal-type">starting</span>
+													<code class="signal-payload">{`{"agentName":"{agent}","project":"jat"}`}</code>
+												</div>
+												<div class="signal-example">
+													<span class="signal-type">compacting</span>
+													<code class="signal-payload">{`{"reason":"...","contextSizeBefore":...}`}</code>
+												</div>
+											</div>
+										</div>
+									</details>
+								{/if}
 							</div>
 						</div>
 					{/each}
@@ -1086,6 +1181,179 @@
 		background: oklch(0.50 0.18 145);
 	}
 
+	/* Signal Help Section */
+	.signal-help {
+		margin-top: 0.5rem;
+	}
+
+	.signal-help-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.7rem;
+		color: oklch(0.60 0.08 200);
+		cursor: pointer;
+		user-select: none;
+		font-family: ui-monospace, monospace;
+	}
+
+	.signal-help-toggle:hover {
+		color: oklch(0.75 0.12 200);
+	}
+
+	.help-icon {
+		width: 14px;
+		height: 14px;
+	}
+
+	.signal-help[open] .signal-help-toggle {
+		color: oklch(0.75 0.12 200);
+		margin-bottom: 0.5rem;
+	}
+
+	.signal-help-content {
+		padding: 0.75rem;
+		background: oklch(0.14 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 8px;
+		font-size: 0.7rem;
+	}
+
+	.signal-help-intro {
+		color: oklch(0.75 0.02 250);
+		margin: 0 0 0.75rem;
+		font-family: ui-monospace, monospace;
+	}
+
+	.signal-help-intro code {
+		background: oklch(0.20 0.04 200);
+		color: oklch(0.85 0.10 200);
+		padding: 0.125rem 0.375rem;
+		border-radius: 4px;
+		font-size: 0.65rem;
+	}
+
+	.signal-examples {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.signal-example {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		padding: 0.25rem 0;
+	}
+
+	.signal-type {
+		flex-shrink: 0;
+		width: 80px;
+		font-weight: 600;
+		color: oklch(0.75 0.15 145);
+		font-family: ui-monospace, monospace;
+		font-size: 0.65rem;
+	}
+
+	.signal-payload {
+		flex: 1;
+		background: oklch(0.18 0.02 250);
+		color: oklch(0.70 0.02 250);
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.6rem;
+		font-family: ui-monospace, monospace;
+		word-break: break-all;
+		border: 1px solid oklch(0.25 0.02 250);
+	}
+
+	/* Template Variables Section */
+	.signal-vars-section {
+		margin-bottom: 0.75rem;
+		padding: 0.5rem;
+		background: oklch(0.16 0.02 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 6px;
+	}
+
+	.signal-vars-title,
+	.signal-types-title {
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: oklch(0.70 0.10 200);
+		margin-bottom: 0.5rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		font-family: ui-monospace, monospace;
+	}
+
+	.signal-types-title {
+		margin-top: 0.5rem;
+	}
+
+	.signal-vars-grid {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.25rem 0.75rem;
+		align-items: baseline;
+	}
+
+	.signal-var {
+		background: oklch(0.25 0.10 145 / 0.3);
+		color: oklch(0.85 0.12 145);
+		padding: 0.125rem 0.375rem;
+		border-radius: 4px;
+		font-size: 0.6rem;
+		font-family: ui-monospace, monospace;
+		white-space: nowrap;
+	}
+
+	.signal-var-desc {
+		font-size: 0.6rem;
+		color: oklch(0.65 0.02 250);
+		font-family: ui-monospace, monospace;
+	}
+
+	/* Example with Variables */
+	.signal-vars-example {
+		margin-bottom: 0.75rem;
+		padding: 0.5rem;
+		background: oklch(0.18 0.04 200 / 0.2);
+		border: 1px solid oklch(0.35 0.08 200 / 0.3);
+		border-radius: 6px;
+	}
+
+	.signal-vars-example-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.signal-vars-example-row {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
+	.signal-vars-example-label {
+		font-size: 0.55rem;
+		color: oklch(0.60 0.02 250);
+		font-family: ui-monospace, monospace;
+		text-transform: uppercase;
+	}
+
+	.signal-vars-example-code {
+		background: oklch(0.14 0.02 250);
+		color: oklch(0.80 0.02 250);
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.6rem;
+		font-family: ui-monospace, monospace;
+		word-break: break-all;
+		border: 1px solid oklch(0.25 0.02 250);
+	}
+
 	/* Responsive */
 	@media (max-width: 640px) {
 		.modal-content {
@@ -1099,6 +1367,15 @@
 
 		.w-28 {
 			width: 100%;
+		}
+
+		.signal-example {
+			flex-direction: column;
+			gap: 0.25rem;
+		}
+
+		.signal-type {
+			width: auto;
 		}
 	}
 </style>

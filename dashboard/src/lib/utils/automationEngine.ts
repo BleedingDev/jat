@@ -37,6 +37,8 @@ export interface PatternMatch {
 	pattern: AutomationPattern;
 	matchedText: string;
 	matchIndex: number;
+	/** Regex capture groups: $0 is full match, $1, $2, etc. are groups */
+	captureGroups: string[];
 }
 
 /**
@@ -46,6 +48,22 @@ export interface ActionResult {
 	action: AutomationAction;
 	success: boolean;
 	error?: string;
+}
+
+/**
+ * Template context for variable substitution in action payloads
+ */
+export interface TemplateContext {
+	/** The tmux session name (e.g., "jat-FairBay") */
+	session: string;
+	/** The agent name extracted from session (e.g., "FairBay") */
+	agent: string;
+	/** ISO timestamp when the rule triggered */
+	timestamp: string;
+	/** Full matched text from pattern ($0 equivalent) */
+	match: string;
+	/** Regex capture groups: $0 is full match, $1, $2, etc. are groups */
+	captureGroups: string[];
 }
 
 /**
@@ -84,23 +102,26 @@ const triggerSubscribers: Set<AutomationTriggerCallback> = new Set();
 /**
  * Test if a pattern matches the given text
  */
-export function testPattern(pattern: AutomationPattern, text: string): { matched: boolean; matchedText: string; matchIndex: number } {
+export function testPattern(pattern: AutomationPattern, text: string): { matched: boolean; matchedText: string; matchIndex: number; captureGroups: string[] } {
 	if (pattern.mode === 'regex') {
 		try {
 			const flags = pattern.caseSensitive ? 'g' : 'gi';
 			const regex = new RegExp(pattern.pattern, flags);
 			const match = regex.exec(text);
 			if (match) {
+				// Extract all capture groups (match[0] is full match, match[1]+ are groups)
+				const captureGroups = Array.from(match).map(g => g || '');
 				return {
 					matched: true,
 					matchedText: match[0],
-					matchIndex: match.index
+					matchIndex: match.index,
+					captureGroups
 				};
 			}
 		} catch (err) {
 			console.error('[automationEngine] Invalid regex pattern:', pattern.pattern, err);
 		}
-		return { matched: false, matchedText: '', matchIndex: -1 };
+		return { matched: false, matchedText: '', matchIndex: -1, captureGroups: [] };
 	}
 
 	// String literal matching
@@ -109,14 +130,16 @@ export function testPattern(pattern: AutomationPattern, text: string): { matched
 	const index = searchText.indexOf(searchPattern);
 
 	if (index !== -1) {
+		const matchedText = text.substring(index, index + pattern.pattern.length);
 		return {
 			matched: true,
-			matchedText: text.substring(index, index + pattern.pattern.length),
-			matchIndex: index
+			matchedText,
+			matchIndex: index,
+			captureGroups: [matchedText] // $0 is the full match for string patterns
 		};
 	}
 
-	return { matched: false, matchedText: '', matchIndex: -1 };
+	return { matched: false, matchedText: '', matchIndex: -1, captureGroups: [] };
 }
 
 /**
@@ -130,7 +153,8 @@ export function matchRule(rule: AutomationRule, text: string): PatternMatch | nu
 				rule,
 				pattern,
 				matchedText: result.matchedText,
-				matchIndex: result.matchIndex
+				matchIndex: result.matchIndex,
+				captureGroups: result.captureGroups
 			};
 		}
 	}
@@ -198,6 +222,63 @@ function recordAction(): void {
 }
 
 // =============================================================================
+// TEMPLATE PROCESSING
+// =============================================================================
+
+/**
+ * Process template variables in a string
+ *
+ * Available variables:
+ * - {session} - The tmux session name (e.g., "jat-FairBay")
+ * - {agent} - The agent name extracted from session (e.g., "FairBay")
+ * - {timestamp} - ISO timestamp when the rule triggered
+ * - {match} or {$0} - Full matched text from pattern
+ * - {$1}, {$2}, etc. - Regex capture groups
+ *
+ * @param template The template string with {variable} placeholders
+ * @param context The context with values to substitute
+ * @returns The processed string with variables replaced
+ */
+export function processTemplate(template: string, context: TemplateContext): string {
+	let result = template;
+
+	// Replace named variables
+	result = result.replace(/\{session\}/g, context.session);
+	result = result.replace(/\{agent\}/g, context.agent);
+	result = result.replace(/\{timestamp\}/g, context.timestamp);
+	result = result.replace(/\{match\}/g, context.match);
+
+	// Replace capture groups: {$0}, {$1}, {$2}, etc.
+	result = result.replace(/\{\$(\d+)\}/g, (_, index) => {
+		const idx = parseInt(index, 10);
+		return context.captureGroups[idx] ?? '';
+	});
+
+	return result;
+}
+
+/**
+ * Create a template context from session and match information
+ */
+function createTemplateContext(
+	sessionName: string,
+	match: PatternMatch | null
+): TemplateContext {
+	// Extract agent name from session name (e.g., "jat-FairBay" -> "FairBay")
+	const agentName = sessionName.startsWith('jat-')
+		? sessionName.substring(4)
+		: sessionName;
+
+	return {
+		session: sessionName,
+		agent: agentName,
+		timestamp: new Date().toISOString(),
+		match: match?.matchedText ?? '',
+		captureGroups: match?.captureGroups ?? []
+	};
+}
+
+// =============================================================================
 // ACTION EXECUTION
 // =============================================================================
 
@@ -207,7 +288,8 @@ function recordAction(): void {
 async function executeAction(
 	sessionName: string,
 	action: AutomationAction,
-	ruleName: string
+	ruleName: string,
+	templateContext: TemplateContext
 ): Promise<ActionResult> {
 	const config = getConfig();
 
@@ -226,31 +308,34 @@ async function executeAction(
 	}
 
 	try {
+		// Process template variables in payload
+		const processedPayload = processTemplate(action.payload, templateContext);
+
 		switch (action.type) {
 			case 'send_text':
-				await sendTextToSession(sessionName, action.payload);
+				await sendTextToSession(sessionName, processedPayload);
 				break;
 
 			case 'send_keys':
-				await sendKeysToSession(sessionName, action.payload);
+				await sendKeysToSession(sessionName, processedPayload);
 				break;
 
 			case 'tmux_command':
-				await executeTmuxCommand(sessionName, action.payload);
+				await executeTmuxCommand(sessionName, processedPayload);
 				break;
 
 			case 'signal':
-				await emitSignal(sessionName, action.payload);
+				await emitSignal(sessionName, processedPayload);
 				break;
 
 			case 'notify_only':
 				// Show toast notification to user with rule name
 				infoToast(
-					action.payload || `Automation triggered on ${sessionName}`,
+					processedPayload || `Automation triggered on ${sessionName}`,
 					`Rule: ${ruleName}`
 				);
 				if (config.debugLogging) {
-					console.log(`[automationEngine] Notification for ${sessionName}: ${action.payload}`);
+					console.log(`[automationEngine] Notification for ${sessionName}: ${processedPayload}`);
 				}
 				break;
 
@@ -279,12 +364,16 @@ async function executeAction(
  */
 export async function executeActions(
 	sessionName: string,
-	rule: AutomationRule
+	rule: AutomationRule,
+	match: PatternMatch | null = null
 ): Promise<ActionResult[]> {
 	const results: ActionResult[] = [];
 
+	// Create template context for variable substitution
+	const templateContext = createTemplateContext(sessionName, match);
+
 	for (const action of rule.actions) {
-		const result = await executeAction(sessionName, action, rule.name);
+		const result = await executeAction(sessionName, action, rule.name, templateContext);
 		results.push(result);
 
 		// If an action fails, continue with others but log it
@@ -441,8 +530,8 @@ export async function processSessionOutput(
 		setRecoveringState(sessionName, match.rule.id);
 	}
 
-	// Execute actions
-	const results = await executeActions(sessionName, match.rule);
+	// Execute actions with template context from match
+	const results = await executeActions(sessionName, match.rule, match);
 
 	// Log activity event
 	const allSucceeded = results.every(r => r.success);

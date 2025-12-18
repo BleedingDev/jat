@@ -7,7 +7,7 @@
 #
 # Signal format: [JAT-SIGNAL:<type>] <json-payload>
 # Types: working, review, needs_input, idle, completing, completed,
-#        starting, compacting, auto_proceed, tasks, action, complete
+#        starting, compacting, auto_proceed, question, tasks, action, complete
 #
 # Input: JSON with tool name, input (command), output, session_id
 # Output: Writes to /tmp/jat-signal-{session}.json
@@ -106,9 +106,9 @@ TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
 TASK_ID="${TASK_ID:-}"
 
 # Determine if this is a state signal or data signal
-# State signals: working, review, needs_input, idle, completing, completed, starting, compacting, auto_proceed
+# State signals: working, review, needs_input, idle, completing, completed, starting, compacting, auto_proceed, question
 # Data signals: tasks, action, complete
-STATE_SIGNALS="working review needs_input idle completing completed starting compacting auto_proceed"
+STATE_SIGNALS="working review needs_input idle completing completed starting compacting auto_proceed question"
 IS_STATE_SIGNAL=false
 for s in $STATE_SIGNALS; do
     if [[ "$SIGNAL_TYPE" == "$s" ]]; then
@@ -150,6 +150,14 @@ if [[ "$IS_STATE_SIGNAL" == "true" ]]; then
             HAS_TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
             if [[ -z "$HAS_TASK_ID" ]]; then
                 exit 0  # Silently skip incomplete completing/completed signals
+            fi
+            ;;
+        question)
+            # question requires question and questionType
+            HAS_QUESTION=$(echo "$PARSED_DATA" | jq -r '.question // ""' 2>/dev/null)
+            HAS_TYPE=$(echo "$PARSED_DATA" | jq -r '.questionType // ""' 2>/dev/null)
+            if [[ -z "$HAS_QUESTION" ]] || [[ -z "$HAS_TYPE" ]]; then
+                exit 0  # Silently skip incomplete question signals
             fi
             ;;
         # idle, starting, compacting, auto_proceed are more flexible
@@ -212,6 +220,35 @@ if [[ -n "$TMUX_SESSION" ]]; then
     # Append to timeline log (JSONL format - preserves history)
     TIMELINE_FILE="/tmp/jat-timeline-${TMUX_SESSION}.jsonl"
     echo "$SIGNAL_JSON" >> "$TIMELINE_FILE" 2>/dev/null || true
+fi
+
+# For question signals, also write to /tmp/jat-question-*.json files
+# This allows the dashboard to poll for questions separately from other signals
+if [[ "$SIGNAL_TYPE" == "question" ]]; then
+    # Build question-specific JSON with fields expected by dashboard
+    QUESTION_JSON=$(jq -c -n \
+        --arg session "$SESSION_ID" \
+        --arg tmux "$TMUX_SESSION" \
+        --argjson data "$PARSED_DATA" \
+        '{
+            session_id: $session,
+            tmux_session: $tmux,
+            timestamp: (now | todate),
+            question: $data.question,
+            questionType: $data.questionType,
+            options: ($data.options // []),
+            timeout: ($data.timeout // null)
+        }' 2>/dev/null || echo "{}")
+
+    # Write to session ID file
+    QUESTION_FILE="/tmp/jat-question-${SESSION_ID}.json"
+    echo "$QUESTION_JSON" > "$QUESTION_FILE" 2>/dev/null || true
+
+    # Also write to tmux session name file for easy dashboard lookup
+    if [[ -n "$TMUX_SESSION" ]]; then
+        TMUX_QUESTION_FILE="/tmp/jat-question-tmux-${TMUX_SESSION}.json"
+        echo "$QUESTION_JSON" > "$TMUX_QUESTION_FILE" 2>/dev/null || true
+    fi
 fi
 
 # Write per-task signal timeline for TaskDetailDrawer

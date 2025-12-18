@@ -112,11 +112,49 @@ Rules can have multiple patterns. ALL patterns must match (AND logic) for the ru
 | `send_text` | Send text + Enter to session | `y` (sends "y\n") |
 | `send_keys` | Send raw tmux keys | `C-c` (Ctrl+C) |
 | `tmux_command` | Run tmux command | `send-keys -t {session} q` |
-| `signal` | Emit JAT signal | `recovering` |
+| `signal` | Emit JAT signal | `working {"taskId":"{$1}"}` |
 | `notify_only` | Log without action | `Detected stall` |
 
 **Action Delay:**
 Actions can have `delayMs` to wait before executing (useful for debouncing).
+
+### Template Variables
+
+All action payloads support template variable substitution. Variables are replaced with their runtime values before the action executes.
+
+**Available Variables:**
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `{session}` | Tmux session name | `jat-FairBay` |
+| `{agent}` | Agent name (extracted from session) | `FairBay` |
+| `{timestamp}` | ISO timestamp when rule triggered | `2025-12-17T15:30:00.000Z` |
+| `{match}` | Full text matched by pattern | `Working on task jat-abc` |
+| `{$0}` | Same as `{match}` (full match) | `Working on task jat-abc` |
+| `{$1}`, `{$2}`, ... | Regex capture groups | `jat-abc` (if captured) |
+
+**Example: Dynamic Signal with Captured Task ID**
+
+Pattern (regex):
+```
+Working on task (jat-[a-z0-9]+)
+```
+
+Signal action:
+```
+working {"taskId":"{$1}","agentName":"{agent}"}
+```
+
+If the output contains "Working on task jat-xyz" and the session is "jat-FairBay", the signal emitted will be:
+```
+working {"taskId":"jat-xyz","agentName":"FairBay"}
+```
+
+**Capture Group Tips:**
+- Use parentheses `()` in regex patterns to create capture groups
+- `{$1}` is the first group, `{$2}` is the second, etc.
+- Unmatched groups resolve to empty string
+- Works with all action types, not just signals
 
 ### Rate Limiting
 

@@ -79,6 +79,8 @@
 	import CompletingSignalCard from "$lib/components/signals/CompletingSignalCard.svelte";
 	import CompletedSignalCard from "$lib/components/signals/CompletedSignalCard.svelte";
 	import IdleSignalCard from "$lib/components/signals/IdleSignalCard.svelte";
+	import StartingSignalCard from "$lib/components/signals/StartingSignalCard.svelte";
+	import CompactingSignalCard from "$lib/components/signals/CompactingSignalCard.svelte";
 	import type {
 		WorkingSignal,
 		ReviewSignal,
@@ -86,6 +88,8 @@
 		CompletingSignal as CompletingSignalType,
 		CompletedSignal as CompletedSignalType,
 		IdleSignal,
+		StartingSignal,
+		CompactingSignal,
 	} from "$lib/types/richSignals";
 
 	// Props - aligned with workSessions.svelte.ts types
@@ -343,6 +347,20 @@
 		return null;
 	});
 
+	const startingSignal = $derived.by(() => {
+		if (richSignalPayload?.type === 'starting') {
+			return richSignalPayload as unknown as StartingSignal;
+		}
+		return null;
+	});
+
+	const compactingSignal = $derived.by(() => {
+		if (richSignalPayload?.type === 'compacting') {
+			return richSignalPayload as unknown as CompactingSignal;
+		}
+		return null;
+	});
+
 	const completedSignal = $derived.by(() => {
 		// First check if we have a completed state signal from SSE
 		if (richSignalPayload?.type === 'completed') {
@@ -378,7 +396,9 @@
 		needsInputSignal !== null ||
 		completingSignal !== null ||
 		completedSignal !== null ||
-		idleSignal !== null
+		idleSignal !== null ||
+		startingSignal !== null ||
+		compactingSignal !== null
 	);
 
 	// Flash effect when Alt+C complete command is triggered
@@ -4560,6 +4580,16 @@
 								// Start working on a specific task
 								await onSendInput(`/jat:start ${taskId}`, 'text');
 							} : undefined}
+							compact={false}
+						/>
+					{:else if startingSignal}
+						<StartingSignalCard
+							signal={startingSignal}
+							compact={false}
+						/>
+					{:else if compactingSignal}
+						<CompactingSignalCard
+							signal={compactingSignal}
 							compact={false}
 						/>
 					{/if}

@@ -360,6 +360,35 @@ Signals must be written as compact single-line JSON (JSONL format), one event pe
 - `dashboard/src/routes/api/sessions/[name]/timeline/+server.ts` - Timeline API
 - `dashboard/src/routes/api/signals/+server.js` - All signals API
 
+**Signal Card Components:**
+
+The dashboard renders rich signal cards based on the signal type. Each card provides interactive UI for that specific state.
+
+| Component | Signal Type | Description |
+|-----------|-------------|-------------|
+| `WorkingSignalCard` | `working` | Task context, work plan, expected files, baseline for rollback |
+| `ReviewSignalCard` | `review` | Work summary, files modified, quality status, approve/reject actions |
+| `NeedsInputSignalCard` | `needs_input` | Question with options, context, timeout info |
+| `CompletingSignalCard` | `completing` | Progress through completion steps (verifying, committing, etc.) |
+| `CompletedSignalCard` | `completed` | Session stats, suggested tasks, human actions, cleanup button |
+| `IdleSignalCard` | `idle` | Session summary, suggested next task, start work actions |
+| `StartingSignalCard` | `starting` | Agent name, project, model, git status, tools available |
+| `CompactingSignalCard` | `compacting` | Reason, context size before/after, items being preserved |
+
+**Signal Card Files:**
+- `dashboard/src/lib/components/signals/index.ts` - Export barrel file
+- `dashboard/src/lib/components/signals/WorkingSignalCard.svelte`
+- `dashboard/src/lib/components/signals/ReviewSignalCard.svelte`
+- `dashboard/src/lib/components/signals/NeedsInputSignalCard.svelte`
+- `dashboard/src/lib/components/signals/CompletingSignalCard.svelte`
+- `dashboard/src/lib/components/signals/CompletedSignalCard.svelte`
+- `dashboard/src/lib/components/signals/IdleSignalCard.svelte`
+- `dashboard/src/lib/components/signals/StartingSignalCard.svelte`
+- `dashboard/src/lib/components/signals/CompactingSignalCard.svelte`
+
+**Type Definitions:**
+- `dashboard/src/lib/types/richSignals.ts` - TypeScript interfaces for all signal types
+
 **Signal Files:**
 - `/tmp/jat-signal-{session_id}.json` - Current signal by Claude session ID
 - `/tmp/jat-signal-tmux-{sessionName}.json` - Current signal by tmux session name
