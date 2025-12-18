@@ -290,13 +290,44 @@ Each event type has a custom UI in the expanded timeline:
 | `working` | Task title, task ID, git SHA where work started |
 | `review` | Summary items, files modified, tests status |
 | `needs_input` | Question, question type, options if provided |
-| `question` | Question text, question type badge, timeout, numbered options list with descriptions |
+| `question` | Interactive question UI with type-specific controls (see below) |
 | `completing` | Current step (hidden once task completes) |
 | `completed` | Green outcome badge, summary checklist, task ID |
 | `starting` | Agent name, session ID (full UUID), task ID and title, project |
 | `compacting` | Reason, context size before |
 | `idle` | Ready for work status, session summary |
 | `auto_proceed` | Current task ID, next task ID |
+
+**Question Signal UI:**
+
+The `question` signal renders an interactive UI based on `questionType`:
+
+| Type | UI Rendered | User Interaction |
+|------|-------------|------------------|
+| `choice` | Numbered option buttons with descriptions | Click button to send answer |
+| `confirm` | Yes/No buttons (green/red) | Click to send "yes" or "no" |
+| `input` | Text field with Submit button | Type answer, Enter or click Submit |
+
+**Question UI Features:**
+
+- **Collapsed indicator**: Purple "❓ Question" badge pulses in collapsed EventStack when unanswered question exists
+- **Expanded highlight**: Unanswered questions have purple glow, ring effect, and "NEEDS ANSWER" badge
+- **Sound notification**: Plays alert sound when new question arrives (if sounds enabled)
+- **Timeout countdown**: Shows remaining seconds (e.g., "⏱ 45s"), pulses when < 30s, shows "⏱ Expired" when done
+- **Answered state**: Card turns green with "✓ Answered" badge showing selected option
+- **Re-answer option**: "Change answer" button allows changing selection after answering
+
+**Example Signals:**
+```bash
+# Choice question with options
+jat-signal question '{"question":"Which approach?","questionType":"choice","options":[{"label":"Option A","value":"a"},{"label":"Option B","value":"b"}]}'
+
+# Confirm question (yes/no)
+jat-signal question '{"question":"Proceed with migration?","questionType":"confirm"}'
+
+# Input question with timeout
+jat-signal question '{"question":"Enter name:","questionType":"input","timeout":60}'
+```
 
 **Completing → Completed Transition:**
 
