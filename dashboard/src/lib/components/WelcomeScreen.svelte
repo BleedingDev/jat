@@ -217,17 +217,17 @@
 			<p class="text-sm" style="color: oklch(0.50 0.02 250);">
 				Need help?
 				<a
-					href="https://github.com/steveyegge/beads"
+					href="https://github.com/joewinke/jomarchy"
 					target="_blank"
 					rel="noopener noreferrer"
 					class="underline hover:no-underline transition-colors"
 					style="color: oklch(0.65 0.12 240);"
 				>
-					Beads documentation
+					Jomarchy documentation
 				</a>
 				&middot;
 				<a
-					href="https://github.com/jomarchy/jat"
+					href="https://github.com/joewinke/jat"
 					target="_blank"
 					rel="noopener noreferrer"
 					class="underline hover:no-underline transition-colors"
