@@ -825,7 +825,7 @@
 											<option value="">Select a command...</option>
 											{#each availableCommands as cmd}
 												<option value={cmd.invocation}>
-													{cmd.invocation} ({cmd.namespace})
+													{cmd.invocation}{cmd.namespace === 'local' ? ' (local)' : ''}
 												</option>
 											{/each}
 										</select>
