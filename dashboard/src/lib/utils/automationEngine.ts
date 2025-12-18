@@ -12,7 +12,8 @@ import type {
 	AutomationRule,
 	AutomationPattern,
 	AutomationAction,
-	AutomationActivityEvent
+	AutomationActivityEvent,
+	QuestionUIConfig
 } from '$lib/types/automation';
 import {
 	getRulesForSession,
@@ -339,6 +340,10 @@ async function executeAction(
 				}
 				break;
 
+			case 'show_question_ui':
+				await showQuestionUI(sessionName, action, templateContext, ruleName);
+				break;
+
 			default:
 				return {
 					action,
@@ -484,6 +489,94 @@ async function emitSignal(sessionName: string, signalSpec: string): Promise<void
 		const data = await response.json();
 		throw new Error(data.message || data.error || 'Failed to emit signal');
 	}
+}
+
+/**
+ * Show question UI by emitting a question signal
+ *
+ * Instead of auto-responding, this action type triggers the dashboard's
+ * question UI to show custom options defined in the automation rule.
+ * The user selects an option, and it's sent back to the session.
+ */
+async function showQuestionUI(
+	sessionName: string,
+	action: AutomationAction,
+	templateContext: TemplateContext,
+	ruleName: string
+): Promise<void> {
+	const config = getConfig();
+
+	// Get question config from either structured config or parsed payload
+	let questionConfig: QuestionUIConfig;
+
+	if (action.questionUIConfig) {
+		// Use structured config if available
+		questionConfig = action.questionUIConfig;
+	} else if (action.payload) {
+		// Try to parse payload as JSON
+		try {
+			questionConfig = JSON.parse(processTemplate(action.payload, templateContext));
+		} catch (err) {
+			throw new Error(`Invalid question UI config: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
+		}
+	} else {
+		throw new Error('show_question_ui action requires questionUIConfig or valid JSON payload');
+	}
+
+	// Validate required fields
+	if (!questionConfig.question) {
+		throw new Error('Question text is required for show_question_ui action');
+	}
+	if (!questionConfig.questionType) {
+		questionConfig.questionType = 'choice'; // Default to choice
+	}
+	if (questionConfig.questionType === 'choice' && (!questionConfig.options || questionConfig.options.length === 0)) {
+		throw new Error('Options are required for choice-type questions');
+	}
+
+	// Process template variables in question and options
+	questionConfig.question = processTemplate(questionConfig.question, templateContext);
+	if (questionConfig.options) {
+		questionConfig.options = questionConfig.options.map(opt => ({
+			...opt,
+			label: processTemplate(opt.label, templateContext),
+			value: processTemplate(opt.value, templateContext),
+			description: opt.description ? processTemplate(opt.description, templateContext) : undefined
+		}));
+	}
+
+	// Emit question signal - this will be picked up by the dashboard
+	// and rendered using the existing custom question UI in SessionCard
+	const signalPayload = JSON.stringify({
+		question: questionConfig.question,
+		questionType: questionConfig.questionType,
+		options: questionConfig.options,
+		timeout: questionConfig.timeout,
+		// Include metadata about the automation rule that triggered this
+		automationRule: ruleName,
+		triggeredAt: templateContext.timestamp
+	});
+
+	const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ type: 'question', data: signalPayload })
+	});
+
+	if (!response.ok) {
+		const data = await response.json();
+		throw new Error(data.message || data.error || 'Failed to show question UI');
+	}
+
+	if (config.debugLogging) {
+		console.log(`[automationEngine] Showing question UI for ${sessionName}: ${questionConfig.question}`);
+	}
+
+	// Show notification that question UI is being displayed
+	infoToast(
+		`Question triggered: ${questionConfig.question.substring(0, 50)}${questionConfig.question.length > 50 ? '...' : ''}`,
+		`Rule: ${ruleName}`
+	);
 }
 
 // =============================================================================

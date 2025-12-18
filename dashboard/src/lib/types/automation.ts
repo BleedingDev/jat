@@ -38,11 +38,12 @@ export interface AutomationPattern {
  * Action types available for automation rules
  */
 export type ActionType =
-	| 'send_text'      // Send text to session (like typing)
-	| 'send_keys'      // Send special keys (Enter, Escape, Tab)
-	| 'tmux_command'   // Run arbitrary tmux command
-	| 'signal'         // Emit jat-signal
-	| 'notify_only';   // Show toast notification only
+	| 'send_text'        // Send text to session (like typing)
+	| 'send_keys'        // Send special keys (Enter, Escape, Tab)
+	| 'tmux_command'     // Run arbitrary tmux command
+	| 'signal'           // Emit jat-signal
+	| 'notify_only'      // Show toast notification only
+	| 'show_question_ui'; // Show custom question UI with options defined in the rule
 
 /**
  * Special keys that can be sent via send_keys action
@@ -60,6 +61,32 @@ export type SpecialKey =
 	| 'C-u';     // Ctrl+U
 
 /**
+ * Option for show_question_ui action
+ */
+export interface QuestionUIOption {
+	/** Display label shown to user */
+	label: string;
+	/** Value sent to session when selected */
+	value: string;
+	/** Optional description */
+	description?: string;
+}
+
+/**
+ * Configuration for show_question_ui action
+ */
+export interface QuestionUIConfig {
+	/** Question text to display */
+	question: string;
+	/** Type of question: choice (single select), confirm (yes/no), input (free text) */
+	questionType: 'choice' | 'confirm' | 'input';
+	/** Options for choice-type questions */
+	options?: QuestionUIOption[];
+	/** Optional timeout in seconds */
+	timeout?: number;
+}
+
+/**
  * Action to execute when a pattern matches
  */
 export interface AutomationAction {
@@ -73,11 +100,18 @@ export interface AutomationAction {
 	 * - tmux_command: The tmux command (e.g., "send-keys -t {session} 'text'")
 	 * - signal: The signal type and data (e.g., "working {\"taskId\":\"...\"}")
 	 * - notify_only: The notification message
+	 * - show_question_ui: JSON string of QuestionUIConfig (parsed at runtime)
 	 */
 	payload: string;
 
 	/** Delay in milliseconds before executing action (default: 0) */
 	delay?: number;
+
+	/**
+	 * Structured configuration for show_question_ui action type.
+	 * When type is 'show_question_ui', this takes precedence over payload.
+	 */
+	questionUIConfig?: QuestionUIConfig;
 }
 
 // =============================================================================

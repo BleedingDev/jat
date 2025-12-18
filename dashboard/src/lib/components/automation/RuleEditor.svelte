@@ -23,7 +23,9 @@
 		AutomationAction,
 		ActionType,
 		PatternMode,
-		RuleCategory
+		RuleCategory,
+		QuestionUIConfig,
+		QuestionUIOption
 	} from '$lib/types/automation';
 	import { RULE_CATEGORY_META } from '$lib/config/automationConfig';
 	import { fly, fade } from 'svelte/transition';
@@ -63,7 +65,12 @@
 		description: string;
 		enabled: boolean;
 		patterns: Array<{ pattern: string; mode: PatternMode; caseSensitive: boolean }>;
-		actions: Array<{ type: ActionType; payload: string; delay: number }>;
+		actions: Array<{
+			type: ActionType;
+			payload: string;
+			delay: number;
+			questionUIConfig?: QuestionUIConfig;
+		}>;
 		sessionFilter: string[];
 		cooldownSeconds: number;
 		maxTriggersPerSession: number;
@@ -126,7 +133,20 @@
 			label: 'Notify Only',
 			description: 'Show a toast notification without taking action',
 			icon: 'M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0'
+		},
+		{
+			value: 'show_question_ui',
+			label: 'Show Question UI',
+			description: 'Show custom question UI with options (instead of auto-responding)',
+			icon: 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z'
 		}
+	];
+
+	// Question type options for show_question_ui
+	const questionTypes: Array<{ value: 'choice' | 'confirm' | 'input'; label: string; description: string }> = [
+		{ value: 'choice', label: 'Choice', description: 'Select from multiple options' },
+		{ value: 'confirm', label: 'Confirm', description: 'Yes/No confirmation' },
+		{ value: 'input', label: 'Input', description: 'Free text input' }
 	];
 
 	// Special keys for send_keys action
@@ -158,7 +178,8 @@
 				actions: rule.actions.map(a => ({
 					type: a.type,
 					payload: a.payload,
-					delay: a.delay ?? 0
+					delay: a.delay ?? 0,
+					questionUIConfig: a.questionUIConfig ? { ...a.questionUIConfig } : undefined
 				})),
 				sessionFilter: rule.sessionFilter || [],
 				cooldownSeconds: rule.cooldownSeconds,
@@ -218,6 +239,30 @@
 			newErrors.actions = 'At least one action is required';
 		}
 
+		// Validate show_question_ui actions have required fields
+		for (let i = 0; i < formData.actions.length; i++) {
+			const action = formData.actions[i];
+			if (action.type === 'show_question_ui') {
+				if (!action.questionUIConfig?.question?.trim()) {
+					newErrors[`action-${i}-question`] = 'Question text is required';
+				}
+				if (action.questionUIConfig?.questionType === 'choice') {
+					const options = action.questionUIConfig.options || [];
+					if (options.length < 2) {
+						newErrors[`action-${i}-options`] = 'At least 2 options are required for choice type';
+					}
+					for (let j = 0; j < options.length; j++) {
+						if (!options[j].label?.trim()) {
+							newErrors[`action-${i}-option-${j}-label`] = 'Option label is required';
+						}
+						if (!options[j].value?.trim()) {
+							newErrors[`action-${i}-option-${j}-value`] = 'Option value is required';
+						}
+					}
+				}
+			}
+		}
+
 		// Cooldown must be non-negative
 		if (formData.cooldownSeconds < 0) {
 			newErrors.cooldown = 'Cooldown must be non-negative';
@@ -250,7 +295,8 @@
 			actions: formData.actions.map(a => ({
 				type: a.type,
 				payload: a.payload,
-				delay: a.delay > 0 ? a.delay : undefined
+				delay: a.delay > 0 ? a.delay : undefined,
+				questionUIConfig: a.type === 'show_question_ui' ? a.questionUIConfig : undefined
 			})),
 			sessionFilter: formData.sessionFilter.length > 0 ? formData.sessionFilter : undefined,
 			cooldownSeconds: formData.cooldownSeconds,
@@ -295,6 +341,44 @@
 	function removeAction(index: number) {
 		if (formData.actions.length > 1) {
 			formData.actions = formData.actions.filter((_, i) => i !== index);
+		}
+	}
+
+	// Question UI config management
+	function initQuestionUIConfig(actionIndex: number) {
+		if (!formData.actions[actionIndex].questionUIConfig) {
+			formData.actions[actionIndex].questionUIConfig = {
+				question: '',
+				questionType: 'choice',
+				options: [
+					{ label: 'Option 1', value: '1', description: '' },
+					{ label: 'Option 2', value: '2', description: '' }
+				],
+				timeout: undefined
+			};
+		}
+	}
+
+	function addQuestionOption(actionIndex: number) {
+		const config = formData.actions[actionIndex].questionUIConfig;
+		if (config && config.options) {
+			const nextNum = config.options.length + 1;
+			config.options = [...config.options, { label: `Option ${nextNum}`, value: String(nextNum), description: '' }];
+		}
+	}
+
+	function removeQuestionOption(actionIndex: number, optionIndex: number) {
+		const config = formData.actions[actionIndex].questionUIConfig;
+		if (config && config.options && config.options.length > 1) {
+			config.options = config.options.filter((_, i) => i !== optionIndex);
+		}
+	}
+
+	// Handle action type change - initialize questionUIConfig when switching to show_question_ui
+	function handleActionTypeChange(actionIndex: number, newType: ActionType) {
+		formData.actions[actionIndex].type = newType;
+		if (newType === 'show_question_ui') {
+			initQuestionUIConfig(actionIndex);
 		}
 	}
 
@@ -535,7 +619,11 @@
 							<div class="form-row">
 								<div class="form-group flex-1">
 									<label class="form-label">Action Type</label>
-									<select bind:value={action.type} class="form-select">
+									<select
+										value={action.type}
+										onchange={(e) => handleActionTypeChange(index, e.currentTarget.value as ActionType)}
+										class="form-select"
+									>
 										{#each actionTypes as actionType}
 											<option value={actionType.value}>{actionType.label}</option>
 										{/each}
@@ -557,37 +645,155 @@
 								</div>
 							</div>
 
-							<div class="form-group">
-								<label class="form-label">
-									{#if action.type === 'send_keys'}
-										Key to Send
-									{:else if action.type === 'notify_only'}
-										Notification Message
-									{:else if action.type === 'signal'}
-										Signal Type/Data
-									{:else if action.type === 'tmux_command'}
-										Tmux Command
-									{:else}
-										Text to Send
+							<!-- Show Question UI Configuration -->
+							{#if action.type === 'show_question_ui' && action.questionUIConfig}
+								<div class="question-ui-config">
+									<div class="form-group">
+										<label class="form-label">Question Text <span class="required">*</span></label>
+										<input
+											type="text"
+											bind:value={action.questionUIConfig.question}
+											class="form-input"
+											class:error={errors[`action-${index}-question`]}
+											placeholder="e.g., Which approach should we use?"
+										/>
+										{#if errors[`action-${index}-question`]}
+											<span class="error-text">{errors[`action-${index}-question`]}</span>
+										{/if}
+									</div>
+
+									<div class="form-row">
+										<div class="form-group flex-1">
+											<label class="form-label">Question Type</label>
+											<select bind:value={action.questionUIConfig.questionType} class="form-select">
+												{#each questionTypes as qType}
+													<option value={qType.value}>{qType.label}</option>
+												{/each}
+											</select>
+											<span class="help-text">
+												{questionTypes.find(q => q.value === action.questionUIConfig?.questionType)?.description}
+											</span>
+										</div>
+										<div class="form-group w-28">
+											<label class="form-label">Timeout (s)</label>
+											<input
+												type="number"
+												bind:value={action.questionUIConfig.timeout}
+												class="form-input"
+												min="0"
+												step="10"
+												placeholder="None"
+											/>
+										</div>
+									</div>
+
+									<!-- Options (for choice type) -->
+									{#if action.questionUIConfig.questionType === 'choice'}
+										<div class="options-section">
+											<div class="options-header">
+												<span class="options-title">Options</span>
+												<button class="add-btn" onclick={() => addQuestionOption(index)}>
+													<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+													</svg>
+													Add Option
+												</button>
+											</div>
+											{#if errors[`action-${index}-options`]}
+												<span class="error-text">{errors[`action-${index}-options`]}</span>
+											{/if}
+
+											{#each action.questionUIConfig.options || [] as option, optIndex}
+												<div class="option-item">
+													<div class="option-header">
+														<span class="option-number">Option {optIndex + 1}</span>
+														{#if (action.questionUIConfig.options?.length || 0) > 1}
+															<button
+																class="remove-btn"
+																onclick={() => removeQuestionOption(index, optIndex)}
+																aria-label="Remove option"
+															>
+																<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+																	<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+																</svg>
+															</button>
+														{/if}
+													</div>
+													<div class="form-row">
+														<div class="form-group flex-1">
+															<label class="form-label">Label <span class="required">*</span></label>
+															<input
+																type="text"
+																bind:value={option.label}
+																class="form-input"
+																class:error={errors[`action-${index}-option-${optIndex}-label`]}
+																placeholder="Display text"
+															/>
+															{#if errors[`action-${index}-option-${optIndex}-label`]}
+																<span class="error-text">{errors[`action-${index}-option-${optIndex}-label`]}</span>
+															{/if}
+														</div>
+														<div class="form-group w-24">
+															<label class="form-label">Value <span class="required">*</span></label>
+															<input
+																type="text"
+																bind:value={option.value}
+																class="form-input"
+																class:error={errors[`action-${index}-option-${optIndex}-value`]}
+																placeholder="1"
+															/>
+															{#if errors[`action-${index}-option-${optIndex}-value`]}
+																<span class="error-text">{errors[`action-${index}-option-${optIndex}-value`]}</span>
+															{/if}
+														</div>
+													</div>
+													<div class="form-group">
+														<label class="form-label">Description (optional)</label>
+														<input
+															type="text"
+															bind:value={option.description}
+															class="form-input"
+															placeholder="Optional description"
+														/>
+													</div>
+												</div>
+											{/each}
+										</div>
 									{/if}
-								</label>
-								{#if action.type === 'send_keys'}
-									<select bind:value={action.payload} class="form-select">
-										{#each specialKeys as key}
-											<option value={key}>{key}</option>
-										{/each}
-									</select>
-								{:else}
-									<input
-										type="text"
-										bind:value={action.payload}
-										class="form-input"
-										placeholder={action.type === 'notify_only' ? 'Notification message...' :
-											action.type === 'signal' ? 'working {"taskId":"..."}' :
-											action.type === 'tmux_command' ? 'send-keys -t {session} "text"' :
-											'Text to send...'}
-									/>
-								{/if}
+								</div>
+							{:else}
+								<!-- Standard payload input for other action types -->
+								<div class="form-group">
+									<label class="form-label">
+										{#if action.type === 'send_keys'}
+											Key to Send
+										{:else if action.type === 'notify_only'}
+											Notification Message
+										{:else if action.type === 'signal'}
+											Signal Type/Data
+										{:else if action.type === 'tmux_command'}
+											Tmux Command
+										{:else}
+											Text to Send
+										{/if}
+									</label>
+									{#if action.type === 'send_keys'}
+										<select bind:value={action.payload} class="form-select">
+											{#each specialKeys as key}
+												<option value={key}>{key}</option>
+											{/each}
+										</select>
+									{:else}
+										<input
+											type="text"
+											bind:value={action.payload}
+											class="form-input"
+											placeholder={action.type === 'notify_only' ? 'Notification message...' :
+												action.type === 'signal' ? 'working {"taskId":"..."}' :
+												action.type === 'tmux_command' ? 'send-keys -t {session} "text"' :
+												'Text to send...'}
+										/>
+									{/if}
 								<!-- Signal Help Section -->
 								{#if action.type === 'signal'}
 									<details class="signal-help">
@@ -684,6 +890,7 @@
 									</details>
 								{/if}
 							</div>
+							{/if}
 						</div>
 					{/each}
 				</section>
@@ -1377,5 +1584,68 @@
 		.signal-type {
 			width: auto;
 		}
+
+		.w-24 {
+			width: 100%;
+		}
+	}
+
+	/* Question UI Config */
+	.question-ui-config {
+		margin-top: 0.75rem;
+		padding: 0.75rem;
+		background: oklch(0.16 0.04 310 / 0.15);
+		border: 1px solid oklch(0.45 0.12 310 / 0.3);
+		border-radius: 8px;
+	}
+
+	.options-section {
+		margin-top: 0.75rem;
+	}
+
+	.options-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 0.5rem;
+	}
+
+	.options-title {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.70 0.10 310);
+		font-family: ui-monospace, monospace;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.option-item {
+		padding: 0.625rem;
+		background: oklch(0.14 0.02 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 6px;
+		margin-bottom: 0.5rem;
+	}
+
+	.option-item:last-child {
+		margin-bottom: 0;
+	}
+
+	.option-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 0.375rem;
+	}
+
+	.option-number {
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: oklch(0.60 0.08 310);
+		font-family: ui-monospace, monospace;
+	}
+
+	.w-24 {
+		width: 6rem;
 	}
 </style>
