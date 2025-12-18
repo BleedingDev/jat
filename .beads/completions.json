@@ -3989,5 +3989,199 @@
     "sessionName": "jat-DimMeadow",
     "completedAt": "2025-12-18T03:46:12.181Z",
     "persistedAt": "2025-12-18T03:46:12.181Z"
+  },
+  "jat-otwi": {
+    "taskId": "jat-otwi",
+    "agentName": "CrystalPeak",
+    "summary": [
+      "Added state management for custom question data (CustomQuestionData interface)",
+      "Implemented polling for /api/sessions/{name}/custom-question when in needs-input state",
+      "Rendered clickable buttons for choice questions with index numbers",
+      "Rendered Yes/No buttons with icons for confirm questions",
+      "Rendered text input with Enter support and Send button for input questions",
+      "Added timeout countdown display when timeout is specified",
+      "Send selected value via tmux send-keys and clear question file"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Add multi-select support to custom question UI",
+        "description": "The current implementation only supports single selection. Add checkbox-style multi-select support similar to the existing AskUserQuestion UI for when multiSelect is true in the question payload.",
+        "priority": 3,
+        "reason": "AskUserQuestion supports multiSelect but custom question UI does not yet"
+      },
+      {
+        "type": "task",
+        "title": "Add auto-dismiss on timeout expiry for custom questions",
+        "description": "Currently timeout countdown displays but does not auto-dismiss or take default action when it reaches 0. Consider auto-selecting first option or dismissing the question card.",
+        "priority": 4,
+        "reason": "Timeout countdown implemented but no action on expiry"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "dashboard/src/lib/components/work/SessionCard.svelte",
+        "dashboard/src/routes/api/sessions/[name]/custom-question/+server.ts"
+      ],
+      "patterns": [
+        "Custom questions use /tmp/jat-question-tmux-{sessionName}.json file",
+        "submitCustomQuestionAnswer() sends via onSendInput prop then clears question file",
+        "Polling only active when sessionState === needs-input"
+      ],
+      "gotchas": [
+        "Question file uses full tmux session name (jat-AgentName), not just agent name",
+        "Dashboard hooks directory needs symlink to parent jat/.claude/hooks/ for signals to work"
+      ]
+    },
+    "sessionName": "jat-CrystalPeak",
+    "completedAt": "2025-12-18T03:54:04.073Z",
+    "persistedAt": "2025-12-18T03:54:04.073Z"
+  },
+  "jat-9txq": {
+    "taskId": "jat-9txq",
+    "agentName": "SwiftRock",
+    "summary": [
+      "Verified project hide/show functionality fully implemented",
+      "Hide button on /projects page with confirmation modal",
+      "POST /api/projects endpoint handles hide/show actions",
+      "Settings persist to ~/.config/jat/dashboard-projects.json",
+      "Visibility toggle on /servers page for restoring hidden projects"
+    ],
+    "quality": {
+      "tests": "skipped",
+      "build": "clean"
+    },
+    "sessionName": "jat-SwiftRock",
+    "completedAt": "2025-12-18T16:57:41.245Z",
+    "persistedAt": "2025-12-18T16:57:41.245Z"
+  },
+  "jat-yc2u": {
+    "taskId": "jat-yc2u",
+    "agentName": "HighSun",
+    "summary": [
+      "Fixed signal card overflow by changing overflow-hidden to overflow-y-auto on SessionCard container",
+      "Removed max-h-full from CompletedSignalCard and ReviewSignalCard root divs",
+      "Simplified body divs in all 7 signal cards (removed flex-1 min-h-0 overflow-y-auto)",
+      "Fixed duplicate completed events in EventStack by adding completed to mergableTypes"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Add visual regression tests for signal cards",
+        "description": "Create visual regression tests to catch overflow/layout issues in signal cards before they reach production",
+        "priority": 3,
+        "reason": "This bug was only caught through manual testing - automated visual tests would catch similar issues",
+        "labels": "testing,dashboard,ui"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "dashboard/src/lib/components/work/SessionCard.svelte",
+        "dashboard/src/lib/components/work/EventStack.svelte",
+        "dashboard/src/lib/components/signals/*.svelte"
+      ],
+      "patterns": [
+        "Parent container should handle max-height and scrolling, children size naturally",
+        "Use overflow-y-auto on containers, not max-h-full on children"
+      ],
+      "gotchas": [
+        "CSS max-h-full does not resolve when parent only has max-height (no explicit height)",
+        "EventStack mergableTypes array controls which event types get deduplicated"
+      ]
+    },
+    "sessionName": "jat-HighSun",
+    "completedAt": "2025-12-18T16:48:53.139Z",
+    "persistedAt": "2025-12-18T16:48:53.139Z"
+  },
+  "jat-nso0": {
+    "taskId": "jat-nso0",
+    "agentName": "FreePeak",
+    "summary": [
+      "Added autoExpandedForEventKey state to track which completion triggered auto-expand",
+      "Modified auto-expand effect to only expand for NEW completion events",
+      "Prevents EventStack from re-expanding every 5 seconds during polling"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Add visual indicator when EventStack has been manually collapsed",
+        "description": "When user collapses an auto-expanded EventStack, show a subtle badge or indicator that there are events to view. This helps users know there is content they may have missed.",
+        "priority": 4,
+        "reason": "UX improvement noticed while fixing auto-expand behavior",
+        "labels": "ui,ux,eventstack"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "dashboard/src/lib/components/work/EventStack.svelte"
+      ],
+      "patterns": [
+        "Use event key tracking to prevent effects from re-triggering on poll refresh"
+      ],
+      "gotchas": [
+        "$effect runs on every filteredEvents change including poll refreshes - track state to avoid re-triggering"
+      ]
+    },
+    "sessionName": "jat-FreePeak",
+    "completedAt": "2025-12-18T16:51:26.713Z",
+    "persistedAt": "2025-12-18T16:51:26.713Z"
+  },
+  "jat-6t7u": {
+    "taskId": "jat-6t7u",
+    "agentName": "BlueMarsh",
+    "summary": [
+      "Extended StatusActionBadge with showCommands and onCommand props",
+      "Added collapsible All Commands dropdown with slide transition",
+      "Consolidated standalone Start/Complete/Done buttons into unified badge",
+      "Fixed redundant namespace display in RuleEditor command dropdown"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "feature",
+        "title": "Add keyboard shortcuts for common slash commands",
+        "description": "Allow users to trigger /jat:start, /jat:complete, etc. via keyboard shortcuts in the dashboard",
+        "priority": 3,
+        "reason": "Natural UX enhancement now that commands are visible in dropdown"
+      },
+      {
+        "type": "task",
+        "title": "Add command search/filter in StatusActionBadge dropdown",
+        "description": "When there are many commands, allow filtering by typing. Reuse pattern from CommandPalette.",
+        "priority": 3,
+        "reason": "Commands list will grow; filtering improves discoverability"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "dashboard/src/lib/components/work/SessionCard.svelte",
+        "dashboard/src/lib/components/work/StatusActionBadge.svelte"
+      ],
+      "patterns": [
+        "Commands fetched lazily via /api/commands when dropdown opens",
+        "Use showCommands={true} and onCommand={sendWorkflowCommand} to enable"
+      ],
+      "gotchas": [
+        "Commands API returns namespace - only show (local) suffix for local commands"
+      ]
+    },
+    "sessionName": "jat-BlueMarsh",
+    "completedAt": "2025-12-18T18:10:54.919Z",
+    "persistedAt": "2025-12-18T18:10:54.919Z"
   }
 }

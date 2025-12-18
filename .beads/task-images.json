@@ -37,18 +37,6 @@
       "id": "att-1765734791199-qdjl69"
     }
   ],
-  "jat-yc2u": [
-    {
-      "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-yc2u-1765761311461-dnmz8j.png",
-      "uploadedAt": "2025-12-15T01:15:11.467Z",
-      "id": "att-1765761290582-fnj2v6"
-    },
-    {
-      "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-yc2u-1765762363888-dpeajy.png",
-      "uploadedAt": "2025-12-15T01:32:44.136Z",
-      "id": "file-1765762364056-k46d9f"
-    }
-  ],
   "jat-pza6": [
     {
       "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-pza6-1765764639975-co7vob.png",
@@ -144,6 +132,37 @@
       "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-6pqt-1766029236719-40lu55.png",
       "uploadedAt": "2025-12-18T03:40:36.723Z",
       "id": "att-1766029180846-jcyosf"
+    }
+  ],
+  "jat-yc2u": [
+    {
+      "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-yc2u-1766075314363-zsuuqe.png",
+      "uploadedAt": "2025-12-18T16:28:34.376Z",
+      "id": "file-1766075314367-q9dvfa"
+    },
+    {
+      "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-yc2u-1766075464554-6kwkfx.png",
+      "uploadedAt": "2025-12-18T16:31:04.568Z",
+      "id": "file-1766075464564-s7ynb9"
+    },
+    {
+      "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-yc2u-1766075464619-lti886.png",
+      "uploadedAt": "2025-12-18T16:31:04.629Z",
+      "id": "file-1766075464626-aquni6"
+    }
+  ],
+  "jat-nso0": [
+    {
+      "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-nso0-1766075590698-zdol2a.png",
+      "uploadedAt": "2025-12-18T16:33:10.710Z",
+      "id": "att-1766075587596-xxi371"
+    }
+  ],
+  "jat-4a0i": [
+    {
+      "path": "/home/jw/.local/share/jat/task-images/upload-task-jat-4a0i-1766080491947-skd9bz.png",
+      "uploadedAt": "2025-12-18T17:54:51.964Z",
+      "id": "file-1766080491956-hjt94e"
     }
   ]
 }
