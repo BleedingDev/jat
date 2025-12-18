@@ -135,6 +135,10 @@
 	// Keyboard navigation state
 	let focusedProjectIndex = $state<number>(-1);
 
+	// Project removal confirmation state
+	let projectToHide = $state<string | null>(null);
+	let isHiding = $state(false);
+
 	// Derive all projects (from JAT config, sessions, AND tasks)
 	// Config projects are shown even if empty (for onboarding new projects)
 	const allProjects = $derived.by(() => {
@@ -866,13 +870,39 @@
 		openTaskDrawer(project);
 	}
 
+	// Hide project from dashboard (doesn't delete .beads/)
+	async function hideProject(project: string) {
+		isHiding = true;
+		try {
+			const response = await fetch('/api/projects', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'hide', project })
+			});
+			if (response.ok) {
+				// Remove from config projects list
+				configProjects = configProjects.filter(p => p !== project);
+				// Also remove from custom order if present
+				customProjectOrder = customProjectOrder.filter(p => p !== project);
+				saveProjectOrder(customProjectOrder);
+			} else {
+				console.error('Failed to hide project:', await response.text());
+			}
+		} catch (error) {
+			console.error('Failed to hide project:', error);
+		} finally {
+			isHiding = false;
+			projectToHide = null;
+		}
+	}
+
 	// Subscription cleanup
 	let unsubscribeMaximize: (() => void) | undefined;
 
 	onMount(async () => {
 		customProjectOrder = loadProjectOrder();
 		initSort(); // Initialize session sort from localStorage
-		fetchConfigProjects(); // Load all configured projects
+		await fetchConfigProjects(); // Load all configured projects FIRST
 		fetchTaskData();
 		await fetchSessions();
 		setTimeout(() => fetchSessionUsage(), 5000);
@@ -1147,6 +1177,17 @@
 								class="input input-xs input-bordered w-24 focus:w-40 transition-all duration-200 bg-base-200/50"
 							/>
 						</div>
+
+						<!-- Hide project button -->
+						<button
+							class="btn btn-xs btn-ghost opacity-30 hover:opacity-100 hover:btn-error flex-shrink-0"
+							onclick={(e) => { e.stopPropagation(); projectToHide = project; }}
+							title="Hide project from dashboard"
+						>
+							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
 					</div>
 
 					<!-- Project content (collapsible) -->
@@ -1293,4 +1334,42 @@
 		bind:taskId={selectedTaskId}
 		bind:isOpen={drawerOpen}
 	/>
+
+	<!-- Hide Project Confirmation Modal -->
+	{#if projectToHide}
+		<div class="modal modal-open">
+			<div class="modal-box max-w-md">
+				<h3 class="font-bold text-lg">Hide Project</h3>
+				<p class="py-4">
+					Are you sure you want to hide <span class="font-semibold text-primary">{projectToHide}</span> from the dashboard?
+				</p>
+				<p class="text-sm text-base-content/70 bg-base-200 rounded p-3">
+					This only hides the project from JAT's dashboard. The project's <code class="text-primary">.beads/</code> directory and all task data will remain untouched.
+				</p>
+				<p class="text-xs text-base-content/50 mt-3">
+					To restore hidden projects, edit <code>~/.config/jat/dashboard-projects.json</code>
+				</p>
+				<div class="modal-action">
+					<button
+						class="btn btn-ghost"
+						onclick={() => projectToHide = null}
+						disabled={isHiding}
+					>
+						Cancel
+					</button>
+					<button
+						class="btn btn-error"
+						onclick={() => hideProject(projectToHide!)}
+						disabled={isHiding}
+					>
+						{#if isHiding}
+							<span class="loading loading-spinner loading-xs"></span>
+						{/if}
+						Hide Project
+					</button>
+				</div>
+			</div>
+			<div class="modal-backdrop bg-black/50" onclick={() => projectToHide = null}></div>
+		</div>
+	{/if}
 </div>
