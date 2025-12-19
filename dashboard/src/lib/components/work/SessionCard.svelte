@@ -2659,9 +2659,9 @@
 	}
 
 	// Task to display - either active task or last completed task
-	// Show lastCompletedTask in both "completed" and "idle" states to maintain task linkage
+	// Show lastCompletedTask in "completing", "completed", and "idle" states to maintain task linkage
 	const displayTask = $derived(
-		task || ((sessionState === "completed" || sessionState === "idle") ? lastCompletedTask : null),
+		task || ((sessionState === "completing" || sessionState === "completed" || sessionState === "idle") ? lastCompletedTask : null),
 	);
 
 	// Get visual config from centralized statusColors.ts
@@ -4724,6 +4724,18 @@
 						}}
 						onCreateTasks={createTimelineEventTasks}
 						{availableProjects}
+						onSelectOption={async (optionId) => {
+							// Send the option selection to the terminal via EventStack's needs_input card
+							if (onSendInput) {
+								await onSendInput(optionId, 'text');
+							}
+						}}
+						onSubmitText={async (text) => {
+							// Send custom text input to the terminal via EventStack's needs_input card
+							if (onSendInput) {
+								await onSendInput(text, 'text');
+							}
+						}}
 					/>
 				</div>
 			{/if}
