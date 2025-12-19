@@ -5,8 +5,10 @@
 	 * Configuration management page with tab-based navigation:
 	 * - Commands tab: View and manage slash commands
 	 * - Projects tab: View and manage project configurations
+	 * - Hooks tab: Visual editor for .claude/settings.json hooks
+	 * - CLAUDE.md tab: View project CLAUDE.md documentation
 	 *
-	 * Tab state syncs with URL query parameter (?tab=commands|projects).
+	 * Tab state syncs with URL query parameter (?tab=commands|projects|hooks|claude).
 	 *
 	 * @see dashboard/src/lib/stores/configStore.svelte.ts for state management
 	 * @see dashboard/src/lib/components/config/ for sub-components
@@ -21,37 +23,46 @@
 	import {
 		loadCommands,
 		loadProjects,
-		getCommands,
 		getProjects,
-		isCommandsLoading,
 		isProjectsLoading,
-		getCommandsError,
-		getProjectsError,
-		deleteCommand
+		getProjectsError
 	} from '$lib/stores/configStore.svelte';
 
 	// Components
 	import ConfigTabs from '$lib/components/config/ConfigTabs.svelte';
-	import CommandCard from '$lib/components/config/CommandCard.svelte';
+	import CommandsList from '$lib/components/config/CommandsList.svelte';
+	import CommandEditor from '$lib/components/config/CommandEditor.svelte';
 	import ProjectsList from '$lib/components/config/ProjectsList.svelte';
-	import type { SlashCommand, ProjectConfig } from '$lib/types/config';
+	import HooksEditor from '$lib/components/config/HooksEditor.svelte';
+	import ClaudeMdList from '$lib/components/config/ClaudeMdList.svelte';
+	import ClaudeMdEditor from '$lib/components/config/ClaudeMdEditor.svelte';
+	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 
 	// Page state
 	let isLoading = $state(true);
 	let activeTab = $state('commands');
 
+	// Hooks state
+	let hooksLoading = $state(false);
+	let hooksError = $state<string | null>(null);
+	let hooksEditorRef: HooksEditor | undefined = $state();
+
+	// Command editor state
+	let editingCommand = $state<SlashCommand | null>(null);
+	let isCommandEditorOpen = $state(false);
+
 	// Derived store values
-	const commands = $derived(getCommands());
 	const projects = $derived(getProjects());
-	const commandsLoading = $derived(isCommandsLoading());
 	const projectsLoading = $derived(isProjectsLoading());
-	const commandsError = $derived(getCommandsError());
 	const projectsError = $derived(getProjectsError());
+
+	// Valid tabs for URL sync
+	const validTabs = ['commands', 'projects', 'hooks', 'claude'];
 
 	// Sync activeTab from URL query parameter
 	$effect(() => {
 		const tabParam = $page.url.searchParams.get('tab');
-		if (tabParam && (tabParam === 'commands' || tabParam === 'projects')) {
+		if (tabParam && validTabs.includes(tabParam)) {
 			activeTab = tabParam;
 		}
 	});
@@ -66,17 +77,20 @@
 
 	// Handle edit command
 	function handleEditCommand(command: SlashCommand) {
-		// Navigate to command editor (TODO: implement editor route)
-		console.log('[Config] Edit command:', command.invocation);
-		// For now, we could open Monaco editor modal or navigate to dedicated route
+		editingCommand = command;
+		isCommandEditorOpen = true;
 	}
 
-	// Handle delete command
-	async function handleDeleteCommand(command: SlashCommand) {
-		const success = await deleteCommand(command);
-		if (!success) {
-			console.error('[Config] Failed to delete command:', command.invocation);
-		}
+	// Handle command editor save
+	function handleCommandSave(command: SlashCommand) {
+		// Reload commands to get the updated content
+		loadCommands();
+	}
+
+	// Handle command editor close
+	function handleCommandEditorClose() {
+		isCommandEditorOpen = false;
+		editingCommand = null;
 	}
 
 	// Handle edit project
@@ -97,34 +111,64 @@
 		// TODO: Implement delete
 	}
 
+	// Load hooks configuration
+	async function loadHooks() {
+		hooksLoading = true;
+		hooksError = null;
+
+		try {
+			const response = await fetch('/api/hooks');
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to load hooks');
+			}
+
+			// Pass hooks to the editor component
+			if (hooksEditorRef) {
+				hooksEditorRef.setHooks(data.hooks || {});
+			}
+		} catch (err) {
+			hooksError = err instanceof Error ? err.message : 'Failed to load hooks';
+			console.error('[Config] Failed to load hooks:', err);
+		} finally {
+			hooksLoading = false;
+		}
+	}
+
+	// Save hooks configuration
+	async function saveHooks(hooks: HooksConfig): Promise<boolean> {
+		try {
+			const response = await fetch('/api/hooks', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ hooks })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to save hooks');
+			}
+
+			return true;
+		} catch (err) {
+			console.error('[Config] Failed to save hooks:', err);
+			throw err;
+		}
+	}
+
+	// Load hooks when switching to hooks tab
+	$effect(() => {
+		if (activeTab === 'hooks' && hooksEditorRef) {
+			loadHooks();
+		}
+	});
+
 	// Load data on mount
 	onMount(async () => {
 		await Promise.all([loadCommands(), loadProjects()]);
 		isLoading = false;
-	});
-
-	// Group commands by namespace
-	const commandGroups = $derived.by(() => {
-		const groups = new Map<string, SlashCommand[]>();
-
-		for (const command of commands) {
-			const existing = groups.get(command.namespace) || [];
-			groups.set(command.namespace, [...existing, command]);
-		}
-
-		// Sort namespaces: 'jat' first, then 'local', then alphabetically
-		const sortedNamespaces = Array.from(groups.keys()).sort((a, b) => {
-			if (a === 'jat') return -1;
-			if (b === 'jat') return 1;
-			if (a === 'local') return -1;
-			if (b === 'local') return 1;
-			return a.localeCompare(b);
-		});
-
-		return sortedNamespaces.map((namespace) => ({
-			namespace,
-			commands: (groups.get(namespace) || []).sort((a, b) => a.name.localeCompare(b.name))
-		}));
 	});
 </script>
 
@@ -163,93 +207,7 @@
 						aria-labelledby="commands-tab"
 						transition:fade={{ duration: 150 }}
 					>
-						{#if commandsLoading}
-							<div class="loading-state">
-								<div class="loading-spinner"></div>
-								<p class="loading-text">Loading commands...</p>
-							</div>
-						{:else if commandsError}
-							<div class="error-state">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="1.5"
-									stroke="currentColor"
-									class="error-icon"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-									/>
-								</svg>
-								<p class="error-title">Failed to load commands</p>
-								<p class="error-message">{commandsError}</p>
-								<button class="retry-btn" onclick={() => loadCommands()}>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke-width="1.5"
-										stroke="currentColor"
-										class="w-4 h-4"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-										/>
-									</svg>
-									Retry
-								</button>
-							</div>
-						{:else if commands.length === 0}
-							<div class="empty-state">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="1.5"
-									stroke="currentColor"
-									class="empty-icon"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z"
-									/>
-								</svg>
-								<p class="empty-title">No commands found</p>
-								<p class="empty-hint">Add slash commands to your .claude/commands directory</p>
-							</div>
-						{:else}
-							<!-- Command groups -->
-							<div class="commands-content">
-								<div class="commands-header">
-									<span class="commands-count"
-										>{commands.length} command{commands.length !== 1 ? 's' : ''}</span
-									>
-								</div>
-								{#each commandGroups as group (group.namespace)}
-									<div class="command-group">
-										<div class="group-header">
-											<span class="group-name">{group.namespace}</span>
-											<span class="group-count">{group.commands.length}</span>
-										</div>
-										<div class="commands-grid">
-											{#each group.commands as command (command.path)}
-												<CommandCard
-													{command}
-													onEdit={handleEditCommand}
-													onDelete={handleDeleteCommand}
-												/>
-											{/each}
-										</div>
-									</div>
-								{/each}
-							</div>
-						{/if}
+						<CommandsList onEditCommand={handleEditCommand} />
 					</div>
 				{:else if activeTab === 'projects'}
 					<!-- Projects Tab -->
@@ -265,11 +223,62 @@
 							onDeleteProject={handleDeleteProject}
 						/>
 					</div>
+				{:else if activeTab === 'hooks'}
+					<!-- Hooks Tab -->
+					<div
+						role="tabpanel"
+						id="hooks-panel"
+						aria-labelledby="hooks-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<HooksEditor
+							bind:this={hooksEditorRef}
+							loading={hooksLoading}
+							error={hooksError}
+							onSave={saveHooks}
+							onRetry={loadHooks}
+						/>
+					</div>
+				{:else if activeTab === 'claude'}
+					<!-- CLAUDE.md Tab -->
+					<div
+						role="tabpanel"
+						id="claude-panel"
+						aria-labelledby="claude-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<div class="empty-state">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="empty-icon"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+								/>
+							</svg>
+							<p class="empty-title">CLAUDE.md Editor</p>
+							<p class="empty-hint">View and edit project CLAUDE.md documentation (coming soon)</p>
+						</div>
+					</div>
 				{/if}
 			</div>
 		</div>
 	{/if}
 </div>
+
+<!-- Command Editor Modal -->
+<CommandEditor
+	bind:isOpen={isCommandEditorOpen}
+	command={editingCommand}
+	onSave={handleCommandSave}
+	onClose={handleCommandEditorClose}
+/>
 
 <style>
 	.config-page {
