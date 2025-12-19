@@ -2659,9 +2659,9 @@
 	}
 
 	// Task to display - either active task or last completed task
-	// Show lastCompletedTask in "completing", "completed", and "idle" states to maintain task linkage
+	// Show lastCompletedTask in "ready-for-review", "completing", "completed", and "idle" states to maintain task linkage
 	const displayTask = $derived(
-		task || ((sessionState === "completing" || sessionState === "completed" || sessionState === "idle") ? lastCompletedTask : null),
+		task || ((sessionState === "ready-for-review" || sessionState === "completing" || sessionState === "completed" || sessionState === "idle") ? lastCompletedTask : null),
 	);
 
 	// Get visual config from centralized statusColors.ts
