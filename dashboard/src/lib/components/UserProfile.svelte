@@ -10,14 +10,14 @@
 	 * Replace with real user data when auth is added.
 	 */
 
-	import { onMount } from 'svelte';
 	import ThemeSelector from './ThemeSelector.svelte';
 	import {
-		areSoundsEnabled,
 		enableSounds,
 		disableSounds,
 		playSuccessChime
 	} from '$lib/utils/soundEffects';
+	import { getSoundsEnabled } from '$lib/stores/preferences.svelte';
+	import { getVersionString } from '$lib/version';
 	import {
 		getSparklineVisible,
 		setSparklineVisible,
@@ -66,8 +66,8 @@
 	const soundOnIcon = 'M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z';
 	const soundOffIcon = 'M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.531V19.94a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.506-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.395C2.806 8.757 3.63 8.25 4.51 8.25H6.75z';
 
-	// Sound settings
-	let soundsEnabled = $state(false);
+	// Sound settings (reactive from preferences store)
+	const soundsEnabled = $derived(getSoundsEnabled());
 	let isSoundAnimating = $state(false);
 
 	// Sparkline visibility (reactive from preferences store)
@@ -110,23 +110,17 @@
 	// Swarm settings (reactive from preferences store)
 	const maxSessions = $derived(getMaxSessions());
 
-	onMount(() => {
-		// Load saved sound preference
-		soundsEnabled = areSoundsEnabled();
-	});
-
 	function handleSoundToggle() {
 		// Trigger animation
 		isSoundAnimating = true;
 
 		// Toggle sound after brief delay to let animation start
+		// (soundsEnabled is derived from preferences store, so we call enable/disable which update the store)
 		setTimeout(() => {
 			if (soundsEnabled) {
 				disableSounds();
-				soundsEnabled = false;
 			} else {
 				enableSounds();
-				soundsEnabled = true;
 				// Play a test sound so user knows it works
 				setTimeout(() => playSuccessChime(), 100);
 			}
@@ -604,6 +598,18 @@
 						</button>
 					{/each}
 				</div>
+			</div>
+		</li>
+
+		<!-- Version -->
+		<div class="divider my-1" style="height: 1px; background: oklch(0.30 0.02 250);"></div>
+		<li>
+			<div
+				class="text-[10px] px-2 py-1 font-mono cursor-default"
+				style="color: oklch(0.50 0.02 250);"
+				title="Build version"
+			>
+				v{getVersionString()}
 			</div>
 		</li>
 	</ul>
