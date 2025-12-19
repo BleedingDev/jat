@@ -2,6 +2,19 @@
 	import type { SlashCommand, CommandFrontmatter } from '$lib/types/config';
 	import { onMount, onDestroy } from 'svelte';
 	import loader from '@monaco-editor/loader';
+	import {
+		validateYamlFrontmatter,
+		setEditorMarkers,
+		clearEditorMarkers,
+		type ValidationResult,
+		MarkerSeverity
+	} from '$lib/utils/editorValidation';
+	import CommandTemplates from './CommandTemplates.svelte';
+	import {
+		COMMAND_TEMPLATES,
+		applyTemplate,
+		type CommandTemplate
+	} from '$lib/config/commandTemplates';
 
 	// Props
 	let {
@@ -30,6 +43,14 @@
 	let error = $state('');
 	let success = $state('');
 
+	// Template selection state (for create mode)
+	let showTemplateStep = $state(true);
+	let selectedTemplate = $state<CommandTemplate | null>(null);
+
+	// Validation state
+	let validation = $state<ValidationResult | null>(null);
+	let validationDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Monaco
 	let editorContainer: HTMLDivElement;
 	let editor: any = null;
@@ -46,6 +67,7 @@
 	$effect(() => {
 		if (isOpen && command) {
 			loadCommandContent();
+			showTemplateStep = false; // Skip template step for edit mode
 		} else if (isOpen && !command) {
 			// Reset form for create mode
 			namespace = 'local';
@@ -54,11 +76,13 @@
 			author = '';
 			version = '';
 			tags = '';
+			showTemplateStep = true; // Show template picker first
+			selectedTemplate = null;
 			content = `---
-description: 
-author: 
+description:
+author:
 version: 1.0.0
-tags: 
+tags:
 ---
 
 # Command Title
@@ -67,9 +91,52 @@ Command content here...
 `;
 			if (editor) {
 				editor.setValue(content);
+				validateContent(content);
 			}
 		}
 	});
+
+	// Handle template selection
+	function handleTemplateSelect(template: CommandTemplate) {
+		selectedTemplate = template;
+		// Apply template frontmatter defaults
+		description = template.frontmatter.description || '';
+		author = template.frontmatter.author || '';
+		version = template.frontmatter.version || '1.0.0';
+		tags = template.frontmatter.tags || '';
+	}
+
+	// Apply selected template and move to editor step
+	function applySelectedTemplate() {
+		if (selectedTemplate) {
+			content = applyTemplate(selectedTemplate, {
+				namespace,
+				name: name || 'command',
+				description
+			});
+		}
+		showTemplateStep = false;
+
+		// Update editor if already initialized
+		if (editor) {
+			editor.setValue(content);
+			validateContent(content);
+		}
+	}
+
+	// Skip template selection and use default
+	function skipTemplate() {
+		showTemplateStep = false;
+		// Content already has default value
+		if (editor) {
+			validateContent(content);
+		}
+	}
+
+	// Go back to template selection
+	function backToTemplates() {
+		showTemplateStep = true;
+	}
 
 	async function loadCommandContent() {
 		if (!command) return;
@@ -97,12 +164,35 @@ Command content here...
 
 			if (editor) {
 				editor.setValue(content);
+				validateContent(content);
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load command';
 		} finally {
 			loading = false;
 		}
+	}
+
+	// Validate content and update Monaco markers
+	function validateContent(editorContent: string) {
+		if (!monaco || !editor) return;
+
+		// Clear previous debounce timer
+		if (validationDebounceTimer) {
+			clearTimeout(validationDebounceTimer);
+		}
+
+		// Debounce validation to avoid excessive processing
+		validationDebounceTimer = setTimeout(() => {
+			const model = editor.getModel();
+			if (!model) return;
+
+			const result = validateYamlFrontmatter(editorContent);
+			validation = result;
+
+			// Apply markers to Monaco editor
+			setEditorMarkers(monaco, model, result.markers, 'yaml-validation');
+		}, 300);
 	}
 
 	// Initialize Monaco editor
@@ -121,18 +211,26 @@ Command content here...
 					tabSize: 2,
 					scrollBeyondLastLine: false,
 					automaticLayout: true,
-					padding: { top: 16, bottom: 16 }
+					padding: { top: 16, bottom: 16 },
+					// Enable error gutter (shows colored squiggles)
+					glyphMargin: true
 				});
 
-				// Track content changes
+				// Track content changes and validate
 				editor.onDidChangeModelContent(() => {
 					content = editor.getValue();
+					validateContent(content);
 				});
 
 				// Keyboard shortcut for save
 				editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
 					handleSave();
 				});
+
+				// Initial validation if content exists
+				if (content) {
+					validateContent(content);
+				}
 			}
 		} catch (e) {
 			console.error('Failed to load Monaco:', e);
@@ -141,6 +239,9 @@ Command content here...
 	});
 
 	onDestroy(() => {
+		if (validationDebounceTimer) {
+			clearTimeout(validationDebounceTimer);
+		}
 		if (editor) {
 			editor.dispose();
 		}
@@ -172,6 +273,12 @@ Command content here...
 	async function handleSave() {
 		if (isCreateMode && !name.trim()) {
 			error = 'Command name is required';
+			return;
+		}
+
+		// Check for validation errors (block save on critical errors)
+		if (validation?.hasErrors) {
+			error = `Cannot save: ${validation.errorCount} syntax error${validation.errorCount > 1 ? 's' : ''} found. Fix errors to continue.`;
 			return;
 		}
 
@@ -338,15 +445,16 @@ Command content here...
 						</div>
 					{/if}
 
-					<!-- Create mode fields -->
-					{#if isCreateMode}
+					<!-- Template Selection Step (Create Mode Only) -->
+					{#if isCreateMode && showTemplateStep}
+						<!-- Basic info first -->
 						<div class="mb-6 grid grid-cols-2 gap-4">
 							<div class="form-control">
-								<label class="label" for="namespace">
+								<label class="label" for="namespace-template">
 									<span class="label-text font-medium">Namespace</span>
 								</label>
 								<select
-									id="namespace"
+									id="namespace-template"
 									class="select select-bordered"
 									bind:value={namespace}
 								>
@@ -357,11 +465,11 @@ Command content here...
 							</div>
 
 							<div class="form-control">
-								<label class="label" for="name">
+								<label class="label" for="name-template">
 									<span class="label-text font-medium">Command Name</span>
 								</label>
 								<input
-									id="name"
+									id="name-template"
 									type="text"
 									class="input input-bordered"
 									placeholder="my-command"
@@ -369,9 +477,112 @@ Command content here...
 								/>
 							</div>
 						</div>
-					{/if}
 
-					<!-- Frontmatter fields -->
+						<!-- Template picker -->
+						<CommandTemplates
+							bind:selectedTemplate
+							onSelect={handleTemplateSelect}
+						/>
+
+						<!-- Template step actions -->
+						<div class="mt-6 flex justify-between">
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								onclick={skipTemplate}
+							>
+								Skip, start from scratch
+							</button>
+							<button
+								type="button"
+								class="btn btn-primary btn-sm"
+								onclick={applySelectedTemplate}
+								disabled={!selectedTemplate}
+							>
+								{selectedTemplate ? `Use ${selectedTemplate.name} Template` : 'Select a template'}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									class="ml-1 h-4 w-4"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M9 5l7 7-7 7"
+									/>
+								</svg>
+							</button>
+						</div>
+					{:else}
+						<!-- Editor Step -->
+
+						<!-- Create mode fields (when not in template step) -->
+						{#if isCreateMode}
+							<div class="mb-4 flex items-center gap-2">
+								<button
+									type="button"
+									class="btn btn-ghost btn-xs"
+									onclick={backToTemplates}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										class="mr-1 h-3 w-3"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M15 19l-7-7 7-7"
+										/>
+									</svg>
+									Change template
+								</button>
+								{#if selectedTemplate}
+									<span class="badge badge-sm badge-ghost">
+										{selectedTemplate.icon} {selectedTemplate.name}
+									</span>
+								{:else}
+									<span class="badge badge-sm badge-ghost">Custom</span>
+								{/if}
+							</div>
+							<div class="mb-6 grid grid-cols-2 gap-4">
+								<div class="form-control">
+									<label class="label" for="namespace">
+										<span class="label-text font-medium">Namespace</span>
+									</label>
+									<select
+										id="namespace"
+										class="select select-bordered"
+										bind:value={namespace}
+									>
+										{#each namespaces as ns}
+											<option value={ns.value}>{ns.label}</option>
+										{/each}
+									</select>
+								</div>
+
+								<div class="form-control">
+									<label class="label" for="name">
+										<span class="label-text font-medium">Command Name</span>
+									</label>
+									<input
+										id="name"
+										type="text"
+										class="input input-bordered"
+										placeholder="my-command"
+										bind:value={name}
+									/>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Frontmatter fields -->
 					<div class="mb-6">
 						<h3 class="mb-3 font-medium text-base-content">Frontmatter</h3>
 						<div class="grid grid-cols-2 gap-4">
@@ -441,10 +652,47 @@ Command content here...
 						</label>
 						<div
 							bind:this={editorContainer}
-							class="h-[400px] overflow-hidden rounded-lg border"
+							class="h-[400px] overflow-hidden rounded-t-lg border border-b-0"
 							style="border-color: oklch(0.3 0.02 250);"
 						></div>
+						<!-- Validation status bar -->
+						<div
+							class="flex items-center justify-between gap-2 rounded-b-lg border px-3 py-1.5 text-xs"
+							style="border-color: oklch(0.3 0.02 250); background: oklch(0.15 0.02 250);"
+						>
+							<div class="flex items-center gap-3">
+								{#if validation?.hasErrors}
+									<span class="flex items-center gap-1 text-error">
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+										</svg>
+										{validation.errorCount} error{validation.errorCount > 1 ? 's' : ''}
+									</span>
+								{/if}
+								{#if validation?.hasWarnings}
+									<span class="flex items-center gap-1 text-warning">
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+										</svg>
+										{validation.warningCount} warning{validation.warningCount > 1 ? 's' : ''}
+									</span>
+								{/if}
+								{#if validation && !validation.hasErrors && !validation.hasWarnings}
+									<span class="flex items-center gap-1 text-success">
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+										</svg>
+										No issues
+									</span>
+								{/if}
+								{#if !validation}
+									<span class="opacity-50">Validating...</span>
+								{/if}
+							</div>
+							<span class="opacity-50">YAML frontmatter</span>
+						</div>
 					</div>
+					{/if}
 				{/if}
 			</div>
 
@@ -453,13 +701,24 @@ Command content here...
 				class="flex items-center justify-end gap-3 border-t px-6 py-4"
 				style="border-color: oklch(0.3 0.02 250); background: oklch(0.18 0.02 250);"
 			>
-				<button class="btn btn-ghost" onclick={handleClose} disabled={saving}>Cancel</button>
-				<button class="btn btn-primary" onclick={handleSave} disabled={saving || loading}>
-					{#if saving}
-						<span class="loading loading-spinner loading-sm"></span>
-					{/if}
-					{isCreateMode ? 'Create Command' : 'Save Changes'}
-				</button>
+				{#if isCreateMode && showTemplateStep}
+					<!-- Template step footer -->
+					<button class="btn btn-ghost" onclick={handleClose}>Cancel</button>
+				{:else}
+					<!-- Editor step footer -->
+					<button class="btn btn-ghost" onclick={handleClose} disabled={saving}>Cancel</button>
+					<button
+						class="btn btn-primary"
+						onclick={handleSave}
+						disabled={saving || loading || validation?.hasErrors}
+						title={validation?.hasErrors ? 'Fix syntax errors before saving' : ''}
+					>
+						{#if saving}
+							<span class="loading loading-spinner loading-sm"></span>
+						{/if}
+						{isCreateMode ? 'Create Command' : 'Save Changes'}
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
