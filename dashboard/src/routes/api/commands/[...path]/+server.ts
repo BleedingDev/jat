@@ -19,6 +19,7 @@ import { readFile, writeFile, unlink, access, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import type { RequestHandler } from './$types';
+import { parseCommandFrontmatter } from '$lib/utils/commandFrontmatter';
 
 // Regex patterns for validation
 // Namespace: alphanumeric, hyphens, underscores (e.g., "jat", "my-project", "local")
@@ -133,12 +134,16 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		// Read file content
 		const content = await readFile(filePath, 'utf-8');
 
+		// Parse frontmatter
+		const frontmatter = parseCommandFrontmatter(content);
+
 		return json({
 			namespace,
 			name,
 			path: filePath,
 			invocation: namespace === LOCAL_NAMESPACE ? `/${name}` : `/${namespace}:${name}`,
-			content
+			content,
+			frontmatter: frontmatter || undefined
 		});
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === 'ENOENT') {

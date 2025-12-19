@@ -34,6 +34,10 @@ export interface CommandFrontmatter {
 	version?: string;
 	/** Comma-separated or array of tags for categorization */
 	tags?: string | string[];
+	/** Keyboard shortcut (e.g., "Alt+C", "Ctrl+Shift+S") */
+	shortcut?: string;
+	/** Hint for command arguments (e.g., "[agent-name | task-id]") */
+	argumentHint?: string;
 }
 
 /**

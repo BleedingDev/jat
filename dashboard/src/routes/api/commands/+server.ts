@@ -7,12 +7,13 @@
  */
 
 import { json, error } from '@sveltejs/kit';
-import { readdirSync, existsSync, statSync, lstatSync } from 'fs';
+import { readdirSync, existsSync, statSync, lstatSync, readFileSync } from 'fs';
 import { writeFile, mkdir, access } from 'fs/promises';
 import { join, basename, dirname } from 'path';
 import { homedir } from 'os';
 import type { RequestHandler } from './$types';
 import type { SlashCommand } from '$lib/types/config';
+import { parseCommandFrontmatter } from '$lib/utils/commandFrontmatter';
 
 // Regex patterns for validation (same as in [...path]/+server.ts)
 const NAMESPACE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
@@ -72,8 +73,18 @@ function isFileOrSymlinkToFile(path: string): boolean {
 
 /**
  * Discover commands from a directory
+ *
+ * @param dir - Directory path to search
+ * @param namespace - Namespace for these commands (e.g., "jat", "local")
+ * @param prefix - Invocation prefix (e.g., "jat" for "/jat:start")
+ * @param includeFrontmatter - Whether to read and parse frontmatter (default: true)
  */
-function discoverCommands(dir: string, namespace: string, prefix: string): SlashCommand[] {
+function discoverCommands(
+	dir: string,
+	namespace: string,
+	prefix: string,
+	includeFrontmatter: boolean = true
+): SlashCommand[] {
 	const commands: SlashCommand[] = [];
 
 	if (!existsSync(dir)) {
@@ -89,12 +100,28 @@ function discoverCommands(dir: string, namespace: string, prefix: string): Slash
 				// Check if it's a file or a symlink to a file
 				if (entry.isFile() || (entry.isSymbolicLink() && isFileOrSymlinkToFile(fullPath))) {
 					const name = basename(entry.name, '.md');
-					commands.push({
+
+					const command: SlashCommand = {
 						name,
 						invocation: prefix ? `/${prefix}:${name}` : `/${name}`,
 						namespace,
 						path: fullPath
-					});
+					};
+
+					// Read file content and parse frontmatter if requested
+					if (includeFrontmatter) {
+						try {
+							const content = readFileSync(fullPath, 'utf-8');
+							const frontmatter = parseCommandFrontmatter(content);
+							if (frontmatter) {
+								command.frontmatter = frontmatter;
+							}
+						} catch (readErr) {
+							console.error(`Error reading frontmatter from ${fullPath}:`, readErr);
+						}
+					}
+
+					commands.push(command);
 				}
 			}
 		}
@@ -107,8 +134,11 @@ function discoverCommands(dir: string, namespace: string, prefix: string): Slash
 
 /**
  * Discover all available commands
+ *
+ * @param projectPath - Project directory path for local commands
+ * @param includeFrontmatter - Whether to parse frontmatter (default: true)
  */
-function discoverAllCommands(projectPath?: string): SlashCommand[] {
+function discoverAllCommands(projectPath?: string, includeFrontmatter: boolean = true): SlashCommand[] {
 	const allCommands: SlashCommand[] = [];
 	const home = homedir();
 
@@ -120,7 +150,7 @@ function discoverAllCommands(projectPath?: string): SlashCommand[] {
 			for (const ns of namespaces) {
 				if (ns.isDirectory()) {
 					const nsPath = join(globalCommandsDir, ns.name);
-					const nsCommands = discoverCommands(nsPath, ns.name, ns.name);
+					const nsCommands = discoverCommands(nsPath, ns.name, ns.name, includeFrontmatter);
 					allCommands.push(...nsCommands);
 				}
 			}
@@ -132,7 +162,7 @@ function discoverAllCommands(projectPath?: string): SlashCommand[] {
 	// 2. Discover project-local commands from .claude/commands/
 	if (projectPath) {
 		const localCommandsDir = join(projectPath, '.claude', 'commands');
-		const localCommands = discoverCommands(localCommandsDir, 'local', '');
+		const localCommands = discoverCommands(localCommandsDir, 'local', '', includeFrontmatter);
 		allCommands.push(...localCommands);
 	}
 
@@ -155,7 +185,12 @@ function discoverAllCommands(projectPath?: string): SlashCommand[] {
 /**
  * GET /api/commands
  *
- * Discover and list all available slash commands
+ * Discover and list all available slash commands.
+ *
+ * Query params:
+ *   - project: Project path for local commands (default: parent of cwd)
+ *   - frontmatter: Whether to include parsed frontmatter (default: true)
+ *   - debug: Include debug info (default: false)
  */
 export const GET: RequestHandler = async ({ url }) => {
 	// Get project path from query param or use default
@@ -163,7 +198,10 @@ export const GET: RequestHandler = async ({ url }) => {
 	const home = homedir();
 	const globalDir = join(home, '.claude', 'commands');
 
-	const commands = discoverAllCommands(projectPath);
+	// Check if frontmatter parsing is requested (default: true)
+	const includeFrontmatter = url.searchParams.get('frontmatter') !== 'false';
+
+	const commands = discoverAllCommands(projectPath, includeFrontmatter);
 
 	// Include debug info if requested
 	const debug = url.searchParams.has('debug');

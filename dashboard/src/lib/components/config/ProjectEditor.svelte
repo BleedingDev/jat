@@ -2,6 +2,7 @@
 	import { fly, fade } from 'svelte/transition';
 	import type { ProjectConfig } from '$lib/types/config';
 	import { saveProject } from '$lib/stores/configStore.svelte';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
 	interface Props {
 		isOpen: boolean;
@@ -33,6 +34,39 @@
 	// Validation state
 	let errors = $state<Record<string, string>>({});
 	let touched = $state<Record<string, boolean>>({});
+
+	// Real-time field validation
+	function validateField(field: string, value: unknown) {
+		touched[field] = true;
+		let error: string | null = null;
+		switch (field) {
+			case 'key':
+				error = validateKey(value as string);
+				break;
+			case 'name':
+				error = validateName(value as string);
+				break;
+			case 'path':
+				error = validatePath(value as string);
+				break;
+			case 'port':
+				error = validatePort(value as number | undefined);
+				break;
+			case 'activeColor':
+				error = validateColor(value as string);
+				break;
+			case 'inactiveColor':
+				error = validateColor(value as string);
+				break;
+		}
+		if (error) {
+			errors = { ...errors, [field]: error };
+		} else {
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const { [field]: _, ...rest } = errors;
+			errors = rest;
+		}
+	}
 
 	// Is this a new project or editing existing?
 	let isNewProject = $derived(!project);
@@ -106,6 +140,7 @@
 
 	function validatePort(value: number | undefined): string | null {
 		if (value === undefined || value === null) return null;
+		if (!Number.isInteger(value)) return 'Port must be a whole number';
 		if (value < 1 || value > 65535) return 'Port must be between 1 and 65535';
 		return null;
 	}
@@ -232,8 +267,10 @@
 			showDeleteConfirm = false;
 			isOpen = false;
 			onDelete?.(project.key);
+			successToast(`Project "${project.key}" deleted`, 'Removed from configuration');
 		} catch (error) {
 			deleteError = error instanceof Error ? error.message : 'Failed to delete project';
+			errorToast('Failed to delete project', deleteError);
 		} finally {
 			isDeleting = false;
 		}
@@ -289,6 +326,7 @@
 						bind:value={key}
 						readonly={!isNewProject}
 						onfocus={() => touched['key'] = true}
+						onblur={() => validateField('key', key)}
 					/>
 					{#if touched['key'] && errors['key']}
 						<label class="label">
@@ -315,7 +353,7 @@
 						placeholder="My Project"
 						bind:value={name}
 						onfocus={() => touched['name'] = true}
-						onblur={generateKeyFromName}
+						onblur={() => { generateKeyFromName(); validateField('name', name); }}
 					/>
 					{#if touched['name'] && errors['name']}
 						<label class="label">
@@ -337,6 +375,7 @@
 						placeholder="~/code/my-project"
 						bind:value={path}
 						onfocus={() => touched['path'] = true}
+						onblur={() => validateField('path', path)}
 					/>
 					{#if touched['path'] && errors['path']}
 						<label class="label">
@@ -385,8 +424,10 @@
 						placeholder="3000"
 						min="1"
 						max="65535"
+						step="1"
 						bind:value={port}
 						onfocus={() => touched['port'] = true}
+						onblur={() => validateField('port', port)}
 					/>
 					{#if touched['port'] && errors['port']}
 						<label class="label">
@@ -445,6 +486,7 @@
 							placeholder="oklch(0.7 0.15 150)"
 							bind:value={activeColor}
 							onfocus={() => touched['activeColor'] = true}
+							onblur={() => validateField('activeColor', activeColor)}
 						/>
 						{#if activeColor}
 							<div
@@ -474,6 +516,7 @@
 							placeholder="oklch(0.5 0.1 150)"
 							bind:value={inactiveColor}
 							onfocus={() => touched['inactiveColor'] = true}
+							onblur={() => validateField('inactiveColor', inactiveColor)}
 						/>
 						{#if inactiveColor}
 							<div
