@@ -16,8 +16,10 @@
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.70.1",
 		"@humanspeak/svelte-virtual-list": "^0.3.6",
+		"@monaco-editor/loader": "^1.7.0",
 		"better-sqlite3": "^11.8.1",
 		"d3": "^7.9.0",
+		"monaco-editor": "^0.55.1",
 		"svelte-dnd-action": "^0.9.67",
 		"theme-change": "^2.5.0",
 		"ws": "^8.18.3"
