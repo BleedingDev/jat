@@ -26,6 +26,7 @@
 		toggleProjectVisibility
 	} from '$lib/stores/configStore.svelte';
 	import ProjectCard from './ProjectCard.svelte';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
 	interface Props {
 		/** Called when edit button is clicked for a project */
@@ -57,7 +58,15 @@
 
 	// Handle visibility toggle
 	async function handleToggleVisibility(project: ProjectConfig) {
-		await toggleProjectVisibility(project.name, !project.hidden);
+		try {
+			const newVisibility = !project.hidden;
+			await toggleProjectVisibility(project.name, newVisibility);
+			const action = newVisibility ? 'hidden' : 'shown';
+			successToast(`Project "${project.name}" ${action}`, `Project is now ${newVisibility ? 'hidden from' : 'visible in'} the dashboard`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Failed to toggle visibility';
+			errorToast('Failed to update project visibility', message);
+		}
 	}
 
 	// Handle retry

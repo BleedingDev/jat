@@ -42,6 +42,7 @@
 	import DocsEditor from '$lib/components/config/DocsEditor.svelte';
 	import DefaultsEditor from '$lib/components/config/DefaultsEditor.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
 	// Page state
 	let isLoading = $state(true);
@@ -171,6 +172,7 @@
 					const data = await response.json();
 					throw new Error(data.error || 'Failed to create project');
 				}
+				successToast(`Project "${key}" created`, 'Added to configuration');
 			} else {
 				// Update existing project
 				const response = await fetch('/api/projects', {
@@ -189,13 +191,15 @@
 					const data = await response.json();
 					throw new Error(data.error || 'Failed to update project');
 				}
+				successToast(`Project "${key}" saved`, 'Changes applied');
 			}
 
 			// Reload projects to reflect the change
 			await loadProjects();
 		} catch (error) {
 			console.error('[Config] Failed to save project:', error);
-			// The error will be handled by the ProjectEditor component
+			const message = error instanceof Error ? error.message : 'Failed to save project';
+			errorToast('Failed to save project', message);
 			throw error;
 		}
 	}
