@@ -37,27 +37,21 @@
 	];
 </script>
 
-<!-- Graph Skeleton -->
-<div
-	class="relative w-full h-96 rounded-lg overflow-hidden"
-	style="
-		background: linear-gradient(180deg, oklch(0.16 0.01 250) 0%, oklch(0.14 0.01 250) 100%);
-		border: 1px solid oklch(0.30 0.02 250);
-	"
->
+<!-- Graph Skeleton - Theme-aware -->
+<div class="relative w-full h-96 rounded-lg overflow-hidden bg-base-300 border border-base-content/20">
 	<!-- Background grid pattern -->
 	<div
 		class="absolute inset-0 opacity-[0.05]"
 		style="
 			background-image:
-				linear-gradient(oklch(0.5 0.1 240) 1px, transparent 1px),
-				linear-gradient(90deg, oklch(0.5 0.1 240) 1px, transparent 1px);
+				linear-gradient(currentColor 1px, transparent 1px),
+				linear-gradient(90deg, currentColor 1px, transparent 1px);
 			background-size: 30px 30px;
 		"
 	></div>
 
 	<!-- SVG for edges -->
-	<svg class="absolute inset-0 w-full h-full" style="opacity: 0.3;">
+	<svg class="absolute inset-0 w-full h-full opacity-30">
 		{#each edges as edge, i}
 			{@const from = nodePositions[edge.from]}
 			{@const to = nodePositions[edge.to]}
@@ -66,7 +60,7 @@
 				y1="{from.y}%"
 				x2="{to.x}%"
 				y2="{to.y}%"
-				stroke="oklch(0.50 0.10 240)"
+				class="stroke-primary"
 				stroke-width="2"
 				stroke-dasharray="5,5"
 				style="animation: dashMove 2s linear infinite; animation-delay: {i * 100}ms;"
@@ -77,24 +71,22 @@
 	<!-- Node placeholders -->
 	{#each nodePositions.slice(0, nodes) as pos, i}
 		<div
-			class="absolute {pos.size} rounded-lg skeleton"
+			class="absolute {pos.size} rounded-lg skeleton bg-base-200 border border-base-content/20"
 			style="
 				left: {pos.x}%;
 				top: {pos.y}%;
 				transform: translate(-50%, -50%);
-				background: oklch(0.22 0.02 250);
-				border: 1px solid oklch(0.35 0.02 250);
 				animation: nodePulse 2s ease-in-out infinite;
 				animation-delay: {i * 150}ms;
 			"
 		>
 			<!-- Task ID skeleton -->
 			<div class="absolute top-2 left-2">
-				<div class="skeleton h-3 w-12 rounded" style="background: oklch(0.30 0.02 250);"></div>
+				<div class="skeleton h-3 w-12 rounded bg-base-content/15"></div>
 			</div>
 			<!-- Title skeleton -->
 			<div class="absolute bottom-2 left-2 right-2">
-				<div class="skeleton h-3 w-full rounded" style="background: oklch(0.28 0.01 250);"></div>
+				<div class="skeleton h-3 w-full rounded bg-base-content/12"></div>
 			</div>
 		</div>
 	{/each}
@@ -102,11 +94,8 @@
 	<!-- Center loading indicator -->
 	<div class="absolute inset-0 flex items-center justify-center">
 		<div class="flex flex-col items-center gap-3">
-			<div
-				class="w-10 h-10 rounded-full border-2 animate-spin"
-				style="border-color: oklch(0.50 0.15 240); border-top-color: transparent;"
-			></div>
-			<span class="text-xs font-mono" style="color: oklch(0.50 0.02 250);">Loading graph...</span>
+			<div class="w-10 h-10 rounded-full border-2 animate-spin border-primary border-t-transparent"></div>
+			<span class="text-xs font-mono text-base-content/50">Loading graph...</span>
 		</div>
 	</div>
 </div>

@@ -14,115 +14,61 @@
 	// Varying task bar widths for visual variety
 	const taskWidths = [60, 40, 75, 55, 45, 70, 35, 65];
 	const taskOffsets = [5, 25, 10, 40, 20, 15, 50, 30];
-
-	// Pre-computed dot colors for variety
-	const dotColors = [
-		'oklch(0.35 0.05 200)',
-		'oklch(0.45 0.10 230)',
-		'oklch(0.55 0.15 260)',
-		'oklch(0.40 0.08 290)',
-		'oklch(0.50 0.12 320)',
-		'oklch(0.35 0.05 200)',
-		'oklch(0.45 0.10 230)',
-		'oklch(0.55 0.15 260)',
-	];
-
-	// Pre-computed bar colors for variety
-	const barColors = [
-		'oklch(0.30 0.05 220)',
-		'oklch(0.35 0.08 240)',
-		'oklch(0.40 0.11 260)',
-		'oklch(0.45 0.08 280)',
-		'oklch(0.30 0.05 300)',
-		'oklch(0.35 0.08 220)',
-		'oklch(0.40 0.11 240)',
-		'oklch(0.45 0.08 260)',
-	];
 </script>
 
-<!-- Timeline Skeleton -->
-<div class="min-h-screen" style="background: oklch(0.14 0.01 250);">
+<!-- Timeline Skeleton - Theme-aware -->
+<div class="min-h-screen bg-base-300">
 	<!-- Filter Bar Skeleton -->
-	<div
-		class="p-4"
-		style="
-			background: oklch(0.16 0.01 250);
-			border-bottom: 1px solid oklch(0.30 0.02 250);
-		"
-	>
+	<div class="p-4 bg-base-200 border-b border-base-content/20">
 		<div class="flex flex-wrap items-center gap-4">
 			<!-- Priority filter -->
 			<div class="form-control">
-				<div class="skeleton h-4 w-14 rounded mb-1" style="background: oklch(0.25 0.01 250);"></div>
-				<div class="skeleton h-8 w-32 rounded" style="background: oklch(0.22 0.02 250);"></div>
+				<div class="skeleton h-4 w-14 rounded mb-1 bg-base-content/10"></div>
+				<div class="skeleton h-8 w-32 rounded bg-base-content/8"></div>
 			</div>
 			<!-- Status filter -->
 			<div class="form-control">
-				<div class="skeleton h-4 w-12 rounded mb-1" style="background: oklch(0.25 0.01 250);"></div>
-				<div class="skeleton h-8 w-28 rounded" style="background: oklch(0.22 0.02 250);"></div>
+				<div class="skeleton h-4 w-12 rounded mb-1 bg-base-content/10"></div>
+				<div class="skeleton h-8 w-28 rounded bg-base-content/8"></div>
 			</div>
 			<!-- Search -->
 			<div class="form-control">
-				<div class="skeleton h-4 w-12 rounded mb-1" style="background: oklch(0.25 0.01 250);"></div>
-				<div class="skeleton h-8 w-40 rounded" style="background: oklch(0.22 0.02 250);"></div>
+				<div class="skeleton h-4 w-12 rounded mb-1 bg-base-content/10"></div>
+				<div class="skeleton h-8 w-40 rounded bg-base-content/8"></div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Gantt Chart Skeleton -->
 	<div class="p-4">
-		<div
-			class="rounded-lg overflow-hidden"
-			style="
-				background: oklch(0.16 0.01 250);
-				border: 1px solid oklch(0.30 0.02 250);
-			"
-		>
+		<div class="rounded-lg overflow-hidden bg-base-200 border border-base-content/20">
 			<!-- Header row (time columns) -->
-			<div
-				class="flex items-center gap-2 px-4 py-3"
-				style="
-					background: oklch(0.20 0.01 250);
-					border-bottom: 1px solid oklch(0.30 0.02 250);
-				"
-			>
+			<div class="flex items-center gap-2 px-4 py-3 bg-base-100 border-b border-base-content/20">
 				<div class="w-48 flex-shrink-0">
-					<div class="skeleton h-4 w-20 rounded" style="background: oklch(0.30 0.02 250);"></div>
+					<div class="skeleton h-4 w-20 rounded bg-base-content/15"></div>
 				</div>
 				<div class="flex-1 flex justify-between">
 					{#each Array(6) as _, i}
-						<div
-							class="skeleton h-4 w-12 rounded"
-							style="background: oklch(0.28 0.01 250);"
-						></div>
+						<div class="skeleton h-4 w-12 rounded bg-base-content/12"></div>
 					{/each}
 				</div>
 			</div>
 
 			<!-- Task rows -->
-			<div class="divide-y" style="--tw-divide-opacity: 0.3; border-color: oklch(0.25 0.01 250);">
+			<div class="divide-y divide-base-content/10">
 				{#each Array(tasks) as _, i}
 					<div
 						class="flex items-center gap-2 px-4 py-3"
-						style="
-							animation: pulse 1.5s ease-in-out infinite;
-							animation-delay: {i * 100}ms;
-						"
+						style="animation: pulse 1.5s ease-in-out infinite; animation-delay: {i * 100}ms;"
 					>
 						<!-- Task name column -->
 						<div class="w-48 flex-shrink-0 flex items-center gap-2">
 							<!-- Priority dot -->
-							<div
-								class="skeleton w-2 h-2 rounded-full"
-								style="background: {dotColors[i % dotColors.length]};"
-							></div>
+							<div class="skeleton w-2 h-2 rounded-full bg-primary/40"></div>
 							<!-- Task ID -->
 							<div
-								class="skeleton h-4 rounded"
-								style="
-									background: oklch(0.28 0.02 250);
-									width: {[60, 72, 56, 68, 64, 76, 52, 70][i % 8]}px;
-								"
+								class="skeleton h-4 rounded bg-base-content/12"
+								style="width: {[60, 72, 56, 68, 64, 76, 52, 70][i % 8]}px;"
 							></div>
 						</div>
 
@@ -131,18 +77,14 @@
 							<!-- Grid lines (subtle) -->
 							<div class="absolute inset-0 flex justify-between opacity-20">
 								{#each Array(6) as _}
-									<div class="w-px h-full" style="background: oklch(0.40 0.02 250);"></div>
+									<div class="w-px h-full bg-base-content/25"></div>
 								{/each}
 							</div>
 
 							<!-- Task bar -->
 							<div
-								class="absolute top-1 h-4 rounded skeleton"
-								style="
-									left: {taskOffsets[i % taskOffsets.length]}%;
-									width: {taskWidths[i % taskWidths.length]}%;
-									background: {barColors[i % barColors.length]};
-								"
+								class="absolute top-1 h-4 rounded skeleton bg-primary/20"
+								style="left: {taskOffsets[i % taskOffsets.length]}%; width: {taskWidths[i % taskWidths.length]}%;"
 							></div>
 						</div>
 					</div>
@@ -153,11 +95,8 @@
 		<!-- Center loading indicator -->
 		<div class="flex items-center justify-center mt-8">
 			<div class="flex flex-col items-center gap-3">
-				<div
-					class="w-10 h-10 rounded-full border-2 animate-spin"
-					style="border-color: oklch(0.50 0.15 240); border-top-color: transparent;"
-				></div>
-				<span class="text-xs font-mono" style="color: oklch(0.50 0.02 250);">Loading timeline...</span>
+				<div class="w-10 h-10 rounded-full border-2 animate-spin border-primary border-t-transparent"></div>
+				<span class="text-xs font-mono text-base-content/50">Loading timeline...</span>
 			</div>
 		</div>
 	</div>
