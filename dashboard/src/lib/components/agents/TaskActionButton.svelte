@@ -251,7 +251,7 @@
 			{#if dropdownOpen}
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<div class="fixed inset-0 z-40" onclick={closeDropdown}></div>
-				<ul class="dropdown-content z-50 menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300">
+				<ul class="dropdown-content z-40 menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300">
 					{#if task.status === 'in_progress' && isAgentOnline && sessionName}
 						<li>
 							<button onclick={handleAttach} class="gap-2">

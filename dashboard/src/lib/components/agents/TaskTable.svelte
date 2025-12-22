@@ -2103,7 +2103,7 @@
 						</div>
 						<ul
 							tabindex="0"
-							class="dropdown-content z-50 menu p-2 shadow rounded-box w-52"
+							class="dropdown-content z-40 menu p-2 shadow rounded-box w-52"
 							style="
 								background: oklch(0.20 0.01 250);
 								border: 1px solid oklch(0.35 0.02 250);

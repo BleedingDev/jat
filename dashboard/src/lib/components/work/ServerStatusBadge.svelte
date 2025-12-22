@@ -145,8 +145,7 @@
 		<!-- Port status indicator -->
 		{#if port && serverStatus === 'running'}
 			<span
-				class="inline-block w-1.5 h-1.5 rounded-full ml-1"
-				style="background: {portRunning ? 'oklch(0.70 0.20 145)' : 'oklch(0.50 0.05 250)'};"
+				class="inline-block w-1.5 h-1.5 rounded-full ml-1 {portRunning ? 'port-active' : 'port-inactive'}"
 				title={portRunning ? 'Port is listening' : 'Port not responding'}
 			></span>
 		{/if}
@@ -166,18 +165,13 @@
 	<!-- Dropdown Menu -->
 	{#if isOpen}
 		<div
-			class="absolute z-50 min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
-			style="
-				background: oklch(0.20 0.02 250);
-				border: 1px solid oklch(0.35 0.03 250);
-			"
+			class="server-dropdown absolute z-40 min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
 		>
 			<!-- Server info header -->
 			{#if port}
 				<div
-					class="px-3 py-2 flex items-center justify-between text-xs"
-					style="background: oklch(0.18 0.02 250); border-bottom: 1px solid oklch(0.30 0.02 250);"
+					class="px-3 py-2 flex items-center justify-between text-xs server-header"
 				>
 					<span class="opacity-70">Port</span>
 					<span class="font-mono font-bold" style="color: {config.textColor};">
@@ -221,11 +215,40 @@
 
 			<!-- Session info footer -->
 			<div
-				class="px-3 py-1.5 text-[9px] font-mono opacity-50 truncate"
-				style="background: oklch(0.15 0.02 250); border-top: 1px solid oklch(0.30 0.02 250);"
+				class="px-3 py-1.5 text-[9px] font-mono opacity-50 truncate server-footer"
 			>
 				{sessionName}
 			</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Port status indicators */
+	.port-active {
+		background: var(--color-success);
+	}
+
+	.port-inactive {
+		background: var(--color-base-content);
+		opacity: 0.3;
+	}
+
+	/* Dropdown container */
+	.server-dropdown {
+		background: var(--color-base-300);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);
+	}
+
+	/* Server info header */
+	.server-header {
+		background: var(--color-base-200);
+		border-bottom: 1px solid color-mix(in oklch, var(--color-base-content) 15%, transparent);
+	}
+
+	/* Footer */
+	.server-footer {
+		background: var(--color-base-200);
+		border-top: 1px solid color-mix(in oklch, var(--color-base-content) 15%, transparent);
+	}
+</style>

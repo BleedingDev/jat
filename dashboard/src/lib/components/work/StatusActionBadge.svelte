@@ -403,7 +403,7 @@
 	}
 </script>
 
-<div class="relative inline-block z-[60] {className} pr-2 pb-1" bind:this={dropdownRef}>
+<div class="relative inline-block z-40 {className} pr-2 pb-1" bind:this={dropdownRef}>
 	<!-- Status Badge Button -->
 	<button
 		type="button"
@@ -436,7 +436,7 @@
 	<!-- Dropdown Menu -->
 	{#if isOpen}
 		<div
-			class="status-dropdown absolute z-[60] min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
+			class="status-dropdown absolute z-40 min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
 		>
 			<!-- Actions list -->
