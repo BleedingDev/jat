@@ -213,16 +213,6 @@
 		</div>
 	</div>
 
-	<!-- Legend -->
-	<div class="legend">
-		<span class="legend-label">Less</span>
-		<div class="legend-cells">
-			{#each [0, 1, 2, 3, 4] as level}
-				<div class="legend-cell intensity-{level}"></div>
-			{/each}
-		</div>
-		<span class="legend-label">More</span>
-	</div>
 </div>
 
 <!-- Tooltip portal -->
@@ -349,32 +339,6 @@
 	.intensity-4 {
 		background: var(--color-warning);
 		box-shadow: 0 0 6px color-mix(in oklch, var(--color-warning) 40%, transparent);
-	}
-
-	.legend {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		justify-content: flex-end;
-		padding-right: 4px;
-	}
-
-	.legend-label {
-		font-size: 9px;
-		color: var(--color-base-content);
-		opacity: 0.5;
-		font-family: ui-monospace, monospace;
-	}
-
-	.legend-cells {
-		display: flex;
-		gap: 2px;
-	}
-
-	.legend-cell {
-		width: 10px;
-		height: 10px;
-		border-radius: 2px;
 	}
 
 	/* Tooltip */
