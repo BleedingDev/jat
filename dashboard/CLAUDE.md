@@ -287,6 +287,101 @@ npm run dev
 ```
 Then hard refresh browser (Ctrl+Shift+R).
 
+### 5. Double Curly Braces in Attributes
+**Problem**: Using `{{variable}}` in HTML attributes causes "variable is not defined" error.
+```svelte
+<!-- ❌ WRONG - Svelte interprets {{variableName}} as JavaScript -->
+<input placeholder="Use {{variableName}} for templates" />
+<!-- Error: variableName is not defined -->
+```
+
+**Solution**: Use template literal syntax to escape double curlies:
+```svelte
+<!-- ✅ CORRECT - Template literal makes it a string -->
+<input placeholder={`Use {{variableName}} for templates`} />
+
+<!-- ✅ ALSO CORRECT - For inline text content -->
+<span>Use {`{{variableName}}`} for templates</span>
+```
+
+**Why**: Svelte uses `{expression}` for JavaScript interpolation. When it sees `{{`, it interprets the inner `{variableName}` as an expression. Using backticks inside `{}` creates a string literal that renders the curly braces literally.
+
+## Z-Index Stacking Order
+
+This project uses a consistent z-index hierarchy to manage layer stacking across components.
+
+### Z-Index Hierarchy
+
+| Level | z-index | Purpose | Components |
+|-------|---------|---------|------------|
+| 1 | z-10 | Local stacking | Sticky table headers, relative elements within components |
+| 2 | z-20 | Higher sticky | Main sticky headers, session card color bars |
+| 3 | z-30 | Page headers | Page-level sticky headers (e.g., projects page) |
+| 4 | **z-40** | **Dropdowns** | FilterDropdown, DateRangePicker, StatusActionBadge, ServerStatusBadge, TaskActionButton |
+| 5 | **z-50** | **Drawers/Modals** | TaskCreationDrawer, TaskDetailDrawer, CommandEditor, OutputDrawer, RuleEditor, PresetsPicker, TopBar dropdowns, toasts |
+| 6 | z-[55] | Special layering | SessionCard input section (layers above EventStack z-50) |
+| 7 | z-100/101 | Editor overlays | CodeMirror autocomplete, tooltips in McpConfigEditor, DefaultsEditor, TemplatesEditor |
+| 8 | z-998/999 | Stacked drawers | TaskHistoryDrawer (opens on top of TaskDetailDrawer) |
+| 9 | z-1000 | Tooltips | Sparkline tooltip, StreakCalendar tooltip |
+
+### Key Conventions
+
+**Dropdowns (z-40):**
+- Standard dropdown menus, filters, date pickers
+- Status action badges, server status badges
+- Use `z-40` to layer above page content but below modals
+
+**Drawers/Modals (z-50):**
+- All drawers: TaskCreation, TaskDetail, Command, Output
+- All modals: RuleEditor, PresetsPicker, UserProfile
+- TopBar navigation dropdowns (also z-50 since they're part of navigation chrome)
+- Toast notifications
+
+**Editor Overlays (z-100+):**
+- CodeMirror autocomplete and tooltip overlays
+- Need to appear above everything including modals when editing
+
+**Stacked Drawers (z-998/999):**
+- TaskHistoryDrawer uses high z-index because it opens ON TOP of TaskDetailDrawer
+- z-998 for overlay, z-999 for panel
+
+**Tooltips (z-1000):**
+- Highest z-index for ephemeral tooltip content
+- Sparklines, calendars, informational popovers
+
+### Why TopBar Uses z-50 (Not z-40)
+
+TopBar dropdowns use z-50 (same as drawers) rather than z-40:
+- TopBar is part of the navigation chrome, not page content
+- Its dropdowns should remain visible even when drawers are partially visible
+- Keeps navigation layer consistent
+
+### When to Use Each Level
+
+```svelte
+<!-- Dropdown inside page content -->
+<div class="dropdown-content z-40 menu ...">
+
+<!-- Modal/Drawer overlay and panel -->
+<div class="drawer drawer-end z-50">
+
+<!-- Drawer that stacks on another drawer -->
+<style>
+.history-overlay { z-index: 998; }
+.history-drawer { z-index: 999; }
+</style>
+
+<!-- Tooltip that must appear above everything -->
+<div class="tooltip z-1000">
+```
+
+### Avoiding Z-Index Conflicts
+
+1. **Don't invent new z-index values** - Use the established levels
+2. **Use relative z-index within components** (z-10, z-20) for internal layering
+3. **If a dropdown appears behind a modal**, it should probably be z-50 or the modal needs redesigning
+4. **Stacked drawers** - Only use z-998/999 when genuinely stacking on another drawer/modal
+
 ## Svelte 5 Runes
 
 This project uses Svelte 5 runes syntax:
