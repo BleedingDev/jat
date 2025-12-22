@@ -12,11 +12,11 @@
 	import { fly } from 'svelte/transition';
 	import {
 		getSessionStateVisual,
-		getSessionStateActions,
 		type SessionStateVisual,
 		type SessionStateAction,
 		type SessionState
 	} from '$lib/config/statusColors';
+	import { getActions, loadUserConfig, getIsLoaded } from '$lib/stores/stateActionsConfig.svelte';
 	import {
 		playTaskCompleteSound,
 		playCleanupSound,
@@ -99,7 +99,15 @@
 
 	// Get config from centralized statusColors.ts
 	const config = $derived(getSessionStateVisual(sessionState));
-	const actions = $derived(getSessionStateActions(sessionState));
+	// Get actions from configurable store (merges user config with defaults)
+	const actions = $derived(getActions(sessionState));
+
+	// Load user config on mount (if not already loaded)
+	$effect(() => {
+		if (!getIsLoaded()) {
+			loadUserConfig();
+		}
+	});
 
 	// Score-based command search (adapted from CommandPalette)
 	function scoreCommand(query: string, cmd: SlashCommand): number {
@@ -333,7 +341,8 @@
 			case 'info':
 				return 'hover:bg-info/20 text-info';
 			default:
-				return 'hover:bg-base-300 text-base-content';
+				// Use base-content/10 overlay since dropdown bg is base-300
+				return 'hover:bg-base-content/10 text-base-content';
 		}
 	}
 
