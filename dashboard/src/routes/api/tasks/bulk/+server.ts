@@ -222,14 +222,22 @@ async function createTask(task: SuggestedTask, defaultProject?: string): Promise
 		const { stdout, stderr } = await execAsync(command);
 
 		// Parse JSON output to get task ID
+		// bd create --json may output warning messages before the JSON line
+		// e.g.: "⚠ Creating issue with 'Test' prefix...\n{\"id\":\"jat-abc\",...}"
+		// So we need to extract just the JSON line
 		try {
-			const result = JSON.parse(stdout);
-			if (result.id) {
-				return {
-					title,
-					taskId: result.id,
-					success: true
-				};
+			// Try to find a JSON line in stdout (line starting with '{')
+			const lines = stdout.trim().split('\n');
+			const jsonLine = lines.find((line) => line.trim().startsWith('{'));
+			if (jsonLine) {
+				const result = JSON.parse(jsonLine);
+				if (result.id) {
+					return {
+						title,
+						taskId: result.id,
+						success: true
+					};
+				}
 			}
 		} catch {
 			// Fallback to regex parsing if JSON parsing fails
