@@ -368,19 +368,17 @@
 	}
 
 	// Get source badge info for start-next action
-	function getSourceBadge(action: SessionStateAction): { label: string; color: string; bgColor: string } | null {
+	function getSourceBadge(action: SessionStateAction): { label: string; colorClass: string } | null {
 		if (action.id === 'start-next' && nextTask) {
 			if (nextTask.source === 'epic') {
 				return {
 					label: nextTask.epicId ? `🏔️ ${nextTask.epicId}` : '🏔️ EPIC',
-					color: 'oklch(0.85 0.15 270)',
-					bgColor: 'oklch(0.40 0.12 270 / 0.4)'
+					colorClass: 'source-badge-epic'
 				};
 			} else {
 				return {
 					label: '📋 BACKLOG',
-					color: 'oklch(0.75 0.10 200)',
-					bgColor: 'oklch(0.35 0.08 200 / 0.4)'
+					colorClass: 'source-badge-backlog'
 				};
 			}
 		}
@@ -396,7 +394,7 @@
 	}
 </script>
 
-<div class="relative inline-block {className} pr-2 pb-1" bind:this={dropdownRef}>
+<div class="relative inline-block z-[60] {className} pr-2 pb-1" bind:this={dropdownRef}>
 	<!-- Status Badge Button -->
 	<button
 		type="button"
@@ -429,11 +427,7 @@
 	<!-- Dropdown Menu -->
 	{#if isOpen}
 		<div
-			class="absolute z-50 min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
-			style="
-				background: oklch(0.20 0.02 250);
-				border: 1px solid oklch(0.35 0.03 250);
-			"
+			class="status-dropdown absolute z-[60] min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
 		>
 			<!-- Actions list -->
@@ -464,8 +458,7 @@
 									<span class="font-semibold">{actionLabel}</span>
 									{#if sourceBadge}
 										<span
-											class="text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap"
-											style="color: {sourceBadge.color}; background: {sourceBadge.bgColor};"
+											class="text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap {sourceBadge.colorClass}"
 										>
 											{sourceBadge.label}
 										</span>
@@ -483,8 +476,7 @@
 			<!-- Commands section (collapsible) -->
 			{#if showCommands}
 				<div
-					class="border-t"
-					style="border-color: oklch(0.30 0.02 250);"
+					class="border-t commands-divider"
 				>
 					<!-- Commands header (toggle) -->
 					<button
@@ -513,16 +505,15 @@
 					<!-- Commands list (expandable) -->
 					{#if commandsExpanded}
 						<div
-							style="background: oklch(0.15 0.02 250);"
+							class="commands-panel"
 							transition:slide={{ duration: 150 }}
 						>
 							<!-- Search input (show when there are many commands) -->
 							{#if commands.length > 5}
-								<div class="px-2 py-1.5 border-b" style="border-color: oklch(0.25 0.02 250);">
+								<div class="px-2 py-1.5 border-b commands-search-border">
 									<div class="relative flex items-center gap-1.5">
 										<svg
-											class="w-3 h-3 flex-shrink-0"
-											style="color: oklch(0.55 0.02 250);"
+											class="w-3 h-3 flex-shrink-0 commands-search-icon"
 											fill="none"
 											viewBox="0 0 24 24"
 											stroke="currentColor"
@@ -536,8 +527,7 @@
 											onkeydown={handleCommandKeyDown}
 											type="text"
 											placeholder="Filter commands..."
-											class="w-full bg-transparent text-[10px] font-mono focus:outline-none"
-											style="color: oklch(0.85 0.02 250);"
+											class="w-full bg-transparent text-[10px] font-mono focus:outline-none commands-search-input"
 											autocomplete="off"
 										/>
 										{#if commandSearchQuery}
@@ -576,8 +566,7 @@
 											<button
 												type="button"
 												onclick={() => executeCommand(cmd.invocation)}
-												class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-white/70 hover:text-white"
-												style="background: {index === selectedCommandIndex ? 'oklch(1 0 0 / 0.1)' : 'transparent'}; border-left: 2px solid {index === selectedCommandIndex ? 'oklch(0.70 0.18 240)' : 'transparent'};"
+												class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 hover:text-base-content {index === selectedCommandIndex ? 'command-item-selected' : 'command-item-default'}"
 												disabled={isExecuting}
 												onmouseenter={() => { selectedCommandIndex = index; }}
 											>
@@ -586,10 +575,10 @@
 												</svg>
 												<span class="font-mono">{cmd.invocation}</span>
 												{#if cmd.namespace === 'local'}
-													<span class="text-[8px] px-1 py-0.5 rounded bg-white/10 text-white/40 ml-auto">local</span>
+													<span class="text-[8px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 ml-auto">local</span>
 												{/if}
 												{#if index === selectedCommandIndex && commands.length > 5}
-													<kbd class="kbd kbd-xs font-mono ml-auto" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.70 0.18 240);">↵</kbd>
+													<kbd class="kbd kbd-xs font-mono ml-auto command-kbd">↵</kbd>
 												{/if}
 											</button>
 										</li>
@@ -603,11 +592,77 @@
 
 			<!-- Session info footer -->
 			<div
-				class="px-3 py-1.5 text-[9px] font-mono opacity-50 truncate"
-				style="background: oklch(0.15 0.02 250); border-top: 1px solid oklch(0.30 0.02 250);"
+				class="px-3 py-1.5 text-[9px] font-mono opacity-50 truncate status-footer"
 			>
 				{sessionName}
 			</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Dropdown container */
+	.status-dropdown {
+		background: var(--color-base-300);
+		border: 1px solid var(--color-base-content);
+		border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+	}
+
+	/* Commands section */
+	.commands-divider {
+		border-color: color-mix(in oklch, var(--color-base-content) 15%, transparent);
+	}
+
+	.commands-panel {
+		background: var(--color-base-200);
+	}
+
+	.commands-search-border {
+		border-color: color-mix(in oklch, var(--color-base-content) 12%, transparent);
+	}
+
+	.commands-search-icon {
+		color: var(--color-base-content);
+		opacity: 0.4;
+	}
+
+	.commands-search-input {
+		color: var(--color-base-content);
+		opacity: 0.85;
+	}
+
+	/* Command item states */
+	.command-item-selected {
+		background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+		border-left: 2px solid var(--color-primary);
+	}
+
+	.command-item-default {
+		background: transparent;
+		border-left: 2px solid transparent;
+	}
+
+	/* Keyboard hint */
+	.command-kbd {
+		background: var(--color-base-300);
+		border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+		color: var(--color-primary);
+	}
+
+	/* Footer */
+	.status-footer {
+		background: var(--color-base-200);
+		border-top: 1px solid color-mix(in oklch, var(--color-base-content) 15%, transparent);
+	}
+
+	/* Source badges */
+	.source-badge-epic {
+		color: var(--color-secondary);
+		background: color-mix(in oklch, var(--color-secondary) 15%, transparent);
+	}
+
+	.source-badge-backlog {
+		color: var(--color-info);
+		background: color-mix(in oklch, var(--color-info) 15%, transparent);
+	}
+</style>
