@@ -3753,7 +3753,7 @@
 	     Skips: Terminal output, input section, completion banner, resize handle
 	     ═══════════════════════════════════════════════════════════════════════════ -->
 	<article
-		class="unified-agent-card p-2 rounded-lg relative overflow-hidden {className} {isCompleteFlashing ? 'complete-flash-animation' : ''}"
+		class="unified-agent-card p-2 rounded-lg relative overflow-visible {className} {isCompleteFlashing ? 'complete-flash-animation' : ''}"
 		class:ring-2={effectiveHighlighted || sessionState === "needs-input" || isCompleteFlashing}
 		class:ring-primary={effectiveHighlighted}
 		class:ring-success={isCompleteFlashing}
@@ -4764,9 +4764,9 @@
 				</div>
 			{/if}
 
-			<!-- Input Section (z-10 to layer above collapsed stack) -->
+			<!-- Input Section (z-[55] to layer above collapsed AND expanded EventStack z-50) -->
 			<div
-				class="relative px-3 py-2 flex-shrink-0 z-10"
+				class="relative px-3 py-2 flex-shrink-0 z-[55]"
 				style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);"
 			>
 				<!-- Attached Files Preview -->

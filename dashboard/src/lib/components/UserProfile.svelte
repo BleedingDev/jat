@@ -245,7 +245,7 @@
 	<!-- Dropdown Menu - Industrial -->
 	<ul
 		tabindex="0"
-		class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto"
+		class="menu menu-sm dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto"
 		style="
 			background: oklch(0.20 0.01 250);
 			border: 1px solid oklch(0.35 0.02 250);
