@@ -185,7 +185,10 @@
 	const focusedProject = $derived(focusedProjectIndex >= 0 ? sortedProjects[focusedProjectIndex] : null);
 
 	// Group sessions by project
-	// Project is determined from task ID prefix (e.g., flush-12p -> flush)
+	// Project is determined from (in priority order):
+	// 1. task ID prefix (e.g., jat-12p -> jat)
+	// 2. lastCompletedTask ID prefix
+	// 3. session.project field (set by spawn API for planning sessions)
 	// Do NOT fall back to tmux session name - all sessions are named jat-{AgentName}
 	// regardless of which project they're working on
 	const sessionsByProject = $derived.by(() => {
@@ -196,10 +199,12 @@
 				project = getProjectFromTaskId(session.task.id);
 			} else if (session.lastCompletedTask?.id) {
 				project = getProjectFromTaskId(session.lastCompletedTask.id);
+			} else if (session.project) {
+				// Fallback to session.project for planning sessions spawned via ServersBadge
+				project = session.project;
 			}
 			// Note: We intentionally don't fall back to sessionName because
 			// tmux sessions are named jat-{AgentName} not {project}-{AgentName}
-			// Sessions without task info won't be grouped (shown when task loads)
 			if (project) {
 				const existing = groups.get(project) || [];
 				existing.push(session);

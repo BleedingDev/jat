@@ -420,13 +420,18 @@ export async function POST({ request }) {
 			}
 		}
 
-		// Step 6: Return WorkSession
+		// Step 6: Determine project name from projectPath for session grouping
+		// Extract project name from path (e.g., "/home/jw/code/jat" -> "jat")
+		const projectName = projectPath.split('/').filter(Boolean).pop() || null;
+
+		// Step 7: Return WorkSession
 		return json({
 			success: true,
 			session: {
 				sessionName,
 				agentName,
 				task: fullTask,
+				project: projectName,  // Include project for session grouping on /projects page
 				imagePath: imagePath || null,
 				output: '',
 				lineCount: 0,

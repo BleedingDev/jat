@@ -68,6 +68,8 @@ export interface WorkSession {
 		issue_type?: string;
 		closedAt?: string;
 	} | null;
+	/** Project this session is associated with (for grouping planning sessions without tasks) */
+	project?: string;
 	output: string;
 	lineCount: number;
 	tokens: number;
@@ -317,27 +319,35 @@ export async function fetch(includeUsage: boolean = false): Promise<void> {
 			_sseStateTimestamp: session.sessionState ? Date.now() : session._sseStateTimestamp
 		}));
 
-		// When not including usage data, preserve existing tokens/cost/sparklineData/contextPercent
-		// to avoid overwriting data from fetchUsage() with zeros
+		// When not including usage data, preserve existing tokens/cost/sparklineData/contextPercent/project
+		// to avoid overwriting data from fetchUsage() with zeros or losing spawn-time data
 		if (!includeUsage && state.sessions.length > 0) {
-			const existingUsageMap = new Map(
+			const existingDataMap = new Map(
 				state.sessions.map(s => [s.sessionName, {
 					tokens: s.tokens,
 					cost: s.cost,
 					sparklineData: s.sparklineData,
-					contextPercent: s.contextPercent
+					contextPercent: s.contextPercent,
+					project: s.project
 				}])
 			);
 
 			state.sessions = newSessions.map(session => {
-				const existingUsage = existingUsageMap.get(session.sessionName);
-				if (existingUsage && (existingUsage.tokens > 0 || existingUsage.sparklineData?.length || existingUsage.contextPercent != null)) {
+				const existingData = existingDataMap.get(session.sessionName);
+				if (existingData) {
+					// Preserve usage data if it exists
+					const preserveUsage = existingData.tokens > 0 || existingData.sparklineData?.length || existingData.contextPercent != null;
 					return {
 						...session,
-						tokens: existingUsage.tokens,
-						cost: existingUsage.cost,
-						sparklineData: existingUsage.sparklineData,
-						contextPercent: existingUsage.contextPercent
+						// Preserve usage fields if they have data
+						...(preserveUsage ? {
+							tokens: existingData.tokens,
+							cost: existingData.cost,
+							sparklineData: existingData.sparklineData,
+							contextPercent: existingData.contextPercent
+						} : {}),
+						// Always preserve project (set at spawn time, not returned by /api/work)
+						project: session.project || existingData.project
 					};
 				}
 				return session;
@@ -565,6 +575,25 @@ export async function spawn(taskId: string): Promise<WorkSession | null> {
 		console.error('workSessions.spawn error:', err);
 		return null;
 	}
+}
+
+/**
+ * Add a session to the store from an external spawn call
+ * This is used when components call /api/work/spawn directly instead of spawn()
+ * The session object should include the 'project' field for proper grouping
+ */
+export function addSession(session: WorkSession): void {
+	// Check if session already exists
+	const existingIndex = state.sessions.findIndex(s => s.sessionName === session.sessionName);
+	if (existingIndex >= 0) {
+		// Update existing session
+		state.sessions[existingIndex] = { ...state.sessions[existingIndex], ...session };
+	} else {
+		// Add new session
+		state.sessions = [...state.sessions, session];
+	}
+	// Bust cache on next fetch to get fresh data
+	bustCacheOnNextFetch = true;
 }
 
 /**
