@@ -21,7 +21,7 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, toggleStartDropdown } from '$lib/stores/drawerStore';
+	import { availableProjects, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
@@ -185,18 +185,30 @@
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
 		connectSessionEvents(); // Connect to real-time session events SSE
 		connectTaskEvents(); // Connect to real-time task events SSE
-		// Load critical data first (tasks, projects, state counts)
-		// Sparkline is deferred (setTimeout) to avoid blocking the initial page render
-		Promise.all([loadAllTasks(), loadReadyTaskCount(), loadConfigProjects(), loadStateCounts(), loadEpicsWithReady(), loadReviewRules()]);
 
-		// Load sparkline data after initial render (fast with SQLite, ~5ms)
-		setTimeout(() => loadSparklineData(), 200);
+		// Phase 1: Critical data for initial render (fast, no usage data)
+		// Use loadAllTasksFast instead of loadAllTasks to avoid 2-4s token aggregation
+		await Promise.all([
+			loadAllTasksFast(),
+			loadReadyTaskCount(),
+			loadConfigProjects(),
+			loadStateCounts()
+		]);
 
-		// Load sessions for activity polling (needs sessions before polling can work)
-		await fetchWorkSessions();
+		// Phase 2: Non-critical data (deferred, doesn't block render)
+		// These can load in background after page is interactive
+		setTimeout(() => {
+			loadEpicsWithReady();
+			loadReviewRules();
+			loadSparklineData();
+			loadAllTasks(); // Full data with usage (expensive, background)
+		}, 100);
 
-		// Start activity polling for shimmer effect on all pages (200ms for responsive updates)
-		startActivityPolling(200);
+		// Load sessions for activity polling
+		fetchWorkSessions(); // Don't await - page can render without it
+
+		// Activity polling - 500ms is responsive enough, 200ms was too aggressive
+		startActivityPolling(500);
 
 		return () => {
 			closeSessionEvents(); // Close cross-page BroadcastChannel
@@ -549,10 +561,14 @@
 			return;
 		}
 
-		// Alt+S = Toggle START NEXT dropdown in TopBar
+		// Alt+S = Toggle START NEXT dropdown in TopBar (with keyboard focus)
 		if (event.altKey && event.code === 'KeyS') {
 			event.preventDefault();
-			toggleStartDropdown();
+			if (get(isStartDropdownOpen)) {
+				closeStartDropdown();
+			} else {
+				openStartDropdownViaKeyboard();
+			}
 			return;
 		}
 

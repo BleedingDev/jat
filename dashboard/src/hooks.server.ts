@@ -13,36 +13,39 @@ import { runAggregation } from '$lib/server/tokenUsageDb';
 // Track aggregation interval
 let aggregationInterval: ReturnType<typeof setInterval> | null = null;
 
-// Run aggregation on server startup
+// Run aggregation on server startup (deferred to not block first request)
 async function initializeAggregation() {
-	console.log('[Token Aggregation] Running initial aggregation...');
-	try {
-		const result = await runAggregation();
-		console.log(
-			`[Token Aggregation] Initial aggregation complete: ${result.filesProcessed} files, ${result.entriesProcessed} entries in ${result.durationMs}ms`
-		);
-	} catch (error) {
-		console.error('[Token Aggregation] Initial aggregation failed:', error);
-	}
+	// Defer initial aggregation by 2 seconds to let server start serving requests first
+	setTimeout(async () => {
+		console.log('[Token Aggregation] Running initial aggregation...');
+		try {
+			const result = await runAggregation();
+			console.log(
+				`[Token Aggregation] Initial aggregation complete: ${result.filesProcessed} files, ${result.entriesProcessed} entries in ${result.durationMs}ms`
+			);
+		} catch (error) {
+			console.error('[Token Aggregation] Initial aggregation failed:', error);
+		}
 
-	// Schedule periodic aggregation every 5 minutes
-	if (!aggregationInterval) {
-		const FIVE_MINUTES = 5 * 60 * 1000;
-		aggregationInterval = setInterval(async () => {
-			try {
-				const result = await runAggregation();
-				if (result.entriesProcessed > 0) {
-					console.log(
-						`[Token Aggregation] Periodic update: ${result.filesProcessed} files, ${result.entriesProcessed} entries in ${result.durationMs}ms`
-					);
+		// Schedule periodic aggregation every 5 minutes
+		if (!aggregationInterval) {
+			const FIVE_MINUTES = 5 * 60 * 1000;
+			aggregationInterval = setInterval(async () => {
+				try {
+					const result = await runAggregation();
+					if (result.entriesProcessed > 0) {
+						console.log(
+							`[Token Aggregation] Periodic update: ${result.filesProcessed} files, ${result.entriesProcessed} entries in ${result.durationMs}ms`
+						);
+					}
+				} catch (error) {
+					console.error('[Token Aggregation] Periodic aggregation failed:', error);
 				}
-			} catch (error) {
-				console.error('[Token Aggregation] Periodic aggregation failed:', error);
-			}
-		}, FIVE_MINUTES);
+			}, FIVE_MINUTES);
 
-		console.log('[Token Aggregation] Scheduled periodic aggregation every 5 minutes');
-	}
+			console.log('[Token Aggregation] Scheduled periodic aggregation every 5 minutes');
+		}
+	}, 2000);
 }
 
 // Initialize aggregation when the server starts
