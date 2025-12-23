@@ -10,11 +10,13 @@
 	let {
 		selectedTemplate = $bindable(null as CommandTemplate | null),
 		onSelect = (_template: CommandTemplate) => {},
-		showUserTemplates = true
+		showUserTemplates = true,
+		onClose = () => {}
 	}: {
 		selectedTemplate?: CommandTemplate | null;
 		onSelect?: (template: CommandTemplate) => void;
 		showUserTemplates?: boolean;
+		onClose?: () => void;
 	} = $props();
 
 	// State
@@ -142,6 +144,7 @@
 					href="/config?tab=templates"
 					class="btn btn-xs btn-ghost gap-1"
 					title="Manage templates"
+					onclick={onClose}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -186,8 +189,7 @@
 					<div class="text-2xl mb-2">📄</div>
 					<p class="text-sm">No custom templates yet</p>
 					<p class="text-xs mt-1">
-						Create one from an existing command or use the
-						<a href="/config?tab=templates" class="link link-primary">template manager</a>
+						Save a command as template from the command editor
 					</p>
 				</div>
 			{:else}

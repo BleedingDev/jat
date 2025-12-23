@@ -710,6 +710,7 @@ Command content here...
 						<CommandTemplates
 							bind:selectedTemplate
 							onSelect={handleTemplateSelect}
+							onClose={handleClose}
 						/>
 
 						<!-- Template step actions -->
