@@ -14,8 +14,27 @@
 	import RuleEditor from '$lib/components/automation/RuleEditor.svelte';
 	import type { AutomationRule } from '$lib/types/automation';
 	import type { ActivityLogEntry } from '$lib/components/automation/ActivityLog.svelte';
-	import { addRule, updateRule, getRules } from '$lib/stores/automationRules.svelte';
+	import { addRule, updateRule, getRules, getActivityEvents, initializeStore, isInitialized } from '$lib/stores/automationRules.svelte';
 	import { onAutomationTrigger } from '$lib/utils/automationEngine';
+
+	// Convert store activity events to ActivityLog format
+	function convertStoreEventsToLogEntries(): ActivityLogEntry[] {
+		const storeEvents = getActivityEvents();
+		// DEBUG: Log what we're converting
+		console.log('[automation page] Converting', storeEvents.length, 'store events to log entries');
+		const entries = storeEvents.map(event => ({
+			id: event.id,
+			timestamp: new Date(event.timestamp),
+			sessionName: event.sessionName,
+			ruleName: event.ruleName,
+			matchedPattern: event.matchedPattern,
+			actionTaken: event.actionsExecuted?.map(a => a.type).join(', ') || 'none',
+			result: event.success ? 'success' : 'failure',
+			details: event.error
+		}));
+		console.log('[automation page] Created', entries.length, 'log entries');
+		return entries;
+	}
 
 	// Convert store rules to PatternTester format
 	// PatternTester uses simplified types, so we flatten patterns array
@@ -59,12 +78,24 @@
 
 	// Initialize page
 	onMount(() => {
+		console.log('[automation page] onMount starting...');
+
+		// Ensure automation store is initialized (loads rules from localStorage)
+		if (!isInitialized()) {
+			console.log('[automation page] Store not initialized, initializing now...');
+			initializeStore();
+		}
+
+		// Load existing activity events from store (events that fired before page load)
+		activityEntries = convertStoreEventsToLogEntries();
+		console.log('[automation page] activityEntries set to', activityEntries.length, 'entries');
+
 		// Simulate brief load for skeleton display
 		setTimeout(() => {
 			isLoading = false;
 		}, 300);
 
-		// Subscribe to automation triggers for activity log
+		// Subscribe to automation triggers for activity log (new events while page is open)
 		const unsubscribe = onAutomationTrigger((sessionName, rule, match, results) => {
 			// Convert trigger event to ActivityLogEntry
 			const entry: ActivityLogEntry = {

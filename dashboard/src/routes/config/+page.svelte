@@ -41,6 +41,8 @@
 	import DocsList from '$lib/components/config/DocsList.svelte';
 	import DocsEditor from '$lib/components/config/DocsEditor.svelte';
 	import DefaultsEditor from '$lib/components/config/DefaultsEditor.svelte';
+	import TemplatesEditor from '$lib/components/config/TemplatesEditor.svelte';
+	import StateActionsEditor from '$lib/components/config/StateActionsEditor.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
@@ -85,7 +87,7 @@
 	const projectsError = $derived(getProjectsError());
 
 	// Valid tabs for URL sync
-	const validTabs = ['commands', 'projects', 'defaults', 'mcp', 'hooks', 'claude', 'docs'];
+	const validTabs = ['commands', 'projects', 'defaults', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions'];
 
 	// Sync activeTab from URL query parameter
 	$effect(() => {
@@ -399,6 +401,26 @@
 							filename={selectedDocFile?.filename}
 							displayName={selectedDocFile?.title}
 						/>
+					</div>
+				{:else if activeTab === 'templates'}
+					<!-- Templates Tab -->
+					<div
+						role="tabpanel"
+						id="templates-panel"
+						aria-labelledby="templates-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<TemplatesEditor />
+					</div>
+				{:else if activeTab === 'actions'}
+					<!-- State Actions Tab -->
+					<div
+						role="tabpanel"
+						id="actions-panel"
+						aria-labelledby="actions-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<StateActionsEditor />
 					</div>
 				{/if}
 			</div>

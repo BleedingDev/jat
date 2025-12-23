@@ -129,12 +129,14 @@ export async function POST({ params }) {
 		// Create a restart script that runs in the background
 		// This survives even if we're restarting the server handling this request
 		// Note: Server sessions use 80x40 dimensions for consistent output width
+		// Sleep after session creation allows shell to initialize before sending keys
+		// Without this delay, the shell may not be ready and keys are lost (race condition)
 		const restartScript = `
 			sleep 0.5
 			tmux kill-session -t "${sessionName}" 2>/dev/null || true
 			sleep 0.5
 			tmux new-session -d -s "${sessionName}" -x 80 -y 40 -c "${workDir}"
-			sleep 0.2
+			sleep 0.3
 			tmux send-keys -t "${sessionName}" "${restartCommand}" Enter
 		`;
 

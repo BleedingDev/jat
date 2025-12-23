@@ -383,6 +383,9 @@ export function addActivityEvent(event: Omit<AutomationActivityEvent, 'id' | 'ti
 	if (state.activityEvents.length > state.config.maxActivityEvents) {
 		state.activityEvents = state.activityEvents.slice(0, state.config.maxActivityEvents);
 	}
+
+	// DEBUG: Log when activity events are added
+	console.log('[automationRules] Activity event added:', newEvent.ruleName, '| Total events:', state.activityEvents.length);
 }
 
 /**
@@ -522,6 +525,8 @@ export function isAutomationEnabled(): boolean {
 }
 
 export function getActivityEvents(): AutomationActivityEvent[] {
+	// DEBUG: Log when activity events are fetched
+	console.log('[automationRules] getActivityEvents called, returning', state.activityEvents.length, 'events');
 	return state.activityEvents;
 }
 

@@ -26,3 +26,7 @@ export const MIN_AGENT_COUNT = 1;
 // Stagger delay between spawns (ms) to avoid overwhelming system
 // Must be longer than Claude init time (5s) to ensure sequential spawns
 export const SPAWN_STAGGER_MS = 6000;
+
+// Claude startup timeout (seconds) - how long to wait for Claude Code TUI to be ready
+// Can be overridden in ~/.config/jat/projects.json under defaults.claude_startup_timeout
+export const CLAUDE_STARTUP_TIMEOUT_SECONDS = 20;

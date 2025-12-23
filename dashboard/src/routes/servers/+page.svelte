@@ -778,10 +778,7 @@
 	>
 		<!-- Error message (inline) -->
 		{#if error}
-			<div
-				class="mx-4 mt-2 px-3 py-2 rounded font-mono text-xs"
-				style="background: oklch(0.25 0.10 25 / 0.3); border: 1px solid oklch(0.50 0.15 25 / 0.5); color: oklch(0.80 0.10 25);"
-			>
+			<div class="mx-4 mt-2 px-3 py-2 rounded font-mono text-xs bg-error/20 border border-error/50 text-error">
 				{error}
 			</div>
 		{/if}
@@ -792,20 +789,15 @@
 		{:else if projects.length === 0}
 			<div class="flex items-center justify-center py-12">
 				<div class="text-center">
-					<p class="font-mono text-sm" style="color: oklch(0.55 0.02 250);">
+					<p class="text-base-content/60 font-mono text-sm">
 						No projects found
 					</p>
-					<p class="font-mono text-xs mt-2 mb-4" style="color: oklch(0.45 0.02 250);">
+					<p class="text-base-content/50 font-mono text-xs mt-2 mb-4">
 						Add a project to get started with JAT
 					</p>
 					<button
-						class="btn btn-sm gap-1"
+						class="btn btn-sm gap-1 text-success border border-success/30 bg-success/10"
 						onclick={openProjectDrawer}
-						style="
-							color: oklch(0.70 0.18 145);
-							border: 1px solid oklch(0.70 0.18 145 / 0.3);
-							background: oklch(0.70 0.18 145 / 0.1);
-						"
 					>
 						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -816,17 +808,13 @@
 			</div>
 		{:else}
 			<!-- Sticky header with Add Project button -->
-			<div class="sticky top-0 z-10 bg-base-100 border-b px-4 py-2 flex items-center justify-between" style="border-color: oklch(0.30 0.02 250);">
-				<span class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+			<div class="sticky top-0 z-10 bg-base-100 border-b border-base-content/20 px-4 py-2 flex items-center justify-between">
+				<span class="text-base-content/60 text-xs font-mono uppercase tracking-wider">
 					{projects.length} project{projects.length !== 1 ? 's' : ''}
 				</span>
 				<button
-					class="btn btn-xs btn-ghost gap-1"
+					class="btn btn-xs btn-ghost gap-1 text-success border border-success/30"
 					onclick={openProjectDrawer}
-					style="
-						color: oklch(0.70 0.18 145);
-						border: 1px solid oklch(0.70 0.18 145 / 0.3);
-					"
 				>
 					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -838,32 +826,32 @@
 			<div class="overflow-x-auto">
 				<table class="w-full">
 					<thead>
-						<tr style="background: oklch(0.22 0.01 250); border-bottom: 1px solid oklch(0.30 0.02 250);">
-							<th class="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+						<tr class="bg-base-200 border-b border-base-content/20">
+							<th class="text-base-content/60 px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
 								Project
 							</th>
-							<th class="px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<th class="text-base-content/60 px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider">
 								Color
 							</th>
-							<th class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
 								Port
 							</th>
-							<th class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
 								Server
 							</th>
-							<th class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
 								Last
 							</th>
-							<th class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
 								Tasks
 							</th>
-							<th class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
 								Agents
 							</th>
-							<th class="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider min-w-[180px]" style="color: oklch(0.55 0.02 250);">
+							<th class="text-base-content/60 px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider min-w-[180px]">
 								Desc
 							</th>
-							<th class="px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.45 0.02 250);">
+							<th class="text-base-content/50 px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider">
 								Show
 							</th>
 						</tr>
@@ -872,25 +860,20 @@
 						{#each sortedProjects() as project (project.name)}
 							{@const runningSessionName = getServerSessionName(project.name)}
 							<tr
-								class="transition-colors {runningSessionName ? 'cursor-pointer' : ''}"
-								style="
-									border-bottom: 1px solid oklch(0.25 0.01 250);
-									opacity: {project.hidden ? '0.5' : '1'};
-									background: {project.status === 'running' ? 'oklch(0.20 0.03 145 / 0.15)' : 'transparent'};
-								"
-								onmouseenter={(e) => { hoveredProject = project.name; e.currentTarget.style.background = project.status === 'running' ? 'oklch(0.22 0.05 145 / 0.25)' : 'oklch(0.22 0.02 250)'; }}
-								onmouseleave={(e) => { hoveredProject = null; e.currentTarget.style.background = project.status === 'running' ? 'oklch(0.20 0.03 145 / 0.15)' : 'transparent'; }}
+								class="border-b border-base-content/15 transition-colors {runningSessionName ? 'cursor-pointer' : ''} {project.status === 'running' ? 'bg-success/10 hover:bg-success/15' : 'hover:bg-base-200'}"
+								style="opacity: {project.hidden ? '0.5' : '1'};"
+								onmouseenter={() => { hoveredProject = project.name; }}
+								onmouseleave={() => { hoveredProject = null; }}
 								onclick={() => runningSessionName && scrollToSession(runningSessionName)}
 							>
 								<!-- Project name and path -->
 								<td class="px-4 py-2">
 									<div class="flex flex-col">
-										<span class="font-mono text-sm font-medium" style="color: oklch(0.85 0.02 250);">
+										<span class="text-base-content/90 font-mono text-sm font-medium">
 											{project.name}
 										</span>
 										<button
-											class="font-mono text-[10px] truncate max-w-[160px] hover:underline cursor-pointer text-left"
-											style="color: oklch(0.45 0.02 250);"
+											class="text-base-content/50 font-mono text-[10px] truncate max-w-[160px] hover:underline cursor-pointer text-left"
 											title="Open folder: {project.path}"
 											onclick={(e) => { e.stopPropagation(); openFolder(project.path); }}
 										>
@@ -905,8 +888,7 @@
 										{#if editingColor === project.name}
 											<!-- Color picker dropdown -->
 											<div
-												class="absolute top-0 left-1/2 -translate-x-1/2 z-50 p-2 rounded-lg shadow-xl"
-												style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.35 0.02 250);"
+												class="absolute top-0 left-1/2 -translate-x-1/2 z-50 p-2 rounded-lg shadow-xl bg-base-200 border border-base-content/25"
 												onclick={(e) => e.stopPropagation()}
 											>
 												<!-- Palette grid -->
@@ -914,7 +896,7 @@
 													{#each COLOR_PALETTE as color}
 														<button
 															class="w-6 h-6 rounded-full transition-transform hover:scale-110 {colorDraft === color ? 'ring-2 ring-white ring-offset-1' : ''}"
-															style="background: {color}; ring-offset-color: oklch(0.22 0.02 250);"
+															style="background: {color};"
 															onclick={() => { colorDraft = color; }}
 															title={color}
 														></button>
@@ -924,14 +906,12 @@
 												<div class="flex items-center gap-1.5 mb-2">
 													<input
 														type="color"
-														class="w-6 h-6 rounded cursor-pointer"
-														style="border: none; padding: 0;"
+														class="w-6 h-6 rounded cursor-pointer border-0 p-0"
 														bind:value={colorDraft}
 													/>
 													<input
 														type="text"
-														class="flex-1 px-2 py-1 rounded font-mono text-xs"
-														style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+														class="flex-1 px-2 py-1 rounded font-mono text-xs bg-base-300 border border-base-content/20 text-base-content/90"
 														bind:value={colorDraft}
 														placeholder="#5588ff"
 													/>
@@ -939,15 +919,13 @@
 												<!-- Action buttons -->
 												<div class="flex justify-end gap-1.5">
 													<button
-														class="px-2 py-1 rounded text-xs font-medium transition-colors"
-														style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);"
+														class="px-2 py-1 rounded text-xs font-medium transition-colors bg-base-content/20 text-base-content/75"
 														onclick={() => cancelEditingColor()}
 													>
 														Cancel
 													</button>
 													<button
-														class="px-2 py-1 rounded text-xs font-medium transition-colors"
-														style="background: oklch(0.50 0.18 145); color: white;"
+														class="px-2 py-1 rounded text-xs font-medium transition-colors bg-success text-base-100"
 														onclick={() => saveColor(project, colorDraft)}
 														disabled={saving === project.name}
 													>
@@ -957,8 +935,8 @@
 											</div>
 											<!-- Current color dot (clickable to close) -->
 											<button
-												class="w-5 h-5 rounded-full transition-transform hover:scale-110"
-												style="background: {colorDraft || '#888888'}; box-shadow: 0 0 0 2px oklch(0.50 0.18 220);"
+												class="w-5 h-5 rounded-full transition-transform hover:scale-110 ring-2 ring-info"
+												style="background: {colorDraft || '#888888'};"
 												onclick={(e) => { e.stopPropagation(); cancelEditingColor(); }}
 												title="Cancel"
 											></button>
@@ -979,13 +957,7 @@
 									{#if editingPort === project.name}
 										<input
 											type="text"
-											class="w-16 px-2 py-1 rounded font-mono text-xs"
-											style="
-												background: oklch(0.25 0.01 250);
-												border: 1px solid oklch(0.45 0.15 240);
-												color: oklch(0.85 0.02 250);
-												outline: none;
-											"
+											class="w-16 px-2 py-1 rounded font-mono text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"
 											placeholder="Port"
 											bind:value={portDraft}
 											onclick={(e) => e.stopPropagation()}
@@ -998,8 +970,7 @@
 											{#if project.port && project.status === 'running'}
 												<!-- Running: click to open in browser -->
 												<button
-													class="font-mono text-xs hover:underline"
-													style="color: oklch(0.75 0.15 145);"
+													class="text-success font-mono text-xs hover:underline"
 													onclick={(e) => { e.stopPropagation(); window.open(`http://localhost:${project.port}`, '_blank'); }}
 													title="Open http://localhost:{project.port} in browser"
 												>
@@ -1007,8 +978,7 @@
 												</button>
 												<!-- Copy URL button -->
 												<button
-													class="p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
-													style="color: oklch(0.65 0.02 250);"
+													class="text-base-content/55 p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
 													onclick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`http://localhost:${project.port}`); }}
 													title="Copy URL to clipboard"
 												>
@@ -1018,8 +988,7 @@
 												</button>
 												<!-- Edit port button -->
 												<button
-													class="p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
-													style="color: oklch(0.50 0.02 250);"
+													class="text-base-content/55 p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
 													onclick={(e) => { e.stopPropagation(); startEditingPort(project); }}
 													title="Edit port"
 												>
@@ -1030,8 +999,7 @@
 												<!-- Copy tmux command button (only shows when running but not in tmux) -->
 												{#if !runningSessionName}
 													<button
-														class="p-0.5 rounded opacity-60 hover:opacity-100 transition-opacity"
-														style="color: {copiedTmuxCmd === project.name ? 'oklch(0.70 0.18 145)' : 'oklch(0.70 0.12 200)'};"
+														class="{copiedTmuxCmd === project.name ? 'text-success' : 'text-info'} p-0.5 rounded opacity-60 hover:opacity-100 transition-opacity"
 														onclick={(e) => {
 															e.stopPropagation();
 															const execPath = (project.serverPath || project.path).replace(/^\/home\/[^/]+/, '~');
@@ -1057,8 +1025,7 @@
 												<!-- Not running: port + edit + copy tmux command -->
 												<div class="flex items-center gap-1">
 													<button
-														class="font-mono text-xs"
-														style="color: oklch(0.70 0.02 250);"
+														class="text-base-content/75 font-mono text-xs"
 														onclick={(e) => { e.stopPropagation(); startEditingPort(project); }}
 														title="Click to edit port"
 													>
@@ -1066,8 +1033,7 @@
 													</button>
 													<!-- Edit port button -->
 													<button
-														class="p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
-														style="color: oklch(0.50 0.02 250);"
+														class="text-base-content/55 p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
 														onclick={(e) => { e.stopPropagation(); startEditingPort(project); }}
 														title="Edit port"
 													>
@@ -1077,8 +1043,7 @@
 													</button>
 													<!-- Copy tmux command button -->
 													<button
-														class="p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
-														style="color: {copiedTmuxCmd === project.name ? 'oklch(0.70 0.18 145)' : 'oklch(0.70 0.12 200)'};"
+														class="{copiedTmuxCmd === project.name ? 'text-success' : 'text-info'} p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
 														onclick={(e) => {
 															e.stopPropagation();
 															const execPath = (project.serverPath || project.path).replace(/^\/home\/[^/]+/, '~');
@@ -1107,10 +1072,9 @@
 													onclick={(e) => { e.stopPropagation(); startEditingPort(project); }}
 													title="Click to set port"
 												>
-													<span class="italic" style="color: oklch(0.40 0.02 250);">—</span>
+													<span class="text-base-content/45 italic">—</span>
 													<svg
-														class="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity"
-														style="color: oklch(0.50 0.02 250);"
+														class="text-base-content/55 w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity"
 														fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
 													>
 														<path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1133,11 +1097,11 @@
 								</td>
 
 								<!-- Last activity / Server uptime -->
-								<td class="px-3 py-3 font-mono text-xs" style="color: oklch(0.65 0.02 250);">
+								<td class="text-base-content/70 px-3 py-3 font-mono text-xs">
 									{#if project.status === 'running'}
 										{@const elapsed = getServerElapsed(project.name)}
 										{#if elapsed}
-											<span class="flex items-center gap-0.5" title="Server uptime" style="color: oklch(0.75 0.18 145);">
+											<span class="text-success flex items-center gap-0.5" title="Server uptime">
 												{#if elapsed.showHours}
 													<AnimatedDigits value={elapsed.hours} class="text-xs" />
 													<span class="opacity-60">:</span>
@@ -1147,7 +1111,7 @@
 												<AnimatedDigits value={elapsed.seconds} class="text-xs" />
 											</span>
 										{:else}
-											<span style="color: oklch(0.75 0.18 145);">now</span>
+											<span class="text-success">now</span>
 										{/if}
 									{:else if project.lastActivity !== undefined}
 										{project.lastActivity || '-'}
@@ -1157,7 +1121,7 @@
 								</td>
 
 								<!-- Tasks -->
-								<td class="px-3 py-3 font-mono text-xs" style="color: oklch(0.65 0.02 250);">
+								<td class="text-base-content/70 px-3 py-3 font-mono text-xs">
 									{#if project.tasks !== undefined}
 										{formatTasks(project.tasks)}
 									{:else}
@@ -1166,7 +1130,7 @@
 								</td>
 
 								<!-- Agents -->
-								<td class="px-3 py-3 font-mono text-xs" style="color: oklch(0.65 0.02 250);">
+								<td class="text-base-content/70 px-3 py-3 font-mono text-xs">
 									{#if project.agents !== undefined}
 										{formatAgents(project.agents)}
 									{:else}
@@ -1180,13 +1144,7 @@
 										<div class="flex items-center gap-2">
 											<input
 												type="text"
-												class="flex-1 px-2 py-1 rounded font-mono text-xs"
-												style="
-													background: oklch(0.25 0.01 250);
-													border: 1px solid oklch(0.45 0.15 240);
-													color: oklch(0.85 0.02 250);
-													outline: none;
-												"
+												class="flex-1 px-2 py-1 rounded font-mono text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"
 												placeholder="Short description for AI context..."
 												bind:value={descriptionDraft}
 												onclick={(e) => e.stopPropagation()}
@@ -1194,8 +1152,7 @@
 												autofocus
 											/>
 											<button
-												class="p-1 rounded hover:bg-base-300/20"
-												style="color: oklch(0.60 0.15 145);"
+												class="text-success p-1 rounded hover:bg-base-300/20"
 												onclick={(e) => { e.stopPropagation(); saveDescription(project); }}
 												disabled={saving === project.name}
 												title="Save (Enter)"
@@ -1209,8 +1166,7 @@
 												{/if}
 											</button>
 											<button
-												class="p-1 rounded hover:bg-base-300/20"
-												style="color: oklch(0.60 0.10 25);"
+												class="text-error p-1 rounded hover:bg-base-300/20"
 												onclick={(e) => { e.stopPropagation(); cancelEditingDescription(); }}
 												title="Cancel (Esc)"
 											>
@@ -1226,17 +1182,16 @@
 											title="Click to edit description"
 										>
 											{#if project.description}
-												<span class="font-mono text-xs truncate max-w-[180px]" style="color: oklch(0.70 0.02 250);">
+												<span class="text-base-content/75 font-mono text-xs truncate max-w-[180px]">
 													{project.description}
 												</span>
 											{:else}
-												<span class="font-mono text-xs italic" style="color: oklch(0.45 0.02 250);">
+												<span class="text-base-content/50 font-mono text-xs italic">
 													Add description...
 												</span>
 											{/if}
 											<svg
-												class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-												style="color: oklch(0.55 0.02 250);"
+												class="text-base-content/60 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
 												fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
 											>
 												<path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1248,10 +1203,7 @@
 								<!-- Visibility toggle (diminished) -->
 								<td class="px-2 py-3 text-center">
 									<button
-										class="relative w-7 h-3.5 rounded-full transition-all cursor-pointer opacity-60 hover:opacity-100"
-										style="
-											background: {project.hidden ? 'oklch(0.30 0.02 250)' : 'oklch(0.40 0.12 145)'};
-										"
+										class="relative w-7 h-3.5 rounded-full transition-all cursor-pointer opacity-60 hover:opacity-100 {project.hidden ? 'bg-base-content/25' : 'bg-success/45'}"
 										onclick={(e) => { e.stopPropagation(); toggleVisibility(project); }}
 										disabled={saving === project.name}
 										title={project.hidden ? 'Show in dropdowns' : 'Hide from dropdowns'}
@@ -1262,12 +1214,9 @@
 											</span>
 										{:else}
 											<span
-												class="absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all"
+												class="absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all bg-base-content/90"
 												class:visibility-toggle-knob-animate={animatingVisibility === project.name}
-												style="
-													background: oklch(0.85 0.02 250);
-													left: {project.hidden ? '2px' : 'calc(100% - 12px)'};
-												"
+												style="left: {project.hidden ? '2px' : 'calc(100% - 12px)'};"
 											></span>
 										{/if}
 									</button>
@@ -1282,7 +1231,7 @@
 </div>
 
 <style>
-	/* Visibility toggle knob animation - scale pulse */
+	/* Visibility toggle knob animation - scale pulse (cannot be done with Tailwind) */
 	.visibility-toggle-knob-animate {
 		animation: toggle-knob-pulse 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}

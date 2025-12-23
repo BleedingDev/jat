@@ -2,26 +2,17 @@
  * Project Color Utilities
  * Provides consistent, visually distinct colors for projects
  *
- * Known projects use colors from ~/.config/jat/projects.json (synced here for client-side use).
+ * Colors are fetched from the API (/api/projects/colors) which reads from
+ * ~/.config/jat/projects.json. Fetched colors are cached and refresh periodically.
  * Unknown projects fall back to hash-based color assignment.
  */
 
-// Known project colors from ~/.config/jat/projects.json
-// This provides client-side access to config colors without requiring fs module
-const knownProjectColors: Record<string, string> = {
-	'chezwizper': '#8572d6',
-	'chezwizper-fork': '#3df1ae',
-	'chimaro': '#00d4aa',
-	'dirt': '#c90b11',
-	'flush': '#bb66ff',
-	'genesis': '#44ff44',
-	'jat': '#5588ff',
-	'jomarchy': '#ffdd00',
-	'jomarchy-machines': '#17ace6',
-	'mcp_agent_mail': '#97b7fd',
-	'steelbridge': '#ff9933',
-	'linux': '#ff5555'
-};
+// Dynamic project colors fetched from API (cached)
+let dynamicProjectColors: Record<string, string> = {};
+let colorsFetched = false;
+let fetchPromise: Promise<void> | null = null;
+let lastFetchTime = 0;
+const CACHE_DURATION_MS = 30000; // Refresh colors every 30 seconds
 
 // Fallback color palette for unknown projects (hash-based assignment)
 const fallbackColorPalette = [
@@ -44,8 +35,66 @@ const fallbackColorPalette = [
 ];
 
 /**
- * Get consistent color for a project
- * Uses known project colors first, falls back to hash-based for unknown projects
+ * Fetch project colors from API (cached)
+ * Called automatically by getProjectColor when colors are needed
+ */
+async function fetchProjectColors(): Promise<void> {
+	const now = Date.now();
+
+	// Check if we need to refresh the cache
+	if (colorsFetched && now - lastFetchTime < CACHE_DURATION_MS) {
+		return;
+	}
+
+	// If already fetching, wait for that request
+	if (fetchPromise) {
+		await fetchPromise;
+		return;
+	}
+
+	// Start fetch
+	fetchPromise = (async () => {
+		try {
+			const response = await fetch('/api/projects/colors');
+			if (response.ok) {
+				const data = await response.json();
+				dynamicProjectColors = data.colors || {};
+				colorsFetched = true;
+				lastFetchTime = now;
+			}
+		} catch (err) {
+			console.warn('Failed to fetch project colors:', err);
+		} finally {
+			fetchPromise = null;
+		}
+	})();
+
+	await fetchPromise;
+}
+
+/**
+ * Initialize project colors - call this early in app lifecycle
+ * This pre-fetches colors so they're ready when needed
+ */
+export function initProjectColors(): void {
+	fetchProjectColors();
+}
+
+/**
+ * Get color from hash for unknown projects
+ */
+function getHashColor(projectPrefix: string): string {
+	let hash = 0;
+	for (let i = 0; i < projectPrefix.length; i++) {
+		hash = projectPrefix.charCodeAt(i) + ((hash << 5) - hash);
+	}
+	const index = Math.abs(hash) % fallbackColorPalette.length;
+	return fallbackColorPalette[index];
+}
+
+/**
+ * Get consistent color for a project (synchronous version)
+ * Uses cached colors first, falls back to hash-based for unknown projects
  */
 export function getProjectColor(taskId: string): string {
 	if (!taskId) return '#6b7280'; // gray for unknown
@@ -53,20 +102,57 @@ export function getProjectColor(taskId: string): string {
 	// Extract project prefix (e.g., "jat-abc" → "jat")
 	const projectPrefix = taskId.split('-')[0].toLowerCase();
 
-	// Check known project colors first
-	if (knownProjectColors[projectPrefix]) {
-		return knownProjectColors[projectPrefix];
+	// Check cached dynamic colors first
+	if (dynamicProjectColors[projectPrefix]) {
+		return dynamicProjectColors[projectPrefix];
 	}
 
-	// Fall back to hash-based color assignment for unknown projects
-	let hash = 0;
-	for (let i = 0; i < projectPrefix.length; i++) {
-		hash = projectPrefix.charCodeAt(i) + ((hash << 5) - hash);
+	// Trigger background fetch if we haven't fetched yet or cache is stale
+	const now = Date.now();
+	if (!colorsFetched || now - lastFetchTime >= CACHE_DURATION_MS) {
+		fetchProjectColors();
 	}
 
-	// Map hash to fallback palette index
-	const index = Math.abs(hash) % fallbackColorPalette.length;
-	return fallbackColorPalette[index];
+	// Fall back to hash-based color assignment
+	return getHashColor(projectPrefix);
+}
+
+/**
+ * Get project color async - ensures colors are fetched first
+ * Use this when you can await and want guaranteed fresh colors
+ */
+export async function getProjectColorAsync(taskId: string): Promise<string> {
+	if (!taskId) return '#6b7280';
+
+	// Ensure colors are fetched
+	await fetchProjectColors();
+
+	// Extract project prefix
+	const projectPrefix = taskId.split('-')[0].toLowerCase();
+
+	// Check dynamic colors
+	if (dynamicProjectColors[projectPrefix]) {
+		return dynamicProjectColors[projectPrefix];
+	}
+
+	// Fall back to hash-based
+	return getHashColor(projectPrefix);
+}
+
+/**
+ * Update a project's color in the cache
+ * Call this after saving a color via API to immediately reflect changes
+ */
+export function updateProjectColorCache(projectName: string, hexColor: string): void {
+	dynamicProjectColors[projectName.toLowerCase()] = hexColor.toLowerCase();
+}
+
+/**
+ * Clear the color cache (forces re-fetch on next call)
+ */
+export function clearProjectColorCache(): void {
+	colorsFetched = false;
+	lastFetchTime = 0;
 }
 
 /**
@@ -83,4 +169,11 @@ export function getProjectColorMap(tasks: Array<{ id: string }>): Map<string, st
 	});
 
 	return map;
+}
+
+/**
+ * Get all currently cached project colors
+ */
+export function getCachedProjectColors(): Record<string, string> {
+	return { ...dynamicProjectColors };
 }

@@ -123,8 +123,10 @@ export async function POST({ request }) {
 
 		// Create tmux session and start the server
 		// Use 80x40 dimensions for consistent output width in dashboard
+		// Sleep allows shell to initialize before sending keys - prevents race condition
 		const createCmd = `
 			tmux new-session -d -s "${sessionName}" -x 80 -y 40 -c "${executionPath}" && \
+			sleep 0.3 && \
 			tmux send-keys -t "${sessionName}" "${serverCommand}" Enter
 		`;
 

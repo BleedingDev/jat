@@ -252,36 +252,14 @@
 
 <!-- Mission Control Interface -->
 <div
-	class="min-h-screen relative overflow-hidden"
-	style="
-		background: linear-gradient(135deg, oklch(0.13 0.02 260) 0%, oklch(0.10 0.015 250) 50%, oklch(0.12 0.02 240) 100%);
-		font-family: 'JetBrains Mono', monospace;
-	"
+	class="triage-bg min-h-screen relative overflow-hidden"
+	style="font-family: 'JetBrains Mono', monospace;"
 >
 	<!-- Subtle grid overlay -->
-	<div
-		class="absolute inset-0 pointer-events-none opacity-[0.03]"
-		style="
-			background-image:
-				linear-gradient(oklch(0.7 0.1 240) 1px, transparent 1px),
-				linear-gradient(90deg, oklch(0.7 0.1 240) 1px, transparent 1px);
-			background-size: 40px 40px;
-		"
-	></div>
+	<div class="triage-grid-overlay absolute inset-0 pointer-events-none opacity-[0.03]"></div>
 
 	<!-- Scan line effect -->
-	<div
-		class="absolute inset-0 pointer-events-none opacity-[0.02]"
-		style="
-			background: repeating-linear-gradient(
-				0deg,
-				transparent,
-				transparent 2px,
-				oklch(0.5 0.1 240 / 0.1) 2px,
-				oklch(0.5 0.1 240 / 0.1) 4px
-			);
-		"
-	></div>
+	<div class="triage-scanlines absolute inset-0 pointer-events-none opacity-[0.02]"></div>
 
 	<div class="relative z-10 p-6 max-w-7xl mx-auto">
 		<!-- Header -->
@@ -289,49 +267,33 @@
 			<div class="flex items-center justify-between">
 				<div>
 					<h1
-						class="text-3xl font-bold tracking-tight"
-						style="
-							font-family: 'Space Grotesk', sans-serif;
-							color: oklch(0.92 0.02 250);
-							text-shadow: 0 0 30px oklch(0.7 0.15 240 / 0.3);
-						"
+						class="triage-title text-3xl font-bold tracking-tight"
+						style="font-family: 'Space Grotesk', sans-serif;"
 					>
 						TRIAGE QUEUE
 					</h1>
-					<p class="mt-1 text-sm tracking-wide" style="color: oklch(0.55 0.02 250);">
+					<p class="triage-text-muted mt-1 text-sm tracking-wide">
 						Agent Dispatch Control
 					</p>
 				</div>
 
 				<!-- Status indicator -->
-				<div
-					class="flex items-center gap-3 px-4 py-2 rounded-lg"
-					style="
-						background: oklch(0.15 0.02 250);
-						border: 1px solid oklch(0.25 0.02 250);
-					"
-				>
+				<div class="triage-status-container flex items-center gap-3 px-4 py-2 rounded-lg">
 					{#if isLoading}
-						<div
-							class="w-3 h-3 border-2 rounded-full animate-spin"
-							style="border-color: oklch(0.5 0.1 240); border-top-color: transparent;"
-						></div>
-						<span class="text-sm font-medium" style="color: oklch(0.55 0.02 250);">
+						<div class="triage-spinner w-3 h-3 border-2 rounded-full animate-spin"></div>
+						<span class="triage-status-scanning text-sm font-medium">
 							SCANNING
 						</span>
 					{:else if totalNeedingAttention > 0}
 						<div class="relative">
-							<div
-								class="w-3 h-3 rounded-full animate-pulse"
-								style="background: oklch(0.75 0.20 45); box-shadow: 0 0 12px oklch(0.75 0.20 45);"
-							></div>
+							<div class="triage-status-awaiting-dot w-3 h-3 rounded-full animate-pulse"></div>
 						</div>
-						<span class="text-sm font-medium" style="color: oklch(0.85 0.15 45);">
+						<span class="triage-status-awaiting text-sm font-medium">
 							{totalNeedingAttention} AWAITING
 						</span>
 					{:else}
-						<div class="w-3 h-3 rounded-full" style="background: oklch(0.65 0.20 145);"></div>
-						<span class="text-sm font-medium" style="color: oklch(0.75 0.15 145);">
+						<div class="triage-status-clear-dot w-3 h-3 rounded-full"></div>
+						<span class="triage-status-clear text-sm font-medium">
 							ALL CLEAR
 						</span>
 					{/if}
@@ -343,15 +305,11 @@
 			<TriageSkeleton cards={4} />
 		{:else if error}
 			<!-- Error state -->
-			<div
-				class="p-6 rounded-lg text-center"
-				style="background: oklch(0.20 0.05 30 / 0.3); border: 1px solid oklch(0.50 0.15 30);"
-			>
-				<p style="color: oklch(0.80 0.15 30);">{error}</p>
+			<div class="triage-error p-6 rounded-lg text-center">
+				<p>{error}</p>
 				<button
 					onclick={() => { isLoading = true; fetchSessions(); }}
-					class="mt-4 px-4 py-2 rounded text-sm font-medium transition-all hover:scale-105"
-					style="background: oklch(0.50 0.15 30); color: oklch(0.95 0 0);"
+					class="triage-error-btn mt-4 px-4 py-2 rounded text-sm font-medium transition-all hover:scale-105"
 				>
 					Retry
 				</button>
@@ -361,17 +319,11 @@
 			{#if needsInputSessions.length > 0}
 				<section class="mb-8">
 					<div class="flex items-center gap-3 mb-4">
-						<div
-							class="w-2 h-8 rounded-full"
-							style="background: linear-gradient(180deg, oklch(0.75 0.20 45), oklch(0.60 0.18 40));"
-						></div>
-						<h2 class="text-lg font-semibold tracking-wide" style="color: oklch(0.85 0.15 45);">
+						<div class="triage-input-accent-bar w-2 h-8 rounded-full"></div>
+						<h2 class="triage-input-header text-lg font-semibold tracking-wide">
 							NEEDS INPUT
 						</h2>
-						<span
-							class="px-2 py-0.5 rounded text-xs font-bold"
-							style="background: oklch(0.75 0.20 45 / 0.2); color: oklch(0.85 0.18 45);"
-						>
+						<span class="triage-input-count px-2 py-0.5 rounded text-xs font-bold">
 							{needsInputSessions.length}
 						</span>
 					</div>
@@ -379,24 +331,9 @@
 					<div class="grid gap-4">
 						{#each needsInputSessions as session (session.sessionName)}
 							{@const isExpanded = expandedSession === session.sessionName}
-							<div
-								class="group relative rounded-xl overflow-hidden transition-all duration-300"
-								style="
-									background: linear-gradient(135deg, oklch(0.18 0.03 45 / 0.4) 0%, oklch(0.15 0.02 40 / 0.3) 100%);
-									border: 1px solid oklch(0.40 0.12 45 / 0.5);
-									box-shadow:
-										0 4px 20px oklch(0.75 0.20 45 / 0.1),
-										inset 0 1px 0 oklch(0.75 0.20 45 / 0.1);
-								"
-							>
+							<div class="triage-input-card group relative rounded-xl overflow-hidden transition-all duration-300">
 								<!-- Glowing accent bar -->
-								<div
-									class="absolute left-0 top-0 bottom-0 w-1"
-									style="
-										background: linear-gradient(180deg, oklch(0.80 0.22 50), oklch(0.65 0.18 40));
-										box-shadow: 0 0 15px oklch(0.75 0.20 45 / 0.6);
-									"
-								></div>
+								<div class="triage-input-card-accent absolute left-0 top-0 bottom-0 w-1"></div>
 
 								<!-- Summary header (clickable) -->
 								<button
@@ -408,19 +345,13 @@
 										<div class="flex items-center gap-3">
 											<!-- Pulsing indicator -->
 											<div class="relative">
-												<div
-													class="w-2.5 h-2.5 rounded-full animate-pulse"
-													style="background: oklch(0.80 0.22 50); box-shadow: 0 0 10px oklch(0.80 0.22 50);"
-												></div>
+												<div class="triage-input-dot w-2.5 h-2.5 rounded-full animate-pulse"></div>
 											</div>
-											<span class="font-semibold text-base" style="color: oklch(0.92 0.02 250);">
+											<span class="triage-agent-name font-semibold text-base">
 												{session.agentName}
 											</span>
 											{#if session.task}
-												<span
-													class="px-2 py-0.5 rounded text-xs font-mono"
-													style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.02 250);"
-												>
+												<span class="triage-task-id px-2 py-0.5 rounded text-xs font-mono">
 													{session.task.id}
 												</span>
 											{/if}
@@ -428,15 +359,11 @@
 
 										<!-- Expand/collapse indicator -->
 										<div class="flex items-center gap-2">
-											<span
-												class="px-2 py-1 rounded text-xs font-medium"
-												style="background: oklch(0.70 0.18 45 / 0.2); color: oklch(0.85 0.15 45);"
-											>
+											<span class="triage-input-respond px-2 py-1 rounded text-xs font-medium">
 												{isExpanded ? 'COLLAPSE' : 'RESPOND'}
 											</span>
 											<svg
-												class="w-4 h-4 transition-transform duration-200 {isExpanded ? 'rotate-180' : ''}"
-												style="color: oklch(0.70 0.15 45);"
+												class="triage-input-chevron w-4 h-4 transition-transform duration-200 {isExpanded ? 'rotate-180' : ''}"
 												fill="none"
 												viewBox="0 0 24 24"
 												stroke="currentColor"
@@ -448,22 +375,15 @@
 
 									<!-- Task title -->
 									{#if session.task?.title}
-										<p class="text-sm mb-3 truncate" style="color: oklch(0.75 0.02 250);">
+										<p class="triage-task-title text-sm mb-3 truncate">
 											{session.task.title}
 										</p>
 									{/if}
 
 									<!-- Question excerpt (only when collapsed) -->
 									{#if !isExpanded && session._question}
-										<div
-											class="p-3 rounded-lg text-sm"
-											style="
-												background: oklch(0.12 0.02 250 / 0.8);
-												border-left: 2px solid oklch(0.70 0.18 45 / 0.5);
-												color: oklch(0.80 0.02 250);
-											"
-										>
-											<span style="color: oklch(0.70 0.15 45);">❓</span>
+										<div class="triage-input-question p-3 rounded-lg text-sm">
+											<span class="triage-input-question-icon">❓</span>
 											{session._question}
 										</div>
 									{/if}
@@ -471,10 +391,7 @@
 
 								<!-- Expanded SessionCard -->
 								{#if isExpanded}
-									<div
-										class="border-t px-2 pb-2"
-										style="border-color: oklch(0.30 0.05 45 / 0.5); background: oklch(0.10 0.01 250 / 0.5);"
-									>
+									<div class="triage-input-expanded border-t px-2 pb-2">
 										<SessionCard
 											sessionName={session.sessionName}
 											agentName={session.agentName}
@@ -501,17 +418,11 @@
 			{#if readyForReviewSessions.length > 0}
 				<section class="mb-8">
 					<div class="flex items-center gap-3 mb-4">
-						<div
-							class="w-2 h-8 rounded-full"
-							style="background: linear-gradient(180deg, oklch(0.80 0.18 85), oklch(0.65 0.15 80));"
-						></div>
-						<h2 class="text-lg font-semibold tracking-wide" style="color: oklch(0.85 0.12 85);">
+						<div class="triage-review-accent-bar w-2 h-8 rounded-full"></div>
+						<h2 class="triage-review-header text-lg font-semibold tracking-wide">
 							READY FOR REVIEW
 						</h2>
-						<span
-							class="px-2 py-0.5 rounded text-xs font-bold"
-							style="background: oklch(0.80 0.18 85 / 0.2); color: oklch(0.85 0.15 85);"
-						>
+						<span class="triage-review-count px-2 py-0.5 rounded text-xs font-bold">
 							{readyForReviewSessions.length}
 						</span>
 					</div>
@@ -519,21 +430,9 @@
 					<div class="grid gap-4">
 						{#each readyForReviewSessions as session (session.sessionName)}
 							{@const isExpanded = expandedSession === session.sessionName}
-							<div
-								class="group relative rounded-xl overflow-hidden transition-all duration-300"
-								style="
-									background: linear-gradient(135deg, oklch(0.18 0.03 85 / 0.3) 0%, oklch(0.15 0.02 80 / 0.2) 100%);
-									border: 1px solid oklch(0.45 0.12 85 / 0.4);
-									box-shadow:
-										0 4px 20px oklch(0.80 0.18 85 / 0.08),
-										inset 0 1px 0 oklch(0.80 0.18 85 / 0.1);
-								"
-							>
+							<div class="triage-review-card group relative rounded-xl overflow-hidden transition-all duration-300">
 								<!-- Accent bar -->
-								<div
-									class="absolute left-0 top-0 bottom-0 w-1"
-									style="background: linear-gradient(180deg, oklch(0.85 0.20 90), oklch(0.70 0.16 80));"
-								></div>
+								<div class="triage-review-card-accent absolute left-0 top-0 bottom-0 w-1"></div>
 
 								<!-- Summary header (clickable) -->
 								<button
@@ -544,14 +443,11 @@
 									<div class="flex items-start justify-between mb-3">
 										<div class="flex items-center gap-3">
 											<span class="text-lg">🔍</span>
-											<span class="font-semibold text-base" style="color: oklch(0.92 0.02 250);">
+											<span class="triage-agent-name font-semibold text-base">
 												{session.agentName}
 											</span>
 											{#if session.task}
-												<span
-													class="px-2 py-0.5 rounded text-xs font-mono"
-													style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.02 250);"
-												>
+												<span class="triage-task-id px-2 py-0.5 rounded text-xs font-mono">
 													{session.task.id}
 												</span>
 											{/if}
@@ -559,15 +455,11 @@
 
 										<!-- Expand/collapse indicator -->
 										<div class="flex items-center gap-2">
-											<span
-												class="px-2 py-1 rounded text-xs font-medium"
-												style="background: oklch(0.75 0.16 85 / 0.2); color: oklch(0.85 0.12 85);"
-											>
+											<span class="triage-review-btn px-2 py-1 rounded text-xs font-medium">
 												{isExpanded ? 'COLLAPSE' : 'REVIEW'}
 											</span>
 											<svg
-												class="w-4 h-4 transition-transform duration-200 {isExpanded ? 'rotate-180' : ''}"
-												style="color: oklch(0.70 0.12 85);"
+												class="triage-review-chevron w-4 h-4 transition-transform duration-200 {isExpanded ? 'rotate-180' : ''}"
 												fill="none"
 												viewBox="0 0 24 24"
 												stroke="currentColor"
@@ -579,21 +471,14 @@
 
 									<!-- Task title -->
 									{#if session.task?.title}
-										<p class="text-sm mb-3 truncate" style="color: oklch(0.75 0.02 250);">
+										<p class="triage-task-title text-sm mb-3 truncate">
 											{session.task.title}
 										</p>
 									{/if}
 
 									<!-- Changes summary (only when collapsed) -->
 									{#if !isExpanded && session._changes}
-										<div
-											class="p-3 rounded-lg text-sm"
-											style="
-												background: oklch(0.12 0.02 250 / 0.8);
-												border-left: 2px solid oklch(0.70 0.14 85 / 0.5);
-												color: oklch(0.80 0.02 250);
-											"
-										>
+										<div class="triage-review-summary p-3 rounded-lg text-sm">
 											{session._changes}
 										</div>
 									{/if}
@@ -601,10 +486,7 @@
 
 								<!-- Expanded SessionCard -->
 								{#if isExpanded}
-									<div
-										class="border-t px-2 pb-2"
-										style="border-color: oklch(0.35 0.05 85 / 0.5); background: oklch(0.10 0.01 250 / 0.5);"
-									>
+									<div class="triage-review-expanded border-t px-2 pb-2">
 										<SessionCard
 											sessionName={session.sessionName}
 											agentName={session.agentName}
@@ -629,23 +511,14 @@
 
 			<!-- Empty state when no agents need attention -->
 			{#if totalNeedingAttention === 0}
-				<div
-					class="flex flex-col items-center justify-center py-16 rounded-xl"
-					style="
-						background: linear-gradient(135deg, oklch(0.15 0.03 145 / 0.2) 0%, oklch(0.12 0.02 140 / 0.1) 100%);
-						border: 1px solid oklch(0.35 0.08 145 / 0.3);
-					"
-				>
-					<div
-						class="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-						style="background: oklch(0.65 0.18 145 / 0.15); border: 2px solid oklch(0.65 0.18 145 / 0.3);"
-					>
+				<div class="triage-empty flex flex-col items-center justify-center py-16 rounded-xl">
+					<div class="triage-empty-icon w-16 h-16 rounded-full flex items-center justify-center mb-4">
 						<span class="text-3xl">✓</span>
 					</div>
-					<h3 class="text-xl font-semibold mb-2" style="color: oklch(0.80 0.12 145);">
+					<h3 class="triage-empty-title text-xl font-semibold mb-2">
 						All Clear
 					</h3>
-					<p class="text-sm" style="color: oklch(0.55 0.02 250);">
+					<p class="triage-text-muted text-sm">
 						No agents need attention right now
 					</p>
 				</div>
@@ -658,22 +531,15 @@
 						onclick={() => showWorking = !showWorking}
 						class="flex items-center gap-3 mb-4 group"
 					>
-						<div
-							class="w-2 h-6 rounded-full transition-all"
-							style="background: oklch(0.55 0.12 240);"
-						></div>
-						<h2 class="text-sm font-medium tracking-wide" style="color: oklch(0.55 0.02 250);">
+						<div class="triage-working-accent w-2 h-6 rounded-full transition-all"></div>
+						<h2 class="triage-working-header text-sm font-medium tracking-wide">
 							WORKING QUIETLY
 						</h2>
-						<span
-							class="px-2 py-0.5 rounded text-xs"
-							style="background: oklch(0.25 0.02 250); color: oklch(0.55 0.02 250);"
-						>
+						<span class="triage-working-count px-2 py-0.5 rounded text-xs">
 							{workingSessions.length}
 						</span>
 						<svg
-							class="w-4 h-4 transition-transform {showWorking ? 'rotate-180' : ''}"
-							style="color: oklch(0.45 0.02 250);"
+							class="triage-working-chevron w-4 h-4 transition-transform {showWorking ? 'rotate-180' : ''}"
 							fill="none"
 							viewBox="0 0 24 24"
 							stroke="currentColor"
@@ -687,23 +553,16 @@
 							{#each workingSessions as session (session.sessionName)}
 								<button
 									onclick={() => toggleExpand(session.sessionName)}
-									class="p-3 rounded-lg text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-									style="
-										background: oklch(0.15 0.02 250);
-										border: 1px solid oklch(0.25 0.02 250);
-									"
+									class="triage-working-card p-3 rounded-lg text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
 								>
 									<div class="flex items-center gap-2 mb-1">
-										<div
-											class="w-1.5 h-1.5 rounded-full"
-											style="background: oklch(0.60 0.15 240); box-shadow: 0 0 6px oklch(0.60 0.15 240);"
-										></div>
-										<span class="text-sm font-medium truncate" style="color: oklch(0.80 0.02 250);">
+										<div class="triage-working-dot w-1.5 h-1.5 rounded-full"></div>
+										<span class="triage-working-agent text-sm font-medium truncate">
 											{session.agentName}
 										</span>
 									</div>
 									{#if session.task}
-										<p class="text-xs truncate" style="color: oklch(0.50 0.02 250);">
+										<p class="triage-working-task text-xs truncate">
 											{session.task.title || session.task.id}
 										</p>
 									{/if}
@@ -714,13 +573,7 @@
 						<!-- Expanded SessionCard for working session (if any) -->
 						{#each workingSessions as session (session.sessionName)}
 							{#if expandedSession === session.sessionName}
-								<div
-									class="mt-4 rounded-xl overflow-hidden"
-									style="
-										background: oklch(0.12 0.02 250);
-										border: 1px solid oklch(0.30 0.05 240 / 0.5);
-									"
-								>
+								<div class="triage-working-expanded mt-4 rounded-xl overflow-hidden">
 									<div class="p-2">
 										<SessionCard
 											sessionName={session.sessionName}
@@ -739,8 +592,7 @@
 									</div>
 									<button
 										onclick={() => expandedSession = null}
-										class="w-full py-2 text-xs font-medium transition-all hover:bg-white/5"
-										style="color: oklch(0.55 0.02 250); border-top: 1px solid oklch(0.25 0.02 250);"
+										class="triage-collapse-btn w-full py-2 text-xs font-medium transition-all hover:bg-white/5"
 									>
 										COLLAPSE
 									</button>
@@ -755,14 +607,11 @@
 			{#if idleSessions.length > 0}
 				<section class="mt-6">
 					<div class="flex items-center gap-3 mb-3">
-						<div class="w-2 h-5 rounded-full" style="background: oklch(0.35 0.02 250);"></div>
-						<h2 class="text-sm font-medium tracking-wide" style="color: oklch(0.40 0.02 250);">
+						<div class="triage-idle-accent w-2 h-5 rounded-full"></div>
+						<h2 class="triage-idle-header text-sm font-medium tracking-wide">
 							IDLE
 						</h2>
-						<span
-							class="px-2 py-0.5 rounded text-xs"
-							style="background: oklch(0.20 0.02 250); color: oklch(0.40 0.02 250);"
-						>
+						<span class="triage-idle-count px-2 py-0.5 rounded text-xs">
 							{idleSessions.length}
 						</span>
 					</div>
@@ -771,12 +620,7 @@
 						{#each idleSessions as session (session.sessionName)}
 							<button
 								onclick={() => toggleExpand(session.sessionName)}
-								class="px-3 py-1.5 rounded text-xs transition-all hover:scale-105"
-								style="
-									background: oklch(0.15 0.01 250);
-									border: 1px solid oklch(0.25 0.01 250);
-									color: oklch(0.50 0.02 250);
-								"
+								class="triage-idle-btn px-3 py-1.5 rounded text-xs transition-all hover:scale-105"
 							>
 								{session.agentName}
 							</button>
@@ -786,13 +630,7 @@
 					<!-- Expanded SessionCard for idle session -->
 					{#each idleSessions as session (session.sessionName)}
 						{#if expandedSession === session.sessionName}
-							<div
-								class="mt-4 rounded-xl overflow-hidden"
-								style="
-									background: oklch(0.12 0.02 250);
-									border: 1px solid oklch(0.25 0.02 250);
-								"
-							>
+							<div class="triage-idle-expanded mt-4 rounded-xl overflow-hidden">
 								<div class="p-2">
 									<SessionCard
 										sessionName={session.sessionName}
@@ -811,8 +649,7 @@
 								</div>
 								<button
 									onclick={() => expandedSession = null}
-									class="w-full py-2 text-xs font-medium transition-all hover:bg-white/5"
-									style="color: oklch(0.55 0.02 250); border-top: 1px solid oklch(0.25 0.02 250);"
+									class="triage-collapse-btn w-full py-2 text-xs font-medium transition-all hover:bg-white/5"
 								>
 									COLLAPSE
 								</button>
@@ -830,5 +667,446 @@
 	@keyframes pulse-glow {
 		0%, 100% { opacity: 1; }
 		50% { opacity: 0.5; }
+	}
+
+	/* === TRIAGE PAGE THEMED STYLES === */
+
+	/* Mission control background gradient */
+	.triage-bg {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-base-300) 80%, var(--color-info) 20%) 0%,
+			var(--color-base-300) 50%,
+			color-mix(in oklch, var(--color-base-300) 85%, var(--color-info) 15%) 100%
+		);
+	}
+
+	/* Grid overlay */
+	.triage-grid-overlay {
+		background-image:
+			linear-gradient(color-mix(in oklch, var(--color-info) 70%, transparent) 1px, transparent 1px),
+			linear-gradient(90deg, color-mix(in oklch, var(--color-info) 70%, transparent) 1px, transparent 1px);
+		background-size: 40px 40px;
+	}
+
+	/* Scan line effect */
+	.triage-scanlines {
+		background: repeating-linear-gradient(
+			0deg,
+			transparent,
+			transparent 2px,
+			color-mix(in oklch, var(--color-info) 10%, transparent) 2px,
+			color-mix(in oklch, var(--color-info) 10%, transparent) 4px
+		);
+	}
+
+	/* Title styling */
+	.triage-title {
+		color: color-mix(in oklch, var(--color-base-content) 95%, transparent);
+		text-shadow: 0 0 30px color-mix(in oklch, var(--color-info) 30%, transparent);
+	}
+
+	/* Muted text */
+	.triage-text-muted {
+		color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+	}
+
+	/* Status container */
+	.triage-status-container {
+		background: var(--color-base-200);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);
+	}
+
+	/* Spinner */
+	.triage-spinner {
+		border-color: var(--color-info);
+		border-top-color: transparent;
+	}
+
+	/* Orange/amber accent (priority tasks) */
+	.triage-accent-orange {
+		color: var(--color-warning);
+	}
+
+	/* Green accent (completed/success) */
+	.triage-accent-green {
+		color: var(--color-success);
+	}
+
+	/* Error container */
+	.triage-error {
+		background: color-mix(in oklch, var(--color-error) 20%, transparent);
+		border: 1px solid color-mix(in oklch, var(--color-error) 50%, transparent);
+		color: var(--color-error);
+	}
+
+	/* Error button */
+	.triage-error-btn {
+		background: color-mix(in oklch, var(--color-error) 50%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 95%, transparent);
+	}
+
+	/* Card container */
+	.triage-card {
+		background: var(--color-base-200);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);
+	}
+
+	/* Priority task card */
+	.triage-priority-card {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-warning) 25%, var(--color-base-300)) 0%,
+			color-mix(in oklch, var(--color-warning) 15%, var(--color-base-300)) 100%
+		);
+		border: 1px solid color-mix(in oklch, var(--color-warning) 40%, transparent);
+		box-shadow:
+			0 4px 20px color-mix(in oklch, var(--color-warning) 10%, transparent),
+			inset 0 1px 0 color-mix(in oklch, var(--color-warning) 10%, transparent);
+	}
+
+	/* Waiting task card */
+	.triage-waiting-card {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-secondary) 20%, var(--color-base-300)) 0%,
+			color-mix(in oklch, var(--color-secondary) 10%, var(--color-base-300)) 100%
+		);
+		border: 1px solid color-mix(in oklch, var(--color-secondary) 35%, transparent);
+		box-shadow:
+			0 4px 20px color-mix(in oklch, var(--color-secondary) 8%, transparent),
+			inset 0 1px 0 color-mix(in oklch, var(--color-secondary) 10%, transparent);
+	}
+
+	/* Completed section card */
+	.triage-completed-card {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-success) 15%, var(--color-base-300)) 0%,
+			color-mix(in oklch, var(--color-success) 8%, var(--color-base-300)) 100%
+		);
+		border: 1px solid color-mix(in oklch, var(--color-success) 25%, transparent);
+	}
+
+	/* Priority badge */
+	.triage-priority-badge {
+		background: color-mix(in oklch, var(--color-base-content) 18%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
+	}
+
+	/* Description block */
+	.triage-description {
+		background: color-mix(in oklch, var(--color-base-300) 80%, transparent);
+		border-left: 2px solid color-mix(in oklch, var(--color-warning) 40%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 85%, transparent);
+	}
+
+	/* Details panel */
+	.triage-details {
+		border-color: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+	}
+
+	/* Section header */
+	.triage-section-header {
+		background: var(--color-base-200);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+	}
+
+	/* Bright text */
+	.triage-text-bright {
+		color: color-mix(in oklch, var(--color-base-content) 85%, transparent);
+	}
+
+	/* Dim text */
+	.triage-text-dim {
+		color: color-mix(in oklch, var(--color-base-content) 45%, transparent);
+	}
+
+	/* === NEEDS INPUT (ORANGE) SECTION === */
+
+	/* Needs input accent bar */
+	.triage-input-accent-bar {
+		background: linear-gradient(180deg, var(--color-warning), color-mix(in oklch, var(--color-warning) 75%, var(--color-error) 25%));
+	}
+
+	/* Needs input section header */
+	.triage-input-header {
+		color: var(--color-warning);
+	}
+
+	/* Needs input count badge */
+	.triage-input-count {
+		background: color-mix(in oklch, var(--color-warning) 20%, transparent);
+		color: var(--color-warning);
+	}
+
+	/* Needs input card */
+	.triage-input-card {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-warning) 25%, var(--color-base-300)) 0%,
+			color-mix(in oklch, var(--color-warning) 15%, var(--color-base-300)) 100%
+		);
+		border: 1px solid color-mix(in oklch, var(--color-warning) 40%, transparent);
+		box-shadow:
+			0 4px 20px color-mix(in oklch, var(--color-warning) 10%, transparent),
+			inset 0 1px 0 color-mix(in oklch, var(--color-warning) 10%, transparent);
+	}
+
+	/* Needs input card accent bar */
+	.triage-input-card-accent {
+		background: linear-gradient(180deg, var(--color-warning), color-mix(in oklch, var(--color-warning) 80%, transparent));
+		box-shadow: 0 0 15px color-mix(in oklch, var(--color-warning) 60%, transparent);
+	}
+
+	/* Needs input pulsing dot */
+	.triage-input-dot {
+		background: var(--color-warning);
+		box-shadow: 0 0 10px var(--color-warning);
+	}
+
+	/* Needs input respond button */
+	.triage-input-respond {
+		background: color-mix(in oklch, var(--color-warning) 20%, transparent);
+		color: var(--color-warning);
+	}
+
+	/* Needs input chevron */
+	.triage-input-chevron {
+		color: color-mix(in oklch, var(--color-warning) 75%, transparent);
+	}
+
+	/* Needs input question block */
+	.triage-input-question {
+		background: color-mix(in oklch, var(--color-base-300) 80%, transparent);
+		border-left: 2px solid color-mix(in oklch, var(--color-warning) 50%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 85%, transparent);
+	}
+
+	/* Needs input question icon */
+	.triage-input-question-icon {
+		color: color-mix(in oklch, var(--color-warning) 75%, transparent);
+	}
+
+	/* Needs input expanded border */
+	.triage-input-expanded {
+		border-color: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+	}
+
+	/* === READY FOR REVIEW (YELLOW) SECTION === */
+
+	/* Review accent bar */
+	.triage-review-accent-bar {
+		background: linear-gradient(180deg, var(--color-secondary), color-mix(in oklch, var(--color-secondary) 70%, transparent));
+	}
+
+	/* Review section header */
+	.triage-review-header {
+		color: var(--color-secondary);
+	}
+
+	/* Review count badge */
+	.triage-review-count {
+		background: color-mix(in oklch, var(--color-secondary) 20%, transparent);
+		color: var(--color-secondary);
+	}
+
+	/* Review card */
+	.triage-review-card {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-secondary) 20%, var(--color-base-300)) 0%,
+			color-mix(in oklch, var(--color-secondary) 10%, var(--color-base-300)) 100%
+		);
+		border: 1px solid color-mix(in oklch, var(--color-secondary) 35%, transparent);
+		box-shadow:
+			0 4px 20px color-mix(in oklch, var(--color-secondary) 8%, transparent),
+			inset 0 1px 0 color-mix(in oklch, var(--color-secondary) 10%, transparent);
+	}
+
+	/* Review card accent bar */
+	.triage-review-card-accent {
+		background: linear-gradient(180deg, var(--color-secondary), color-mix(in oklch, var(--color-secondary) 75%, transparent));
+	}
+
+	/* Review button */
+	.triage-review-btn {
+		background: color-mix(in oklch, var(--color-secondary) 20%, transparent);
+		color: var(--color-secondary);
+	}
+
+	/* Review chevron */
+	.triage-review-chevron {
+		color: color-mix(in oklch, var(--color-secondary) 70%, transparent);
+	}
+
+	/* Review summary block */
+	.triage-review-summary {
+		background: color-mix(in oklch, var(--color-base-300) 80%, transparent);
+		border-left: 2px solid color-mix(in oklch, var(--color-secondary) 50%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 85%, transparent);
+	}
+
+	/* Review expanded border */
+	.triage-review-expanded {
+		border-color: color-mix(in oklch, var(--color-secondary) 35%, transparent);
+		background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+	}
+
+	/* === EMPTY STATE === */
+
+	/* Empty state container */
+	.triage-empty {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-success) 15%, var(--color-base-300)) 0%,
+			color-mix(in oklch, var(--color-success) 8%, var(--color-base-300)) 100%
+		);
+		border: 1px solid color-mix(in oklch, var(--color-success) 25%, transparent);
+	}
+
+	/* Empty state icon container */
+	.triage-empty-icon {
+		background: color-mix(in oklch, var(--color-success) 15%, transparent);
+		border: 2px solid color-mix(in oklch, var(--color-success) 30%, transparent);
+	}
+
+	/* Empty state title */
+	.triage-empty-title {
+		color: var(--color-success);
+	}
+
+	/* === WORKING SECTION === */
+
+	/* Working section accent bar */
+	.triage-working-accent {
+		background: var(--color-info);
+	}
+
+	/* Working section header */
+	.triage-working-header {
+		color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+	}
+
+	/* Working count badge */
+	.triage-working-count {
+		background: color-mix(in oklch, var(--color-base-content) 18%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+	}
+
+	/* Working chevron */
+	.triage-working-chevron {
+		color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+	}
+
+	/* Working card */
+	.triage-working-card {
+		background: var(--color-base-200);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+	}
+
+	/* Working dot */
+	.triage-working-dot {
+		background: var(--color-info);
+		box-shadow: 0 0 6px var(--color-info);
+	}
+
+	/* Working agent name */
+	.triage-working-agent {
+		color: color-mix(in oklch, var(--color-base-content) 85%, transparent);
+	}
+
+	/* Working task title */
+	.triage-working-task {
+		color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+	}
+
+	/* Working expanded container */
+	.triage-working-expanded {
+		background: color-mix(in oklch, var(--color-base-300) 60%, transparent);
+		border: 1px solid color-mix(in oklch, var(--color-info) 25%, transparent);
+	}
+
+	/* Collapse button */
+	.triage-collapse-btn {
+		color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+		border-top: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+	}
+
+	/* === IDLE SECTION === */
+
+	/* Idle accent bar */
+	.triage-idle-accent {
+		background: color-mix(in oklch, var(--color-base-content) 30%, transparent);
+	}
+
+	/* Idle header */
+	.triage-idle-header {
+		color: color-mix(in oklch, var(--color-base-content) 45%, transparent);
+	}
+
+	/* Idle count badge */
+	.triage-idle-count {
+		background: color-mix(in oklch, var(--color-base-content) 15%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 45%, transparent);
+	}
+
+	/* Idle button */
+	.triage-idle-btn {
+		background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+	}
+
+	/* Idle expanded container */
+	.triage-idle-expanded {
+		background: color-mix(in oklch, var(--color-base-300) 60%, transparent);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+	}
+
+	/* === STATUS INDICATOR === */
+
+	/* Status scanning text */
+	.triage-status-scanning {
+		color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+	}
+
+	/* Status awaiting dot (orange pulse) */
+	.triage-status-awaiting-dot {
+		background: var(--color-warning);
+		box-shadow: 0 0 12px var(--color-warning);
+	}
+
+	/* Status awaiting text */
+	.triage-status-awaiting {
+		color: var(--color-warning);
+	}
+
+	/* Status all-clear dot (green) */
+	.triage-status-clear-dot {
+		background: var(--color-success);
+	}
+
+	/* Status all-clear text */
+	.triage-status-clear {
+		color: var(--color-success);
+	}
+
+	/* Agent name text (bright) */
+	.triage-agent-name {
+		color: color-mix(in oklch, var(--color-base-content) 92%, transparent);
+	}
+
+	/* Task ID badge */
+	.triage-task-id {
+		background: color-mix(in oklch, var(--color-base-content) 18%, transparent);
+		color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
+	}
+
+	/* Task title (muted) */
+	.triage-task-title {
+		color: color-mix(in oklch, var(--color-base-content) 80%, transparent);
 	}
 </style>

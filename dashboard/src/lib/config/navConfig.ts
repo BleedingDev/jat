@@ -118,6 +118,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			href: '/agents',
 			icon: 'agents',
 			primary: false
+		},
+		{
+			id: 'history',
+			label: 'History',
+			href: '/history',
+			icon: 'history',
+			primary: false
 		}
 	],
 	showProjectFilter: true,
