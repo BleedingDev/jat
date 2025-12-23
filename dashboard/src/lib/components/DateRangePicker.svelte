@@ -136,7 +136,7 @@
 			{#each presets as preset}
 				<button
 					type="button"
-					class="px-2 py-1 rounded cursor-pointer transition-all duration-200 font-mono text-xs border {selectedRange === preset.value ? 'date-preset-selected' : 'date-preset-default'}"
+					class="px-2 py-1 rounded cursor-pointer transition-all duration-200 font-mono text-xs border {selectedRange === preset.value ? 'bg-primary/20 border-primary text-primary' : 'bg-base-300 border-base-content/20 text-base-content opacity-60 hover:opacity-100'}"
 					onclick={() => handlePresetSelect(preset.value)}
 				>
 					{preset.label}
@@ -191,22 +191,3 @@
 	</div>
 </div>
 
-<style>
-	/* Date preset button states - themeable */
-	.date-preset-selected {
-		background: color-mix(in oklch, var(--color-primary) 20%, transparent);
-		border-color: var(--color-primary);
-		color: var(--color-primary);
-	}
-
-	.date-preset-default {
-		background: var(--color-base-300);
-		border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
-		color: var(--color-base-content);
-		opacity: 0.6;
-	}
-
-	.date-preset-default:hover {
-		opacity: 1;
-	}
-</style>

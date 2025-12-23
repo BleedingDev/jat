@@ -25,8 +25,8 @@
 		height?: number;
 		/** Width in pixels */
 		width?: number;
-		/** Color for the bars (oklch) - fallback if activity level detection fails */
-		color?: string;
+		/** CSS class for activity level (overrides auto-detection) */
+		colorClass?: string;
 		/** Whether to show tooltip on hover */
 		showTooltip?: boolean;
 		/** Whether to animate bars on entry (currently unused, kept for compatibility) */
@@ -38,7 +38,7 @@
 		maxBars = 12,
 		height = 16,
 		width = 48,
-		color = 'oklch(0.65 0.15 200)',
+		colorClass = '',
 		showTooltip = true
 	}: Props = $props();
 
@@ -78,16 +78,17 @@
 		return 'high';
 	});
 
-	// Color lookup table - avoids switch statement on every render
-	const colorByLevel = {
-		idle: 'oklch(0.40 0.02 250)',
-		low: 'oklch(0.55 0.10 200)',
-		medium: 'oklch(0.65 0.15 200)',
-		high: 'oklch(0.70 0.20 145)'
-	} as const;
-
-	// Dynamic color based on activity level
-	const barColor = $derived(colorByLevel[activityLevel] || color);
+	// CSS class lookup by activity level - using Tailwind classes
+	const levelClass = $derived.by(() => {
+		if (colorClass) return colorClass;
+		switch (activityLevel) {
+			case 'idle': return 'bg-base-content/25';
+			case 'low': return 'bg-info opacity-60';
+			case 'medium': return 'bg-info';
+			case 'high': return 'bg-success';
+			default: return 'bg-base-content/25';
+		}
+	});
 </script>
 
 <div
@@ -101,15 +102,13 @@
 		{@const barHeight = isNoData ? 0 : isIdle ? 2 : Math.max((value / maxValue) * height, 3)}
 		{@const isRecent = i >= displayData.length - 3}
 		<div
-			class="rounded-sm transition-all duration-200"
+			class="sparkline-bar rounded-sm transition-all duration-200 {isIdle ? 'bg-base-content/15' : levelClass}"
 			style="
 				width: {barWidth}px;
 				height: {barHeight}px;
-				background: {isIdle ? 'oklch(0.30 0.01 250)' : barColor};
 				opacity: {isNoData ? 0 : isRecent ? 1 : 0.5};
 			"
 		></div>
 	{/each}
 </div>
 
-<!-- CSS transitions handle smooth height changes without needing keyframe animations -->

@@ -16,6 +16,7 @@
 	import AnimatedDigits from './AnimatedDigits.svelte';
 	import TaskHistoryDrawer from './TaskHistoryDrawer.svelte';
 	import TaskDetailDrawer from './TaskDetailDrawer.svelte';
+	import { getProjectColor } from '$lib/utils/projectColors';
 
 	interface Props {
 		compact?: boolean;
@@ -340,7 +341,7 @@
 										{task.title || task.id}
 									</div>
 									<div class="flex items-center gap-2 mt-0.5">
-										<span class="text-[10px] font-mono" style="color: oklch(0.55 0.10 200);">
+										<span class="text-[10px] font-mono" style="color: {getProjectColor(task.id)};">
 											{task.id}
 										</span>
 										{#if task.assignee}

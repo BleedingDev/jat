@@ -71,13 +71,13 @@
 	// Task type options
 	const TASK_TYPES = ['feature', 'bug', 'task', 'chore', 'epic'];
 
-	// Priority options with colors
+	// Priority options
 	const PRIORITIES = [
-		{ value: 0, label: 'P0', color: 'oklch(0.65 0.25 25)', textColor: 'oklch(0.15 0.02 250)' },
-		{ value: 1, label: 'P1', color: 'oklch(0.70 0.20 50)', textColor: 'oklch(0.15 0.02 250)' },
-		{ value: 2, label: 'P2', color: 'oklch(0.75 0.15 85)', textColor: 'oklch(0.15 0.02 250)' },
-		{ value: 3, label: 'P3', color: 'oklch(0.70 0.08 250)', textColor: 'oklch(0.95 0.02 250)' },
-		{ value: 4, label: 'P4', color: 'oklch(0.65 0.05 250)', textColor: 'oklch(0.95 0.02 250)' }
+		{ value: 0, label: 'P0' },
+		{ value: 1, label: 'P1' },
+		{ value: 2, label: 'P2' },
+		{ value: 3, label: 'P3' },
+		{ value: 4, label: 'P4' }
 	];
 
 	// Get task key for state tracking
@@ -142,10 +142,16 @@
 		edits = newEdits;
 	}
 
-	// Get priority color
-	function getPriorityColor(priority: number): { bg: string; text: string } {
-		const p = PRIORITIES.find((p) => p.value === priority) || PRIORITIES[2];
-		return { bg: p.color, text: p.textColor };
+	// Get priority CSS class
+	function getPriorityClass(priority: number): string {
+		const classes: Record<number, string> = {
+			0: 'priority-p0',
+			1: 'priority-p1',
+			2: 'priority-p2',
+			3: 'priority-p3',
+			4: 'priority-p4'
+		};
+		return classes[priority] || 'priority-p2';
 	}
 
 	// Count selected tasks (excluding already-created)
@@ -284,11 +290,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div class="modal modal-open" onclick={handleBackdropClick}>
 		<div
-			class="modal-box max-w-2xl max-h-[85vh] flex flex-col"
-			style="
-				background: linear-gradient(180deg, oklch(0.18 0.02 250) 0%, oklch(0.15 0.01 250) 100%);
-				border: 1px solid oklch(0.35 0.08 250);
-			"
+			class="modal-box max-w-2xl max-h-[85vh] flex flex-col bg-base-200 border border-base-300"
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between mb-4 flex-shrink-0">
@@ -296,20 +298,18 @@
 					<div class="flex items-center gap-2">
 						<span class="text-lg">💡</span>
 						<h3
-							class="text-lg font-bold font-mono"
-							style="color: oklch(0.90 0.05 250);"
+							class="text-lg font-bold font-mono text-base-content"
 						>
 							Suggested Tasks
 						</h3>
 						<span
-							class="badge badge-sm font-mono"
-							style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
+							class="badge badge-sm badge-primary font-mono"
 						>
 							{tasks.length}
 						</span>
 					</div>
 					{#if agentName}
-						<p class="text-xs mt-1" style="color: oklch(0.55 0.02 250);">
+						<p class="text-xs mt-1 text-base-content/50">
 							From agent: <span class="font-mono">{agentName}</span>
 						</p>
 					{/if}
@@ -339,10 +339,9 @@
 
 			<!-- Bulk actions bar -->
 			<div
-				class="flex items-center justify-between px-2 py-2 mb-3 rounded-lg flex-shrink-0"
-				style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);"
+				class="flex items-center justify-between px-2 py-2 mb-3 rounded-lg flex-shrink-0 bg-base-300 border border-base-content/20"
 			>
-				<div class="flex items-center gap-3 text-xs" style="color: oklch(0.65 0.02 250);">
+				<div class="flex items-center gap-3 text-xs text-base-content/60">
 					<button
 						type="button"
 						class="hover:text-primary transition-colors"
@@ -362,12 +361,12 @@
 					</button>
 				</div>
 				{#if alreadyCreatedCount > 0}
-					<span class="text-xs font-mono" style="color: oklch(0.65 0.12 145);">
+					<span class="text-xs font-mono text-success/70">
 						{alreadyCreatedCount} already created
 					</span>
 				{/if}
 				{#if selectedCount > 0}
-					<span class="text-xs font-mono" style="color: oklch(0.75 0.15 145);">
+					<span class="text-xs font-mono text-success">
 						{selectedCount} of {creatableCount} selected
 					</span>
 				{/if}
@@ -383,41 +382,28 @@
 					{@const effectiveType = getEffectiveValue(task, index, 'type') || 'task'}
 					{@const effectivePriority = getEffectiveValue(task, index, 'priority') ?? 2}
 					{@const effectiveDescription = getEffectiveValue(task, index, 'description') || ''}
-					{@const priorityColors = getPriorityColor(effectivePriority)}
+					{@const priorityClass = getPriorityClass(effectivePriority)}
 					{@const typeVisual = getIssueTypeVisual(effectiveType)}
 
 					<div
-						class="rounded-lg transition-all"
-						style="
-							background: {task.alreadyCreated
-							? 'oklch(0.22 0.05 145 / 0.3)'
+						class="rounded-lg transition-all border {task.alreadyCreated
+							? 'task-card-created'
 							: selected
 								? isHuman
-									? 'oklch(0.25 0.08 50 / 0.4)'
-									: 'oklch(0.26 0.08 220 / 0.35)'
-								: 'oklch(0.20 0.02 250 / 0.6)'};
-							border: 1px solid {task.alreadyCreated
-							? 'oklch(0.45 0.12 145 / 0.5)'
-							: selected
-								? isHuman
-									? 'oklch(0.55 0.15 50 / 0.6)'
-									: 'oklch(0.50 0.15 220 / 0.5)'
-								: 'oklch(0.32 0.03 250 / 0.5)'};
-							opacity: {task.alreadyCreated ? '0.75' : '1'};
-						"
+									? 'task-card-human-selected'
+									: 'task-card-agent-selected'
+								: 'task-card-default'}"
 					>
 						<!-- Main task row -->
 						<div class="flex items-start gap-3 p-3">
 							<!-- Checkbox (disabled for already-created tasks) -->
 							{#if task.alreadyCreated}
 								<div
-									class="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5"
-									style="background: oklch(0.35 0.10 145); border-color: oklch(0.45 0.12 145);"
+									class="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 checkbox-created"
 									title="Already created in Beads"
 								>
 									<svg
-										class="w-3 h-3"
-										style="color: oklch(0.75 0.15 145);"
+										class="w-3 h-3 text-success"
 										fill="none"
 										viewBox="0 0 24 24"
 										stroke="currentColor"
@@ -433,19 +419,11 @@
 							{:else}
 								<button
 									type="button"
-									class="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 transition-colors cursor-pointer"
-									style="
-										background: {selected
+									class="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 transition-colors cursor-pointer {selected
 										? isHuman
-											? 'oklch(0.55 0.18 50)'
-											: 'oklch(0.55 0.18 220)'
-										: 'transparent'};
-										border-color: {selected
-										? isHuman
-											? 'oklch(0.55 0.18 50)'
-											: 'oklch(0.55 0.18 220)'
-										: 'oklch(0.50 0.05 250)'};
-									"
+											? 'checkbox-human-selected'
+											: 'checkbox-agent-selected'
+										: 'checkbox-default'}"
 									onclick={() => toggleSelection(task, index)}
 									disabled={isCreating}
 									aria-label={selected ? 'Deselect task' : 'Select task'}
@@ -474,10 +452,7 @@
 								<div class="flex items-center gap-2 flex-wrap">
 									<!-- Human/Agent indicator -->
 									<span
-										class="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold"
-										style="background: {isHuman
-											? 'oklch(0.45 0.18 50)'
-											: 'oklch(0.45 0.15 220)'}; color: oklch(0.98 0.02 250);"
+										class="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold {isHuman ? 'badge-human' : 'badge-agent'}"
 										title={isHuman
 											? 'Human task (requires manual action)'
 											: 'Agent task (can be automated)'}
@@ -487,8 +462,7 @@
 
 									<!-- Priority dropdown -->
 									<select
-										class="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer appearance-none"
-										style="background: {priorityColors.bg}; color: {priorityColors.text}; border: none; min-width: 38px; padding-right: 1rem; background-image: url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 fill=%27none%27 viewBox=%270 0 20 20%27%3E%3Cpath stroke=%27%23666%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%271.5%27 d=%27M6 8l4 4 4-4%27/%3E%3C/svg%3E'); background-position: right 0.1rem center; background-repeat: no-repeat; background-size: 0.8rem;"
+										class="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer appearance-none select-arrow {priorityClass}"
 										value={effectivePriority}
 										onchange={(e) =>
 											updateTaskField(task, index, 'priority', parseInt(e.currentTarget.value))}
@@ -501,8 +475,7 @@
 
 									<!-- Type dropdown -->
 									<select
-										class="text-[10px] px-1.5 py-0.5 rounded font-mono cursor-pointer appearance-none capitalize"
-										style="background: oklch(0.32 0.04 250); color: oklch(0.85 0.02 250); border: 1px solid oklch(0.42 0.02 250); min-width: 65px; padding-right: 1rem; background-image: url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 fill=%27none%27 viewBox=%270 0 20 20%27%3E%3Cpath stroke=%27%23888%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%271.5%27 d=%27M6 8l4 4 4-4%27/%3E%3C/svg%3E'); background-position: right 0.1rem center; background-repeat: no-repeat; background-size: 0.8rem;"
+										class="text-[10px] px-1.5 py-0.5 rounded font-mono cursor-pointer appearance-none capitalize select-arrow bg-base-300 text-base-content border border-base-content/20"
 										value={effectiveType}
 										onchange={(e) =>
 											updateTaskField(task, index, 'type', e.currentTarget.value)}
@@ -520,8 +493,7 @@
 
 									<!-- Title -->
 									<span
-										class="flex-1 min-w-0 text-sm font-medium truncate"
-										style="color: oklch(0.92 0.03 250);"
+										class="flex-1 min-w-0 text-sm font-medium truncate text-base-content"
 										title={task.title}
 									>
 										{task.title}
@@ -552,8 +524,7 @@
 									<!-- Create single button OR Created badge -->
 									{#if task.alreadyCreated}
 										<span
-											class="flex-shrink-0 badge badge-sm gap-1"
-											style="background: oklch(0.35 0.10 145); color: oklch(0.85 0.15 145); border: none;"
+											class="flex-shrink-0 badge badge-sm badge-success gap-1"
 											title="This task already exists in Beads"
 										>
 											<svg
@@ -574,8 +545,7 @@
 									{:else}
 										<button
 											type="button"
-											class="flex-shrink-0 btn btn-xs gap-1"
-											style="background: oklch(0.45 0.15 145); color: oklch(0.98 0 0); border: none;"
+											class="flex-shrink-0 btn btn-xs btn-success gap-1"
 											onclick={() => handleCreateSingle(task, index)}
 											disabled={isCreating}
 											title="Create this task in Beads"
@@ -601,8 +571,7 @@
 								<!-- Description preview (when collapsed) -->
 								{#if !isExpanded && effectiveDescription}
 									<p
-										class="text-xs mt-1.5 line-clamp-2"
-										style="color: oklch(0.65 0.03 250);"
+										class="text-xs mt-1.5 line-clamp-2 text-base-content/60"
 										title={effectiveDescription}
 									>
 										{truncateDescription(effectiveDescription)}
@@ -612,8 +581,7 @@
 								<!-- Reason if provided -->
 								{#if task.reason && !isExpanded}
 									<p
-										class="text-xs mt-1 italic"
-										style="color: oklch(0.60 0.08 200);"
+										class="text-xs mt-1 italic text-info/80"
 									>
 										💡 {task.reason}
 									</p>
@@ -625,15 +593,13 @@
 						{#if isExpanded}
 							<div class="px-3 pb-3 ml-8" transition:slide={{ duration: 150 }}>
 								<div
-									class="p-2 rounded text-xs whitespace-pre-wrap"
-									style="background: oklch(0.22 0.02 250); color: oklch(0.80 0.02 250); border: 1px solid oklch(0.32 0.02 250);"
+									class="p-2 rounded text-xs whitespace-pre-wrap bg-base-300 text-base-content/80 border border-base-content/20"
 								>
 									{effectiveDescription || 'No description provided.'}
 								</div>
 								{#if task.reason}
 									<p
-										class="text-[10px] mt-2 opacity-60"
-										style="color: oklch(0.60 0.02 250);"
+										class="text-[10px] mt-2 opacity-60 text-base-content/60"
 									>
 										💡 Reason: {task.reason}
 									</p>
@@ -645,8 +611,7 @@
 
 				{#if tasks.length === 0}
 					<div
-						class="text-center py-8"
-						style="color: oklch(0.55 0.02 250);"
+						class="text-center py-8 text-base-content/50"
 					>
 						<p>No suggested tasks found.</p>
 					</div>
@@ -656,8 +621,7 @@
 			<!-- Error/Success messages -->
 			{#if createError}
 				<div
-					class="mt-3 p-3 rounded-lg text-sm flex-shrink-0"
-					style="background: oklch(0.30 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
+					class="mt-3 p-3 rounded-lg text-sm flex-shrink-0 alert alert-error"
 				>
 					<div class="flex items-center gap-2">
 						<svg
@@ -680,8 +644,7 @@
 
 			{#if createSuccess}
 				<div
-					class="mt-3 p-3 rounded-lg text-sm flex-shrink-0"
-					style="background: oklch(0.30 0.15 145); border: 1px solid oklch(0.50 0.18 145); color: oklch(0.95 0.02 250);"
+					class="mt-3 p-3 rounded-lg text-sm flex-shrink-0 alert alert-success"
 				>
 					<div class="flex items-center gap-2">
 						<svg
@@ -703,8 +666,8 @@
 			{/if}
 
 			<!-- Footer actions -->
-			<div class="flex items-center justify-between mt-4 pt-3 border-t flex-shrink-0" style="border-color: oklch(0.30 0.02 250);">
-				<p class="text-[10px]" style="color: oklch(0.50 0.02 250);">
+			<div class="flex items-center justify-between mt-4 pt-3 border-t border-base-content/20 flex-shrink-0">
+				<p class="text-[10px] text-base-content/50">
 					Tasks will be created in Beads with the current project context.
 				</p>
 				<div class="flex gap-2">
@@ -716,8 +679,7 @@
 						Cancel
 					</button>
 					<button
-						class="btn btn-sm gap-2"
-						style="background: linear-gradient(135deg, oklch(0.50 0.18 145) 0%, oklch(0.45 0.15 160) 100%); color: oklch(0.98 0 0); border: none;"
+						class="btn btn-sm btn-success gap-2"
 						onclick={handleCreateSelected}
 						disabled={selectedCount === 0 || isCreating}
 					>
@@ -754,5 +716,108 @@
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	/* Task card states */
+	.task-card-default {
+		background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+		border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+	}
+
+	.task-card-created {
+		background: color-mix(in oklch, var(--color-success) 20%, transparent);
+		border-color: color-mix(in oklch, var(--color-success) 50%, transparent);
+		opacity: 0.75;
+	}
+
+	.task-card-human-selected {
+		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		border-color: color-mix(in oklch, var(--color-warning) 50%, transparent);
+	}
+
+	.task-card-agent-selected {
+		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		border-color: color-mix(in oklch, var(--color-info) 50%, transparent);
+	}
+
+	/* Checkbox states */
+	.checkbox-default {
+		background: transparent;
+		border-color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
+	}
+
+	.checkbox-created {
+		background: color-mix(in oklch, var(--color-success) 30%, transparent);
+		border-color: var(--color-success);
+	}
+
+	.checkbox-human-selected {
+		background: var(--color-warning);
+		border-color: var(--color-warning);
+	}
+
+	.checkbox-agent-selected {
+		background: var(--color-info);
+		border-color: var(--color-info);
+	}
+
+	/* Human/Agent badges */
+	.badge-human {
+		background: color-mix(in oklch, var(--color-warning) 80%, transparent);
+		color: var(--color-warning-content);
+	}
+
+	.badge-agent {
+		background: color-mix(in oklch, var(--color-info) 80%, transparent);
+		color: var(--color-info-content);
+	}
+
+	/* Priority classes */
+	.priority-p0 {
+		background: color-mix(in oklch, var(--color-error) 30%, transparent);
+		color: var(--color-error);
+		border: none;
+		min-width: 38px;
+		padding-right: 1rem;
+	}
+
+	.priority-p1 {
+		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		color: var(--color-warning);
+		border: none;
+		min-width: 38px;
+		padding-right: 1rem;
+	}
+
+	.priority-p2 {
+		background: color-mix(in oklch, var(--color-success) 30%, transparent);
+		color: var(--color-success);
+		border: none;
+		min-width: 38px;
+		padding-right: 1rem;
+	}
+
+	.priority-p3 {
+		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		color: var(--color-info);
+		border: none;
+		min-width: 38px;
+		padding-right: 1rem;
+	}
+
+	.priority-p4 {
+		background: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+		color: var(--color-base-content);
+		border: none;
+		min-width: 38px;
+		padding-right: 1rem;
+	}
+
+	/* Select dropdown arrow */
+	.select-arrow {
+		background-image: url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 fill=%27none%27 viewBox=%270 0 20 20%27%3E%3Cpath stroke=%27%23888%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%271.5%27 d=%27M6 8l4 4 4-4%27/%3E%3C/svg%3E');
+		background-position: right 0.1rem center;
+		background-repeat: no-repeat;
+		background-size: 0.8rem;
 	}
 </style>

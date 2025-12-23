@@ -67,11 +67,8 @@
 
 			<!-- Count badge -->
 			<span
-				class="ml-auto px-2 py-0.5 text-xs font-bold rounded-full"
-				style="
-					background: {visual.accent};
-					color: oklch(0.15 0.01 250);
-				"
+				class="kanban-count-badge ml-auto px-2 py-0.5 text-xs font-bold rounded-full"
+				style="background: {visual.accent};"
 			>
 				{count}
 			</span>
@@ -102,10 +99,7 @@
 
 	<!-- Column Content -->
 	{#if !collapsed}
-		<div
-			class="flex-1 overflow-y-auto p-2 space-y-2 rounded-b-lg"
-			style="background: oklch(0.16 0.01 250);"
-		>
+		<div class="kanban-column-content flex-1 overflow-y-auto p-2 space-y-2 rounded-b-lg">
 			{@render children?.()}
 
 			<!-- Empty state -->
@@ -117,3 +111,15 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Count badge - dark text on accent background */
+	.kanban-count-badge {
+		color: var(--color-base-100);
+	}
+
+	/* Column content background - slightly darker than base */
+	.kanban-column-content {
+		background: var(--color-base-200);
+	}
+</style>

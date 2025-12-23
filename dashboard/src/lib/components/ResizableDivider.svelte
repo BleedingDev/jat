@@ -177,20 +177,20 @@
 	.divider-container.expanded {
 		height: 16px;
 		min-height: 16px;
-		background: oklch(0.55 0.12 250 / 0.15);
+		background: color-mix(in oklch, var(--color-primary) 15%, transparent);
 		box-shadow:
-			0 0 12px oklch(0.65 0.18 250 / 0.4),
-			inset 0 0 8px oklch(0.65 0.18 250 / 0.2);
+			0 0 12px color-mix(in oklch, var(--color-primary) 40%, transparent),
+			inset 0 0 8px color-mix(in oklch, var(--color-primary) 20%, transparent);
 	}
 
 	/* Dragging state: stronger glow */
 	.divider-container.dragging {
 		height: 16px;
 		min-height: 16px;
-		background: oklch(0.55 0.15 250 / 0.25);
+		background: color-mix(in oklch, var(--color-primary) 25%, transparent);
 		box-shadow:
-			0 0 20px oklch(0.70 0.20 250 / 0.5),
-			inset 0 0 12px oklch(0.70 0.20 250 / 0.3);
+			0 0 20px color-mix(in oklch, var(--color-primary) 50%, transparent),
+			inset 0 0 12px color-mix(in oklch, var(--color-primary) 30%, transparent);
 	}
 
 	/* Grippy handle styling */
@@ -220,36 +220,39 @@
 		width: 32px;
 		height: 2px;
 		border-radius: 1px;
-		background: oklch(0.60 0.08 250);
-		transition: background 200ms ease, box-shadow 200ms ease;
+		background: var(--color-base-content);
+		opacity: 0.4;
+		transition: background 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
 	}
 
 	.divider-container.expanded .grip-line {
-		background: oklch(0.75 0.15 250);
-		box-shadow: 0 0 6px oklch(0.75 0.15 250 / 0.5);
+		background: var(--color-primary);
+		opacity: 0.8;
+		box-shadow: 0 0 6px color-mix(in oklch, var(--color-primary) 50%, transparent);
 	}
 
 	.divider-container.dragging .grip-line {
-		background: oklch(0.80 0.18 250);
-		box-shadow: 0 0 8px oklch(0.80 0.18 250 / 0.6);
+		background: var(--color-primary);
+		opacity: 1;
+		box-shadow: 0 0 8px color-mix(in oklch, var(--color-primary) 60%, transparent);
 	}
 
 	/* Collapsed state styling */
 	.divider-collapsed {
 		height: 6px;
 		min-height: 6px;
-		background: oklch(0.25 0.02 250);
-		border-color: oklch(0.30 0.03 250) !important;
+		background: var(--color-base-200);
+		border-color: var(--color-base-300) !important;
 	}
 
 	/* Collapsed + expanded (proximity/hover): grow larger for easy targeting */
 	.divider-collapsed.expanded {
 		height: 20px;
 		min-height: 20px;
-		background: oklch(0.35 0.08 250 / 0.6);
+		background: color-mix(in oklch, var(--color-primary) 40%, transparent);
 		box-shadow:
-			0 0 16px oklch(0.60 0.20 250 / 0.5),
-			inset 0 0 10px oklch(0.60 0.20 250 / 0.3);
+			0 0 16px color-mix(in oklch, var(--color-primary) 50%, transparent),
+			inset 0 0 10px color-mix(in oklch, var(--color-primary) 30%, transparent);
 	}
 
 	.collapsed-indicator {
@@ -272,8 +275,8 @@
 		background: linear-gradient(
 			90deg,
 			transparent 0%,
-			oklch(0.50 0.08 250 / 0.3) 20%,
-			oklch(0.50 0.08 250 / 0.3) 80%,
+			color-mix(in oklch, var(--color-base-content) 30%, transparent) 20%,
+			color-mix(in oklch, var(--color-base-content) 30%, transparent) 80%,
 			transparent 100%
 		);
 		transition: background 200ms ease, height 200ms ease;
@@ -285,8 +288,8 @@
 		background: linear-gradient(
 			90deg,
 			transparent 0%,
-			oklch(0.70 0.15 250 / 0.7) 15%,
-			oklch(0.70 0.15 250 / 0.7) 85%,
+			color-mix(in oklch, var(--color-primary) 70%, transparent) 15%,
+			color-mix(in oklch, var(--color-primary) 70%, transparent) 85%,
 			transparent 100%
 		);
 	}
@@ -302,7 +305,7 @@
 		width: 3px;
 		height: 3px;
 		border-radius: 50%;
-		background: oklch(0.60 0.12 250);
+		background: var(--color-base-content);
 		transition: width 200ms ease, height 200ms ease, background 200ms ease, box-shadow 200ms ease;
 	}
 
@@ -315,7 +318,7 @@
 	.divider-collapsed.expanded .indicator-dots span {
 		width: 5px;
 		height: 5px;
-		background: oklch(0.80 0.18 250);
-		box-shadow: 0 0 8px oklch(0.80 0.18 250 / 0.7);
+		background: var(--color-primary);
+		box-shadow: 0 0 8px color-mix(in oklch, var(--color-primary) 70%, transparent);
 	}
 </style>

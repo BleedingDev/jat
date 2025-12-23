@@ -162,7 +162,7 @@
 		>
 			<span class="uppercase">{label}</span>
 			<span
-				class="px-1.5 py-0.5 rounded text-xs font-mono {selected.size > 0 && !(emptyMeansAll && selected.size === 0) ? 'filter-count-active' : 'filter-count-inactive'}"
+				class="px-1.5 py-0.5 rounded text-xs font-mono {selected.size > 0 && !(emptyMeansAll && selected.size === 0) ? 'bg-primary/20 text-primary' : 'bg-base-300 text-base-content opacity-60'}"
 			>
 				{displayText}
 			</span>
@@ -213,7 +213,7 @@
 				<div class="flex flex-wrap gap-1.5">
 					{#each options as opt}
 						<button
-							class="px-2 py-0.5 rounded font-mono text-xs transition-all cursor-pointer border {selected.has(opt.value) ? 'filter-option-selected' : 'filter-option-default'}"
+							class="px-2 py-0.5 rounded font-mono text-xs transition-all cursor-pointer border {selected.has(opt.value) ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-base-300 border-base-content/20 text-base-content opacity-70 hover:opacity-100'}"
 							onclick={() => handleToggle(opt.value)}
 							onkeydown={(e) => handleKeydown(e, opt.value)}
 						>
@@ -227,34 +227,3 @@
 	</div>
 {/if}
 
-<style>
-	/* Filter count badge states */
-	.filter-count-active {
-		background: color-mix(in oklch, var(--color-primary) 20%, transparent);
-		color: var(--color-primary);
-	}
-
-	.filter-count-inactive {
-		background: var(--color-base-300);
-		color: var(--color-base-content);
-		opacity: 0.6;
-	}
-
-	/* Filter option states */
-	.filter-option-selected {
-		background: color-mix(in oklch, var(--color-primary) 20%, transparent);
-		border-color: color-mix(in oklch, var(--color-primary) 40%, transparent);
-		color: var(--color-primary);
-	}
-
-	.filter-option-default {
-		background: var(--color-base-300);
-		border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
-		color: var(--color-base-content);
-		opacity: 0.7;
-	}
-
-	.filter-option-default:hover {
-		opacity: 1;
-	}
-</style>

@@ -107,7 +107,7 @@
 
 	.resize-handle:hover,
 	.resize-handle.dragging {
-		background: oklch(0.5 0.1 250 / 0.15);
+		background: color-mix(in oklch, var(--color-primary) 15%, transparent);
 	}
 
 	.grippy {
@@ -127,18 +127,21 @@
 		width: 3px;
 		height: 3px;
 		border-radius: 50%;
-		background: oklch(0.60 0.08 250);
-		transition: background 0.15s ease, box-shadow 0.15s ease;
+		background: var(--color-base-content);
+		opacity: 0.5;
+		transition: background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 	}
 
 	.resize-handle:hover .grippy span,
 	.resize-handle.dragging .grippy span {
-		background: oklch(0.70 0.12 250);
-		box-shadow: 0 0 4px oklch(0.70 0.12 250 / 0.5);
+		background: var(--color-primary);
+		opacity: 0.8;
+		box-shadow: 0 0 4px color-mix(in oklch, var(--color-primary) 50%, transparent);
 	}
 
 	.resize-handle.dragging .grippy span {
-		background: oklch(0.75 0.15 200);
-		box-shadow: 0 0 6px oklch(0.75 0.15 200 / 0.6);
+		background: var(--color-info);
+		opacity: 1;
+		box-shadow: 0 0 6px color-mix(in oklch, var(--color-info) 60%, transparent);
 	}
 </style>

@@ -27,6 +27,7 @@
 	} from '$lib/components/signals';
 	import type { SuggestedTask } from '$lib/types/signals';
 	import { workSessionsState, sendInput } from '$lib/stores/workSessions.svelte';
+	import { throttledFetch } from '$lib/utils/requestThrottler';
 	import type {
 		WorkingSignal,
 		ReviewSignal,
@@ -760,7 +761,7 @@
 
 		try {
 			const tmuxName = sessionName.startsWith('jat-') ? sessionName : `jat-${sessionName}`;
-			const response = await fetch(`/api/sessions/${tmuxName}/timeline?limit=${maxEvents}`);
+			const response = await throttledFetch(`/api/sessions/${tmuxName}/timeline?limit=${maxEvents}`);
 			if (!response.ok) {
 				throw new Error(`Failed to fetch timeline: ${response.status}`);
 			}
@@ -939,6 +940,7 @@
 											showFeedback={showCreateFeedback}
 											onDismissFeedback={dismissFeedback}
 											{availableProjects}
+											{onTaskClick}
 										/>
 									{:else if event.type === 'complete' && event.data}
 										<!-- Rich Completion Bundle UI -->
@@ -1026,6 +1028,7 @@
 														showFeedback={showCreateFeedback}
 														onDismissFeedback={dismissFeedback}
 														{availableProjects}
+														{onTaskClick}
 													/>
 												</div>
 											{/if}

@@ -145,34 +145,20 @@
 
 <!-- Industrial Token Usage Badge -->
 <div class="flex items-center gap-2" title={tooltipText}>
-	<!-- Tokens Badge - Industrial -->
-	<span
-		class="px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1"
-		style="
-			background: oklch(0.18 0.01 250);
-			border: 1px solid oklch(0.35 0.02 250);
-			color: oklch(0.70 0.18 240);
-		"
-	>
+	<!-- Tokens Badge - Industrial theme using CSS variables -->
+	<span class="badge-tokens px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1">
 		{#if !compact}
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.18 240);">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
 			</svg>
 		{/if}
 		<AnimatedDigits value={formatTokensCompact(tokensToday)} class="font-medium" />
 	</span>
 
-	<!-- Cost Badge - Industrial -->
-	<span
-		class="px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1"
-		style="
-			background: oklch(0.18 0.01 250);
-			border: 1px solid oklch(0.35 0.02 250);
-			color: oklch(0.70 0.15 150);
-		"
-	>
+	<!-- Cost Badge - Industrial theme using CSS variables -->
+	<span class="badge-cost px-2 py-0.5 rounded text-xs font-mono flex items-center gap-1">
 		{#if !compact}
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.15 150);">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 		{/if}
@@ -210,3 +196,18 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Industrial badge styles using theme CSS variables */
+	.badge-tokens {
+		background: var(--color-base-200);
+		border: 1px solid var(--color-neutral);
+		color: var(--color-primary);
+	}
+
+	.badge-cost {
+		background: var(--color-base-200);
+		border: 1px solid var(--color-neutral);
+		color: var(--color-success);
+	}
+</style>

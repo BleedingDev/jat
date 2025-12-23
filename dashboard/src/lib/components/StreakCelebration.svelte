@@ -131,16 +131,16 @@
 		display: grid;
 		place-content: center;
 		z-index: 100;
-		background: oklch(0.10 0.02 250 / 0.85);
+		background: color-mix(in oklch, var(--color-base-100) 85%, transparent);
 		backdrop-filter: blur(4px);
 		border-radius: inherit;
 		cursor: pointer;
 	}
 
 	.victory-panel {
-		--panel-bg: oklch(0.20 0.03 250);
-		--panel-border: oklch(0.40 0.08 145);
-		--panel-highlight: oklch(0.70 0.20 145);
+		--panel-bg: var(--color-base-200);
+		--panel-border: var(--color-success);
+		--panel-highlight: color-mix(in oklch, var(--color-success) 80%, white);
 
 		background: var(--panel-border);
 		position: relative;
@@ -221,7 +221,7 @@
 		font-size: 1rem;
 		font-weight: 700;
 		font-family: ui-monospace, monospace;
-		color: oklch(0.90 0.05 145);
+		color: var(--color-success);
 		margin: 0;
 		white-space: nowrap;
 	}
@@ -294,7 +294,7 @@
 
 	/* Individual star styling */
 	.star {
-		--star-color: oklch(0.75 0.20 145);
+		--star-color: var(--color-success);
 		--delay: calc(var(--delay-multiplier) * 10s);
 		--duration: 0.5s;
 
@@ -361,8 +361,8 @@
 		position: absolute;
 		width: var(--size);
 		height: var(--size);
-		stroke: oklch(0.80 0.15 145);
-		fill: oklch(0.95 0.05 145);
+		stroke: var(--color-success);
+		fill: color-mix(in oklch, var(--color-success) 30%, white);
 		top: 0;
 		right: 0;
 		animation: star-sparkles 3.5s ease-out both infinite;

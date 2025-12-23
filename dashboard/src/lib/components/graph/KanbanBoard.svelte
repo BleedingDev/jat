@@ -120,8 +120,7 @@
 											<div class="flex items-center gap-1.5">
 												{#if blockedTasks.length > 0}
 													<span
-														class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
-														style="color: oklch(0.75 0.15 200); background: oklch(0.75 0.15 200 / 0.15);"
+														class="unblocks-badge inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
 														title="Completing this task unblocks {blockedTasks.length} other {blockedTasks.length === 1 ? 'task' : 'tasks'}: {blockedTasks.slice(0, 3).map(t => t.id).join(', ')}{blockedTasks.length > 3 ? '...' : ''}"
 													>
 														<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -250,5 +249,11 @@
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	/* Unblocks badge - shows how many tasks this unblocks */
+	.unblocks-badge {
+		color: var(--color-info);
+		background: color-mix(in oklch, var(--color-info) 15%, transparent);
 	}
 </style>

@@ -119,9 +119,9 @@
 				<AgentAvatar {name} {size} />
 			</div>
 		</div>
-		<span class="font-medium text-xs" style="color: oklch(0.70 0.12 220);">{name}</span>
+		<span class="font-medium text-xs text-info">{name}</span>
 		{#if variant === 'timer' && workingDuration}
-			<span class="countdown font-mono text-xs tabular-nums" style="color: oklch(0.55 0.08 220);" title="Working for {workingDuration.display}">
+			<span class="countdown font-mono text-xs tabular-nums text-info/70" title="Working for {workingDuration.display}">
 				{#if workingDuration.hours > 0}
 					<span style="--value:{workingDuration.hours};"></span>h
 					<span style="--value:{workingDuration.mins};"></span>m

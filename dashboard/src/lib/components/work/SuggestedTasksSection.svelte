@@ -75,6 +75,8 @@
 		onDismissFeedback?: () => void;
 		/** Available projects for dropdown (from parent/store) */
 		availableProjects?: string[];
+		/** Callback when user clicks a task ID (opens detail drawer) */
+		onTaskClick?: (taskId: string) => void;
 	}
 
 	let {
@@ -90,6 +92,7 @@
 		showFeedback = false,
 		onDismissFeedback,
 		availableProjects = [],
+		onTaskClick,
 	}: Props = $props();
 
 	// Collapsed state for the section
@@ -105,13 +108,13 @@
 	// Task type options
 	const TASK_TYPES = ['feature', 'bug', 'task', 'chore', 'epic'];
 
-	// Priority options with colors
+	// Priority options with CSS class names (colors defined in style block)
 	const PRIORITIES = [
-		{ value: 0, label: 'P0', color: 'oklch(0.65 0.25 25)', textColor: 'oklch(0.15 0.02 250)' },
-		{ value: 1, label: 'P1', color: 'oklch(0.70 0.20 50)', textColor: 'oklch(0.15 0.02 250)' },
-		{ value: 2, label: 'P2', color: 'oklch(0.75 0.15 85)', textColor: 'oklch(0.15 0.02 250)' },
-		{ value: 3, label: 'P3', color: 'oklch(0.70 0.08 250)', textColor: 'oklch(0.95 0.02 250)' },
-		{ value: 4, label: 'P4', color: 'oklch(0.65 0.05 250)', textColor: 'oklch(0.95 0.02 250)' },
+		{ value: 0, label: 'P0', cssClass: 'priority-p0' },
+		{ value: 1, label: 'P1', cssClass: 'priority-p1' },
+		{ value: 2, label: 'P2', cssClass: 'priority-p2' },
+		{ value: 3, label: 'P3', cssClass: 'priority-p3' },
+		{ value: 4, label: 'P4', cssClass: 'priority-p4' },
 	];
 
 	function toggleCollapse() {
@@ -254,10 +257,10 @@
 		}
 	}
 
-	// Get priority color
-	function getPriorityColor(priority: number): { bg: string; text: string } {
+	// Get priority class name
+	function getPriorityClass(priority: number): string {
 		const p = PRIORITIES.find((p) => p.value === priority) || PRIORITIES[2];
-		return { bg: p.color, text: p.textColor };
+		return p.cssClass;
 	}
 
 	// Truncate description to a sensible length
@@ -268,11 +271,7 @@
 </script>
 
 <div
-	class="suggested-tasks-section rounded-lg overflow-hidden"
-	style="
-		background: linear-gradient(135deg, oklch(0.24 0.04 280) 0%, oklch(0.20 0.03 280) 100%);
-		border: 1px solid oklch(0.40 0.08 280 / 0.5);
-	"
+	class="suggested-tasks-section rounded-lg overflow-hidden bg-base-200 border border-base-300"
 >
 	<!-- Header (always visible, click to collapse/expand) -->
 	<button
@@ -283,8 +282,7 @@
 		<div class="flex items-center gap-2">
 			<!-- Lightbulb icon -->
 			<svg
-				class="w-4 h-4"
-				style="color: oklch(0.80 0.15 280);"
+				class="w-4 h-4 text-primary"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -296,21 +294,15 @@
 					d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"
 				/>
 			</svg>
-			<span class="font-semibold text-sm" style="color: oklch(0.90 0.10 280);">
+			<span class="font-semibold text-sm text-base-content">
 				Suggested Tasks
 			</span>
 			<!-- Count badge -->
-			<span
-				class="badge badge-sm font-mono pt-1"
-				style="background: oklch(0.35 0.12 280); color: oklch(0.95 0.05 280); border: none;"
-			>
+			<span class="badge badge-sm badge-neutral font-mono pt-1">
 				{tasks.length}
 			</span>
 			{#if selectedCount > 0 && isCollapsed}
-				<span
-					class="badge badge-sm font-mono"
-					style="background: oklch(0.50 0.18 145); color: oklch(0.98 0 0); border: none;"
-				>
+				<span class="badge badge-sm badge-success font-mono">
 					{selectedCount} selected
 				</span>
 			{/if}
@@ -318,9 +310,8 @@
 
 		<!-- Collapse/Expand chevron -->
 		<svg
-			class="w-4 h-4 transition-transform duration-200"
+			class="w-4 h-4 transition-transform duration-200 text-base-content/60"
 			class:rotate-180={!isCollapsed}
-			style="color: oklch(0.70 0.05 280);"
 			fill="none"
 			viewBox="0 0 24 24"
 			stroke="currentColor"
@@ -334,10 +325,7 @@
 	{#if !isCollapsed}
 		<div class="px-3 pb-3 space-y-2" transition:slide={{ duration: 200 }}>
 			<!-- Bulk actions -->
-			<div
-				class="flex items-center justify-between text-xs"
-				style="color: oklch(0.70 0.03 280);"
-			>
+			<div class="flex items-center justify-between text-xs text-base-content/60">
 				<div class="flex items-center gap-2">
 					<button
 						type="button"
@@ -356,7 +344,7 @@
 					</button>
 				</div>
 				{#if selectedCount > 0}
-					<span style="color: oklch(0.75 0.15 145);">
+					<span class="text-success">
 						{selectedCount} of {tasks.length} selected
 					</span>
 				{/if}
@@ -375,28 +363,17 @@
 					{@const effectiveProject = getEffectiveValue(task, 'project') || ''}
 					{@const effectiveLabels = getEffectiveValue(task, 'labels') || ''}
 					{@const effectiveDependsOn = getEffectiveValue(task, 'depends_on') || []}
-					{@const priorityColors = getPriorityColor(effectivePriority)}
+					{@const priorityClass = getPriorityClass(effectivePriority)}
 					{@const typeVisual = getIssueTypeVisual(effectiveType)}
 
 					<div
-						class="rounded-md transition-all"
-						style="
-							background: {task.alreadyCreated
-							? 'oklch(0.22 0.05 145 / 0.3)'
+						class="task-card rounded-md transition-all border {task.alreadyCreated
+							? 'task-card-created'
 							: task.selected
 								? isHuman
-									? 'oklch(0.28 0.08 50 / 0.4)'
-									: 'oklch(0.30 0.08 220 / 0.35)'
-								: 'oklch(0.20 0.02 280 / 0.5)'};
-							border: 1px solid {task.alreadyCreated
-							? 'oklch(0.45 0.12 145 / 0.5)'
-							: task.selected
-								? isHuman
-									? 'oklch(0.55 0.15 50 / 0.6)'
-									: 'oklch(0.50 0.15 220 / 0.5)'
-								: 'oklch(0.35 0.03 280 / 0.3)'};
-							opacity: {task.alreadyCreated ? '0.75' : '1'};
-						"
+									? 'task-card-human-selected'
+									: 'task-card-agent-selected'
+								: 'task-card-default'}"
 					>
 						<!-- Main task row -->
 						<div
@@ -409,29 +386,18 @@
 						>
 							<!-- Checkbox (or Created indicator) -->
 							<div
-								class="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 transition-colors"
-								style="
-									background: {task.alreadyCreated
-									? 'oklch(0.35 0.10 145)'
+								class="task-checkbox flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 transition-colors {task.alreadyCreated
+									? 'checkbox-created'
 									: task.selected
 										? isHuman
-											? 'oklch(0.55 0.18 50)'
-											: 'oklch(0.55 0.18 220)'
-										: 'transparent'};
-									border-color: {task.alreadyCreated
-									? 'oklch(0.45 0.12 145)'
-									: task.selected
-										? isHuman
-											? 'oklch(0.55 0.18 50)'
-											: 'oklch(0.55 0.18 220)'
-										: 'oklch(0.50 0.05 280)'};
-								"
+											? 'checkbox-human-selected'
+											: 'checkbox-agent-selected'
+										: 'checkbox-default'}"
 								title={task.alreadyCreated ? 'Already created in Beads' : ''}
 							>
 								{#if task.alreadyCreated || task.selected}
 									<svg
-										class="w-3 h-3"
-										style="color: {task.alreadyCreated ? 'oklch(0.75 0.15 145)' : 'white'};"
+										class="w-3 h-3 {task.alreadyCreated ? 'text-success' : 'text-base-100'}"
 										fill="none"
 										viewBox="0 0 24 24"
 										stroke="currentColor"
@@ -448,10 +414,7 @@
 
 							<!-- Human/Agent indicator -->
 							<span
-								class="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold mt-0.5"
-								style="background: {isHuman
-									? 'oklch(0.45 0.18 50)'
-									: 'oklch(0.45 0.15 220)'}; color: oklch(0.98 0.02 250);"
+								class="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold mt-0.5 text-base-100 {isHuman ? 'badge-human' : 'badge-agent'}"
 								title={isHuman
 									? 'Human task (requires manual action)'
 									: 'Agent task (can be automated)'}
@@ -465,8 +428,7 @@
 								<div class="flex items-center gap-1.5 flex-wrap">
 									<!-- Priority dropdown -->
 									<select
-										class="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer appearance-none priority-select"
-										style="background: {priorityColors.bg}; color: {priorityColors.text}; border: none; min-width: 36px;"
+										class="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer appearance-none priority-select {priorityClass}"
 										value={effectivePriority}
 										onclick={(e) => e.stopPropagation()}
 										onchange={(e) =>
@@ -479,8 +441,7 @@
 
 									<!-- Type dropdown -->
 									<select
-										class="text-[9px] px-1.5 py-0.5 rounded font-mono cursor-pointer appearance-none capitalize type-select"
-										style="background: oklch(0.35 0.04 250); color: oklch(0.85 0.02 250); border: 1px solid oklch(0.45 0.02 250);"
+										class="text-[9px] px-1.5 py-0.5 rounded font-mono cursor-pointer appearance-none capitalize type-select bg-base-300 text-base-content border border-base-content/20"
 										value={effectiveType}
 										onclick={(e) => e.stopPropagation()}
 										onchange={(e) => updateType(taskKey, e.currentTarget.value, e)}
@@ -503,8 +464,7 @@
 											onblur={() => saveTitle(taskKey)}
 											onkeydown={(e) => handleTitleKeydown(e, taskKey)}
 											onclick={(e) => e.stopPropagation()}
-											class="flex-1 min-w-0 text-xs px-1.5 py-0.5 rounded"
-											style="background: oklch(0.35 0.02 250); color: oklch(0.95 0.02 250); border: 1px solid oklch(0.55 0.15 220);"
+											class="flex-1 min-w-0 text-xs px-1.5 py-0.5 rounded bg-base-300 text-base-content border border-info"
 											autofocus
 										/>
 									{:else}
@@ -512,8 +472,7 @@
 											type="button"
 											onclick={(e) => e.stopPropagation()}
 											ondblclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
-											class="flex-1 min-w-0 text-xs text-left font-medium truncate hover:underline"
-											style="color: oklch(0.92 0.03 280);"
+											class="flex-1 min-w-0 text-xs text-left font-medium truncate hover:underline text-base-content"
 											title="Double-click to edit title"
 										>
 											{effectiveTitle}
@@ -522,8 +481,7 @@
 										<button
 											type="button"
 											onclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
-											class="text-[10px] p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
-											style="color: oklch(0.70 0.08 220);"
+											class="text-[10px] p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity text-info"
 											title="Edit title"
 										>
 											<svg
@@ -545,8 +503,7 @@
 									<!-- Already Created indicator -->
 									{#if task.alreadyCreated}
 										<span
-											class="badge badge-xs font-mono gap-1"
-											style="background: oklch(0.35 0.10 145); color: oklch(0.75 0.15 145); border: none;"
+											class="badge badge-xs badge-success font-mono gap-1"
 											title="This task already exists in Beads"
 										>
 											<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
@@ -558,10 +515,7 @@
 
 									<!-- Edited indicator with revert button -->
 									{#if task.edited && !task.alreadyCreated}
-										<span
-											class="badge badge-xs font-mono"
-											style="background: oklch(0.50 0.15 45); color: oklch(0.95 0.05 45); border: none;"
-										>
+										<span class="badge badge-xs badge-warning font-mono">
 											edited
 										</span>
 										{#if onClearEdits}
@@ -606,8 +560,7 @@
 									<button
 										type="button"
 										onclick={(e) => toggleExpand(taskKey, e)}
-										class="text-xs mt-0.5 line-clamp-2 text-left hover:underline cursor-pointer w-full"
-										style="color: oklch(0.70 0.03 280);"
+										class="text-xs mt-0.5 line-clamp-2 text-left hover:underline cursor-pointer w-full text-base-content/60"
 										title="Click to expand and edit description"
 									>
 										{truncateDescription(effectiveDescription)}
@@ -616,7 +569,7 @@
 
 								<!-- Reason (if provided) -->
 								{#if task.reason && !isExpanded}
-									<p class="text-xs mt-1 italic" style="color: oklch(0.65 0.08 200);">
+									<p class="text-xs mt-1 italic text-info/80">
 										💡 {task.reason}
 									</p>
 								{/if}
@@ -632,14 +585,13 @@
 							>
 								<!-- Description -->
 								<div>
-									<label class="text-[9px] font-semibold opacity-60 block mb-0.5" style="color: oklch(0.70 0.02 250);">
+									<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 										Description
 									</label>
 									<textarea
 										value={effectiveDescription}
 										oninput={(e) => updateDescription(taskKey, e.currentTarget.value)}
-										class="w-full text-[11px] p-2 rounded resize-none"
-										style="background: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); border: 1px solid oklch(0.40 0.02 250); min-height: 50px;"
+										class="w-full text-[11px] p-2 rounded resize-none bg-base-300 text-base-content border border-base-content/20 min-h-[50px]"
 										placeholder="Task description..."
 									></textarea>
 								</div>
@@ -647,15 +599,14 @@
 								<!-- Project and Labels row -->
 								<div class="grid grid-cols-2 gap-2">
 									<div>
-										<label class="text-[9px] font-semibold opacity-60 block mb-0.5" style="color: oklch(0.70 0.02 250);">
+										<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 											Project
 										</label>
 										{#if availableProjects.length > 0}
 											<select
 												value={effectiveProject}
 												onchange={(e) => updateProject(taskKey, e.currentTarget.value)}
-												class="w-full text-[11px] px-2 py-1 rounded cursor-pointer project-select"
-												style="background: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
+												class="w-full text-[11px] px-2 py-1 rounded cursor-pointer project-select bg-base-300 text-base-content border border-base-content/20"
 											>
 												<option value="">Select project...</option>
 												{#each availableProjects as project}
@@ -667,22 +618,20 @@
 												type="text"
 												value={effectiveProject}
 												oninput={(e) => updateProject(taskKey, e.currentTarget.value)}
-												class="w-full text-[11px] px-2 py-1 rounded"
-												style="background: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
+												class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
 												placeholder="e.g., jat, chimaro"
 											/>
 										{/if}
 									</div>
 									<div>
-										<label class="text-[9px] font-semibold opacity-60 block mb-0.5" style="color: oklch(0.70 0.02 250);">
+										<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 											Labels
 										</label>
 										<input
 											type="text"
 											value={effectiveLabels}
 											oninput={(e) => updateLabels(taskKey, e.currentTarget.value)}
-											class="w-full text-[11px] px-2 py-1 rounded"
-											style="background: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
+											class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
 											placeholder="label1, label2, ..."
 										/>
 									</div>
@@ -690,24 +639,20 @@
 
 								<!-- Dependencies -->
 								<div>
-									<label class="text-[9px] font-semibold opacity-60 block mb-0.5" style="color: oklch(0.70 0.02 250);">
+									<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 										Depends On (task IDs)
 									</label>
 									<input
 										type="text"
 										value={effectiveDependsOn.join(', ')}
 										oninput={(e) => updateDependsOn(taskKey, e.currentTarget.value)}
-										class="w-full text-[11px] px-2 py-1 rounded"
-										style="background: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
+										class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
 										placeholder="jat-abc, jat-xyz, ..."
 									/>
 								</div>
 
 								{#if task.reason}
-									<p
-										class="text-[9px] mt-1 opacity-60"
-										style="color: oklch(0.65 0.08 200);"
-									>
+									<p class="text-[9px] mt-1 opacity-60 text-info/80">
 										💡 Reason: {task.reason}
 									</p>
 								{/if}
@@ -722,13 +667,7 @@
 				<div class="pt-2 flex justify-end">
 					<button
 						type="button"
-						class="btn btn-sm gap-2"
-						style="
-							background: linear-gradient(135deg, oklch(0.50 0.18 145) 0%, oklch(0.45 0.15 160) 100%);
-							color: oklch(0.98 0 0);
-							border: none;
-							box-shadow: 0 2px 8px oklch(0.50 0.18 145 / 0.3);
-						"
+						class="btn btn-sm btn-success gap-2"
 						onclick={handleCreateSelected}
 						disabled={isCreating}
 					>
@@ -772,37 +711,38 @@
 			<!-- Feedback message after task creation -->
 			{#if showFeedback && (createResults.success.length > 0 || createResults.failed.length > 0)}
 				<div
-					class="mt-2 p-2 rounded-lg text-xs"
-					style="
-						background: {createResults.failed.length > 0
-							? 'oklch(0.30 0.10 25 / 0.3)'
-							: 'oklch(0.30 0.12 145 / 0.3)'};
-						border: 1px solid {createResults.failed.length > 0
-							? 'oklch(0.50 0.15 25 / 0.5)'
-							: 'oklch(0.50 0.15 145 / 0.5)'};
-					"
+					class="mt-2 p-2 rounded-lg text-xs {createResults.failed.length > 0 ? 'alert alert-error' : 'alert alert-success'}"
 					transition:slide={{ duration: 200 }}
 				>
 					<!-- Success message -->
 					{#if createResults.success.length > 0}
-						<div class="flex items-center gap-2" style="color: oklch(0.75 0.15 145);">
-							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<div class="flex items-start gap-2 text-success-content">
+							<svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 							</svg>
-							<span>
-								Created {createResults.success.length} task{createResults.success.length > 1 ? 's' : ''}
-								{#if createResults.success.some(r => r.taskId)}
-									<span class="opacity-70">
-										({createResults.success.filter(r => r.taskId).map(r => r.taskId).join(', ')})
-									</span>
-								{/if}
-							</span>
+							<div class="flex flex-wrap items-center gap-1">
+								<span>Created {createResults.success.length} task{createResults.success.length > 1 ? 's' : ''}:</span>
+								{#each createResults.success.filter(r => r.taskId) as result}
+									{#if onTaskClick}
+										<button
+											type="button"
+											onclick={() => onTaskClick(result.taskId!)}
+											class="badge badge-sm bg-success-content text-success gap-1 font-mono hover:brightness-110 cursor-pointer transition-all"
+											title="Click to view task details"
+										>
+											{result.taskId}
+										</button>
+									{:else}
+										<span class="badge badge-sm bg-success-content text-success font-mono">{result.taskId}</span>
+									{/if}
+								{/each}
+							</div>
 						</div>
 					{/if}
 
 					<!-- Error message -->
 					{#if createResults.failed.length > 0}
-						<div class="flex items-start gap-2 mt-1" style="color: oklch(0.75 0.15 25);">
+						<div class="flex items-start gap-2 mt-1 text-error">
 							<svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
 							</svg>
@@ -828,8 +768,7 @@
 							<button
 								type="button"
 								onclick={onDismissFeedback}
-								class="text-[10px] px-2 py-0.5 rounded opacity-70 hover:opacity-100 transition-opacity"
-								style="background: oklch(0.35 0.02 250); color: oklch(0.85 0.02 250);"
+								class="text-[10px] px-2 py-0.5 rounded opacity-70 hover:opacity-100 transition-opacity bg-base-300 text-base-content"
 							>
 								Dismiss
 							</button>
@@ -839,7 +778,7 @@
 			{/if}
 
 			<!-- Hint -->
-			<p class="text-[9px] mt-1 text-center opacity-40" style="color: oklch(0.60 0.02 280);">
+			<p class="text-[9px] mt-1 text-center opacity-40 text-base-content/50">
 				Double-click or ✏️ to edit title • Click description to edit • Dropdowns for priority/type
 			</p>
 		</div>
@@ -877,5 +816,97 @@
 
 	.project-select {
 		appearance: none;
+	}
+
+	/* Task card states */
+	.task-card-default {
+		background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+		border-color: var(--color-base-content) / 0.2;
+	}
+
+	.task-card-created {
+		background: color-mix(in oklch, var(--color-success) 20%, transparent);
+		border-color: color-mix(in oklch, var(--color-success) 50%, transparent);
+		opacity: 0.75;
+	}
+
+	.task-card-human-selected {
+		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		border-color: color-mix(in oklch, var(--color-warning) 50%, transparent);
+	}
+
+	.task-card-agent-selected {
+		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		border-color: color-mix(in oklch, var(--color-info) 50%, transparent);
+	}
+
+	/* Checkbox states */
+	.checkbox-default {
+		background: transparent;
+		border-color: var(--color-base-content) / 0.4;
+	}
+
+	.checkbox-created {
+		background: color-mix(in oklch, var(--color-success) 40%, transparent);
+		border-color: var(--color-success);
+	}
+
+	.checkbox-human-selected {
+		background: var(--color-warning);
+		border-color: var(--color-warning);
+	}
+
+	.checkbox-agent-selected {
+		background: var(--color-info);
+		border-color: var(--color-info);
+	}
+
+	/* Human/Agent badges */
+	.badge-human {
+		background: var(--color-warning);
+	}
+
+	.badge-agent {
+		background: var(--color-info);
+	}
+
+	/* Priority classes */
+	.priority-p0 {
+		background: color-mix(in oklch, var(--color-error) 30%, transparent);
+		color: var(--color-error);
+		border: none;
+		min-width: 36px;
+	}
+
+	.priority-p1 {
+		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		color: var(--color-warning);
+		border: none;
+		min-width: 36px;
+	}
+
+	.priority-p2 {
+		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		color: var(--color-info);
+		border: none;
+		min-width: 36px;
+	}
+
+	.priority-p3 {
+		background: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+		color: var(--color-base-content) / 0.7;
+		border: none;
+		min-width: 36px;
+	}
+
+	.priority-p4 {
+		background: color-mix(in oklch, var(--color-base-content) 15%, transparent);
+		color: var(--color-base-content) / 0.5;
+		border: none;
+		min-width: 36px;
+	}
+
+	.priority-select {
+		min-width: 36px;
 	}
 </style>
