@@ -283,19 +283,19 @@
 	>
 		<!-- Header -->
 		<header class="drawer-header">
-			<div class="header-content">
+			<div class="flex items-center gap-3">
 				<div class="header-icon">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
 						<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
 					</svg>
 				</div>
 				<div>
-					<h2 class="header-title">Task History</h2>
-					<p class="header-subtitle">{stats.totalCompleted} tasks completed</p>
+					<h2 class="text-base font-semibold text-base-content font-mono tracking-tight m-0">Task History</h2>
+					<p class="text-xs text-base-content/60 m-0">{stats.totalCompleted} tasks completed</p>
 				</div>
 			</div>
 			<button
-				class="close-btn"
+				class="w-8 h-8 rounded-md bg-transparent border border-base-content/20 text-base-content/60 cursor-pointer flex items-center justify-center transition-all duration-150 hover:bg-base-content/10 hover:text-base-content/80 hover:border-base-content/30"
 				onclick={handleClose}
 				aria-label="Close"
 			>
@@ -308,93 +308,93 @@
 		<!-- Content -->
 		<div class="drawer-content">
 			{#if loading}
-				<div class="loading-state">
+				<div class="flex flex-col items-center justify-center py-12 px-4 text-base-content/60 text-center gap-3">
 					<span class="loading loading-spinner loading-lg"></span>
 					<p>Loading history...</p>
 				</div>
 			{:else if error}
-				<div class="error-state">
+				<div class="flex flex-col items-center justify-center py-12 px-4 text-base-content/60 text-center gap-3">
 					<p>{error}</p>
-					<button class="retry-btn" onclick={fetchTasks}>Retry</button>
+					<button class="px-4 py-2 bg-base-content/15 border border-base-content/25 rounded-md text-base-content/80 cursor-pointer text-sm transition-all hover:bg-base-content/20" onclick={fetchTasks}>Retry</button>
 				</div>
 			{:else}
 				<!-- Stats Row -->
-				<div class="stats-row">
+				<div class="grid grid-cols-4 gap-2">
 					<div class="stat-card streak-card">
-						<div class="stat-icon">
+						<div class="text-xl">
 							<span class="streak-fire">🔥</span>
 						</div>
-						<div class="stat-content">
-							<span class="stat-value">
+						<div class="flex flex-col items-center">
+							<span class="text-xl font-bold text-base-content font-mono leading-none">
 								<AnimatedDigits value={stats.streak.toString()} />
 							</span>
-							<span class="stat-label">day streak</span>
+							<span class="text-[0.65rem] text-base-content/50 uppercase tracking-wide mt-0.5">day streak</span>
 						</div>
 					</div>
 
 					<div class="stat-card">
-						<div class="stat-content">
-							<span class="stat-value today-value">
+						<div class="flex flex-col items-center">
+							<span class="text-xl font-bold text-warning font-mono leading-none">
 								<AnimatedDigits value={stats.todayCount.toString()} />
 							</span>
-							<span class="stat-label">today</span>
+							<span class="text-[0.65rem] text-base-content/50 uppercase tracking-wide mt-0.5">today</span>
 						</div>
 					</div>
 
 					<div class="stat-card">
-						<div class="stat-content">
-							<span class="stat-value">
+						<div class="flex flex-col items-center">
+							<span class="text-xl font-bold text-base-content font-mono leading-none">
 								<AnimatedDigits value={stats.bestStreak.toString()} />
 							</span>
-							<span class="stat-label">best streak</span>
+							<span class="text-[0.65rem] text-base-content/50 uppercase tracking-wide mt-0.5">best streak</span>
 						</div>
 					</div>
 
 					<div class="stat-card">
-						<div class="stat-content">
-							<span class="stat-value">
+						<div class="flex flex-col items-center">
+							<span class="text-xl font-bold text-base-content font-mono leading-none">
 								{stats.avgPerDay.toFixed(1)}
 							</span>
-							<span class="stat-label">avg/day</span>
+							<span class="text-[0.65rem] text-base-content/50 uppercase tracking-wide mt-0.5">avg/day</span>
 						</div>
 					</div>
 				</div>
 
 				<!-- Calendar Section -->
-				<section class="calendar-section">
-					<h3 class="section-title">Activity</h3>
-					<div class="calendar-container">
+				<section class="bg-base-200/50 border border-base-content/15 rounded-xl p-4">
+					<h3 class="text-[0.7rem] font-semibold text-base-content/60 uppercase tracking-widest mb-3">Activity</h3>
+					<div class="overflow-x-auto pb-1">
 						<StreakCalendar {tasks} weeks={12} />
 					</div>
 				</section>
 
 				<!-- Top Contributor -->
 				{#if stats.topAgent}
-					<div class="top-agent">
-						<span class="top-agent-label">Top contributor:</span>
-						<span class="top-agent-name">{stats.topAgent.name}</span>
-						<span class="top-agent-count">({stats.topAgent.count} tasks)</span>
+					<div class="flex items-center gap-2 px-3 py-2 bg-success/10 border border-success/20 rounded-md text-xs">
+						<span class="text-base-content/60">Top contributor:</span>
+						<span class="text-success font-semibold font-mono">{stats.topAgent.name}</span>
+						<span class="text-base-content/50">({stats.topAgent.count} tasks)</span>
 					</div>
 				{/if}
 
 				<!-- Daily Breakdown -->
-				<section class="daily-section">
-					<h3 class="section-title">Recent Activity</h3>
+				<section class="flex-1">
+					<h3 class="text-[0.7rem] font-semibold text-base-content/60 uppercase tracking-widest mb-3">Recent Activity</h3>
 					<div class="day-list">
 						{#each tasksByDay as day}
 							<div class="day-group">
 								<div class="day-header">
-									<span class="day-date">{day.displayDate}</span>
-									<span class="day-count">{day.tasks.length} task{day.tasks.length !== 1 ? 's' : ''}</span>
+									<span class="text-sm font-semibold text-base-content/85 font-mono">{day.displayDate}</span>
+									<span class="text-xs text-base-content/55 px-2 py-0.5 bg-base-content/10 rounded-full">{day.tasks.length} task{day.tasks.length !== 1 ? 's' : ''}</span>
 									{#if day.agents.size > 0}
 										<div class="day-agents">
 											{#each Array.from(day.agents.entries()).slice(0, 3) as [agent, count]}
-												<span class="agent-chip" title="{agent}: {count} tasks">
+												<span class="w-6 h-6 rounded bg-info/30 text-info text-[0.6rem] font-semibold font-mono flex items-center justify-center uppercase" title="{agent}: {count} tasks">
 													{agent.slice(0, 2)}
 												</span>
 											{/each}
 											{#if day.agents.size > 3}
-												<span class="agent-chip more">+{day.agents.size - 3}</span>
+												<span class="h-6 rounded bg-base-content/10 text-base-content/60 text-[0.55rem] font-mono flex items-center justify-center px-1.5">+{day.agents.size - 3}</span>
 											{/if}
 										</div>
 									{/if}
@@ -402,7 +402,7 @@
 								<div class="day-tasks">
 									{#each day.tasks as task}
 										<button
-											class="task-item"
+											class="task-item group"
 											onclick={() => handleTaskClick(task.id)}
 										>
 											<span
@@ -410,18 +410,18 @@
 												style="background: {getPriorityColor(task.priority)}"
 											></span>
 											<div class="task-info">
-												<span class="task-title">{task.title}</span>
-												<span class="task-meta">
-													<span class="task-id">{task.id}</span>
+												<span class="text-sm text-base-content/85 whitespace-nowrap overflow-hidden text-ellipsis">{task.title}</span>
+												<span class="flex items-center gap-2 text-[0.65rem] text-base-content/50">
+													<span class="font-mono text-info/70">{task.id}</span>
 													{#if task.assignee}
-														<span class="task-agent">by {task.assignee}</span>
+														<span class="text-success/70">by {task.assignee}</span>
 													{/if}
-													<span class="task-time">
+													<span class="ml-auto">
 														{formatTime(task.closed_at || task.updated_at)}
 													</span>
 												</span>
 											</div>
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="task-arrow">
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 text-base-content/40 shrink-0 transition-all group-hover:text-base-content/60 group-hover:translate-x-0.5">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
 											</svg>
 										</button>
@@ -431,12 +431,12 @@
 						{/each}
 
 						{#if tasksByDay.length === 0}
-							<div class="empty-state">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="empty-icon">
+							<div class="flex flex-col items-center justify-center py-12 px-4 text-base-content/55 text-center gap-3">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 text-base-content/40">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 								</svg>
 								<p>No completed tasks yet</p>
-								<p class="empty-hint">Tasks will appear here when marked complete</p>
+								<p class="text-xs text-base-content/45">Tasks will appear here when marked complete</p>
 							</div>
 						{/if}
 					</div>
@@ -447,14 +447,19 @@
 {/if}
 
 <style>
+	/* Overlay - black with opacity (oklch required for precise dark overlay) */
 	.drawer-overlay {
 		position: fixed;
-		inset: 0;
-		background: oklch(0 0 0 / 0.6);
-		backdrop-filter: blur(2px);
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		backdrop-filter: blur(4px);
 		z-index: 998;
+		background: oklch(0 0 0 / 0.6);
 	}
 
+	/* Main drawer panel */
 	.history-drawer {
 		position: fixed;
 		top: 0;
@@ -462,95 +467,51 @@
 		bottom: 0;
 		width: 100%;
 		max-width: 480px;
-		background: oklch(0.16 0.02 250);
-		border-left: 1px solid oklch(0.30 0.02 250);
 		z-index: 999;
 		display: flex;
 		flex-direction: column;
+		background-color: var(--color-base-100);
+		border-left: 1px solid oklch(from var(--color-base-content) l c h / 0.2);
 		box-shadow: -8px 0 32px oklch(0 0 0 / 0.4);
 	}
 
+	/* Header */
 	.drawer-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 1rem 1.25rem;
-		border-bottom: 1px solid oklch(0.28 0.02 250);
-		background: oklch(0.14 0.02 250);
+		border-bottom: 1px solid oklch(from var(--color-base-content) l c h / 0.15);
+		background-color: oklch(from var(--color-base-200) l c h / 0.5);
 	}
 
-	.header-content {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-	}
-
+	/* Header icon - gradient (oklch required for amber-orange gradient) */
 	.header-icon {
-		width: 36px;
-		height: 36px;
-		border-radius: 8px;
-		background: linear-gradient(135deg, oklch(0.70 0.15 85), oklch(0.60 0.18 55));
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.5rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		background: linear-gradient(135deg, oklch(0.70 0.15 85), oklch(0.60 0.18 55));
 		color: oklch(0.15 0.02 85);
 	}
 
-	.header-title {
-		font-size: 1rem;
-		font-weight: 600;
-		color: oklch(0.90 0.02 250);
-		font-family: ui-monospace, monospace;
-		letter-spacing: -0.01em;
-		margin: 0;
-	}
-
-	.header-subtitle {
-		font-size: 0.75rem;
-		color: oklch(0.55 0.02 250);
-		margin: 0;
-	}
-
-	.close-btn {
-		width: 32px;
-		height: 32px;
-		border-radius: 6px;
-		background: transparent;
-		border: 1px solid oklch(0.30 0.02 250);
-		color: oklch(0.60 0.02 250);
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.15s ease;
-	}
-
-	.close-btn:hover {
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.85 0.02 250);
-		border-color: oklch(0.40 0.02 250);
-	}
-
+	/* Scrollable content */
 	.drawer-content {
 		flex: 1;
 		overflow-y: auto;
-		padding: 1rem 1.25rem;
+		padding: 1rem;
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;
 	}
 
 	/* Stats Row */
-	.stats-row {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 0.5rem;
-	}
-
 	.stat-card {
-		background: oklch(0.20 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 8px;
+		background-color: oklch(from var(--color-base-200) l c h / 0.5);
+		border: 1px solid oklch(from var(--color-base-content) l c h / 0.15);
+		border-radius: 0.5rem;
 		padding: 0.75rem 0.5rem;
 		display: flex;
 		align-items: center;
@@ -558,98 +519,18 @@
 		gap: 0.5rem;
 	}
 
+	/* Streak card - orange/red gradient (oklch required) */
 	.streak-card {
 		background: linear-gradient(135deg, oklch(0.25 0.08 35), oklch(0.22 0.05 45));
 		border-color: oklch(0.40 0.10 35);
 	}
 
-	.stat-icon {
-		font-size: 1.25rem;
-	}
-
+	/* Fire emoji glow - drop-shadow (oklch required) */
 	.streak-fire {
 		filter: drop-shadow(0 0 4px oklch(0.70 0.20 35 / 0.6));
 	}
 
-	.stat-content {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-	}
-
-	.stat-value {
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: oklch(0.90 0.02 250);
-		font-family: ui-monospace, monospace;
-		line-height: 1;
-	}
-
-	.today-value {
-		color: oklch(0.80 0.15 85);
-	}
-
-	.stat-label {
-		font-size: 0.65rem;
-		color: oklch(0.50 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		margin-top: 2px;
-	}
-
-	/* Calendar Section */
-	.calendar-section {
-		background: oklch(0.18 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 10px;
-		padding: 1rem;
-	}
-
-	.section-title {
-		font-size: 0.7rem;
-		font-weight: 600;
-		color: oklch(0.55 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		margin: 0 0 0.75rem 0;
-	}
-
-	.calendar-container {
-		overflow-x: auto;
-		padding-bottom: 0.25rem;
-	}
-
-	/* Top Agent */
-	.top-agent {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
-		background: oklch(0.20 0.04 145 / 0.3);
-		border: 1px solid oklch(0.40 0.08 145 / 0.4);
-		border-radius: 6px;
-		font-size: 0.75rem;
-	}
-
-	.top-agent-label {
-		color: oklch(0.55 0.02 250);
-	}
-
-	.top-agent-name {
-		color: oklch(0.75 0.12 145);
-		font-weight: 600;
-		font-family: ui-monospace, monospace;
-	}
-
-	.top-agent-count {
-		color: oklch(0.50 0.02 250);
-	}
-
 	/* Daily Section */
-	.daily-section {
-		flex: 1;
-	}
-
 	.day-list {
 		display: flex;
 		flex-direction: column;
@@ -657,9 +538,9 @@
 	}
 
 	.day-group {
-		background: oklch(0.18 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 8px;
+		background-color: oklch(from var(--color-base-200) l c h / 0.5);
+		border: 1px solid oklch(from var(--color-base-content) l c h / 0.15);
+		border-radius: 0.5rem;
 		overflow: hidden;
 	}
 
@@ -668,52 +549,14 @@
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.625rem 0.75rem;
-		background: oklch(0.15 0.02 250);
-		border-bottom: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.day-date {
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: oklch(0.85 0.02 250);
-		font-family: ui-monospace, monospace;
-	}
-
-	.day-count {
-		font-size: 0.7rem;
-		color: oklch(0.55 0.02 250);
-		padding: 0.125rem 0.5rem;
-		background: oklch(0.25 0.02 250);
-		border-radius: 10px;
+		background-color: oklch(from var(--color-base-300) l c h / 0.5);
+		border-bottom: 1px solid oklch(from var(--color-base-content) l c h / 0.1);
 	}
 
 	.day-agents {
 		display: flex;
 		gap: 0.25rem;
 		margin-left: auto;
-	}
-
-	.agent-chip {
-		width: 24px;
-		height: 24px;
-		border-radius: 4px;
-		background: oklch(0.30 0.08 200);
-		color: oklch(0.80 0.10 200);
-		font-size: 0.6rem;
-		font-weight: 600;
-		font-family: ui-monospace, monospace;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		text-transform: uppercase;
-	}
-
-	.agent-chip.more {
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.60 0.02 250);
-		width: auto;
-		padding: 0 0.375rem;
-		font-size: 0.55rem;
 	}
 
 	.day-tasks {
@@ -731,8 +574,8 @@
 		cursor: pointer;
 		width: 100%;
 		text-align: left;
-		transition: background 0.15s ease;
-		border-bottom: 1px solid oklch(0.22 0.02 250);
+		transition: background-color 0.15s;
+		border-bottom: 1px solid oklch(from var(--color-base-content) l c h / 0.08);
 	}
 
 	.task-item:last-child {
@@ -740,13 +583,13 @@
 	}
 
 	.task-item:hover {
-		background: oklch(0.22 0.02 250);
+		background-color: oklch(from var(--color-base-content) l c h / 0.05);
 	}
 
 	.task-priority {
 		width: 3px;
-		height: 24px;
-		border-radius: 2px;
+		height: 1.5rem;
+		border-radius: 0.125rem;
 		flex-shrink: 0;
 	}
 
@@ -756,87 +599,5 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.125rem;
-	}
-
-	.task-title {
-		font-size: 0.8rem;
-		color: oklch(0.85 0.02 250);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.task-meta {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.65rem;
-		color: oklch(0.50 0.02 250);
-	}
-
-	.task-id {
-		font-family: ui-monospace, monospace;
-		color: oklch(0.55 0.10 200);
-	}
-
-	.task-agent {
-		color: oklch(0.55 0.08 145);
-	}
-
-	.task-time {
-		margin-left: auto;
-	}
-
-	.task-arrow {
-		width: 14px;
-		height: 14px;
-		color: oklch(0.40 0.02 250);
-		flex-shrink: 0;
-		transition: color 0.15s ease, transform 0.15s ease;
-	}
-
-	.task-item:hover .task-arrow {
-		color: oklch(0.60 0.02 250);
-		transform: translateX(2px);
-	}
-
-	/* Loading & Error States */
-	.loading-state,
-	.error-state,
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 3rem 1rem;
-		color: oklch(0.55 0.02 250);
-		text-align: center;
-		gap: 0.75rem;
-	}
-
-	.retry-btn {
-		padding: 0.5rem 1rem;
-		background: oklch(0.30 0.02 250);
-		border: 1px solid oklch(0.40 0.02 250);
-		border-radius: 6px;
-		color: oklch(0.85 0.02 250);
-		cursor: pointer;
-		font-size: 0.8rem;
-		transition: all 0.15s ease;
-	}
-
-	.retry-btn:hover {
-		background: oklch(0.35 0.02 250);
-	}
-
-	.empty-icon {
-		width: 48px;
-		height: 48px;
-		color: oklch(0.40 0.02 250);
-	}
-
-	.empty-hint {
-		font-size: 0.75rem;
-		color: oklch(0.45 0.02 250);
 	}
 </style>
