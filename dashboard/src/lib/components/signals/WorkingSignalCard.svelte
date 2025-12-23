@@ -15,6 +15,8 @@
 	interface Props {
 		/** The rich working signal data */
 		signal: WorkingSignal;
+		/** Agent name to display in the header */
+		agentName?: string;
 		/** Callback when task ID is clicked */
 		onTaskClick?: (taskId: string) => void;
 		/** Callback when a file path is clicked */
@@ -35,6 +37,7 @@
 
 	let {
 		signal,
+		agentName,
 		onTaskClick,
 		onFileClick,
 		onRollbackClick,
@@ -178,6 +181,16 @@
 			<div class="flex items-center gap-2">
 				<!-- Working indicator -->
 				<span class="loading loading-spinner loading-xs text-warning"></span>
+
+				<!-- Agent name (if provided) -->
+				{#if agentName}
+					<span
+						class="text-[11px] px-2 py-0.5 rounded font-mono font-bold bg-info/30 text-info border border-info/40"
+						title="Agent working on this task"
+					>
+						{agentName}
+					</span>
+				{/if}
 
 				<!-- Task type badge -->
 				<span

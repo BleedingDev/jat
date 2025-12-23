@@ -65,14 +65,33 @@
 		getServerStateVisual,
 	} from "$lib/config/statusColors";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
-	import { setHoveredSession, completingSessionFlash, highlightedSessionName, jumpToSession } from "$lib/stores/hoveredSession";
-	import type { SuggestedTask, SuggestedTaskWithState } from "$lib/types/signals";
+	import {
+		setHoveredSession,
+		completingSessionFlash,
+		highlightedSessionName,
+		jumpToSession,
+	} from "$lib/stores/hoveredSession";
+	import type {
+		SuggestedTask,
+		SuggestedTaskWithState,
+	} from "$lib/types/signals";
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
-	import { getFileTypeInfo, formatFileSize, type FileCategory } from "$lib/utils/fileUtils";
-	import { getTerminalHeight, getCtrlCIntercept, setCtrlCIntercept } from "$lib/stores/preferences.svelte";
+	import {
+		getFileTypeInfo,
+		formatFileSize,
+		type FileCategory,
+	} from "$lib/utils/fileUtils";
+	import {
+		getTerminalHeight,
+		getCtrlCIntercept,
+		setCtrlCIntercept,
+	} from "$lib/stores/preferences.svelte";
 	import { successToast } from "$lib/stores/toasts.svelte";
 	import { availableProjects as availableProjectsStore } from "$lib/stores/drawerStore";
-	import { completeTask as epicCompleteTask, getIsActive as epicIsActive } from "$lib/stores/epicQueueStore.svelte";
+	import {
+		completeTask as epicCompleteTask,
+		getIsActive as epicIsActive,
+	} from "$lib/stores/epicQueueStore.svelte";
 	// Rich signal card components
 	import WorkingSignalCard from "$lib/components/signals/WorkingSignalCard.svelte";
 	import ReviewSignalCard from "$lib/components/signals/ReviewSignalCard.svelte";
@@ -198,8 +217,8 @@
 			agentName: string;
 			summary: string[];
 			quality: {
-				tests: 'passing' | 'failing' | 'none' | 'skipped';
-				build: 'clean' | 'warnings' | 'errors';
+				tests: "passing" | "failing" | "none" | "skipped";
+				build: "clean" | "warnings" | "errors";
 				preExisting?: string;
 			};
 			humanActions?: Array<{
@@ -314,49 +333,49 @@
 	// Rich signal type detection - determine which signal card to render
 	// These derive typed signals from the generic richSignalPayload prop
 	const workingSignal = $derived.by(() => {
-		if (richSignalPayload?.type === 'working') {
+		if (richSignalPayload?.type === "working") {
 			return richSignalPayload as unknown as WorkingSignal;
 		}
 		return null;
 	});
 
 	const reviewSignal = $derived.by(() => {
-		if (richSignalPayload?.type === 'review') {
+		if (richSignalPayload?.type === "review") {
 			return richSignalPayload as unknown as ReviewSignal;
 		}
 		return null;
 	});
 
 	const needsInputSignal = $derived.by(() => {
-		if (richSignalPayload?.type === 'needs_input') {
+		if (richSignalPayload?.type === "needs_input") {
 			return richSignalPayload as unknown as NeedsInputSignal;
 		}
 		return null;
 	});
 
 	const completingSignal = $derived.by(() => {
-		if (richSignalPayload?.type === 'completing') {
+		if (richSignalPayload?.type === "completing") {
 			return richSignalPayload as unknown as CompletingSignalType;
 		}
 		return null;
 	});
 
 	const idleSignal = $derived.by(() => {
-		if (richSignalPayload?.type === 'idle') {
+		if (richSignalPayload?.type === "idle") {
 			return richSignalPayload as unknown as IdleSignal;
 		}
 		return null;
 	});
 
 	const startingSignal = $derived.by(() => {
-		if (richSignalPayload?.type === 'starting') {
+		if (richSignalPayload?.type === "starting") {
 			return richSignalPayload as unknown as StartingSignal;
 		}
 		return null;
 	});
 
 	const compactingSignal = $derived.by(() => {
-		if (richSignalPayload?.type === 'compacting') {
+		if (richSignalPayload?.type === "compacting") {
 			return richSignalPayload as unknown as CompactingSignal;
 		}
 		return null;
@@ -364,26 +383,37 @@
 
 	const completedSignal = $derived.by(() => {
 		// First check if we have a completed state signal from SSE
-		if (richSignalPayload?.type === 'completed') {
+		if (richSignalPayload?.type === "completed") {
 			return richSignalPayload as unknown as CompletedSignalType;
 		}
 		// Also check if we have a completion bundle (from complete data signal)
 		// and SSE state is completed - construct a CompletedSignal from it
 		const BUNDLE_TTL_MS = 30 * 60 * 1000; // 30 minutes
-		const bundleIsValid = completionBundle && completionBundleTimestamp &&
-			(Date.now() - completionBundleTimestamp) < BUNDLE_TTL_MS;
-		if (bundleIsValid && sseState === 'completed') {
+		const bundleIsValid =
+			completionBundle &&
+			completionBundleTimestamp &&
+			Date.now() - completionBundleTimestamp < BUNDLE_TTL_MS;
+		if (bundleIsValid && sseState === "completed") {
 			return {
-				type: 'completed' as const,
+				type: "completed" as const,
 				taskId: completionBundle.taskId,
 				agentName: completionBundle.agentName,
 				summary: completionBundle.summary || [],
-				quality: completionBundle.quality || { tests: 'none', build: 'unknown' },
+				quality: completionBundle.quality || {
+					tests: "none",
+					build: "unknown",
+				},
 				humanActions: completionBundle.humanActions,
 				suggestedTasks: completionBundle.suggestedTasks || [],
 				crossAgentIntel: completionBundle.crossAgentIntel,
-				sessionStats: completionBundle.sessionStats || { duration: 0, tokensUsed: 0, filesModified: 0, linesChanged: 0, commitsCreated: 0 },
-				finalCommit: completionBundle.finalCommit || '',
+				sessionStats: completionBundle.sessionStats || {
+					duration: 0,
+					tokensUsed: 0,
+					filesModified: 0,
+					linesChanged: 0,
+					commitsCreated: 0,
+				},
+				finalCommit: completionBundle.finalCommit || "",
 				prLink: completionBundle.prLink,
 			} as CompletedSignalType;
 		}
@@ -393,13 +423,13 @@
 	// Whether we have any rich signal to display
 	const hasRichSignal = $derived(
 		workingSignal !== null ||
-		reviewSignal !== null ||
-		needsInputSignal !== null ||
-		completingSignal !== null ||
-		completedSignal !== null ||
-		idleSignal !== null ||
-		startingSignal !== null ||
-		compactingSignal !== null
+			reviewSignal !== null ||
+			needsInputSignal !== null ||
+			completingSignal !== null ||
+			completedSignal !== null ||
+			idleSignal !== null ||
+			startingSignal !== null ||
+			compactingSignal !== null,
 	);
 
 	// Flash effect when Alt+C complete command is triggered
@@ -443,8 +473,10 @@
 	// Real-time output activity state (for shimmer effect)
 	// Derived from the central workSessionsState store (polling handled centrally)
 	const outputActivityState = $derived.by(() => {
-		const session = workSessionsState.sessions.find(s => s.sessionName === sessionName);
-		return session?._activityState || 'idle';
+		const session = workSessionsState.sessions.find(
+			(s) => s.sessionName === sessionName,
+		);
+		return session?._activityState || "idle";
 	});
 
 	// API-based question data (from PostToolUse hook)
@@ -497,7 +529,7 @@
 		tmux_session?: string;
 		timestamp?: string;
 		question: string;
-		questionType: 'choice' | 'confirm' | 'input';
+		questionType: "choice" | "confirm" | "input";
 		options: CustomQuestionOption[];
 		timeout?: number | null;
 		fileAgeMs?: number;
@@ -505,7 +537,8 @@
 	let customQuestionData = $state<CustomQuestionData | null>(null);
 	let customQuestionPollInterval: ReturnType<typeof setInterval> | null = null;
 	let customQuestionTimeout = $state<number | null>(null); // Remaining timeout in seconds
-	let customQuestionTimeoutInterval: ReturnType<typeof setInterval> | null = null;
+	let customQuestionTimeoutInterval: ReturnType<typeof setInterval> | null =
+		null;
 	let customQuestionInputValue = $state(""); // For input-type questions
 	let suppressCustomQuestionFetch = $state(false); // Prevent race condition after answering
 
@@ -513,7 +546,7 @@
 	interface NextTaskInfo {
 		taskId: string;
 		taskTitle: string;
-		source: 'epic' | 'backlog';
+		source: "epic" | "backlog";
 		epicId?: string;
 		epicTitle?: string;
 	}
@@ -533,17 +566,20 @@
 		try {
 			const completedTaskId = displayTask?.id || lastCompletedTask?.id || null;
 			// Extract project from task ID (e.g., "steelbridge-abc" → "steelbridge")
-			const project = completedTaskId?.split('-')[0] || null;
+			const project = completedTaskId?.split("-")[0] || null;
 			const params = new URLSearchParams();
-			if (completedTaskId) params.set('completedTaskId', completedTaskId);
-			if (project) params.set('project', project);
+			if (completedTaskId) params.set("completedTaskId", completedTaskId);
+			if (project) params.set("project", project);
 			const queryString = params.toString();
 			// Add timeout to prevent hanging forever
 			const controller = new AbortController();
 			const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-			const response = await fetch(`/api/tasks/next${queryString ? '?' + queryString : ''}`, {
-				signal: controller.signal
-			});
+			const response = await fetch(
+				`/api/tasks/next${queryString ? "?" + queryString : ""}`,
+				{
+					signal: controller.signal,
+				},
+			);
 			clearTimeout(timeoutId);
 			if (response.ok) {
 				const data = await response.json();
@@ -553,7 +589,7 @@
 						taskTitle: data.nextTask.taskTitle,
 						source: data.nextTask.source,
 						epicId: data.nextTask.epicId,
-						epicTitle: data.nextTask.epicTitle
+						epicTitle: data.nextTask.epicTitle,
 					};
 				} else {
 					nextTaskInfo = null;
@@ -672,9 +708,12 @@
 		customQuestionInputValue = "";
 		stopCustomQuestionTimeoutCountdown();
 		try {
-			await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`, {
-				method: "DELETE",
-			});
+			await fetch(
+				`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`,
+				{
+					method: "DELETE",
+				},
+			);
 		} catch (error) {
 			// Silently fail
 		}
@@ -727,7 +766,11 @@
 			if (response.ok) {
 				const data = await response.json();
 				// Only process action signals
-				if (data.hasSignal && data.signal?.type === 'action' && data.signal?.data) {
+				if (
+					data.hasSignal &&
+					data.signal?.type === "action" &&
+					data.signal?.data
+				) {
 					signalActionData = data.signal.data;
 				} else if (!data.hasSignal) {
 					signalActionData = null;
@@ -861,7 +904,7 @@
 		// PERFORMANCE: Only tick every second for full modes that show animated digits.
 		// Compact mode uses static "Xh Xm" format that doesn't need second precision.
 		// With 10+ compact cards on kanban, 1-second intervals cause excessive re-renders.
-		const tickInterval = mode === 'compact' ? 30000 : 1000; // 30s for compact, 1s for others
+		const tickInterval = mode === "compact" ? 30000 : 1000; // 30s for compact, 1s for others
 		elapsedTimeInterval = setInterval(() => {
 			currentTime = Date.now();
 		}, tickInterval);
@@ -1139,7 +1182,9 @@
 
 	// Rollback confirmation modal state
 	let rollbackModalOpen = $state(false);
-	let rollbackEvent = $state<{ git_sha: string; timestamp?: string } | null>(null);
+	let rollbackEvent = $state<{ git_sha: string; timestamp?: string } | null>(
+		null,
+	);
 
 	// Track existing task titles for "already created" detection
 	let existingTaskTitles = $state<Set<string>>(new Set());
@@ -1150,9 +1195,14 @@
 	async function fetchExistingTaskTitles(): Promise<void> {
 		try {
 			// Use repeated status params (API doesn't support comma-separated)
-			const response = await fetch("/api/tasks?status=open&status=in_progress&status=closed");
+			const response = await fetch(
+				"/api/tasks?status=open&status=in_progress&status=closed",
+			);
 			if (!response.ok) {
-				console.warn("[SessionCard] fetchExistingTaskTitles: response not ok", response.status);
+				console.warn(
+					"[SessionCard] fetchExistingTaskTitles: response not ok",
+					response.status,
+				);
 				return;
 			}
 
@@ -1167,7 +1217,10 @@
 			existingTaskTitles = titles;
 			existingTaskTitlesVersion++; // Bump version to trigger $derived reactivity
 		} catch (error) {
-			console.error("[SessionCard] Error fetching existing task titles:", error);
+			console.error(
+				"[SessionCard] Error fetching existing task titles:",
+				error,
+			);
 		}
 	}
 
@@ -1175,7 +1228,8 @@
 	// Note: We check signalSuggestedTasks directly (not hasSuggestedTasks) to avoid circular dependency
 	// since hasSuggestedTasks depends on detectedSuggestedTasks which depends on existingTaskTitles
 	$effect(() => {
-		const hasSignalTasks = signalSuggestedTasks && signalSuggestedTasks.length > 0;
+		const hasSignalTasks =
+			signalSuggestedTasks && signalSuggestedTasks.length > 0;
 		if (hasSignalTasks || suggestedTasksModalOpen) {
 			fetchExistingTaskTitles();
 		}
@@ -1282,17 +1336,19 @@
 	 * Monospace fonts are typically ~0.6em wide.
 	 */
 	function getCharWidthPx(): number {
-		if (typeof window === 'undefined') return 7.2; // SSR fallback
+		if (typeof window === "undefined") return 7.2; // SSR fallback
 
 		// Get current font size from CSS variable
-		const fontSizeStr = getComputedStyle(document.documentElement)
-			.getPropertyValue('--terminal-font-size').trim() || '0.875rem';
+		const fontSizeStr =
+			getComputedStyle(document.documentElement)
+				.getPropertyValue("--terminal-font-size")
+				.trim() || "0.875rem";
 
 		// Convert to pixels
 		let fontSizePx = 14; // default (0.875rem = 14px)
-		if (fontSizeStr.endsWith('rem')) {
+		if (fontSizeStr.endsWith("rem")) {
 			fontSizePx = parseFloat(fontSizeStr) * 16; // assuming 16px root
-		} else if (fontSizeStr.endsWith('px')) {
+		} else if (fontSizeStr.endsWith("px")) {
 			fontSizePx = parseFloat(fontSizeStr);
 		}
 
@@ -1554,7 +1610,10 @@
 				if (newChars) {
 					await onSendInput(newChars, "raw");
 				}
-			} else if (previousText.length === 0 && currentText.length <= maxStreamedLength) {
+			} else if (
+				previousText.length === 0 &&
+				currentText.length <= maxStreamedLength
+			) {
 				// GUARD: lastStreamedText was reset but we already sent this text
 				// This happens when submission detection clears lastStreamedText
 				// but the text hasn't actually been submitted - don't resend!
@@ -1737,8 +1796,12 @@
 		// Pattern 2: Confirmation/review screen (Enter to confirm/submit, may not have full navigation)
 		// Pattern 3: Review your answers screen (shows answers with ❯ Submit answers option)
 		const hasQuestionUI =
-			/Enter to select.*(?:Tab|Arrow).*(?:navigate|keys).*Esc to cancel/i.test(recentOutput) ||
-			/(?:review your answers|Do these.*look correct|Submit answers)/i.test(recentOutput) ||
+			/Enter to select.*(?:Tab|Arrow).*(?:navigate|keys).*Esc to cancel/i.test(
+				recentOutput,
+			) ||
+			/(?:review your answers|Do these.*look correct|Submit answers)/i.test(
+				recentOutput,
+			) ||
 			/Enter to (?:confirm|submit|proceed)/i.test(recentOutput);
 		if (!hasQuestionUI) return null;
 
@@ -1796,7 +1859,10 @@
 			let index = 0;
 
 			// Check if this is a confirmation/review screen (no numbered options)
-			const isConfirmationScreen = /(?:review your answers|Do these.*look correct|Submit answers)/i.test(recentOutput);
+			const isConfirmationScreen =
+				/(?:review your answers|Do these.*look correct|Submit answers)/i.test(
+					recentOutput,
+				);
 
 			for (const line of lines) {
 				// Skip empty lines and the navigation footer
@@ -1807,13 +1873,17 @@
 				// Normal format: "❯ 1. Label" or "  2. Label" (number prefix required)
 				// Confirmation format: "❯ Submit answers" or "  Edit answers" (no numbers)
 				let selectedMatch = line.match(/^\s*❯\s+(\d+\.\s+.+?)(?:\s{2,}(.+))?$/);
-				let unselectedMatch = line.match(/^\s{2,}(\d+\.\s+.+?)(?:\s{2,}(.+))?$/);
+				let unselectedMatch = line.match(
+					/^\s{2,}(\d+\.\s+.+?)(?:\s{2,}(.+))?$/,
+				);
 
 				// For confirmation screens, also match options WITHOUT number prefixes
 				if (!selectedMatch && !unselectedMatch && isConfirmationScreen) {
 					// Confirmation screen options: "❯ Submit answers" or "  Edit answers"
 					selectedMatch = line.match(/^\s*❯\s+([A-Z][a-z]+(?:\s+[a-z]+)*)\s*$/);
-					unselectedMatch = line.match(/^\s{2,}([A-Z][a-z]+(?:\s+[a-z]+)*)\s*$/);
+					unselectedMatch = line.match(
+						/^\s{2,}([A-Z][a-z]+(?:\s+[a-z]+)*)\s*$/,
+					);
 				}
 
 				if (selectedMatch) {
@@ -1987,7 +2057,7 @@
 		// Check for recovering state first (automation rule triggered recovery)
 		// This takes priority over other states to show the user that recovery is in progress
 		if (isRecovering) {
-			return 'recovering';
+			return "recovering";
 		}
 
 		// Rich signal payload is the most authoritative source for certain states
@@ -1997,10 +2067,17 @@
 		// 3. "idle" - explicitly signaled by agent, should persist
 		// Use a longer TTL (60s) for these signal-driven states since signals are emitted explicitly
 		const SIGNAL_DRIVEN_TTL_MS = 60000;
-		const signalDrivenStates: SessionState[] = ['completing', 'completed', 'idle'];
-		if (richSignalPayload?.type && signalDrivenStates.includes(richSignalPayload.type as SessionState)) {
+		const signalDrivenStates: SessionState[] = [
+			"completing",
+			"completed",
+			"idle",
+		];
+		if (
+			richSignalPayload?.type &&
+			signalDrivenStates.includes(richSignalPayload.type as SessionState)
+		) {
 			const timestamp = richSignalPayloadTimestamp || 0;
-			if ((Date.now() - timestamp) < SIGNAL_DRIVEN_TTL_MS) {
+			if (Date.now() - timestamp < SIGNAL_DRIVEN_TTL_MS) {
 				return richSignalPayload.type as SessionState;
 			}
 		}
@@ -2009,15 +2086,28 @@
 		// "completed" state persists until task changes (no TTL) - this ensures completion UI stays visible
 		// Other states use 5-second TTL for real-time responsiveness
 		const SSE_STATE_TTL_MS = 5000;
-		const validStates: SessionState[] = ['starting', 'working', 'compacting', 'needs-input', 'ready-for-review', 'completing', 'completed', 'recovering', 'idle'];
+		const validStates: SessionState[] = [
+			"starting",
+			"working",
+			"compacting",
+			"needs-input",
+			"ready-for-review",
+			"completing",
+			"completed",
+			"recovering",
+			"idle",
+		];
 
 		if (sseState && validStates.includes(sseState as SessionState)) {
 			// "completed" state should persist - it comes from signal files or closed task, not momentary events
-			if (sseState === 'completed') {
-				return 'completed';
+			if (sseState === "completed") {
+				return "completed";
 			}
 			// Other states use TTL for freshness
-			if (sseStateTimestamp && (Date.now() - sseStateTimestamp) < SSE_STATE_TTL_MS) {
+			if (
+				sseStateTimestamp &&
+				Date.now() - sseStateTimestamp < SSE_STATE_TTL_MS
+			) {
 				return sseState as SessionState;
 			}
 		}
@@ -2150,7 +2240,10 @@
 		if (needsQuestionPolling && !questionPollInterval) {
 			// Start polling when entering needs-input state
 			fetchQuestionData().catch(() => {}); // Immediate fetch (catch timeout errors)
-			questionPollInterval = setInterval(() => fetchQuestionData().catch(() => {}), 1500); // 1.5s interval (was 500ms)
+			questionPollInterval = setInterval(
+				() => fetchQuestionData().catch(() => {}),
+				1500,
+			); // 1.5s interval (was 500ms)
 		} else if (!needsQuestionPolling && questionPollInterval) {
 			// Stop polling when leaving needs-input state
 			clearInterval(questionPollInterval);
@@ -2166,7 +2259,10 @@
 		if (needsCustomQuestionPolling && !customQuestionPollInterval) {
 			// Start polling when entering needs-input state
 			fetchCustomQuestionData().catch(() => {}); // Immediate fetch
-			customQuestionPollInterval = setInterval(() => fetchCustomQuestionData().catch(() => {}), 1500);
+			customQuestionPollInterval = setInterval(
+				() => fetchCustomQuestionData().catch(() => {}),
+				1500,
+			);
 		} else if (!needsCustomQuestionPolling && customQuestionPollInterval) {
 			// Stop polling when leaving needs-input state
 			clearInterval(customQuestionPollInterval);
@@ -2181,9 +2277,14 @@
 	// Fetch next task when session enters completed state
 	// This populates the "Start Next" action in the dropdown with actual task info
 	$effect(() => {
-		if (sessionState === 'completed' && !nextTaskInfo && !nextTaskLoading && !nextTaskFetchFailed) {
+		if (
+			sessionState === "completed" &&
+			!nextTaskInfo &&
+			!nextTaskLoading &&
+			!nextTaskFetchFailed
+		) {
 			fetchNextTask().catch(() => {}); // Catch any unhandled promise rejections
-		} else if (sessionState !== 'completed') {
+		} else if (sessionState !== "completed") {
 			// Clear next task info and reset failed flag when leaving completed state
 			nextTaskInfo = null;
 			nextTaskFetchFailed = false;
@@ -2200,7 +2301,10 @@
 		// Start polling on mount
 		if (!signalPollInterval) {
 			fetchSignalData().catch(() => {}); // Immediate fetch (catch timeout errors)
-			signalPollInterval = setInterval(() => fetchSignalData().catch(() => {}), 3000);
+			signalPollInterval = setInterval(
+				() => fetchSignalData().catch(() => {}),
+				3000,
+			);
 		}
 
 		// Cleanup on unmount (effect cleanup function)
@@ -2220,21 +2324,22 @@
 	// - needs-input: 15 minutes of no activity (user is away)
 	// - ready-for-review: 15 minutes of no activity (user is away)
 	const DORMANT_THRESHOLDS = {
-		completed: 5,        // 5 minutes after task closed
-		working: 10,         // 10 minutes of no output
-		'needs-input': 15,   // 15 minutes waiting for user
-		'ready-for-review': 15, // 15 minutes waiting for user
+		completed: 5, // 5 minutes after task closed
+		working: 10, // 10 minutes of no output
+		"needs-input": 15, // 15 minutes waiting for user
+		"ready-for-review": 15, // 15 minutes waiting for user
 	} as const;
 
 	const isDormant = $derived.by((): boolean => {
 		// Only certain states can become dormant
-		const threshold = DORMANT_THRESHOLDS[sessionState as keyof typeof DORMANT_THRESHOLDS];
+		const threshold =
+			DORMANT_THRESHOLDS[sessionState as keyof typeof DORMANT_THRESHOLDS];
 		if (!threshold) return false;
 
 		const now = currentTime; // Use reactive currentTime for live updates
 
 		// For completed state, use the task closed timestamp
-		if (sessionState === 'completed') {
+		if (sessionState === "completed") {
 			if (!lastCompletedTask?.closedAt) return false;
 			const closedDate = new Date(lastCompletedTask.closedAt);
 			const minutesSinceClosed = (now - closedDate.getTime()) / (1000 * 60);
@@ -2275,7 +2380,7 @@
 				for (const item of signalActionData.items) {
 					actions.push({
 						title: item,
-						description: '',
+						description: "",
 						completed: humanActionCompletedState.get(item) || false,
 					});
 				}
@@ -2284,8 +2389,9 @@
 			else if (signalActionData.title && !signalActionData.items) {
 				actions.push({
 					title: signalActionData.title,
-					description: signalActionData.description || '',
-					completed: humanActionCompletedState.get(signalActionData.title) || false,
+					description: signalActionData.description || "",
+					completed:
+						humanActionCompletedState.get(signalActionData.title) || false,
 				});
 			}
 		}
@@ -2334,7 +2440,9 @@
 	// Local state for tracking user's selection and edits of suggested tasks
 	// Key is task title (or index if no title), value is selection/edit state
 	let suggestedTaskSelections = $state<Map<string, boolean>>(new Map());
-	let suggestedTaskEdits = $state<Map<string, Partial<SuggestedTask>>>(new Map());
+	let suggestedTaskEdits = $state<Map<string, Partial<SuggestedTask>>>(
+		new Map(),
+	);
 
 	/**
 	 * Process SUGGESTED_TASKS from signal data (via SSE).
@@ -2349,7 +2457,11 @@
 		const SIGNAL_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 		// Only process signal-based suggested tasks
-		if (!signalSuggestedTasks || signalSuggestedTasks.length === 0 || !signalSuggestedTasksTimestamp) {
+		if (
+			!signalSuggestedTasks ||
+			signalSuggestedTasks.length === 0 ||
+			!signalSuggestedTasksTimestamp
+		) {
 			return [];
 		}
 
@@ -2367,8 +2479,10 @@
 
 			// Check if task title already exists in Beads (normalized comparison)
 			const effectiveTitle = hasEdits && edits.title ? edits.title : task.title;
-			const normalizedTitle = effectiveTitle?.toLowerCase().trim() || '';
-			const alreadyCreated = normalizedTitle ? existingTaskTitles.has(normalizedTitle) : false;
+			const normalizedTitle = effectiveTitle?.toLowerCase().trim() || "";
+			const alreadyCreated = normalizedTitle
+				? existingTaskTitles.has(normalizedTitle)
+				: false;
 
 			return {
 				...task,
@@ -2436,7 +2550,10 @@
 		success: boolean;
 		error?: string;
 	}
-	let createResults = $state<{ success: TaskCreationResult[]; failed: TaskCreationResult[] }>({
+	let createResults = $state<{
+		success: TaskCreationResult[];
+		failed: TaskCreationResult[];
+	}>({
 		success: [],
 		failed: [],
 	});
@@ -2445,7 +2562,9 @@
 	let showCreateFeedback = $state(false);
 
 	/** Create selected suggested tasks by calling /api/tasks/bulk endpoint */
-	async function createSuggestedTasks(selectedTasks: typeof detectedSuggestedTasks) {
+	async function createSuggestedTasks(
+		selectedTasks: typeof detectedSuggestedTasks,
+	) {
 		if (selectedTasks.length === 0) return;
 
 		isCreatingSuggestedTasks = true;
@@ -2453,26 +2572,28 @@
 
 		// Map tasks to the bulk API format
 		const tasksToCreate = selectedTasks.map((t) => ({
-			type: t.edits?.type || t.type || 'task',
+			type: t.edits?.type || t.type || "task",
 			title: t.edits?.title || t.title,
-			description: t.edits?.description || t.description || '',
+			description: t.edits?.description || t.description || "",
 			priority: t.edits?.priority ?? t.priority ?? 2,
 		}));
 
 		// Determine project from parent task ID
 		const parentTaskId = task?.id || displayTask?.id;
-		const project = parentTaskId ? getProjectFromTaskId(parentTaskId) : undefined;
+		const project = parentTaskId
+			? getProjectFromTaskId(parentTaskId)
+			: undefined;
 
-		console.log('[SuggestedTasks] Creating tasks via bulk API:', {
+		console.log("[SuggestedTasks] Creating tasks via bulk API:", {
 			count: selectedTasks.length,
 			project,
 			parentTaskId,
 		});
 
 		try {
-			const response = await fetch('/api/tasks/bulk', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+			const response = await fetch("/api/tasks/bulk", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					tasks: tasksToCreate,
 					project: project || undefined,
@@ -2486,14 +2607,18 @@
 				createResults.failed = tasksToCreate.map((t) => ({
 					title: t.title,
 					success: false,
-					error: result.message || 'Failed to create tasks',
+					error: result.message || "Failed to create tasks",
 				}));
-				console.error('[SuggestedTasks] Bulk creation failed:', result);
+				console.error("[SuggestedTasks] Bulk creation failed:", result);
 			} else {
 				// Process individual results
 				if (result.results && Array.isArray(result.results)) {
-					createResults.success = result.results.filter((r: TaskCreationResult) => r.success);
-					createResults.failed = result.results.filter((r: TaskCreationResult) => !r.success);
+					createResults.success = result.results.filter(
+						(r: TaskCreationResult) => r.success,
+					);
+					createResults.failed = result.results.filter(
+						(r: TaskCreationResult) => !r.success,
+					);
 				} else {
 					// Fallback for successful response without detailed results
 					createResults.success = tasksToCreate.map((t) => ({
@@ -2501,7 +2626,9 @@
 						success: true,
 					}));
 				}
-				console.log(`[SuggestedTasks] Created ${result.created} tasks, ${result.failed} failed`);
+				console.log(
+					`[SuggestedTasks] Created ${result.created} tasks, ${result.failed} failed`,
+				);
 			}
 
 			// Show feedback
@@ -2511,8 +2638,11 @@
 			if (createResults.success.length > 0) {
 				playNewTaskChime();
 				successToast(
-					`Created ${createResults.success.length} task${createResults.success.length > 1 ? 's' : ''}`,
-					createResults.success.map((r) => r.taskId).filter(Boolean).join(', ')
+					`Created ${createResults.success.length} task${createResults.success.length > 1 ? "s" : ""}`,
+					createResults.success
+						.map((r) => r.taskId)
+						.filter(Boolean)
+						.join(", "),
 				);
 				// Refresh existing task titles so newly created tasks show as "Created"
 				await fetchExistingTaskTitles();
@@ -2527,14 +2657,14 @@
 				}, 2500);
 			}
 		} catch (error) {
-			const errorMsg = error instanceof Error ? error.message : 'Network error';
+			const errorMsg = error instanceof Error ? error.message : "Network error";
 			createResults.failed = tasksToCreate.map((t) => ({
 				title: t.title,
 				success: false,
 				error: errorMsg,
 			}));
 			showCreateFeedback = true;
-			console.error('[SuggestedTasks] Error creating tasks:', error);
+			console.error("[SuggestedTasks] Error creating tasks:", error);
 		} finally {
 			isCreatingSuggestedTasks = false;
 		}
@@ -2551,18 +2681,22 @@
 	}
 
 	/** Create suggested tasks directly via bulk API (used by modal) */
-	async function createSuggestedTasksViaBulkApi(selectedTasks: SuggestedTaskWithState[]): Promise<void> {
+	async function createSuggestedTasksViaBulkApi(
+		selectedTasks: SuggestedTaskWithState[],
+	): Promise<void> {
 		if (selectedTasks.length === 0) return;
 
 		// Determine default project from current task ID if available
 		const currentTaskId = task?.id || displayTask?.id;
-		const defaultProject = currentTaskId ? getProjectFromTaskId(currentTaskId) : undefined;
+		const defaultProject = currentTaskId
+			? getProjectFromTaskId(currentTaskId)
+			: undefined;
 
 		// Map tasks to the bulk API format, including all editable fields
 		const tasksToCreate = selectedTasks.map((t) => ({
-			type: t.edits?.type || t.type || 'task',
+			type: t.edits?.type || t.type || "task",
 			title: t.edits?.title || t.title,
-			description: t.edits?.description || t.description || '',
+			description: t.edits?.description || t.description || "",
 			priority: t.edits?.priority ?? t.priority ?? 2,
 			// Use task-specific project if set, otherwise use default from current task
 			project: t.edits?.project || t.project || defaultProject || undefined,
@@ -2570,45 +2704,53 @@
 			depends_on: t.edits?.depends_on || t.depends_on || undefined,
 		}));
 
-		const response = await fetch('/api/tasks/bulk', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+		const response = await fetch("/api/tasks/bulk", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
-				tasks: tasksToCreate
-			})
+				tasks: tasksToCreate,
+			}),
 		});
 
 		if (!response.ok) {
 			const errorData = await response.json();
-			throw new Error(errorData.message || 'Failed to create tasks');
+			throw new Error(errorData.message || "Failed to create tasks");
 		}
 
 		const result = await response.json();
 		if (result.failed > 0) {
-			throw new Error(`Created ${result.created} tasks, but ${result.failed} failed`);
+			throw new Error(
+				`Created ${result.created} tasks, but ${result.failed} failed`,
+			);
 		}
 
-		console.log(`[SuggestedTasks] Created ${result.created} tasks via bulk API`);
+		console.log(
+			`[SuggestedTasks] Created ${result.created} tasks via bulk API`,
+		);
 
 		// Refresh existing task titles so newly created tasks show as "Created"
 		await fetchExistingTaskTitles();
 	}
 
 	/** Create tasks from EventStack timeline events - returns results for feedback UI */
-	async function createTimelineEventTasks(selectedTasks: SuggestedTaskWithState[]): Promise<{ success: any[]; failed: any[] }> {
+	async function createTimelineEventTasks(
+		selectedTasks: SuggestedTaskWithState[],
+	): Promise<{ success: any[]; failed: any[] }> {
 		if (selectedTasks.length === 0) {
 			return { success: [], failed: [] };
 		}
 
 		// Determine default project from current task ID if available
 		const currentTaskId = task?.id || displayTask?.id;
-		const defaultProject = currentTaskId ? getProjectFromTaskId(currentTaskId) : undefined;
+		const defaultProject = currentTaskId
+			? getProjectFromTaskId(currentTaskId)
+			: undefined;
 
 		// Map tasks to the bulk API format
 		const tasksToCreate = selectedTasks.map((t) => ({
-			type: t.edits?.type || t.type || 'task',
+			type: t.edits?.type || t.type || "task",
 			title: t.edits?.title || t.title,
-			description: t.edits?.description || t.description || '',
+			description: t.edits?.description || t.description || "",
 			priority: t.edits?.priority ?? t.priority ?? 2,
 			project: t.edits?.project || t.project || defaultProject || undefined,
 			labels: t.edits?.labels || t.labels || undefined,
@@ -2616,10 +2758,10 @@
 		}));
 
 		try {
-			const response = await fetch('/api/tasks/bulk', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ tasks: tasksToCreate })
+			const response = await fetch("/api/tasks/bulk", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ tasks: tasksToCreate }),
 			});
 
 			const result = await response.json();
@@ -2630,8 +2772,8 @@
 					failed: tasksToCreate.map((t) => ({
 						title: t.title,
 						success: false,
-						error: result.message || 'API error'
-					}))
+						error: result.message || "API error",
+					})),
 				};
 			}
 
@@ -2642,24 +2784,26 @@
 				.map((t: any) => ({
 					title: t.title,
 					taskId: t.taskId,
-					success: true
+					success: true,
 				}));
 
 			const failedTasks = (result.results || [])
 				.filter((t: any) => !t.success)
 				.map((t: any) => ({
-					title: t.title || 'Unknown',
+					title: t.title || "Unknown",
 					success: false,
-					error: t.error || 'Unknown error'
+					error: t.error || "Unknown error",
 				}));
 
-			console.log(`[EventStack] Created ${successTasks.length} tasks, ${failedTasks.length} failed`);
+			console.log(
+				`[EventStack] Created ${successTasks.length} tasks, ${failedTasks.length} failed`,
+			);
 
 			return { success: successTasks, failed: failedTasks };
 		} catch (err: any) {
 			return {
 				success: [],
-				failed: [{ title: 'Error', success: false, error: err.message }]
+				failed: [{ title: "Error", success: false, error: err.message }],
 			};
 		}
 	}
@@ -2677,9 +2821,11 @@
 		if (richSignalPayload?.taskId) {
 			return {
 				id: richSignalPayload.taskId as string,
-				title: (richSignalPayload.taskTitle as string) || richSignalPayload.taskId as string,
+				title:
+					(richSignalPayload.taskTitle as string) ||
+					(richSignalPayload.taskId as string),
 				description: richSignalPayload.taskDescription as string | undefined,
-				status: 'in_progress' as const,
+				status: "in_progress" as const,
 				priority: richSignalPayload.taskPriority as number | undefined,
 				issue_type: richSignalPayload.taskType as string | undefined,
 			};
@@ -2695,21 +2841,31 @@
 
 	// Get display labels (respects dormant state)
 	const displayLabel = $derived(
-		isDormant && stateVisual.dormantLabel ? stateVisual.dormantLabel : stateVisual.label
+		isDormant && stateVisual.dormantLabel
+			? stateVisual.dormantLabel
+			: stateVisual.label,
 	);
 	const displayShortLabel = $derived(
-		isDormant && stateVisual.dormantShortLabel ? stateVisual.dormantShortLabel : stateVisual.shortLabel
+		isDormant && stateVisual.dormantShortLabel
+			? stateVisual.dormantShortLabel
+			: stateVisual.shortLabel,
 	);
 
 	// Get display colors (muted when dormant)
 	const displayAccent = $derived(
-		isDormant && stateVisual.dormantAccent ? stateVisual.dormantAccent : stateVisual.accent
+		isDormant && stateVisual.dormantAccent
+			? stateVisual.dormantAccent
+			: stateVisual.accent,
 	);
 	const displayBgTint = $derived(
-		isDormant && stateVisual.dormantBgTint ? stateVisual.dormantBgTint : stateVisual.bgTint
+		isDormant && stateVisual.dormantBgTint
+			? stateVisual.dormantBgTint
+			: stateVisual.bgTint,
 	);
 	const displayGlow = $derived(
-		isDormant && stateVisual.dormantGlow ? stateVisual.dormantGlow : stateVisual.glow
+		isDormant && stateVisual.dormantGlow
+			? stateVisual.dormantGlow
+			: stateVisual.glow,
 	);
 
 	// Format time since activity for dormant tooltip
@@ -2719,7 +2875,7 @@
 		const now = currentTime;
 		let minutesInactive: number;
 
-		if (sessionState === 'completed' && lastCompletedTask?.closedAt) {
+		if (sessionState === "completed" && lastCompletedTask?.closedAt) {
 			const closedDate = new Date(lastCompletedTask.closedAt);
 			minutesInactive = Math.floor((now - closedDate.getTime()) / (1000 * 60));
 		} else {
@@ -2727,16 +2883,16 @@
 		}
 
 		if (minutesInactive < 1) {
-			return 'Inactive for less than a minute';
+			return "Inactive for less than a minute";
 		} else if (minutesInactive === 1) {
-			return 'Inactive for 1 minute';
+			return "Inactive for 1 minute";
 		} else if (minutesInactive < 60) {
 			return `Inactive for ${minutesInactive} minutes`;
 		} else {
 			const hours = Math.floor(minutesInactive / 60);
 			const mins = minutesInactive % 60;
 			if (mins === 0) {
-				return `Inactive for ${hours} hour${hours > 1 ? 's' : ''}`;
+				return `Inactive for ${hours} hour${hours > 1 ? "s" : ""}`;
 			}
 			return `Inactive for ${hours}h ${mins}m`;
 		}
@@ -2751,7 +2907,7 @@
 	 */
 	async function copySessionContents() {
 		const lines: string[] = [];
-		const separator = '─'.repeat(50);
+		const separator = "─".repeat(50);
 
 		// Header
 		lines.push(`Session: ${sessionName}`);
@@ -2763,7 +2919,7 @@
 				lines.push(`Server: ${displayName || projectName}`);
 			}
 			if (port) {
-				lines.push(`Port: ${port}${portRunning ? ' (running)' : ' (stopped)'}`);
+				lines.push(`Port: ${port}${portRunning ? " (running)" : " (stopped)"}`);
 			}
 			if (serverStatus) {
 				lines.push(`Status: ${serverStatus}`);
@@ -2800,7 +2956,7 @@
 
 			// Task info (use displayTask for proper task display)
 			if (displayTask) {
-				lines.push('');
+				lines.push("");
 				lines.push(`Task: ${displayTask.id}`);
 				if (displayTask.title) {
 					lines.push(`Title: ${displayTask.title}`);
@@ -2816,20 +2972,24 @@
 
 		// Terminal output (strip ANSI codes for clean text)
 		if (output && output.trim()) {
-			lines.push('');
+			lines.push("");
 			lines.push(separator);
-			lines.push('Terminal Output:');
+			lines.push("Terminal Output:");
 			lines.push(separator);
 			lines.push(stripAnsi(output));
 		}
 
-		const text = lines.join('\n');
+		const text = lines.join("\n");
 
 		try {
 			await navigator.clipboard.writeText(text);
 			sessionCopied = true;
 			playCopySound();
-			successToast(isServerMode ? 'Server output copied to clipboard' : 'Session contents copied to clipboard');
+			successToast(
+				isServerMode
+					? "Server output copied to clipboard"
+					: "Session contents copied to clipboard",
+			);
 
 			// Clear timeout if exists
 			if (sessionCopyTimeout) {
@@ -2839,7 +2999,7 @@
 				sessionCopied = false;
 			}, 2000);
 		} catch (err) {
-			console.error('Failed to copy session contents:', err);
+			console.error("Failed to copy session contents:", err);
 		}
 	}
 
@@ -2933,7 +3093,12 @@
 	// AUTO_PROCEED handling: Start countdown when session becomes completed with AUTO_PROCEED marker
 	$effect(() => {
 		// Only trigger on transition to completed state with AUTO_PROCEED
-		if (sessionState === "completed" && isAutoProceed && !autoCloseHeld && autoCloseCountdown === null) {
+		if (
+			sessionState === "completed" &&
+			isAutoProceed &&
+			!autoCloseHeld &&
+			autoCloseCountdown === null
+		) {
 			// Start 3-second countdown
 			autoCloseCountdown = 3;
 
@@ -3001,7 +3166,9 @@
 	// Send a workflow command (e.g., /jat:complete)
 	async function sendWorkflowCommand(command: string) {
 		const startTime = Date.now();
-		console.log(`[SessionCard] sendWorkflowCommand START: ${command} for ${sessionName}`);
+		console.log(
+			`[SessionCard] sendWorkflowCommand START: ${command} for ${sessionName}`,
+		);
 
 		if (!onSendInput) {
 			console.warn(
@@ -3014,11 +3181,15 @@
 			// Send Ctrl+U first to clear any stray characters in input
 			// Note: Previously used Ctrl+C but that sends an interrupt signal which
 			// caused issues on Mac Chrome where the terminal would become unresponsive
-			console.log(`[SessionCard] sendWorkflowCommand: sending ctrl-u to clear line`);
+			console.log(
+				`[SessionCard] sendWorkflowCommand: sending ctrl-u to clear line`,
+			);
 			await onSendInput("ctrl-u", "key");
 			await new Promise((r) => setTimeout(r, 50));
 			// Send the command text (API appends Enter for type='text')
-			console.log(`[SessionCard] sendWorkflowCommand: sending text "${command}"`);
+			console.log(
+				`[SessionCard] sendWorkflowCommand: sending text "${command}"`,
+			);
 			const textResult = await onSendInput(command, "text");
 			if (textResult === false) {
 				console.warn(
@@ -3032,10 +3203,15 @@
 				await onSendInput("enter", "key");
 			}
 			const duration = Date.now() - startTime;
-			console.log(`[SessionCard] sendWorkflowCommand DONE: ${command} took ${duration}ms`);
+			console.log(
+				`[SessionCard] sendWorkflowCommand DONE: ${command} took ${duration}ms`,
+			);
 		} catch (err) {
 			const duration = Date.now() - startTime;
-			console.error(`[SessionCard] sendWorkflowCommand ERROR after ${duration}ms:`, err);
+			console.error(
+				`[SessionCard] sendWorkflowCommand ERROR after ${duration}ms:`,
+				err,
+			);
 		} finally {
 			setSendingInput(false);
 		}
@@ -3099,27 +3275,28 @@
 			case "start-next":
 				// Cleanup current session and spawn agent for next task
 				try {
-					const completedTaskId = displayTask?.id || lastCompletedTask?.id || null;
-					const response = await fetch('/api/tasks/next', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
+					const completedTaskId =
+						displayTask?.id || lastCompletedTask?.id || null;
+					const response = await fetch("/api/tasks/next", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({
 							completedTaskId,
-							cleanupSession: sessionName
-						})
+							cleanupSession: sessionName,
+						}),
 					});
 
 					if (response.ok) {
 						const data = await response.json();
-						console.log('[SessionCard] Start Next result:', data);
+						console.log("[SessionCard] Start Next result:", data);
 						// Session will be cleaned up and new agent spawned
 						// The work panel will pick up the new session on next poll
 					} else {
 						const errorData = await response.json();
-						console.error('[SessionCard] Start Next failed:', errorData);
+						console.error("[SessionCard] Start Next failed:", errorData);
 					}
 				} catch (e) {
-					console.error('[SessionCard] Failed to start next task:', e);
+					console.error("[SessionCard] Failed to start next task:", e);
 				}
 				break;
 
@@ -3466,7 +3643,7 @@
 			typeInfo = getFileTypeInfo(blob);
 		} else {
 			// For blobs without a name (e.g., pasted images), infer from MIME type
-			const ext = blob.type.split('/')[1] || 'bin';
+			const ext = blob.type.split("/")[1] || "bin";
 			name = filename || `File ${attachedFiles.length + 1}.${ext}`;
 			// Create a mock File to get type info
 			const mockFile = new File([blob], name, { type: blob.type });
@@ -3474,17 +3651,20 @@
 		}
 
 		// Create preview URL only for images
-		const preview = typeInfo.previewable ? URL.createObjectURL(blob) : '';
+		const preview = typeInfo.previewable ? URL.createObjectURL(blob) : "";
 
-		attachedFiles = [...attachedFiles, {
-			id,
-			blob,
-			preview,
-			name,
-			category: typeInfo.category,
-			icon: typeInfo.icon,
-			iconColor: typeInfo.color
-		}];
+		attachedFiles = [
+			...attachedFiles,
+			{
+				id,
+				blob,
+				preview,
+				name,
+				category: typeInfo.category,
+				icon: typeInfo.icon,
+				iconColor: typeInfo.color,
+			},
+		];
 	}
 
 	// Remove an attached file
@@ -3512,7 +3692,11 @@
 		e.stopPropagation();
 		// Only reset if we're leaving the card entirely (not entering a child)
 		const relatedTarget = e.relatedTarget as HTMLElement | null;
-		if (!relatedTarget || !e.currentTarget || !(e.currentTarget as HTMLElement).contains(relatedTarget)) {
+		if (
+			!relatedTarget ||
+			!e.currentTarget ||
+			!(e.currentTarget as HTMLElement).contains(relatedTarget)
+		) {
 			isDragOver = false;
 		}
 	}
@@ -3552,9 +3736,10 @@
 	async function saveFileToTask(blob: Blob, taskId: string) {
 		try {
 			// Determine filename from blob or generate one
-			const filename = blob instanceof File
-				? blob.name
-				: `task-${taskId}-${Date.now()}.${blob.type.split('/')[1] || 'bin'}`;
+			const filename =
+				blob instanceof File
+					? blob.name
+					: `task-${taskId}-${Date.now()}.${blob.type.split("/")[1] || "bin"}`;
 
 			// Upload to server
 			const formData = new FormData();
@@ -3753,16 +3938,25 @@
 	     Skips: Terminal output, input section, completion banner, resize handle
 	     ═══════════════════════════════════════════════════════════════════════════ -->
 	<article
-		class="unified-agent-card p-2 rounded-lg relative overflow-visible {className} {isCompleteFlashing ? 'complete-flash-animation' : ''}"
-		class:ring-2={effectiveHighlighted || sessionState === "needs-input" || isCompleteFlashing}
+		class="unified-agent-card p-2 rounded-lg relative overflow-visible {className} {isCompleteFlashing
+			? 'complete-flash-animation'
+			: ''}"
+		class:ring-2={effectiveHighlighted ||
+			sessionState === "needs-input" ||
+			isCompleteFlashing}
 		class:ring-primary={effectiveHighlighted}
 		class:ring-success={isCompleteFlashing}
-		class:ring-warning={sessionState === "needs-input" && !isCompleteFlashing && !effectiveHighlighted}
+		class:ring-warning={sessionState === "needs-input" &&
+			!isCompleteFlashing &&
+			!effectiveHighlighted}
 		class:ring-info={isJumpHighlighted}
-		class:animate-pulse-subtle={sessionState === "needs-input" && !isCompleteFlashing}
+		class:animate-pulse-subtle={sessionState === "needs-input" &&
+			!isCompleteFlashing}
 		style="
 			background: linear-gradient(135deg, {displayBgTint} 0%, oklch(0.18 0.01 250) 100%);
-			border-left: 3px solid {isCompleteFlashing ? 'oklch(0.65 0.20 145)' : displayAccent};
+			border-left: 3px solid {isCompleteFlashing
+			? 'oklch(0.65 0.20 145)'
+			: displayAccent};
 			{isCompleteFlashing
 			? 'box-shadow: 0 0 20px oklch(0.65 0.20 145 / 0.6);'
 			: sessionState === 'needs-input'
@@ -3785,7 +3979,8 @@
 					<AgentAvatar name={agentName} size={18} />
 				</div>
 				<span
-					class="font-mono text-[11px] font-semibold tracking-wider uppercase truncate bg-red-500 text-white px-2 py-1 rounded"
+					class="font-mono text-[11px] font-semibold tracking-wider uppercase truncate"
+					style="color: {displayAccent};"
 					title={agentName}
 				>
 					{agentName}
@@ -3827,8 +4022,11 @@
 						type="button"
 						class="badge badge-xs font-mono cursor-pointer hover:opacity-80 transition-opacity"
 						style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
-						title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''} - click to review and create"
-						onclick={() => suggestedTasksModalOpen = true}
+						title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length >
+						1
+							? 's'
+							: ''} - click to review and create"
+						onclick={() => (suggestedTasksModalOpen = true)}
 					>
 						💡 {detectedSuggestedTasks.length}
 					</button>
@@ -3837,16 +4035,40 @@
 				<button
 					type="button"
 					class="p-0.5 rounded hover:bg-base-content/10 transition-colors group"
-					title={sessionCopied ? "Copied!" : "Copy session contents (Alt+Shift+C)"}
+					title={sessionCopied
+						? "Copied!"
+						: "Copy session contents (Alt+Shift+C)"}
 					onclick={copySessionContents}
 				>
 					{#if sessionCopied}
-						<svg class="w-3.5 h-3.5" style="color: oklch(0.70 0.20 145);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+						<svg
+							class="w-3.5 h-3.5"
+							style="color: oklch(0.70 0.20 145);"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M4.5 12.75l6 6 9-13.5"
+							/>
 						</svg>
 					{:else}
-						<svg class="w-3.5 h-3.5 opacity-40 group-hover:opacity-70 transition-opacity" style="color: oklch(0.70 0.05 250);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+						<svg
+							class="w-3.5 h-3.5 opacity-40 group-hover:opacity-70 transition-opacity"
+							style="color: oklch(0.70 0.05 250);"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
+							/>
 						</svg>
 					{/if}
 				</button>
@@ -4039,10 +4261,24 @@
 				transition:fade={{ duration: 150 }}
 			>
 				<div class="flex flex-col items-center gap-2">
-					<svg class="w-12 h-12" style="color: oklch(0.75 0.15 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+					<svg
+						class="w-12 h-12"
+						style="color: oklch(0.75 0.15 250);"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+						stroke-width="1.5"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+						/>
 					</svg>
-					<span class="text-sm font-semibold" style="color: oklch(0.85 0.10 250);">Drop image to attach</span>
+					<span
+						class="text-sm font-semibold"
+						style="color: oklch(0.85 0.10 250);">Drop image to attach</span
+					>
 				</div>
 			</div>
 		{/if}
@@ -4233,8 +4469,12 @@
 							/>
 						{:else}
 							<h3
-								class="mt-2 font-mono font-bold text-sm tracking-wide min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30 transition-all duration-300 ease-out {taskHovered ? '' : 'truncate'}"
-								style="color: {sessionState === 'completed' ? 'oklch(0.75 0.02 250)' : 'oklch(0.90 0.02 250)'};"
+								class="mt-2 font-mono font-bold text-sm tracking-wide min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30 transition-all duration-300 ease-out {taskHovered
+									? ''
+									: 'truncate'}"
+								style="color: {sessionState === 'completed'
+									? 'oklch(0.75 0.02 250)'
+									: 'oklch(0.90 0.02 250)'};"
 								onclick={startEditingTitle}
 								role="button"
 								tabindex="0"
@@ -4255,17 +4495,27 @@
 							class="overflow-hidden transition-all duration-300 ease-out"
 							style="max-height: {taskHovered ? '50vh' : '2.6rem'};"
 						>
-							<p class="text-xs leading-relaxed" style="color: oklch(0.65 0.02 250);">
+							<p
+								class="text-xs leading-relaxed"
+								style="color: oklch(0.65 0.02 250);"
+							>
 								{displayTask.description || "No description"}
 							</p>
 						</div>
 					</button>
 					<!-- Row 3: Dependencies (if any) -->
 					{#if displayTask.depends_on && displayTask.depends_on.length > 0}
-						{@const unresolvedDeps = displayTask.depends_on.filter(d => d.status !== 'closed')}
-						{@const resolvedDeps = displayTask.depends_on.filter(d => d.status === 'closed')}
+						{@const unresolvedDeps = displayTask.depends_on.filter(
+							(d) => d.status !== "closed",
+						)}
+						{@const resolvedDeps = displayTask.depends_on.filter(
+							(d) => d.status === "closed",
+						)}
 						<div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
-							<span class="text-[10px] font-mono" style="color: oklch(0.55 0.02 250);">deps:</span>
+							<span
+								class="text-[10px] font-mono"
+								style="color: oklch(0.55 0.02 250);">deps:</span
+							>
 							{#each unresolvedDeps as dep (dep.id)}
 								<span
 									class="px-1.5 py-0.5 rounded text-[10px] font-mono"
@@ -4289,7 +4539,10 @@
 				{:else}
 					<!-- Idle state -->
 					<div class="flex items-center gap-2 mb-1">
-						<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
+						<h3
+							class="font-mono font-bold text-sm tracking-wide"
+							style="color: oklch(0.5 0 0 / 0.5);"
+						>
 							Ready to start work
 						</h3>
 					</div>
@@ -4325,7 +4578,10 @@
 					<div class="flex flex-col min-w-0">
 						<!-- Agent name -->
 						<span
-							class="font-mono text-sm font-bold tracking-wide {outputActivityState === 'generating' || outputActivityState === 'thinking' ? 'shimmer-text-fast' : ''}"
+							class="font-mono text-sm font-bold tracking-wide {outputActivityState ===
+								'generating' || outputActivityState === 'thinking'
+								? 'shimmer-text-fast'
+								: ''}"
 							style="color: {displayAccent}; text-shadow: 0 0 12px {displayGlow};"
 						>
 							{agentName}
@@ -4363,23 +4619,31 @@
 				<div class="flex items-center gap-2">
 					<!-- Token Activity Sparkline (bar chart style, moved to right side) -->
 					{#if sparklineData && sparklineData.length > 0}
-						{@const tokenActivityData = sparklineData.map(d => d.tokens)}
+						{@const tokenActivityData = sparklineData.map((d) => d.tokens)}
 						<div class="mr-6">
-						<TerminalActivitySparkline
-							activityData={tokenActivityData}
-							maxBars={12}
-							height={16}
-							width={70}
-							showTooltip={true}
-							animateEntry={true}
-						/>
+							<TerminalActivitySparkline
+								activityData={tokenActivityData}
+								maxBars={12}
+								height={16}
+								width={70}
+								showTooltip={true}
+								animateEntry={true}
+							/>
 						</div>
 					{/if}
 
 					<!-- Context Progress (compact) -->
 					{#if contextPercent != null && contextPercent >= 0}
-						{@const progressColor = contextPercent > 50 ? 'progress-success' : contextPercent > 25 ? 'progress-warning' : 'progress-error'}
-						<div class="w-16 flex items-center gap-1" title="{contextPercent}% context remaining">
+						{@const progressColor =
+							contextPercent > 50
+								? "progress-success"
+								: contextPercent > 25
+									? "progress-warning"
+									: "progress-error"}
+						<div
+							class="w-16 flex items-center gap-1"
+							title="{contextPercent}% context remaining"
+						>
 							<progress
 								class="progress {progressColor} h-1.5 w-full"
 								value={contextPercent}
@@ -4395,16 +4659,40 @@
 					<button
 						type="button"
 						class="p-1 rounded hover:bg-base-content/10 transition-colors group"
-						title={sessionCopied ? "Copied!" : "Copy session contents (Alt+Shift+C)"}
+						title={sessionCopied
+							? "Copied!"
+							: "Copy session contents (Alt+Shift+C)"}
 						onclick={copySessionContents}
 					>
 						{#if sessionCopied}
-							<svg class="w-4 h-4" style="color: oklch(0.70 0.20 145);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							<svg
+								class="w-4 h-4"
+								style="color: oklch(0.70 0.20 145);"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M4.5 12.75l6 6 9-13.5"
+								/>
 							</svg>
 						{:else}
-							<svg class="w-4 h-4 opacity-50 group-hover:opacity-80 transition-opacity" style="color: oklch(0.70 0.05 250);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+							<svg
+								class="w-4 h-4 opacity-50 group-hover:opacity-80 transition-opacity"
+								style="color: oklch(0.70 0.05 250);"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
+								/>
 							</svg>
 						{/if}
 					</button>
@@ -4414,7 +4702,10 @@
 						<span
 							class="badge badge-xs font-mono"
 							style="background: oklch(0.45 0.18 50); color: oklch(0.98 0.02 250); border: none;"
-							title="{pendingHumanActionsCount} manual action{pendingHumanActionsCount > 1 ? 's' : ''} required"
+							title="{pendingHumanActionsCount} manual action{pendingHumanActionsCount >
+							1
+								? 's'
+								: ''} required"
 						>
 							🧑 {pendingHumanActionsCount}
 						</span>
@@ -4425,8 +4716,11 @@
 							type="button"
 							class="badge badge-xs font-mono cursor-pointer hover:opacity-80 transition-opacity"
 							style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
-							title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''} - click to review and create"
-							onclick={() => suggestedTasksModalOpen = true}
+							title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length >
+							1
+								? 's'
+								: ''} - click to review and create"
+							onclick={() => (suggestedTasksModalOpen = true)}
 						>
 							💡 {detectedSuggestedTasks.length}
 						</button>
@@ -4538,9 +4832,11 @@
 				<div class="flex items-center gap-2">
 					<!-- Activity Sparkline -->
 					{#if activityData.length > 0}
-						{@const hasRecentActivity = activityData.slice(-3).some((v) => v > 0)}
+						{@const hasRecentActivity = activityData
+							.slice(-3)
+							.some((v) => v > 0)}
 						<div
-							class="{hasRecentActivity ? 'animate-pulse' : ''}"
+							class={hasRecentActivity ? "animate-pulse" : ""}
 							title="Terminal activity"
 							style={hasRecentActivity ? "animation-duration: 2s;" : ""}
 						>
@@ -4582,16 +4878,40 @@
 					<button
 						type="button"
 						class="p-1 rounded hover:bg-base-content/10 transition-colors group"
-						title={sessionCopied ? "Copied!" : "Copy server output (Alt+Shift+C)"}
+						title={sessionCopied
+							? "Copied!"
+							: "Copy server output (Alt+Shift+C)"}
 						onclick={copySessionContents}
 					>
 						{#if sessionCopied}
-							<svg class="w-4 h-4" style="color: oklch(0.70 0.20 145);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							<svg
+								class="w-4 h-4"
+								style="color: oklch(0.70 0.20 145);"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M4.5 12.75l6 6 9-13.5"
+								/>
 							</svg>
 						{:else}
-							<svg class="w-4 h-4 opacity-50 group-hover:opacity-80 transition-opacity" style="color: oklch(0.70 0.05 250);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+							<svg
+								class="w-4 h-4 opacity-50 group-hover:opacity-80 transition-opacity"
+								style="color: oklch(0.70 0.05 250);"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
+								/>
 							</svg>
 						{/if}
 					</button>
@@ -4613,7 +4933,7 @@
 			</div>
 		{/if}
 
-			<!-- Output Section -->
+		<!-- Output Section -->
 		<div
 			class="flex-1 flex flex-col min-h-0"
 			style="border-top: 10px solid oklch(0.5 0 0 / 0.08);"
@@ -4622,16 +4942,26 @@
 			<!-- Container uses flex-shrink-0 to prevent collapse, max-height constrains expansion -->
 			<!-- overflow-y-auto allows scrolling if content exceeds max-height -->
 			{#if hasRichSignal && isAgentMode}
-				<div class="px-3 py-2 overflow-y-auto flex-shrink-0" style="border-bottom: 1px solid oklch(0.5 0 0 / 0.12); max-height: 350px;">
+				<div
+					class="px-3 py-2 overflow-y-auto flex-shrink-0"
+					style="border-bottom: 1px solid oklch(0.5 0 0 / 0.12); max-height: 350px;"
+				>
 					{#if workingSignal}
 						<WorkingSignalCard
 							signal={workingSignal}
+							{agentName}
 							onTaskClick={(taskId) => onTaskClick?.(taskId)}
-							onInterrupt={onInterrupt ? async () => { await onInterrupt?.(); } : undefined}
-							onPause={onSendInput ? async () => {
-								// Send /jat:pause to pause work on this task
-								await onSendInput('/jat:pause', 'text');
-							} : undefined}
+							onInterrupt={onInterrupt
+								? async () => {
+										await onInterrupt?.();
+									}
+								: undefined}
+							onPause={onSendInput
+								? async () => {
+										// Send /jat:pause to pause work on this task
+										await onSendInput("/jat:pause", "text");
+									}
+								: undefined}
 							compact={false}
 						/>
 					{:else if reviewSignal}
@@ -4641,17 +4971,21 @@
 							onApprove={async () => {
 								// When user approves from review card, trigger completion flow
 								if (onSendInput) {
-									await onSendInput('/jat:complete', 'text');
+									await onSendInput("/jat:complete", "text");
 								}
 							}}
-							onRequestChanges={onSendInput ? async (feedback) => {
-								// Send feedback to agent for requested changes
-								await onSendInput(feedback, 'text');
-							} : undefined}
-							onAskQuestion={onSendInput ? async (question) => {
-								// Send question to agent
-								await onSendInput(question, 'text');
-							} : undefined}
+							onRequestChanges={onSendInput
+								? async (feedback) => {
+										// Send feedback to agent for requested changes
+										await onSendInput(feedback, "text");
+									}
+								: undefined}
+							onAskQuestion={onSendInput
+								? async (question) => {
+										// Send question to agent
+										await onSendInput(question, "text");
+									}
+								: undefined}
 							compact={false}
 						/>
 					{:else if needsInputSignal}
@@ -4661,50 +4995,50 @@
 							onSelectOption={async (optionId) => {
 								// Send the option selection to the terminal
 								if (onSendInput) {
-									await onSendInput(optionId, 'text');
+									await onSendInput(optionId, "text");
 								}
 							}}
 							onSubmitText={async (text) => {
 								// Send custom text input to the terminal
 								if (onSendInput) {
-									await onSendInput(text, 'text');
+									await onSendInput(text, "text");
 								}
 							}}
 							compact={false}
 						/>
 					{:else if completingSignal}
-						<CompletingSignalCard
-							signal={completingSignal}
-							compact={false}
-						/>
+						<CompletingSignalCard signal={completingSignal} compact={false} />
 					{:else if idleSignal}
 						<IdleSignalCard
 							signal={idleSignal}
 							onTaskClick={(taskId) => onTaskClick?.(taskId)}
-							onStartIdle={onSendInput ? async () => {
-								// Send /jat:start to start working
-								await onSendInput('/jat:start', 'text');
-							} : undefined}
-							onStartSuggested={onSendInput && idleSignal.suggestedNextTask ? async () => {
-								// Start working on the suggested task
-								await onSendInput(`/jat:start ${idleSignal.suggestedNextTask!.taskId}`, 'text');
-							} : undefined}
-							onAssignTask={onSendInput ? async (taskId) => {
-								// Start working on a specific task
-								await onSendInput(`/jat:start ${taskId}`, 'text');
-							} : undefined}
+							onStartIdle={onSendInput
+								? async () => {
+										// Send /jat:start to start working
+										await onSendInput("/jat:start", "text");
+									}
+								: undefined}
+							onStartSuggested={onSendInput && idleSignal.suggestedNextTask
+								? async () => {
+										// Start working on the suggested task
+										await onSendInput(
+											`/jat:start ${idleSignal.suggestedNextTask!.taskId}`,
+											"text",
+										);
+									}
+								: undefined}
+							onAssignTask={onSendInput
+								? async (taskId) => {
+										// Start working on a specific task
+										await onSendInput(`/jat:start ${taskId}`, "text");
+									}
+								: undefined}
 							compact={false}
 						/>
 					{:else if startingSignal}
-						<StartingSignalCard
-							signal={startingSignal}
-							compact={false}
-						/>
+						<StartingSignalCard signal={startingSignal} compact={false} />
 					{:else if compactingSignal}
-						<CompactingSignalCard
-							signal={compactingSignal}
-							compact={false}
-						/>
+						<CompactingSignalCard signal={compactingSignal} compact={false} />
 					{/if}
 				</div>
 			{/if}
@@ -4729,19 +5063,19 @@
 			</div>
 
 			<!-- Event Timeline Stack (peeks above input, expands on hover) -->
-			{#if mode === 'agent' && sessionName}
+			{#if mode === "agent" && sessionName}
 				<div class="relative px-3 bg-base-300">
 					<EventStack
 						{sessionName}
 						maxEvents={20}
 						pollInterval={5000}
-						autoExpand={sessionState === 'completed'}
+						autoExpand={sessionState === "completed"}
 						onRollback={(event) => {
 							// Open confirmation modal before rolling back
 							if (event.git_sha) {
 								rollbackEvent = {
 									git_sha: event.git_sha,
-									timestamp: event.timestamp
+									timestamp: event.timestamp,
 								};
 								rollbackModalOpen = true;
 							}
@@ -4751,13 +5085,13 @@
 						onSelectOption={async (optionId) => {
 							// Send the option selection to the terminal via EventStack's needs_input card
 							if (onSendInput) {
-								await onSendInput(optionId, 'text');
+								await onSendInput(optionId, "text");
 							}
 						}}
 						onSubmitText={async (text) => {
 							// Send custom text input to the terminal via EventStack's needs_input card
 							if (onSendInput) {
-								await onSendInput(text, 'text');
+								await onSendInput(text, "text");
 							}
 						}}
 					/>
@@ -4766,7 +5100,7 @@
 
 			<!-- Input Section (z-[55] to layer above collapsed AND expanded EventStack z-50) -->
 			<div
-				class="relative px-3 py-2 flex-shrink-0 z-[55]"
+				class="relative px-3 py-2 flex-shrink-0 z-[50]"
 				style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);"
 			>
 				<!-- Attached Files Preview -->
@@ -4778,7 +5112,7 @@
 								style="background: oklch(0.28 0.08 200); border: 1px solid oklch(0.35 0.06 200);"
 							>
 								<!-- File preview/icon -->
-								{#if file.category === 'image' && file.preview}
+								{#if file.category === "image" && file.preview}
 									<img
 										src={file.preview}
 										alt={file.name}
@@ -4888,12 +5222,13 @@
 						</div>
 
 						<!-- Different UIs based on question type -->
-						{#if customQuestionData.questionType === 'choice' && customQuestionData.options?.length > 0}
+						{#if customQuestionData.questionType === "choice" && customQuestionData.options?.length > 0}
 							<!-- Choice question: clickable option buttons -->
 							<div class="flex flex-wrap gap-1.5">
 								{#each customQuestionData.options as opt, index (index)}
 									<button
-										onclick={() => submitCustomQuestionAnswer(opt.value || opt.label)}
+										onclick={() =>
+											submitCustomQuestionAnswer(opt.value || opt.label)}
 										class="btn btn-xs btn-outline gap-1"
 										style="background: oklch(0.25 0.03 280); border-color: oklch(0.40 0.08 280); color: oklch(0.85 0.02 280);"
 										title={opt.description || opt.label}
@@ -4910,31 +5245,51 @@
 							>
 								Click an option to select
 							</div>
-						{:else if customQuestionData.questionType === 'confirm'}
+						{:else if customQuestionData.questionType === "confirm"}
 							<!-- Confirm question: Yes/No buttons -->
 							<div class="flex gap-2">
 								<button
-									onclick={() => submitCustomQuestionAnswer('yes')}
+									onclick={() => submitCustomQuestionAnswer("yes")}
 									class="btn btn-xs btn-success gap-1"
 									disabled={sendingInput || !onSendInput}
 								>
-									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+									<svg
+										class="w-3 h-3"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+										stroke-width="2.5"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M5 13l4 4L19 7"
+										/>
 									</svg>
 									Yes
 								</button>
 								<button
-									onclick={() => submitCustomQuestionAnswer('no')}
+									onclick={() => submitCustomQuestionAnswer("no")}
 									class="btn btn-xs btn-error btn-outline gap-1"
 									disabled={sendingInput || !onSendInput}
 								>
-									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+									<svg
+										class="w-3 h-3"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+										stroke-width="2.5"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M6 18L18 6M6 6l12 12"
+										/>
 									</svg>
 									No
 								</button>
 							</div>
-						{:else if customQuestionData.questionType === 'input'}
+						{:else if customQuestionData.questionType === "input"}
 							<!-- Input question: text field with submit -->
 							<div class="flex items-center gap-2">
 								<input
@@ -4945,19 +5300,34 @@
 									style="background: oklch(0.18 0.02 280); border-color: oklch(0.45 0.12 280); color: oklch(0.90 0.02 280);"
 									onkeydown={(e) => {
 										if (e.key === "Enter" && customQuestionInputValue.trim()) {
-											submitCustomQuestionAnswer(customQuestionInputValue.trim());
+											submitCustomQuestionAnswer(
+												customQuestionInputValue.trim(),
+											);
 										}
 									}}
 									disabled={sendingInput || !onSendInput}
 								/>
 								<button
-									onclick={() => submitCustomQuestionAnswer(customQuestionInputValue.trim())}
+									onclick={() =>
+										submitCustomQuestionAnswer(customQuestionInputValue.trim())}
 									class="btn btn-xs btn-success gap-1"
 									title="Send (Enter)"
-									disabled={sendingInput || !onSendInput || !customQuestionInputValue.trim()}
+									disabled={sendingInput ||
+										!onSendInput ||
+										!customQuestionInputValue.trim()}
 								>
-									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+									<svg
+										class="w-3 h-3"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+										stroke-width="2.5"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+										/>
 									</svg>
 									Send
 								</button>
@@ -5040,7 +5410,9 @@
 										onclick={submitOtherInput}
 										class="btn btn-xs btn-success gap-1"
 										title="Send (Enter)"
-										disabled={sendingInput || !onSendInput || !otherInputValue.trim()}
+										disabled={sendingInput ||
+											!onSendInput ||
+											!otherInputValue.trim()}
 									>
 										<svg
 											class="w-3 h-3"
@@ -5130,7 +5502,8 @@
 
 								<!-- "Other" button - lets user type custom text -->
 								<button
-									onclick={() => activateOtherInputMode(currentQuestion.options.length)}
+									onclick={() =>
+										activateOtherInputMode(currentQuestion.options.length)}
 									class="btn btn-xs btn-outline gap-1"
 									style="background: oklch(0.20 0.04 45); border-color: oklch(0.45 0.10 45); color: oklch(0.80 0.08 45);"
 									title="Type a custom response"
@@ -5211,7 +5584,8 @@
 								{#if currentQuestion.multiSelect}
 									Click options to toggle, then Done to confirm
 								{:else}
-									Click an option to select, or "Other" to type a custom response
+									Click an option to select, or "Other" to type a custom
+									response
 								{/if}
 							</div>
 						{/if}
@@ -5276,7 +5650,9 @@
 										onclick={submitOtherInput}
 										class="btn btn-xs btn-success gap-1"
 										title="Send (Enter)"
-										disabled={sendingInput || !onSendInput || !otherInputValue.trim()}
+										disabled={sendingInput ||
+											!onSendInput ||
+											!otherInputValue.trim()}
 									>
 										<svg
 											class="w-3 h-3"
@@ -5342,7 +5718,8 @@
 
 								<!-- "Other" button - lets user type custom text -->
 								<button
-									onclick={() => activateOtherInputMode(detectedQuestion.options.length)}
+									onclick={() =>
+										activateOtherInputMode(detectedQuestion.options.length)}
 									class="btn btn-xs btn-outline gap-1"
 									style="background: oklch(0.20 0.04 45); border-color: oklch(0.45 0.10 45); color: oklch(0.80 0.08 45);"
 									title="Type a custom response"
@@ -5398,7 +5775,8 @@
 								{#if detectedQuestion.isMultiSelect}
 									Click options to toggle, then Done to confirm
 								{:else}
-									Click an option to select, or "Other" to type a custom response
+									Click an option to select, or "Other" to type a custom
+									response
 								{/if}
 							</div>
 						{/if}
@@ -5552,18 +5930,31 @@
 									class="text-xs font-semibold"
 									style="color: oklch(0.95 0.08 250);"
 								>
-									{detectedSuggestedTasks.length} task{detectedSuggestedTasks.length > 1 ? 's' : ''} to create
+									{detectedSuggestedTasks.length} task{detectedSuggestedTasks.length >
+									1
+										? "s"
+										: ""} to create
 								</span>
 							</div>
 							<!-- Close button -->
 							<button
 								type="button"
 								class="btn btn-ghost btn-xs"
-								onclick={() => suggestedTasksExpanded = false}
+								onclick={() => (suggestedTasksExpanded = false)}
 								title="Close"
 							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								<svg
+									class="w-3 h-3"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+									stroke-width="2"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M6 18L18 6M6 6l12 12"
+									/>
 								</svg>
 							</button>
 						</div>
@@ -5579,10 +5970,13 @@
 									<!-- Priority badge -->
 									<span
 										class="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono font-bold mt-0.5"
-										style="background: {suggestedTask.priority === 0 ? 'oklch(0.50 0.20 25)' :
-											suggestedTask.priority === 1 ? 'oklch(0.55 0.18 50)' :
-											suggestedTask.priority === 2 ? 'oklch(0.50 0.15 250)' :
-											'oklch(0.40 0.05 250)'}; color: oklch(0.98 0.02 250);"
+										style="background: {suggestedTask.priority === 0
+											? 'oklch(0.50 0.20 25)'
+											: suggestedTask.priority === 1
+												? 'oklch(0.55 0.18 50)'
+												: suggestedTask.priority === 2
+													? 'oklch(0.50 0.15 250)'
+													: 'oklch(0.40 0.05 250)'}; color: oklch(0.98 0.02 250);"
 									>
 										P{suggestedTask.priority}
 									</span>
@@ -5627,7 +6021,8 @@
 							class="text-[10px] mt-2 opacity-50"
 							style="color: oklch(0.65 0.02 250);"
 						>
-							Agent-suggested tasks from recent output. Review and create as needed.
+							Agent-suggested tasks from recent output. Review and create as
+							needed.
 						</div>
 					</div>
 				{/if}
@@ -5642,11 +6037,17 @@
 							onclick={async () => {
 								if (sessionName) {
 									try {
-										await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
-											method: "POST",
-										});
+										await fetch(
+											`/api/work/${encodeURIComponent(sessionName)}/attach`,
+											{
+												method: "POST",
+											},
+										);
 									} catch (e) {
-										console.error("[SessionCard] Failed to attach terminal:", e);
+										console.error(
+											"[SessionCard] Failed to attach terminal:",
+											e,
+										);
 									}
 								}
 							}}
@@ -5739,34 +6140,39 @@
 									/>
 								</svg>
 							</button>
-							<ul tabindex="0" class="dropdown-content z-[100] menu menu-xs p-1 shadow-lg bg-base-200 rounded-box w-auto min-w-[100px]">
-								<li class="menu-title px-2 py-0.5 text-[9px] opacity-60">Arrows</li>
+							<ul
+								tabindex="0"
+								class="dropdown-content z-[100] menu menu-xs p-1 shadow-lg bg-base-200 rounded-box w-auto min-w-[100px]"
+							>
+								<li class="menu-title px-2 py-0.5 text-[9px] opacity-60">
+									Arrows
+								</li>
 								<li>
 									<div class="flex gap-0.5 p-0.5">
 										<button
 											onclick={() => sendKey("up")}
 											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
 											disabled={sendingInput || !onSendInput}
-											title="Up Arrow"
-										>↑</button>
+											title="Up Arrow">↑</button
+										>
 										<button
 											onclick={() => sendKey("down")}
 											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
 											disabled={sendingInput || !onSendInput}
-											title="Down Arrow"
-										>↓</button>
+											title="Down Arrow">↓</button
+										>
 										<button
 											onclick={() => sendKey("left")}
 											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
 											disabled={sendingInput || !onSendInput}
-											title="Left Arrow"
-										>←</button>
+											title="Left Arrow">←</button
+										>
 										<button
 											onclick={() => sendKey("right")}
 											class="btn btn-xs btn-ghost font-mono text-[10px] px-1.5"
 											disabled={sendingInput || !onSendInput}
-											title="Right Arrow"
-										>→</button>
+											title="Right Arrow">→</button
+										>
 									</div>
 								</li>
 								<li>
@@ -5813,7 +6219,9 @@
 											e.preventDefault();
 											setCtrlCIntercept(!ctrlCInterceptEnabled);
 										}}
-										class="font-mono text-[10px] tracking-wider uppercase whitespace-nowrap {!ctrlCInterceptEnabled ? 'opacity-50 line-through' : ''}"
+										class="font-mono text-[10px] tracking-wider uppercase whitespace-nowrap {!ctrlCInterceptEnabled
+											? 'opacity-50 line-through'
+											: ''}"
 										title={ctrlCInterceptEnabled
 											? "Send Ctrl+C — Right-click to allow copy"
 											: "Ctrl+C copies — Right-click to enable interrupt"}
@@ -6048,7 +6456,7 @@
 <!-- Suggested Tasks Modal -->
 <SuggestedTasksModal
 	isOpen={suggestedTasksModalOpen}
-	onClose={() => suggestedTasksModalOpen = false}
+	onClose={() => (suggestedTasksModalOpen = false)}
 	tasks={detectedSuggestedTasks}
 	onCreateTasks={createSuggestedTasksViaBulkApi}
 	{agentName}
@@ -6058,7 +6466,7 @@
 <!-- Rollback Confirmation Modal -->
 <RollbackConfirmModal
 	bind:isOpen={rollbackModalOpen}
-	gitSha={rollbackEvent?.git_sha || ''}
+	gitSha={rollbackEvent?.git_sha || ""}
 	timestamp={rollbackEvent?.timestamp}
 	{sessionName}
 	onClose={() => {
@@ -6109,20 +6517,20 @@
 	/* Flash animation for Alt+C complete action */
 	@keyframes complete-flash {
 		0% {
-			border-color: oklch(0.65 0.20 145);
-			box-shadow: 0 0 0 oklch(0.65 0.20 145 / 0);
+			border-color: oklch(0.65 0.2 145);
+			box-shadow: 0 0 0 oklch(0.65 0.2 145 / 0);
 		}
 		15% {
 			border-color: oklch(0.75 0.25 145);
-			box-shadow: 0 0 30px oklch(0.65 0.20 145 / 0.8);
+			box-shadow: 0 0 30px oklch(0.65 0.2 145 / 0.8);
 		}
 		30% {
-			border-color: oklch(0.70 0.22 145);
-			box-shadow: 0 0 20px oklch(0.65 0.20 145 / 0.5);
+			border-color: oklch(0.7 0.22 145);
+			box-shadow: 0 0 20px oklch(0.65 0.2 145 / 0.5);
 		}
 		100% {
 			border-color: oklch(0.35 0.02 250);
-			box-shadow: 0 0 0 oklch(0.65 0.20 145 / 0);
+			box-shadow: 0 0 0 oklch(0.65 0.2 145 / 0);
 		}
 	}
 
