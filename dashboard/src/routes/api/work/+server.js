@@ -430,20 +430,8 @@ export async function GET({ url }) {
 			});
 		}
 
-		// Step 1b: Ensure all sessions have proper terminal dimensions (80x40)
-		// This fixes sessions created before the dimension fix was applied
-		// Runs in parallel, errors are ignored (session might be closing)
-		const TMUX_TARGET_WIDTH = 80;
-		const TMUX_TARGET_HEIGHT = 40;
-		await Promise.all(
-			rawSessions.map(async (session) => {
-				try {
-					await execAsync(`tmux resize-window -t "${session.name}:0" -x ${TMUX_TARGET_WIDTH} -y ${TMUX_TARGET_HEIGHT} 2>/dev/null`);
-				} catch {
-					// Ignore resize errors - session might be closing or already at target size
-				}
-			})
-		);
+		// Step 1b: Skip terminal resize - now handled at session creation time
+		// (Previously ran tmux resize-window for every session on every request, causing ~200ms overhead)
 
 		// Step 2: Get all tasks from Beads (for lookup) - uses cache to avoid expensive JSONL parsing
 		const allTasks = getCachedTasks();
