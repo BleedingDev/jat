@@ -720,34 +720,34 @@
 
 	/* Task card states */
 	.task-card-default {
-		background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
-		border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+		background: var(--color-base-300) / 0.5;
+		border-color: var(--color-base-content) / 0.2;
 	}
 
 	.task-card-created {
-		background: color-mix(in oklch, var(--color-success) 20%, transparent);
-		border-color: color-mix(in oklch, var(--color-success) 50%, transparent);
+		background: var(--color-success) / 0.2;
+		border-color: var(--color-success) / 0.5;
 		opacity: 0.75;
 	}
 
 	.task-card-human-selected {
-		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
-		border-color: color-mix(in oklch, var(--color-warning) 50%, transparent);
+		background: var(--color-warning) / 0.3;
+		border-color: var(--color-warning) / 0.5;
 	}
 
 	.task-card-agent-selected {
-		background: color-mix(in oklch, var(--color-info) 30%, transparent);
-		border-color: color-mix(in oklch, var(--color-info) 50%, transparent);
+		background: var(--color-info) / 0.3;
+		border-color: var(--color-info) / 0.5;
 	}
 
 	/* Checkbox states */
 	.checkbox-default {
 		background: transparent;
-		border-color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
+		border-color: var(--color-base-content) / 0.4;
 	}
 
 	.checkbox-created {
-		background: color-mix(in oklch, var(--color-success) 30%, transparent);
+		background: var(--color-success) / 0.3;
 		border-color: var(--color-success);
 	}
 
@@ -763,18 +763,18 @@
 
 	/* Human/Agent badges */
 	.badge-human {
-		background: color-mix(in oklch, var(--color-warning) 80%, transparent);
+		background: var(--color-warning) / 0.8;
 		color: var(--color-warning-content);
 	}
 
 	.badge-agent {
-		background: color-mix(in oklch, var(--color-info) 80%, transparent);
+		background: var(--color-info) / 0.8;
 		color: var(--color-info-content);
 	}
 
 	/* Priority classes */
 	.priority-p0 {
-		background: color-mix(in oklch, var(--color-error) 30%, transparent);
+		background: var(--color-error) / 0.3;
 		color: var(--color-error);
 		border: none;
 		min-width: 38px;
@@ -782,7 +782,7 @@
 	}
 
 	.priority-p1 {
-		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		background: var(--color-warning) / 0.3;
 		color: var(--color-warning);
 		border: none;
 		min-width: 38px;
@@ -790,7 +790,7 @@
 	}
 
 	.priority-p2 {
-		background: color-mix(in oklch, var(--color-success) 30%, transparent);
+		background: var(--color-success) / 0.3;
 		color: var(--color-success);
 		border: none;
 		min-width: 38px;
@@ -798,7 +798,7 @@
 	}
 
 	.priority-p3 {
-		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		background: var(--color-info) / 0.3;
 		color: var(--color-info);
 		border: none;
 		min-width: 38px;
@@ -806,7 +806,7 @@
 	}
 
 	.priority-p4 {
-		background: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+		background: var(--color-base-content) / 0.2;
 		color: var(--color-base-content);
 		border: none;
 		min-width: 38px;
