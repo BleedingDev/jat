@@ -605,15 +605,14 @@
 
 /* Shimmer for "generating" state - uses agent's accent color */
 .shimmer-text-fast {
-	/* Use --shimmer-text-color if set, otherwise fall back to currentColor */
-	--_shimmer-color: var(--shimmer-text-color, currentColor);
+	/* Use a visible light gray for shimmer text base color */
 	background: linear-gradient(
 		90deg,
-		var(--_shimmer-color) 0%,
-		var(--_shimmer-color) 35%,
+		oklch(0.85 0.02 250) 0%,
+		oklch(0.85 0.02 250) 35%,
 		var(--anim-shimmer-bright) 50%,
-		var(--_shimmer-color) 65%,
-		var(--_shimmer-color) 100%
+		oklch(0.85 0.02 250) 65%,
+		oklch(0.85 0.02 250) 100%
 	);
 	background-size: 200% 100%;
 	-webkit-background-clip: text;
@@ -626,13 +625,14 @@
 
 /* Slower shimmer for "thinking" state */
 .shimmer-text-slow {
+	/* Use a visible light gray for shimmer text base color */
 	background: linear-gradient(
 		90deg,
-		currentColor 0%,
-		currentColor 40%,
+		oklch(0.85 0.02 250) 0%,
+		oklch(0.85 0.02 250) 40%,
 		var(--anim-shimmer-slow) 50%,
-		currentColor 60%,
-		currentColor 100%
+		oklch(0.85 0.02 250) 60%,
+		oklch(0.85 0.02 250) 100%
 	);
 	background-size: 200% 100%;
 	-webkit-background-clip: text;

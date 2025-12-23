@@ -513,7 +513,7 @@
 			color-mix(in oklch, var(--color-warning) 25%, var(--color-base-100)),
 			var(--color-base-100)
 		);
-		border-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+		border-color: oklch(from var(--color-warning) l c h / 40%);
 	}
 
 	.stat-icon {
@@ -544,7 +544,7 @@
 
 	.stat-label {
 		font-size: 0.65rem;
-		color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 55%);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		margin-top: 2px;
@@ -567,7 +567,7 @@
 	}
 
 	.filter-trigger:hover {
-		border-color: color-mix(in oklch, var(--color-base-content) 30%, transparent);
+		border-color: oklch(from var(--color-base-content) l c h / 30%);
 	}
 
 	/* Project Color Dot */
@@ -603,7 +603,7 @@
 
 	.filter-option.active {
 		opacity: 1;
-		background: color-mix(in oklch, var(--color-primary) 15%, transparent);
+		background: oklch(from var(--color-primary) l c h / 15%);
 		border-left-color: var(--color-primary);
 		color: var(--color-primary);
 	}
@@ -644,7 +644,7 @@
 
 	.day-count {
 		font-size: 0.75rem;
-		color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 60%);
 		padding: 0.125rem 0.5rem;
 		background: var(--color-base-300);
 		border-radius: 10px;
@@ -673,7 +673,7 @@
 		width: 100%;
 		text-align: left;
 		transition: background 0.15s ease;
-		border-bottom: 1px solid color-mix(in oklch, var(--color-base-300) 60%, transparent);
+		border-bottom: 1px solid oklch(from var(--color-base-300) l c h / 60%);
 	}
 
 	.task-item:last-child {
@@ -702,7 +702,7 @@
 		background: var(--color-info);
 	}
 	.task-priority.priority-default {
-		background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
+		background: oklch(from var(--color-base-content) l c h / 40%);
 	}
 
 	.task-info {
@@ -726,7 +726,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		font-size: 0.7rem;
-		color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 55%);
 	}
 
 	.task-id {
@@ -745,7 +745,7 @@
 	.task-arrow {
 		width: 16px;
 		height: 16px;
-		color: color-mix(in oklch, var(--color-base-content) 45%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 45%);
 		flex-shrink: 0;
 		transition:
 			color 0.15s ease,
@@ -753,7 +753,7 @@
 	}
 
 	.task-item:hover .task-arrow {
-		color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 65%);
 		transform: translateX(2px);
 	}
 
@@ -766,7 +766,7 @@
 		align-items: center;
 		justify-content: center;
 		padding: 4rem 1rem;
-		color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 60%);
 		text-align: center;
 		gap: 0.75rem;
 	}
@@ -774,11 +774,11 @@
 	.empty-icon {
 		width: 48px;
 		height: 48px;
-		color: color-mix(in oklch, var(--color-base-content) 45%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 45%);
 	}
 
 	.empty-hint {
 		font-size: 0.8rem;
-		color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+		color: oklch(from var(--color-base-content) l c h / 50%);
 	}
 </style>
