@@ -1271,7 +1271,7 @@
 	}
 
 	.progress-pill-success {
-		background: color-mix(in oklch, var(--color-success) 20%, transparent);
+		background: oklch(from var(--color-success) l c h / 20%);
 		color: var(--color-success);
 	}
 
@@ -1357,7 +1357,7 @@
 		font-family: ui-monospace, monospace;
 		padding: 0.0625rem 0.25rem;
 		border-radius: 0.25rem;
-		background: color-mix(in oklch, var(--color-warning) 20%, transparent);
+		background: oklch(from var(--color-warning) l c h / 20%);
 		color: var(--color-warning);
 	}
 
@@ -1366,7 +1366,7 @@
 		font-family: ui-monospace, monospace;
 		padding: 0.0625rem 0.25rem;
 		border-radius: 0.25rem;
-		background: color-mix(in oklch, var(--color-info) 15%, transparent);
+		background: oklch(from var(--color-info) l c h / 15%);
 		color: var(--color-info);
 	}
 
@@ -1396,13 +1396,13 @@
 	.spawn-btn {
 		flex: 1;
 		justify-content: center;
-		background: color-mix(in oklch, var(--color-success) 30%, transparent);
+		background: oklch(from var(--color-success) l c h / 30%);
 		color: var(--color-success);
-		border-color: color-mix(in oklch, var(--color-success) 50%, transparent);
+		border-color: oklch(from var(--color-success) l c h / 50%);
 	}
 
 	.spawn-btn:hover:not(:disabled) {
-		background: color-mix(in oklch, var(--color-success) 40%, transparent);
+		background: oklch(from var(--color-success) l c h / 40%);
 	}
 
 	.spawn-btn:disabled {
@@ -1412,14 +1412,14 @@
 
 	/* Refresh button - info themed */
 	.refresh-btn {
-		background: color-mix(in oklch, var(--color-info) 25%, transparent);
+		background: oklch(from var(--color-info) l c h / 25%);
 		color: var(--color-info);
-		border-color: color-mix(in oklch, var(--color-info) 40%, transparent);
+		border-color: oklch(from var(--color-info) l c h / 40%);
 		padding: 0.375rem;
 	}
 
 	.refresh-btn:hover:not(:disabled) {
-		background: color-mix(in oklch, var(--color-info) 35%, transparent);
+		background: oklch(from var(--color-info) l c h / 35%);
 	}
 
 	.refresh-btn:disabled {
@@ -1429,13 +1429,13 @@
 
 	/* Stop button - error themed */
 	.stop-btn {
-		background: color-mix(in oklch, var(--color-error) 25%, transparent);
+		background: oklch(from var(--color-error) l c h / 25%);
 		color: var(--color-error);
-		border-color: color-mix(in oklch, var(--color-error) 40%, transparent);
+		border-color: oklch(from var(--color-error) l c h / 40%);
 	}
 
 	.stop-btn:hover {
-		background: color-mix(in oklch, var(--color-error) 35%, transparent);
+		background: oklch(from var(--color-error) l c h / 35%);
 	}
 
 	/* Next up preview section */
