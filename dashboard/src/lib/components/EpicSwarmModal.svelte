@@ -417,35 +417,19 @@
 		}
 	}
 
-	// Priority badge colors - using CSS variable classes
-	function getPriorityClass(priority: number): string {
-		switch (priority) {
-			case 0:
-				return 'priority-p0'; // P0 - Red/Error
-			case 1:
-				return 'priority-p1'; // P1 - Orange/Warning
-			case 2:
-				return 'priority-p2'; // P2 - Yellow
-			case 3:
-				return 'priority-p3'; // P3 - Green/Success
-			default:
-				return 'priority-p4'; // P4+ - Gray/Neutral
-		}
-	}
-
-	// Status badge styling - using CSS classes
-	function getStatusClass(status: string): { class: string; label: string } {
+	// Status label mapping
+	function getStatusLabel(status: string): string {
 		switch (status) {
 			case 'open':
-				return { class: 'status-open', label: 'Open' };
+				return 'Open';
 			case 'in_progress':
-				return { class: 'status-in-progress', label: 'In Progress' };
+				return 'In Progress';
 			case 'closed':
-				return { class: 'status-closed', label: 'Closed' };
+				return 'Closed';
 			case 'blocked':
-				return { class: 'status-blocked', label: 'Blocked' };
+				return 'Blocked';
 			default:
-				return { class: 'status-default', label: status };
+				return status;
 		}
 	}
 </script>
@@ -606,7 +590,7 @@
 				<div class="mb-4">
 					<div class="flex items-center justify-between mb-2">
 						<div class="flex items-center gap-2">
-							<code class="text-xs font-mono px-1.5 py-0.5 rounded badge-epic-id">
+							<code class="text-xs font-mono px-1.5 py-0.5 rounded bg-primary/30 text-primary">
 								{epicId}
 							</code>
 							<span class="text-sm truncate max-w-xs text-base-content/70">
@@ -652,12 +636,25 @@
 									{@const isSelectable =
 										child.status !== 'closed' && child.status !== 'in_progress'}
 									{@const isSelected = selectedTaskIds.has(child.id)}
-									{@const statusClass = child.isBlocked
-										? getStatusClass('blocked')
-										: getStatusClass(child.status)}
+									{@const statusLabel = child.isBlocked
+										? 'Blocked'
+										: getStatusLabel(child.status)}
+									{@const priorityClasses = {
+										0: 'bg-error/30 text-error',
+										1: 'bg-warning/30 text-warning',
+										2: 'bg-info/30 text-info',
+										3: 'bg-success/30 text-success',
+										4: 'bg-neutral/30 text-base-content/70'
+									}[child.priority] ?? 'bg-neutral/30 text-base-content/70'}
+									{@const statusStyles = {
+										'open': 'bg-info/25 text-info',
+										'in_progress': 'bg-warning/25 text-warning',
+										'closed': 'bg-success/25 text-success',
+										'blocked': 'bg-error/25 text-error'
+									}[child.isBlocked ? 'blocked' : child.status] ?? 'bg-neutral/25 text-base-content/70'}
 
 									<div
-										class="flex items-center gap-2 px-3 py-2 border-b border-base-200 transition-colors group {isSelected ? 'selected-row' : ''}"
+										class="flex items-center gap-2 px-3 py-2 border-b border-base-200 transition-colors group {isSelected ? 'bg-primary/10' : ''}"
 										class:opacity-50={!isSelectable}
 									>
 										<!-- Checkbox -->
@@ -670,7 +667,7 @@
 										/>
 
 										<!-- Priority Badge -->
-										<span class="text-xs font-bold font-mono px-1.5 py-0.5 rounded {getPriorityClass(child.priority)}">
+										<span class="text-xs font-bold font-mono px-1.5 py-0.5 rounded {priorityClasses}">
 											P{child.priority}
 										</span>
 
@@ -692,8 +689,8 @@
 										</div>
 
 										<!-- Status Badge -->
-										<span class="text-xs font-mono px-2 py-0.5 rounded {statusClass.class}">
-											{statusClass.label}
+										<span class="text-xs font-mono px-2 py-0.5 rounded {statusStyles}">
+											{statusLabel}
 										</span>
 
 										<!-- View Details Button -->
@@ -741,7 +738,7 @@
 							</span>
 							{#if showCustomSettingsIndicator}
 								<span
-									class="text-xs font-mono px-1.5 py-0.5 rounded badge-saved"
+									class="text-xs font-mono px-1.5 py-0.5 rounded bg-info/30 text-info"
 								>
 									Saved
 								</span>
@@ -940,7 +937,7 @@
 							</span>
 							{#if blockedChildren.filter((c) => selectedTaskIds.has(c.id)).length > 0}
 								<span
-									class="text-xs px-2 py-0.5 rounded font-mono badge-blocked-preview"
+									class="text-xs px-2 py-0.5 rounded font-mono bg-warning/30 text-warning"
 								>
 									{blockedChildren.filter((c) => selectedTaskIds.has(c.id)).length} blocked (will
 									wait)
@@ -1080,72 +1077,4 @@
 		border: 1px solid color-mix(in oklch, var(--color-neutral) 50%, transparent);
 	}
 
-	/* Priority badge classes */
-	.priority-p0 {
-		background: color-mix(in oklch, var(--color-error) 30%, transparent);
-		color: var(--color-error);
-	}
-	.priority-p1 {
-		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
-		color: var(--color-warning);
-	}
-	.priority-p2 {
-		background: color-mix(in oklch, var(--color-info) 30%, transparent);
-		color: var(--color-info);
-	}
-	.priority-p3 {
-		background: color-mix(in oklch, var(--color-success) 30%, transparent);
-		color: var(--color-success);
-	}
-	.priority-p4 {
-		background: color-mix(in oklch, var(--color-neutral) 30%, transparent);
-		color: var(--color-base-content);
-		opacity: 0.7;
-	}
-
-	/* Status badge classes */
-	.status-open {
-		background: color-mix(in oklch, var(--color-info) 25%, transparent);
-		color: var(--color-info);
-	}
-	.status-in-progress {
-		background: color-mix(in oklch, var(--color-warning) 25%, transparent);
-		color: var(--color-warning);
-	}
-	.status-closed {
-		background: color-mix(in oklch, var(--color-success) 25%, transparent);
-		color: var(--color-success);
-	}
-	.status-blocked {
-		background: color-mix(in oklch, var(--color-error) 25%, transparent);
-		color: var(--color-error);
-	}
-	.status-default {
-		background: color-mix(in oklch, var(--color-neutral) 25%, transparent);
-		color: var(--color-base-content);
-		opacity: 0.7;
-	}
-
-	/* Epic ID badge */
-	.badge-epic-id {
-		background: color-mix(in oklch, var(--color-primary) 30%, transparent);
-		color: var(--color-primary);
-	}
-
-	/* Selected row highlight */
-	.selected-row {
-		background: color-mix(in oklch, var(--color-primary) 10%, transparent);
-	}
-
-	/* Saved indicator badge */
-	.badge-saved {
-		background: color-mix(in oklch, var(--color-info) 30%, transparent);
-		color: var(--color-info);
-	}
-
-	/* Blocked preview badge */
-	.badge-blocked-preview {
-		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
-		color: var(--color-warning);
-	}
 </style>
