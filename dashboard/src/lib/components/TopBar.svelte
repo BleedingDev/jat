@@ -33,6 +33,8 @@
 		openTaskDetailDrawer,
 		openProjectDrawer,
 		isSpawnModalOpen,
+		isStartDropdownOpen,
+		closeStartDropdown,
 	} from "$lib/stores/drawerStore";
 	import {
 		startSpawning,
@@ -399,6 +401,21 @@
 	let startNextLoading = $state(false); // Track "Start Next" primary button loading
 	let selectedProjectTab = $state<string | null>(null); // null = show all projects
 
+	// Sync with global store (for Alt+S keyboard shortcut)
+	$effect(() => {
+		const unsubscribe = isStartDropdownOpen.subscribe((isOpen) => {
+			if (isOpen) {
+				showSwarmDropdown = true;
+				// Clear any existing timeout
+				if (swarmDropdownTimeout) {
+					clearTimeout(swarmDropdownTimeout);
+					swarmDropdownTimeout = null;
+				}
+			}
+		});
+		return unsubscribe;
+	});
+
 	// Epic submenu state
 	let showEpicSubmenu = $state(false);
 	let runningEpicId = $state<string | null>(null); // Track which epic is being run
@@ -469,6 +486,7 @@
 	function hideSwarmMenuDelayed() {
 		swarmDropdownTimeout = setTimeout(() => {
 			showSwarmDropdown = false;
+			closeStartDropdown(); // Sync store state
 		}, 150);
 	}
 
@@ -935,8 +953,8 @@
 						transform: {swarmHovered || showSwarmDropdown ? 'scale(1.05)' : 'scale(1)'};
 					"
 					title={readyTaskCount > 0
-						? `Pick a task to start (${readyTaskCount} ready)`
-						: "No ready tasks"}
+						? `Pick a task to start (${readyTaskCount} ready) • Alt+S`
+						: "No ready tasks • Alt+S"}
 					onmouseenter={() => (swarmHovered = true)}
 					onmouseleave={() => (swarmHovered = false)}
 					disabled={swarmLoading || startNextLoading}

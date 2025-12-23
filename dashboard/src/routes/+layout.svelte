@@ -21,7 +21,7 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId } from '$lib/stores/drawerStore';
+	import { availableProjects, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, toggleStartDropdown } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
@@ -546,6 +546,13 @@
 		if (event.altKey && event.code === 'KeyE') {
 			event.preventDefault();
 			isEpicSwarmModalOpen.set(true);
+			return;
+		}
+
+		// Alt+S = Toggle START NEXT dropdown in TopBar
+		if (event.altKey && event.code === 'KeyS') {
+			event.preventDefault();
+			toggleStartDropdown();
 			return;
 		}
 

@@ -115,3 +115,19 @@ export function openProjectDrawer() {
 export function closeProjectDrawer() {
 	isProjectDrawerOpen.set(false);
 }
+
+// Start dropdown state (TopBar's START NEXT dropdown)
+// Keyboard shortcut: Alt+S to open
+export const isStartDropdownOpen = writable(false);
+
+export function openStartDropdown() {
+	isStartDropdownOpen.set(true);
+}
+
+export function closeStartDropdown() {
+	isStartDropdownOpen.set(false);
+}
+
+export function toggleStartDropdown() {
+	isStartDropdownOpen.update(v => !v);
+}
