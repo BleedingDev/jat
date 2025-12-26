@@ -222,11 +222,7 @@
 	<!-- Avatar Button - Industrial -->
 	<button
 		tabindex="0"
-		class="flex items-center justify-center w-7 h-7 rounded transition-all hover:scale-105"
-		style="
-			background: oklch(0.18 0.01 250);
-			border: 1px solid oklch(0.35 0.02 250);
-		"
+		class="flex items-center justify-center w-7 h-7 rounded transition-all hover:scale-105 bg-base-300 border border-base-content/20"
 		aria-label="User profile menu"
 	>
 		<svg
@@ -235,8 +231,7 @@
 			viewBox="0 0 24 24"
 			stroke-width="1.5"
 			stroke="currentColor"
-			class="w-4 h-4"
-			style="color: oklch(0.70 0.18 240);"
+			class="w-4 h-4 text-primary"
 		>
 			<path stroke-linecap="round" stroke-linejoin="round" d={userIcon} />
 		</svg>
@@ -245,17 +240,13 @@
 	<!-- Dropdown Menu - Industrial -->
 	<ul
 		tabindex="0"
-		class="menu menu-sm dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto"
-		style="
-			background: oklch(0.20 0.01 250);
-			border: 1px solid oklch(0.35 0.02 250);
-		"
+		class="menu menu-sm dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto bg-base-300 border border-base-content/20"
 	>
 		<!-- Help & Shortcuts -->
 		<li>
 			<button
 				onclick={() => showHelpModal = true}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-300"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-200"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -263,24 +254,23 @@
 					viewBox="0 0 24 24"
 					stroke-width="1.5"
 					stroke="currentColor"
-					class="w-4 h-4"
-					style="color: oklch(0.70 0.18 240);"
+					class="w-4 h-4 text-primary"
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d={questionIcon} />
 				</svg>
-				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+				<span class="text-xs flex-1 text-left text-base-content/70">
 					Help & Shortcuts
 				</span>
-				<kbd class="kbd kbd-xs" style="background: oklch(0.25 0.02 250); color: oklch(0.60 0.02 250);">?</kbd>
+				<kbd class="kbd kbd-xs bg-base-200 text-base-content/60">?</kbd>
 			</button>
 		</li>
 
-		<div class="divider my-1" style="height: 1px; background: oklch(0.30 0.02 250);"></div>
+		<div class="divider my-1 h-px bg-base-content/20"></div>
 
 		<!-- Theme Selector -->
 
 		<li class="menu-title mt-2">
-			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Theme</span>
+			<span class="text-xs text-base-content/50">Theme</span>
 		</li>
 
 		<li>
@@ -289,14 +279,13 @@
 
 		<!-- Sound Settings -->
 		<li class="menu-title mt-2">
-			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Sound</span>
+			<span class="text-xs text-base-content/50">Sound</span>
 		</li>
 
 		<li>
 			<button
 				onclick={handleSoundToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
-				style="background: {soundsEnabled ? 'oklch(0.30 0.08 145 / 0.3)' : 'transparent'};"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {soundsEnabled ? 'bg-success/20' : ''}"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -304,22 +293,17 @@
 					viewBox="0 0 24 24"
 					stroke-width="1.5"
 					stroke="currentColor"
-					class="w-4 h-4 transition-transform duration-300"
+					class="w-4 h-4 transition-transform duration-300 {soundsEnabled ? 'text-success' : 'text-base-content/50'}"
 					class:sound-icon-pulse={isSoundAnimating}
-					style="color: {soundsEnabled ? 'oklch(0.75 0.15 145)' : 'oklch(0.55 0.02 250)'};"
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d={soundsEnabled ? soundOnIcon : soundOffIcon} />
 				</svg>
-				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+				<span class="text-xs flex-1 text-left text-base-content/70">
 					Sound Effects
 				</span>
 				<span
-					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {soundsEnabled ? 'bg-success/40 text-success' : 'bg-base-200 text-base-content/50'}"
 					class:sound-badge-bounce={isSoundAnimating}
-					style="
-						background: {soundsEnabled ? 'oklch(0.35 0.10 145)' : 'oklch(0.25 0.02 250)'};
-						color: {soundsEnabled ? 'oklch(0.85 0.10 145)' : 'oklch(0.55 0.02 250)'};
-					"
 				>
 					{soundsEnabled ? 'ON' : 'OFF'}
 				</span>
@@ -328,14 +312,13 @@
 
 		<!-- Display Settings -->
 		<li class="menu-title mt-2">
-			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Display</span>
+			<span class="text-xs text-base-content/50">Display</span>
 		</li>
 
 		<li>
 			<button
 				onclick={handleSparklineToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
-				style="background: {sparklineVisible ? 'oklch(0.30 0.08 240 / 0.3)' : 'transparent'};"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {sparklineVisible ? 'bg-info/20' : ''}"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -343,22 +326,17 @@
 					viewBox="0 0 24 24"
 					stroke-width="1.5"
 					stroke="currentColor"
-					class="w-4 h-4 transition-transform duration-300"
+					class="w-4 h-4 transition-transform duration-300 {sparklineVisible ? 'text-info' : 'text-base-content/50'}"
 					class:toggle-icon-pulse={isSparklineAnimating}
-					style="color: {sparklineVisible ? 'oklch(0.75 0.15 240)' : 'oklch(0.55 0.02 250)'};"
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d={chartIcon} />
 				</svg>
-				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+				<span class="text-xs flex-1 text-left text-base-content/70">
 					Sparkline
 				</span>
 				<span
-					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {sparklineVisible ? 'bg-info/40 text-info' : 'bg-base-200 text-base-content/50'}"
 					class:toggle-badge-bounce={isSparklineAnimating}
-					style="
-						background: {sparklineVisible ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
-						color: {sparklineVisible ? 'oklch(0.85 0.10 240)' : 'oklch(0.55 0.02 250)'};
-					"
 				>
 					{sparklineVisible ? 'ON' : 'OFF'}
 				</span>
@@ -369,29 +347,23 @@
 		<li>
 			<button
 				onclick={handleCtrlCToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
-				style="background: {ctrlCIntercept ? 'oklch(0.30 0.08 25 / 0.3)' : 'transparent'};"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {ctrlCIntercept ? 'bg-error/20' : ''}"
 				title={ctrlCIntercept
 					? 'Ctrl+C sends interrupt to tmux'
 					: 'Ctrl+C copies text (browser default)'}
 			>
 				<span
-					class="w-4 h-4 flex items-center justify-center font-mono text-[9px] font-bold transition-transform duration-300 {!ctrlCIntercept ? 'line-through opacity-50' : ''}"
+					class="w-4 h-4 flex items-center justify-center font-mono text-[9px] font-bold transition-transform duration-300 {!ctrlCIntercept ? 'line-through opacity-50' : ''} {ctrlCIntercept ? 'text-error' : 'text-base-content/50'}"
 					class:toggle-icon-pulse={isCtrlCAnimating}
-					style="color: {ctrlCIntercept ? 'oklch(0.85 0.15 25)' : 'oklch(0.55 0.02 250)'};"
 				>
 					^C
 				</span>
-				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+				<span class="text-xs flex-1 text-left text-base-content/70">
 					Ctrl+C Interrupt
 				</span>
 				<span
-					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {ctrlCIntercept ? 'bg-error/40 text-error' : 'bg-base-200 text-base-content/50'}"
 					class:toggle-badge-bounce={isCtrlCAnimating}
-					style="
-						background: {ctrlCIntercept ? 'oklch(0.35 0.10 25)' : 'oklch(0.25 0.02 250)'};
-						color: {ctrlCIntercept ? 'oklch(0.85 0.10 25)' : 'oklch(0.55 0.02 250)'};
-					"
 				>
 					{ctrlCIntercept ? 'ON' : 'OFF'}
 				</span>
@@ -400,14 +372,13 @@
 
 		<!-- Epic Settings -->
 		<li class="menu-title mt-2">
-			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Epic Completion</span>
+			<span class="text-xs text-base-content/50">Epic Completion</span>
 		</li>
 
 		<li>
 			<button
 				onclick={handleEpicCelebrationToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
-				style="background: {epicCelebration ? 'oklch(0.30 0.08 85 / 0.3)' : 'transparent'};"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {epicCelebration ? 'bg-warning/20' : ''}"
 				title={epicCelebration
 					? 'Celebrate when all children of an epic complete'
 					: 'No celebration for epic completion'}
@@ -418,16 +389,12 @@
 				>
 					{epicCelebration ? '🎉' : '🔕'}
 				</span>
-				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+				<span class="text-xs flex-1 text-left text-base-content/70">
 					Celebration
 				</span>
 				<span
-					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {epicCelebration ? 'bg-warning/40 text-warning-content' : 'bg-base-200 text-base-content/50'}"
 					class:toggle-badge-bounce={isEpicCelebrationAnimating}
-					style="
-						background: {epicCelebration ? 'oklch(0.35 0.10 85)' : 'oklch(0.25 0.02 250)'};
-						color: {epicCelebration ? 'oklch(0.85 0.10 85)' : 'oklch(0.55 0.02 250)'};
-					"
 				>
 					{epicCelebration ? 'ON' : 'OFF'}
 				</span>
@@ -437,8 +404,7 @@
 		<li>
 			<button
 				onclick={handleEpicAutoCloseToggle}
-				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
-				style="background: {epicAutoClose ? 'oklch(0.30 0.08 145 / 0.3)' : 'transparent'};"
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {epicAutoClose ? 'bg-success/20' : ''}"
 				title={epicAutoClose
 					? 'Automatically close the epic in Beads when all children complete'
 					: 'Keep epic open even when all children complete'}
@@ -449,16 +415,12 @@
 				>
 					{epicAutoClose ? '✅' : '⏸️'}
 				</span>
-				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+				<span class="text-xs flex-1 text-left text-base-content/70">
 					Auto-Close
 				</span>
 				<span
-					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {epicAutoClose ? 'bg-success/40 text-success' : 'bg-base-200 text-base-content/50'}"
 					class:toggle-badge-bounce={isEpicAutoCloseAnimating}
-					style="
-						background: {epicAutoClose ? 'oklch(0.35 0.10 145)' : 'oklch(0.25 0.02 250)'};
-						color: {epicAutoClose ? 'oklch(0.85 0.10 145)' : 'oklch(0.55 0.02 250)'};
-					"
 				>
 					{epicAutoClose ? 'ON' : 'OFF'}
 				</span>
@@ -466,15 +428,15 @@
 		</li>
 
 		<li class="menu-title mt-2">
-			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Terminal Settings</span>
+			<span class="text-xs text-base-content/50">Terminal Settings</span>
 		</li>
 
 		<!-- Terminal Height Slider -->
 		<li>
 			<div class="flex flex-col gap-1 px-2 py-1">
 				<div class="flex items-center justify-between">
-					<span class="text-xs" style="color: oklch(0.70 0.02 250);">Height (rows)</span>
-					<span class="text-xs font-mono" style="color: oklch(0.80 0.02 250);">{terminalHeight}</span>
+					<span class="text-xs text-base-content/70">Height (rows)</span>
+					<span class="text-xs font-mono text-base-content/80">{terminalHeight}</span>
 				</div>
 				<input
 					type="range"
@@ -484,7 +446,7 @@
 					oninput={(e) => handleHeightChange(parseInt(e.currentTarget.value, 10))}
 					class="range range-xs range-info w-full"
 				/>
-				<div class="flex justify-between text-[9px]" style="color: oklch(0.50 0.02 250);">
+				<div class="flex justify-between text-[9px] text-base-content/50">
 					<span>{MIN_TERMINAL_HEIGHT}</span>
 					<span>{MAX_TERMINAL_HEIGHT}</span>
 				</div>
@@ -494,17 +456,12 @@
 		<!-- Session Maximize Height -->
 		<li>
 			<div class="flex flex-col gap-1 px-2 py-1">
-				<span class="text-xs" style="color: oklch(0.70 0.02 250);">Click-to-Expand Height</span>
+				<span class="text-xs text-base-content/70">Click-to-Expand Height</span>
 				<div class="flex gap-1">
 					{#each SESSION_MAXIMIZE_HEIGHT_OPTIONS as option}
 						<button
 							onclick={() => handleSessionMaxHeightChange(option.value)}
-							class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors"
-							style="
-								background: {sessionMaximizeHeight === option.value ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
-								color: {sessionMaximizeHeight === option.value ? 'oklch(0.90 0.10 240)' : 'oklch(0.60 0.02 250)'};
-								border: 1px solid {sessionMaximizeHeight === option.value ? 'oklch(0.45 0.12 240)' : 'oklch(0.30 0.02 250)'};
-							"
+							class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors border {sessionMaximizeHeight === option.value ? 'bg-info/40 text-info border-info/50' : 'bg-base-200 text-base-content/60 border-base-content/20'}"
 						>
 							{option.label}
 						</button>
@@ -516,17 +473,12 @@
 		<!-- Terminal Font Family -->
 		<li>
 			<div class="flex flex-col gap-1 px-2 py-1">
-				<span class="text-xs" style="color: oklch(0.70 0.02 250);">Font Family</span>
+				<span class="text-xs text-base-content/70">Font Family</span>
 				<div class="flex flex-wrap gap-1">
 					{#each TERMINAL_FONT_OPTIONS as option}
 						<button
 							onclick={() => handleFontFamilyChange(option.value)}
-							class="px-2 py-0.5 text-[10px] rounded transition-colors"
-							style="
-								background: {terminalFontFamily === option.value ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
-								color: {terminalFontFamily === option.value ? 'oklch(0.90 0.10 240)' : 'oklch(0.60 0.02 250)'};
-								border: 1px solid {terminalFontFamily === option.value ? 'oklch(0.45 0.12 240)' : 'oklch(0.30 0.02 250)'};
-							"
+							class="px-2 py-0.5 text-[10px] rounded transition-colors border {terminalFontFamily === option.value ? 'bg-info/40 text-info border-info/50' : 'bg-base-200 text-base-content/60 border-base-content/20'}"
 						>
 							{option.label}
 						</button>
@@ -538,17 +490,12 @@
 		<!-- Terminal Font Size -->
 		<li>
 			<div class="flex flex-col gap-1 px-2 py-1">
-				<span class="text-xs" style="color: oklch(0.70 0.02 250);">Font Size</span>
+				<span class="text-xs text-base-content/70">Font Size</span>
 				<div class="flex gap-1">
 					{#each TERMINAL_FONT_SIZE_OPTIONS as option}
 						<button
 							onclick={() => handleFontSizeChange(option.value)}
-							class="px-2.5 py-0.5 text-[10px] font-mono rounded transition-colors"
-							style="
-								background: {terminalFontSize === option.value ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
-								color: {terminalFontSize === option.value ? 'oklch(0.90 0.10 240)' : 'oklch(0.60 0.02 250)'};
-								border: 1px solid {terminalFontSize === option.value ? 'oklch(0.45 0.12 240)' : 'oklch(0.30 0.02 250)'};
-							"
+							class="px-2.5 py-0.5 text-[10px] font-mono rounded transition-colors border {terminalFontSize === option.value ? 'bg-info/40 text-info border-info/50' : 'bg-base-200 text-base-content/60 border-base-content/20'}"
 						>
 							{option.label}
 						</button>
@@ -560,17 +507,12 @@
 		<!-- Terminal Scrollback Limit -->
 		<li>
 			<div class="flex flex-col gap-1 px-2 py-1">
-				<span class="text-xs" style="color: oklch(0.70 0.02 250);">Scrollback Lines</span>
+				<span class="text-xs text-base-content/70">Scrollback Lines</span>
 				<div class="flex gap-1">
 					{#each TERMINAL_SCROLLBACK_OPTIONS as option}
 						<button
 							onclick={() => handleScrollbackChange(option.value)}
-							class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors"
-							style="
-								background: {terminalScrollback === option.value ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
-								color: {terminalScrollback === option.value ? 'oklch(0.90 0.10 240)' : 'oklch(0.60 0.02 250)'};
-								border: 1px solid {terminalScrollback === option.value ? 'oklch(0.45 0.12 240)' : 'oklch(0.30 0.02 250)'};
-							"
+							class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors border {terminalScrollback === option.value ? 'bg-info/40 text-info border-info/50' : 'bg-base-200 text-base-content/60 border-base-content/20'}"
 						>
 							{option.label}
 						</button>
@@ -582,17 +524,12 @@
 		<!-- Max Concurrent Sessions -->
 		<li>
 			<div class="flex flex-col gap-1 px-2 py-1">
-				<span class="text-xs" style="color: oklch(0.70 0.02 250);">Max Sessions</span>
+				<span class="text-xs text-base-content/70">Max Sessions</span>
 				<div class="flex gap-1">
 					{#each MAX_SESSIONS_OPTIONS as option}
 						<button
 							onclick={() => handleMaxSessionsChange(option.value)}
-							class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors"
-							style="
-								background: {maxSessions === option.value ? 'oklch(0.35 0.10 145)' : 'oklch(0.25 0.02 250)'};
-								color: {maxSessions === option.value ? 'oklch(0.90 0.10 145)' : 'oklch(0.60 0.02 250)'};
-								border: 1px solid {maxSessions === option.value ? 'oklch(0.45 0.12 145)' : 'oklch(0.30 0.02 250)'};
-							"
+							class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors border {maxSessions === option.value ? 'bg-success/40 text-success border-success/50' : 'bg-base-200 text-base-content/60 border-base-content/20'}"
 						>
 							{option.label}
 						</button>
@@ -602,11 +539,10 @@
 		</li>
 
 		<!-- Version -->
-		<div class="divider my-1" style="height: 1px; background: oklch(0.30 0.02 250);"></div>
+		<div class="divider my-1 h-px bg-base-content/20"></div>
 		<li>
 			<div
-				class="text-[10px] px-2 py-1 font-mono cursor-default"
-				style="color: oklch(0.50 0.02 250);"
+				class="text-[10px] px-2 py-1 font-mono cursor-default text-base-content/50"
 				title="Build version"
 			>
 				v{getVersionString()}
@@ -619,26 +555,24 @@
 {#if showHelpModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center"
-		style="background: oklch(0 0 0 / 0.6); backdrop-filter: blur(4px);"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
 		onclick={() => showHelpModal = false}
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
-			class="relative w-full max-w-lg mx-4 rounded-lg shadow-2xl overflow-hidden"
-			style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+			class="relative w-full max-w-lg mx-4 rounded-lg shadow-2xl overflow-hidden bg-base-300 border border-base-content/20"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<!-- Header -->
-			<div class="flex items-center justify-between px-5 py-4" style="border-bottom: 1px solid oklch(0.30 0.02 250);">
-				<h2 class="text-lg font-semibold" style="color: oklch(0.90 0.02 250);">
+			<div class="flex items-center justify-between px-5 py-4 border-b border-base-content/20">
+				<h2 class="text-lg font-semibold text-base-content">
 					Help & Keyboard Shortcuts
 				</h2>
 				<button
 					onclick={() => showHelpModal = false}
-					class="p-1 rounded hover:bg-base-300 transition-colors"
+					class="p-1 rounded hover:bg-base-200 transition-colors"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" style="color: oklch(0.60 0.02 250);">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-base-content/60">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
 				</button>
@@ -648,60 +582,60 @@
 			<div class="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
 				<!-- Global Shortcuts -->
 				<div>
-					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Global Shortcuts</h3>
+					<h3 class="text-sm font-semibold mb-2 text-primary">Global Shortcuts</h3>
 					<div class="space-y-1.5">
 						<div class="flex items-center justify-between">
-							<span class="text-sm" style="color: oklch(0.70 0.02 250);">New Task</span>
-							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + N</kbd>
+							<span class="text-sm text-base-content/70">New Task</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Alt + N</kbd>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Attach to Hovered Session</span>
-							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + A</kbd>
+							<span class="text-sm text-base-content/70">Attach to Hovered Session</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Alt + A</kbd>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Spawn New Session</span>
-							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + S</kbd>
+							<span class="text-sm text-base-content/70">Spawn New Session</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Alt + S</kbd>
 						</div>
 					</div>
 				</div>
 
 				<!-- Task Creation Shortcuts -->
 				<div>
-					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Task Creation Drawer</h3>
+					<h3 class="text-sm font-semibold mb-2 text-primary">Task Creation Drawer</h3>
 					<div class="space-y-1.5">
 						<div class="flex items-center justify-between">
-							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Save & Start Agent</span>
-							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Ctrl + Enter</kbd>
+							<span class="text-sm text-base-content/70">Save & Start Agent</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Ctrl + Enter</kbd>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Save & Close</span>
-							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + Enter</kbd>
+							<span class="text-sm text-base-content/70">Save & Close</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Alt + Enter</kbd>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Save & New</span>
-							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Ctrl + Shift + Enter</kbd>
+							<span class="text-sm text-base-content/70">Save & New</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Ctrl + Shift + Enter</kbd>
 						</div>
 						<div class="flex items-center justify-between">
-							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Close Drawer</span>
-							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Escape</kbd>
+							<span class="text-sm text-base-content/70">Close Drawer</span>
+							<kbd class="kbd kbd-sm bg-base-200 text-base-content/80">Escape</kbd>
 						</div>
 					</div>
 				</div>
 
 				<!-- Session Card Tips -->
 				<div>
-					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Session Cards</h3>
-					<ul class="text-sm space-y-1" style="color: oklch(0.65 0.02 250);">
+					<h3 class="text-sm font-semibold mb-2 text-primary">Session Cards</h3>
+					<ul class="text-sm space-y-1 text-base-content/65">
 						<li class="flex items-start gap-2">
-							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span class="text-base-content/50">•</span>
 							<span>Hover over a session card, then press <kbd class="kbd kbd-xs">Alt + A</kbd> to attach terminal</span>
 						</li>
 						<li class="flex items-start gap-2">
-							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span class="text-base-content/50">•</span>
 							<span>Click the status badge for quick actions (Complete, Kill, Attach)</span>
 						</li>
 						<li class="flex items-start gap-2">
-							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span class="text-base-content/50">•</span>
 							<span>Drag the right edge to resize session cards</span>
 						</li>
 					</ul>
@@ -709,29 +643,28 @@
 
 				<!-- Voice Input -->
 				<div>
-					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Voice Input</h3>
-					<ul class="text-sm space-y-1" style="color: oklch(0.65 0.02 250);">
+					<h3 class="text-sm font-semibold mb-2 text-primary">Voice Input</h3>
+					<ul class="text-sm space-y-1 text-base-content/65">
 						<li class="flex items-start gap-2">
-							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span class="text-base-content/50">•</span>
 							<span>Click the microphone icon to start voice recording</span>
 						</li>
 						<li class="flex items-start gap-2">
-							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span class="text-base-content/50">•</span>
 							<span>Recording uses local whisper.cpp (privacy-first, no data sent externally)</span>
 						</li>
 					</ul>
 				</div>
 
 				<!-- Links -->
-				<div class="pt-2" style="border-top: 1px solid oklch(0.30 0.02 250);">
-					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Resources</h3>
+				<div class="pt-2 border-t border-base-content/20">
+					<h3 class="text-sm font-semibold mb-2 text-primary">Resources</h3>
 					<div class="flex flex-wrap gap-2">
 						<a
 							href="https://github.com/anthropics/claude-code/issues"
 							target="_blank"
 							rel="noopener noreferrer"
-							class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors"
-							style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.02 250);"
+							class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors bg-base-200 text-base-content/70 hover:bg-base-100"
 						>
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
@@ -743,11 +676,10 @@
 			</div>
 
 			<!-- Footer -->
-			<div class="px-5 py-3 flex justify-end" style="border-top: 1px solid oklch(0.30 0.02 250); background: oklch(0.16 0.01 250);">
+			<div class="px-5 py-3 flex justify-end border-t border-base-content/20 bg-base-200">
 				<button
 					onclick={() => showHelpModal = false}
-					class="px-4 py-1.5 text-sm rounded transition-colors"
-					style="background: oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
+					class="px-4 py-1.5 text-sm rounded transition-colors bg-base-300 text-base-content/80 hover:bg-base-100"
 				>
 					Close
 				</button>
