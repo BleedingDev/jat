@@ -1889,17 +1889,11 @@
 <div class="flex flex-col h-full">
 	<!-- Filter Bar - Industrial Style -->
 	<div
-		class="p-4 overflow-visible relative"
-		style="
-			background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
-			border: 1px solid oklch(0.35 0.02 250);
-			border-left: none;
-		"
+		class="p-4 overflow-visible relative bg-gradient-to-b from-base-100 to-base-200 border border-base-content/20 border-l-0"
 	>
 		<!-- Left accent bar -->
 		<div
-			class="absolute left-0 top-0 bottom-0 w-1"
-			style="background: linear-gradient(180deg, oklch(0.70 0.18 240) 0%, oklch(0.70 0.18 240 / 0.3) 100%);"
+			class="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-primary/30"
 		></div>
 
 		<div class="flex flex-wrap items-center gap-3">
@@ -1912,30 +1906,21 @@
 					viewBox="0 0 24 24"
 					stroke-width="1.5"
 					stroke="currentColor"
-					class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2"
-					style="color: oklch(0.55 0.02 250);"
+					class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50"
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
 				</svg>
 				<input
 					type="text"
 					placeholder="Search {sortedTasks.length} of {tasks.length} tasks..."
-					class="pl-9 pr-8 py-1.5 min-w-40 max-w-64 shrink rounded font-mono text-sm"
-					style="
-						background: oklch(0.18 0.01 250);
-						border: 1px solid oklch(0.35 0.02 250);
-						color: oklch(0.75 0.02 250);
-					"
+					class="pl-9 pr-8 py-1.5 min-w-40 max-w-64 shrink rounded font-mono text-sm bg-base-200 border border-base-content/20 text-base-content/70"
 					bind:value={searchQuery}
 					oninput={() => updateURL()}
 				/>
 				{#if searchQuery}
 					<button
 						type="button"
-						class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors"
-						style="color: oklch(0.55 0.02 250);"
-						onmouseenter={(e) => e.currentTarget.style.color = 'oklch(0.75 0.02 250)'}
-						onmouseleave={(e) => e.currentTarget.style.color = 'oklch(0.55 0.02 250)'}
+						class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors text-base-content/50 hover:text-base-content/70"
 						onclick={() => { searchQuery = ''; updateURL(); }}
 						aria-label="Clear search"
 					>
@@ -2015,13 +2000,10 @@
 			{/if}
 
 			<!-- Grouping Mode Toggle - Industrial btn-group -->
-			<div class="join rounded" style="border: 1px solid oklch(0.35 0.02 250);">
+			<div class="join rounded border border-base-content/20">
 				<!-- Project grouping (cube/package icon) - DEFAULT -->
 				<button
-					class="join-item btn btn-xs px-2"
-					style={groupingMode === 'project'
-						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
-						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					class="join-item btn btn-xs px-2 border-none {groupingMode === 'project' ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
 					onclick={() => setGroupingMode('project')}
 					title="Group by Project → Epic"
 				>
@@ -2031,10 +2013,7 @@
 				</button>
 				<!-- Parent grouping (folder icon) -->
 				<button
-					class="join-item btn btn-xs px-2"
-					style={groupingMode === 'parent'
-						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
-						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					class="join-item btn btn-xs px-2 border-none {groupingMode === 'parent' ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
 					onclick={() => setGroupingMode('parent')}
 					title="Group by Parent Epic"
 				>
@@ -2044,10 +2023,7 @@
 				</button>
 				<!-- Type grouping (list icon) -->
 				<button
-					class="join-item btn btn-xs px-2"
-					style={groupingMode === 'type'
-						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
-						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					class="join-item btn btn-xs px-2 border-none {groupingMode === 'type' ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
 					onclick={() => setGroupingMode('type')}
 					title="Group by Type"
 				>
@@ -2057,10 +2033,7 @@
 				</button>
 				<!-- Label grouping (tag icon) -->
 				<button
-					class="join-item btn btn-xs px-2"
-					style={groupingMode === 'label'
-						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
-						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					class="join-item btn btn-xs px-2 border-none {groupingMode === 'label' ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
 					onclick={() => setGroupingMode('label')}
 					title="Group by Label"
 				>
@@ -2073,13 +2046,10 @@
 
 			<!-- Collapse/Expand All Groups - Industrial btn-group -->
 			{#if visibleGroupKeys.length > 0}
-				<div class="join rounded" style="border: 1px solid oklch(0.35 0.02 250);">
+				<div class="join rounded border border-base-content/20">
 					<!-- Collapse All -->
 					<button
-						class="join-item btn btn-xs px-2"
-						style={allGroupsCollapsed
-							? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
-							: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+						class="join-item btn btn-xs px-2 border-none {allGroupsCollapsed ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
 						onclick={collapseAll}
 						disabled={allGroupsCollapsed}
 						title="Collapse All Groups (Alt+[)"
@@ -2091,10 +2061,7 @@
 					</button>
 					<!-- Expand All -->
 					<button
-						class="join-item btn btn-xs px-2"
-						style={!anyGroupsCollapsed
-							? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
-							: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+						class="join-item btn btn-xs px-2 border-none {!anyGroupsCollapsed ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
 						onclick={expandAll}
 						disabled={!anyGroupsCollapsed}
 						title="Expand All Groups (Alt+])"
@@ -2109,10 +2076,7 @@
 
 			<!-- Human Tasks Only Toggle - Industrial -->
 			<button
-				class="px-2 py-1 rounded font-mono text-xs tracking-wider transition-all flex items-center gap-1"
-				style={humanTasksOnly
-					? 'background: oklch(0.70 0.18 45 / 0.25); color: oklch(0.85 0.15 45); border: 1px solid oklch(0.70 0.18 45 / 0.5);'
-					: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: 1px solid oklch(0.35 0.02 250);'}
+				class="px-2 py-1 rounded font-mono text-xs tracking-wider transition-all flex items-center gap-1 {humanTasksOnly ? 'bg-warning/25 text-warning border border-warning/50' : 'bg-base-100 text-base-content/50 border border-base-content/20'}"
 				onclick={() => { humanTasksOnly = !humanTasksOnly; updateURL(); }}
 				title="Show human-action tasks only"
 			>
@@ -2123,11 +2087,7 @@
 			<!-- Clear Filters - Industrial -->
 			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0 || humanTasksOnly}
 				<button
-					class="px-3 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover"
-					style="
-						color: oklch(0.70 0.20 25);
-						border: 1px solid oklch(0.70 0.20 25 / 0.3);
-					"
+					class="px-3 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover text-error border border-error/30"
 					onclick={clearAllFilters}
 				>
 					Clear
@@ -2139,8 +2099,7 @@
 				{#if selectedTasks.size > 0}
 					<!-- Selection mode - Industrial -->
 					<span
-						class="font-mono text-xs tracking-wider"
-						style="color: oklch(0.70 0.18 240);"
+						class="font-mono text-xs tracking-wider text-primary"
 					>
 						{selectedTasks.size} SELECTED
 					</span>
@@ -2148,12 +2107,7 @@
 						<div
 							tabindex="0"
 							role="button"
-							class="px-3 py-1.5 rounded font-mono text-xs tracking-wider uppercase cursor-pointer transition-all industrial-hover flex items-center gap-1"
-							style="
-								background: linear-gradient(135deg, oklch(0.70 0.18 240 / 0.2) 0%, oklch(0.70 0.18 240 / 0.1) 100%);
-								border: 1px solid oklch(0.70 0.18 240 / 0.4);
-								color: oklch(0.80 0.15 240);
-							"
+							class="px-3 py-1.5 rounded font-mono text-xs tracking-wider uppercase cursor-pointer transition-all industrial-hover flex items-center gap-1 bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/40 text-primary"
 						>
 							Bulk Actions
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
@@ -2162,11 +2116,7 @@
 						</div>
 						<ul
 							tabindex="0"
-							class="dropdown-content z-40 menu p-2 shadow rounded-box w-52"
-							style="
-								background: oklch(0.20 0.01 250);
-								border: 1px solid oklch(0.35 0.02 250);
-							"
+							class="dropdown-content z-40 menu p-2 shadow rounded-box w-52 bg-base-200 border border-base-content/20"
 						>
 							<li><button onclick={handleBulkAssign} class="gap-2">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
@@ -2239,8 +2189,7 @@
 						</ul>
 					</div>
 					<button
-						class="px-2 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover"
-						style="color: oklch(0.60 0.02 250);"
+						class="px-2 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover text-base-content/60"
 						onclick={clearSelection}
 					>
 						Clear
@@ -2274,77 +2223,72 @@
 	<!-- Table - Industrial Style -->
 	<!-- ondragover/ondrop prevent browser from navigating to dropped files -->
 	<div
-		class="flex-1 overflow-x-auto overflow-y-auto"
-		style="background: oklch(0.16 0.01 250);"
+		class="flex-1 overflow-x-auto overflow-y-auto bg-base-200"
 		ondragover={(e) => e.preventDefault()}
 		ondrop={(e) => e.preventDefault()}
 	>
 		<table class="table table-xs table-pin-rows table-pin-cols w-full">
 			<!-- Main column headers (always pinned at top) - Industrial -->
 			<thead>
-				<tr style="background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);">
-					<th class="w-10" style="background: inherit;">
+				<tr class="bg-gradient-to-b from-base-300 to-base-200">
+					<th class="w-10 bg-inherit">
 						<input
 							type="checkbox"
-							class="checkbox checkbox-sm"
+							class="checkbox checkbox-sm border-base-content/40"
 							checked={allSelected}
 							indeterminate={partialSelected}
 							onchange={toggleAll}
 							onclick={(e) => e.stopPropagation()}
-							style="border-color: oklch(0.45 0.02 250);"
 						/>
 					</th>
 					<th
-						class="cursor-pointer w-auto min-w-32 industrial-hover"
-						style="background: inherit;"
+						class="cursor-pointer w-auto min-w-32 industrial-hover bg-inherit"
 						onclick={() => handleSort('id')}
 					>
-						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
+						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase text-base-content/60">
 							ID
 							{#if sortColumn === 'id'}
-								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</th>
-					<td class="w-10" style="background: inherit;">
-						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);"></span>
+					<td class="w-10 bg-inherit">
+						<span class="font-mono text-xs tracking-wider uppercase text-base-content/60"></span>
 					</td>
 					<td
-						class="cursor-pointer industrial-hover"
-						style="background: inherit;"
+						class="cursor-pointer industrial-hover bg-inherit"
 						onclick={() => handleSort('title')}
 					>
-						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
+						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase text-base-content/60">
 							Title
 							{#if sortColumn === 'title'}
-								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</td>
-					<th class="w-28" style="background: inherit;">
-						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);" title="Drag & drop images to attach screenshots">
+					<th class="w-28 bg-inherit">
+						<span class="font-mono text-xs tracking-wider uppercase text-base-content/60" title="Drag & drop images to attach screenshots">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
 								<path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
 							</svg>
 						</span>
 					</th>
 					<td
-						class="cursor-pointer w-16 text-center industrial-hover"
-						style="background: inherit;"
+						class="cursor-pointer w-16 text-center industrial-hover bg-inherit"
 						onclick={() => handleSort('priority')}
 					>
-						<div class="flex items-center justify-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
+						<div class="flex items-center justify-center gap-1 font-mono text-xs tracking-wider uppercase text-base-content/60">
 							P
 							{#if sortColumn === 'priority'}
-								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</td>
-					<td class="w-32" style="background: inherit;">
-						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">Labels</span>
+					<td class="w-32 bg-inherit">
+						<span class="font-mono text-xs tracking-wider uppercase text-base-content/60">Labels</span>
 					</td>
-					<td class="w-16 text-center" style="background: inherit;" title="Review status: Auto-proceed or Requires Review">
-						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
+					<td class="w-16 text-center bg-inherit" title="Review status: Auto-proceed or Requires Review">
+						<span class="font-mono text-xs tracking-wider uppercase text-base-content/60">
 							<!-- Eye icon for Review column -->
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mx-auto">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
@@ -2353,14 +2297,13 @@
 						</span>
 					</td>
 					<td
-						class="cursor-pointer w-16 industrial-hover"
-						style="background: inherit;"
+						class="cursor-pointer w-16 industrial-hover bg-inherit"
 						onclick={() => handleSort('updated')}
 					>
-						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);">
+						<div class="flex items-center gap-1 font-mono text-xs tracking-wider uppercase text-base-content/60">
 							Age
 							{#if sortColumn === 'updated'}
-								<span style="color: oklch(0.70 0.18 240);">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
 							{/if}
 						</div>
 					</td>
@@ -2448,16 +2391,10 @@
 
 								<!-- Status text -->
 								<div class="relative z-10 text-center">
-									<p
-										class="font-mono text-sm tracking-widest uppercase mb-1"
-										style="color: oklch(0.70 0.18 240);"
-									>
+									<p class="font-mono text-sm tracking-widest uppercase mb-1 text-primary">
 										All Clear
 									</p>
-									<p
-										class="font-mono text-xs tracking-wide"
-										style="color: oklch(0.50 0.02 250);"
-									>
+									<p class="font-mono text-xs tracking-wide text-base-content/50">
 										No tasks matching current filters
 									</p>
 								</div>
@@ -2465,14 +2402,7 @@
 								<!-- Action buttons -->
 								{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0}
 									<button
-										class="relative z-10 mt-6 px-4 py-2 rounded font-mono text-xs tracking-wider uppercase transition-all"
-										style="
-											background: oklch(0.70 0.18 240 / 0.1);
-											border: 1px solid oklch(0.70 0.18 240 / 0.3);
-											color: oklch(0.70 0.18 240);
-										"
-										onmouseenter={(e) => e.currentTarget.style.background = 'oklch(0.70 0.18 240 / 0.2)'}
-										onmouseleave={(e) => e.currentTarget.style.background = 'oklch(0.70 0.18 240 / 0.1)'}
+										class="relative z-10 mt-6 px-4 py-2 rounded font-mono text-xs tracking-wider uppercase transition-all bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20"
 										onclick={clearAllFilters}
 									>
 										Clear Filters
@@ -2690,11 +2620,8 @@
 														<div class="flex items-center gap-2 ml-3" title="{closedChildrenCount} of {totalChildrenCount} tasks completed">
 															<!-- Checkmark for fully complete -->
 															{#if isEpicFullyComplete}
-																<span
-																	class="flex items-center justify-center w-5 h-5 rounded-full"
-																	style="background: oklch(0.55 0.18 145 / 0.25);"
-																>
-																	<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<span class="flex items-center justify-center w-5 h-5 rounded-full bg-success/25">
+																	<svg class="w-3 h-3 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
 																	</svg>
 																</span>
@@ -2702,8 +2629,8 @@
 															<!-- Progress bar -->
 															<div class="w-20 h-1.5 bg-base-content/10 rounded-full overflow-hidden {isRunningEpic ? 'ring-1 ring-primary/30' : ''}">
 																<div
-																	class="h-full rounded-full transition-all duration-300 {isRunningEpic ? 'animate-pulse' : ''}"
-																	style="width: {progressPercent}%; background: {isEpicFullyComplete ? 'oklch(0.72 0.20 142)' : isRunningEpic ? 'oklch(0.75 0.18 85)' : epicVisual.accent};"
+																	class="h-full rounded-full transition-all duration-300 {isRunningEpic ? 'animate-pulse' : ''} {isEpicFullyComplete ? 'bg-success' : isRunningEpic ? 'bg-warning' : ''}"
+																	style="width: {progressPercent}%; {!isEpicFullyComplete && !isRunningEpic ? `background: ${epicVisual.accent};` : ''}"
 																></div>
 															</div>
 															<!-- X/Y complete text -->
@@ -2713,8 +2640,7 @@
 															<!-- Running agent count (only when epic is active) -->
 															{#if isRunningEpic && epicQueueAgents.length > 0}
 																<span
-																	class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono animate-pulse"
-																	style="background: oklch(0.75 0.18 85 / 0.2); color: oklch(0.85 0.15 85);"
+																	class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono animate-pulse bg-warning/20 text-warning"
 																	title="Agents working on this epic: {epicQueueAgents.join(', ')}"
 																>
 																	<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2807,18 +2733,17 @@
 														{#if isCompletedByActiveSession}
 															<!-- Completed checkmark for tasks finished by active session -->
 															<span
-																class="flex items-center justify-center w-5 h-5 rounded-full"
-																style="background: oklch(0.55 0.18 145 / 0.25);"
+																class="flex items-center justify-center w-5 h-5 rounded-full bg-success/25"
 																title="Completed - session still active"
 															>
-																<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<svg class="w-3 h-3 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
 																</svg>
 															</span>
 														{:else if isChildTask}
 															<span
-																class="font-mono text-xs select-none"
-																style="color: oklch(0.45 0.02 250); min-width: 1rem;"
+																class="font-mono text-xs select-none text-base-content/40"
+																style="min-width: 1rem;"
 															>{isLastChild ? '└' : '├'}</span>
 														{/if}
 														<TaskIdBadge
@@ -2858,11 +2783,10 @@
 												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 													<div>
 														<div
-															class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : ''}"
-															style={!(taskIsActive && isAgentGenerating(task.assignee)) ? "color: oklch(0.85 0.02 250);" : ""}
+															class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
 														>{task.title}</div>
 														{#if task.description}
-															<div class="text-xs line-clamp-5" style="color: oklch(0.55 0.02 250);">
+															<div class="text-xs line-clamp-5 text-base-content/55">
 																{task.description}
 															</div>
 														{/if}
@@ -2917,11 +2841,10 @@
 														{/each}
 														<!-- Add more button / empty drop zone -->
 														<div
-															class="w-6 h-6 rounded border border-dashed flex items-center justify-center transition-all flex-shrink-0"
-															style="border-color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'}; background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.1)' : 'transparent'};"
+															class="w-6 h-6 rounded border border-dashed flex items-center justify-center transition-all flex-shrink-0 {dragOverTask === task.id ? 'border-primary bg-primary/10' : 'border-base-content/30'}"
 															title={(taskFiles.get(task.id) || []).length > 0 ? 'Drop to add another file' : 'Drop file here to attach'}
 														>
-															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.45 0.02 250)'};">
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3 {dragOverTask === task.id ? 'text-primary' : 'text-base-content/40'}">
 																<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 															</svg>
 														</div>
@@ -2936,8 +2859,7 @@
 														</span>
 														{#if blockedTasks.length > 0}
 															<span
-																class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
-																style="color: oklch(0.75 0.15 200); background: oklch(0.75 0.15 200 / 0.15);"
+																class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded text-info bg-info/15"
 																title="Completing this task unblocks {blockedTasks.length} other {blockedTasks.length === 1 ? 'task' : 'tasks'}: {blockedTasks.slice(0, 3).map(t => t.id).join(', ')}{blockedTasks.length > 3 ? '...' : ''}"
 															>
 																<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2948,8 +2870,7 @@
 														{/if}
 														{#if isOnCriticalPath}
 															<span
-																class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
-																style="color: oklch(0.75 0.18 30); background: oklch(0.75 0.18 30 / 0.15);"
+																class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded text-error bg-error/15"
 																title="Critical path: {criticalPathLength} {criticalPathLength === 1 ? 'task' : 'tasks'} to epic completion. Completing this task shortens the critical path."
 															>
 																<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2968,7 +2889,7 @@
 													{#if task.labels && task.labels.length > 0}
 														<LabelBadges labels={task.labels} maxDisplay={2} />
 													{:else}
-														<span style="color: oklch(0.40 0.02 250);">-</span>
+														<span class="text-base-content/40">-</span>
 													{/if}
 												</td>
 
@@ -2981,18 +2902,18 @@
 														<div class="flex items-center justify-center gap-1">
 															{#if reviewStatus.action === 'review'}
 																<!-- Eye icon for Review -->
-																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.80 0.15 45);">
+																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-warning">
 																	<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
 																	<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
 																</svg>
 															{:else}
 																<!-- Checkmark icon for Auto -->
-																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
+																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-success">
 																	<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
 																</svg>
 															{/if}
 															{#if reviewStatus.hasOverride}
-																<span class="badge badge-xs" style="background: oklch(0.70 0.15 280 / 0.2); color: oklch(0.80 0.12 280); font-size: 9px; padding: 1px 4px;">O</span>
+																<span class="badge badge-xs bg-secondary/20 text-secondary" style="font-size: 9px; padding: 1px 4px;">O</span>
 															{/if}
 														</div>
 													</div>
@@ -3127,11 +3048,8 @@
 											<div class="flex items-center gap-2 ml-3" title="{parentClosedCount} of {parentTotalCount} tasks completed">
 												<!-- Checkmark for fully complete -->
 												{#if parentIsFullyComplete}
-													<span
-														class="flex items-center justify-center w-5 h-5 rounded-full"
-														style="background: oklch(0.55 0.18 145 / 0.25);"
-													>
-														<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<span class="flex items-center justify-center w-5 h-5 rounded-full bg-success/25">
+														<svg class="w-3 h-3 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
 														</svg>
 													</span>
@@ -3139,8 +3057,8 @@
 												<!-- Progress bar -->
 												<div class="w-24 h-1.5 bg-base-content/10 rounded-full overflow-hidden {isParentRunningEpic ? 'ring-1 ring-primary/30' : ''}">
 													<div
-														class="h-full rounded-full transition-all duration-300 {isParentRunningEpic ? 'animate-pulse' : ''}"
-														style="width: {progressPercent}%; background: {parentIsFullyComplete ? 'oklch(0.72 0.20 142)' : isParentRunningEpic ? 'oklch(0.75 0.18 85)' : typeVisual.accent};"
+														class="h-full rounded-full transition-all duration-300 {isParentRunningEpic ? 'animate-pulse' : ''} {parentIsFullyComplete ? 'bg-success' : isParentRunningEpic ? 'bg-warning' : ''}"
+														style="width: {progressPercent}%; {!parentIsFullyComplete && !isParentRunningEpic ? `background: ${typeVisual.accent};` : ''}"
 													></div>
 												</div>
 												<!-- X/Y complete text -->
@@ -3150,8 +3068,7 @@
 												<!-- Running agent count (only when epic is active) -->
 												{#if isParentRunningEpic && parentEpicQueueAgents.length > 0}
 													<span
-														class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono animate-pulse"
-														style="background: oklch(0.75 0.18 85 / 0.2); color: oklch(0.85 0.15 85);"
+														class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono animate-pulse bg-warning/20 text-warning"
 														title="Agents working on this epic: {parentEpicQueueAgents.join(', ')}"
 													>
 														<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3247,10 +3164,9 @@
 										>
 											<input
 												type="checkbox"
-												class="checkbox checkbox-sm"
+												class="checkbox checkbox-sm border-base-content/40"
 												checked={selectedTasks.has(task.id)}
 												onchange={() => toggleTask(task.id)}
-												style="border-color: oklch(0.45 0.02 250);"
 											/>
 										</th>
 										<th style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
@@ -3258,19 +3174,18 @@
 												{#if isCompletedByActiveSession}
 													<!-- Completed checkmark for tasks finished by active session -->
 													<span
-														class="flex items-center justify-center w-5 h-5 rounded-full"
-														style="background: oklch(0.55 0.18 145 / 0.25);"
+														class="flex items-center justify-center w-5 h-5 rounded-full bg-success/25"
 														title="Completed - session still active"
 													>
-														<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<svg class="w-3 h-3 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
 														</svg>
 													</span>
 												{:else if isChildTask}
 													<!-- Tree line indicator for child tasks -->
 													<span
-														class="font-mono text-xs select-none"
-														style="color: oklch(0.45 0.02 250); min-width: 1rem;"
+														class="font-mono text-xs select-none text-base-content/40"
+														style="min-width: 1rem;"
 													>{isLastChild ? '└' : '├'}</span>
 												{/if}
 												<TaskIdBadge
@@ -3309,11 +3224,10 @@
 										<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 											<div>
 												<div
-													class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : ''}"
-													style={!(taskIsActive && isAgentGenerating(task.assignee)) ? "color: oklch(0.85 0.02 250);" : ""}
+													class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
 												>{task.title}</div>
 												{#if task.description}
-													<div class="text-xs line-clamp-5" style="color: oklch(0.55 0.02 250);">
+													<div class="text-xs line-clamp-5 text-base-content/55">
 														{task.description}
 													</div>
 												{/if}
@@ -3367,11 +3281,10 @@
 												{/each}
 												<!-- Add more button / empty drop zone -->
 												<div
-													class="w-6 h-6 rounded border border-dashed flex items-center justify-center transition-all flex-shrink-0"
-													style="border-color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'}; background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.1)' : 'transparent'};"
+													class="w-6 h-6 rounded border border-dashed flex items-center justify-center transition-all flex-shrink-0 {dragOverTask === task.id ? 'border-primary bg-primary/10' : 'border-base-content/30'}"
 													title={(taskFiles.get(task.id) || []).length > 0 ? 'Drop to add another file' : 'Drop file here to attach'}
 												>
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.45 0.02 250)'};">
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3 {dragOverTask === task.id ? 'text-primary' : 'text-base-content/40'}">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 													</svg>
 												</div>
@@ -3384,8 +3297,7 @@
 											</span>
 											{#if blockedTasks.length > 0}
 												<span
-													class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
-													style="color: oklch(0.75 0.15 200); background: oklch(0.75 0.15 200 / 0.15);"
+													class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded text-info bg-info/15"
 													title="Completing this task unblocks {blockedTasks.length} other {blockedTasks.length === 1 ? 'task' : 'tasks'}: {blockedTasks.slice(0, 3).map(t => t.id).join(', ')}{blockedTasks.length > 3 ? '...' : ''}"
 												>
 													<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3396,8 +3308,7 @@
 											{/if}
 											{#if isOnCriticalPath}
 												<span
-													class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
-													style="color: oklch(0.75 0.18 30); background: oklch(0.75 0.18 30 / 0.15);"
+													class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded text-error bg-error/15"
 													title="Critical path: {criticalPathLength} {criticalPathLength === 1 ? 'task' : 'tasks'} to epic completion. Completing this task shortens the critical path."
 												>
 													<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3414,7 +3325,7 @@
 										{#if task.labels && task.labels.length > 0}
 											<LabelBadges labels={task.labels} maxDisplay={2} />
 										{:else}
-											<span style="color: oklch(0.40 0.02 250);">-</span>
+											<span class="text-base-content/40">-</span>
 										{/if}
 									</td>
 									<!-- Review Status -->
@@ -3426,18 +3337,18 @@
 											<div class="flex items-center justify-center gap-1">
 												{#if reviewStatusStd.action === 'review'}
 													<!-- Eye icon for Review -->
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.80 0.15 45);">
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-warning">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
 														<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
 													</svg>
 												{:else}
 													<!-- Checkmark icon for Auto -->
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-success">
 														<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
 													</svg>
 												{/if}
 												{#if reviewStatusStd.hasOverride}
-													<span class="badge badge-xs" style="background: oklch(0.70 0.15 280 / 0.2); color: oklch(0.80 0.12 280); font-size: 9px; padding: 1px 4px;">O</span>
+													<span class="badge badge-xs bg-secondary/20 text-secondary" style="font-size: 9px; padding: 1px 4px;">O</span>
 												{/if}
 											</div>
 										</div>
@@ -3518,7 +3429,7 @@
 									{/if}
 								</td>
 								<td style="background: transparent;">
-									<div class="font-medium text-sm" style="color: oklch(0.65 0.02 250);">{task.title}</div>
+									<div class="font-medium text-sm text-base-content/65">{task.title}</div>
 								</td>
 								<td class="w-28" style="background: transparent;"></td><!-- Image column -->
 								<td class="text-center" style="background: transparent;">
@@ -3528,8 +3439,7 @@
 										</span>
 										{#if blockedTasks.length > 0}
 											<span
-												class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
-												style="color: oklch(0.75 0.15 200); background: oklch(0.75 0.15 200 / 0.15);"
+												class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded text-info bg-info/15"
 												title="Completing this task unblocks {blockedTasks.length} other {blockedTasks.length === 1 ? 'task' : 'tasks'}: {blockedTasks.slice(0, 3).map(t => t.id).join(', ')}{blockedTasks.length > 3 ? '...' : ''}"
 											>
 												<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
