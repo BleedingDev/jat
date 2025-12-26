@@ -1019,31 +1019,22 @@
 
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
 		<div
-			class="h-full w-full max-w-2xl flex flex-col shadow-2xl"
-			style="
-				background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
-				border-left: 1px solid oklch(0.35 0.02 250);
-			"
+			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-300 border-l border-base-content/30"
 			role="dialog"
 			aria-labelledby="drawer-title"
 			onkeydown={handleKeydown}
 		>
 			<!-- Header - Industrial -->
 			<div
-				class="flex items-center justify-between p-6 relative"
-				style="
-					background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
-					border-bottom: 1px solid oklch(0.35 0.02 250);
-				"
+				class="flex items-center justify-between p-6 relative bg-base-200 border-b border-base-content/30"
 			>
 				<!-- Left accent bar -->
 				<div
-					class="absolute left-0 top-0 bottom-0 w-1"
-					style="background: linear-gradient(180deg, oklch(0.70 0.18 240) 0%, oklch(0.70 0.18 240 / 0.3) 100%);"
+					class="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-primary/30"
 				></div>
 				<div>
-					<h2 id="drawer-title" class="text-xl font-bold font-mono uppercase tracking-wider" style="color: oklch(0.85 0.02 250);">Create New Task</h2>
-					<p class="text-sm mt-1" style="color: oklch(0.55 0.02 250);">
+					<h2 id="drawer-title" class="text-xl font-bold font-mono uppercase tracking-wider text-base-content">Create New Task</h2>
+					<p class="text-sm mt-1 text-base-content/70">
 						Fill in the details below to create a new task
 					</p>
 				</div>
@@ -1058,12 +1049,12 @@
 			</div>
 
 			<!-- Content (scrollable area between sticky header and footer) - Industrial -->
-			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0" style="background: oklch(0.16 0.01 250);">
+			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0 bg-base-300">
 				<div class="space-y-6">
 					<!-- Title (Required) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-title">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Title
 								<span class="text-error">*</span>
 							</span>
@@ -1073,8 +1064,7 @@
 								id="task-title"
 								type="text"
 								placeholder="Paste task text or enter title..."
-								class="input flex-1 font-mono {validationErrors.title ? 'input-error' : ''}"
-								style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+								class="input flex-1 font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.title ? 'input-error' : ''}"
 								bind:this={titleInput}
 								bind:value={formData.title}
 								onpaste={handleTitlePaste}
@@ -1101,10 +1091,10 @@
 					<!-- Description (Optional) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-description">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Description</span>
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">Description</span>
 							<span class="flex items-center gap-1.5 -mt-2">
 								{#if isLoadingSuggestions}
-									<span class="flex items-center gap-1.5 text-xs" style="color: oklch(0.70 0.18 240);">
+									<span class="flex items-center gap-1.5 text-xs text-primary">
 										<span class="loading loading-spinner loading-xs"></span>
 										Analyzing...
 									</span>
@@ -1122,14 +1112,13 @@
 						<textarea
 							id="task-description"
 							placeholder="Enter task description or use voice input..."
-							class="textarea w-full h-32 font-mono {isDescriptionRecording ? 'textarea-primary' : ''}"
-							style="background: oklch(0.18 0.01 250); border: 1px solid {isDescriptionRecording ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'}; color: oklch(0.80 0.02 250);"
+							class="textarea w-full h-32 font-mono bg-base-200 text-base-content {isDescriptionRecording ? 'textarea-primary border-primary' : 'border-base-content/30'}"
 							bind:value={formData.description}
 							onblur={handleDescriptionBlur}
 							disabled={isSubmitting}
 						></textarea>
 						<label class="label">
-							<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							<span class="label-text-alt text-base-content/60">
 								{#if suggestionsApplied}
 									AI suggestions applied - adjust as needed
 								{:else}
@@ -1142,14 +1131,13 @@
 					<!-- Voice Input Error Message -->
 					{#if voiceInputError}
 						<div
-							class="rounded-lg p-3"
-							style="background: oklch(0.25 0.10 25 / 0.2); border: 1px solid oklch(0.50 0.15 25 / 0.3);"
+							class="rounded-lg p-3 bg-error/20 border border-error/30"
 						>
 							<div class="flex items-center gap-2">
-								<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.65 0.20 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<svg class="w-4 h-4 flex-shrink-0 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
 								</svg>
-								<span class="text-sm" style="color: oklch(0.80 0.02 250);">
+								<span class="text-sm text-base-content">
 									{voiceInputError}
 								</span>
 								<button
@@ -1166,18 +1154,17 @@
 					<!-- AI Suggestion Reasoning - Show when suggestions applied -->
 					{#if suggestionReasoning}
 						<div
-							class="rounded-lg p-3"
-							style="background: oklch(0.22 0.08 240 / 0.15); border: 1px solid oklch(0.50 0.15 240 / 0.3);"
+							class="rounded-lg p-3 bg-primary/10 border border-primary/30"
 						>
 							<div class="flex items-start gap-2">
-								<svg class="w-4 h-4 mt-0.5 flex-shrink-0" style="color: oklch(0.70 0.18 240);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<svg class="w-4 h-4 mt-0.5 flex-shrink-0 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 								</svg>
 								<div>
-									<p class="text-xs font-semibold font-mono uppercase tracking-wider mb-1" style="color: oklch(0.70 0.18 240);">
+									<p class="text-xs font-semibold font-mono uppercase tracking-wider mb-1 text-primary">
 										AI Analysis
 									</p>
-									<p class="text-sm" style="color: oklch(0.75 0.02 250);">
+									<p class="text-sm text-base-content/90">
 										{suggestionReasoning}
 									</p>
 								</div>
@@ -1198,14 +1185,13 @@
 					<!-- AI Suggestion Error -->
 					{#if suggestionError}
 						<div
-							class="rounded-lg p-3"
-							style="background: oklch(0.25 0.10 25 / 0.2); border: 1px solid oklch(0.50 0.15 25 / 0.3);"
+							class="rounded-lg p-3 bg-error/20 border border-error/30"
 						>
 							<div class="flex items-center gap-2">
-								<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.65 0.20 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<svg class="w-4 h-4 flex-shrink-0 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
 								</svg>
-								<span class="text-sm" style="color: oklch(0.80 0.02 250);">
+								<span class="text-sm text-base-content">
 									{suggestionError}
 								</span>
 								<button
@@ -1224,18 +1210,17 @@
 						<!-- Priority (Required) - Industrial -->
 						<div class="form-control">
 							<label class="label" for="task-priority">
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 									Priority
 									<span class="text-error">*</span>
 									{#if suggestionsApplied && !userModifiedFields.has('priority')}
-										<span class="badge badge-xs ml-1" style="background: oklch(0.35 0.15 240); color: oklch(0.90 0.02 250);">AI</span>
+										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
 									{/if}
 								</span>
 							</label>
 							<select
 								id="task-priority"
-								class="select w-full font-mono"
-								style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content"
 								bind:value={formData.priority}
 								onchange={() => markFieldModified('priority')}
 								disabled={isSubmitting}
@@ -1250,18 +1235,17 @@
 						<!-- Type (Required) - Industrial -->
 						<div class="form-control">
 							<label class="label" for="task-type">
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 									Type
 									<span class="text-error">*</span>
 									{#if suggestionsApplied && !userModifiedFields.has('type')}
-										<span class="badge badge-xs ml-1" style="background: oklch(0.35 0.15 240); color: oklch(0.90 0.02 250);">AI</span>
+										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
 									{/if}
 								</span>
 							</label>
 							<select
 								id="task-type"
-								class="select w-full font-mono {validationErrors.type ? 'select-error' : ''}"
-								style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.type ? 'select-error' : ''}"
 								bind:value={formData.type}
 								onchange={() => markFieldModified('type')}
 								disabled={isSubmitting}
@@ -1284,21 +1268,18 @@
 						<label class="label cursor-pointer justify-start gap-3">
 							<input
 								type="checkbox"
-								class="toggle toggle-sm"
-								style={isHumanAction
-									? 'background-color: oklch(0.70 0.18 45); border-color: oklch(0.70 0.18 45);'
-									: ''}
+								class="toggle toggle-sm {isHumanAction ? 'toggle-warning' : ''}"
 								bind:checked={isHumanAction}
 								disabled={isSubmitting}
 							/>
 							<span class="flex items-center gap-2">
 								<span style="font-size: 1.1rem;">🧑</span>
-								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: {isHumanAction ? 'oklch(0.85 0.15 45)' : 'oklch(0.55 0.02 250)'};">
+								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider {isHumanAction ? 'text-warning' : 'text-base-content/70'}">
 									Human action required
 								</span>
 							</span>
 						</label>
-						<span class="text-xs ml-12" style="color: oklch(0.45 0.02 250);">
+						<span class="text-xs ml-12 text-base-content/50">
 							Tasks that require human intervention (not agent work)
 						</span>
 					</div>
@@ -1306,15 +1287,14 @@
 					<!-- Project - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-project">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Project
 								<span class="text-error">*</span>
 							</span>
 						</label>
 						<select
 							id="task-project"
-							class="select w-full font-mono"
-							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+							class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content"
 							bind:value={formData.project}
 							disabled={isSubmitting}
 							required
@@ -1329,10 +1309,10 @@
 					<!-- Labels (Optional) - Industrial -->
 					<div class="form-control">
 						<label class="label" for="task-labels">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Labels
 								{#if suggestionsApplied && !userModifiedFields.has('labels') && formData.labels}
-									<span class="badge badge-xs ml-1" style="background: oklch(0.35 0.15 240); color: oklch(0.90 0.02 250);">AI</span>
+									<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
 								{/if}
 							</span>
 						</label>
@@ -1340,14 +1320,13 @@
 							id="task-labels"
 							type="text"
 							placeholder="e.g., frontend, urgent, bug-fix"
-							class="input w-full font-mono"
-							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+							class="input w-full font-mono bg-base-200 border-base-content/30 text-base-content"
 							bind:value={formData.labels}
 							oninput={() => markFieldModified('labels')}
 							disabled={isSubmitting}
 						/>
 						<label class="label">
-							<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							<span class="label-text-alt text-base-content/60">
 								Comma-separated list of labels
 							</span>
 						</label>
@@ -1356,11 +1335,11 @@
 					<!-- Attachments Dropzone - Industrial -->
 					<div class="form-control">
 						<label class="label">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Attachments
 							</span>
 							{#if pendingAttachments.length > 0}
-								<span class="label-text-alt font-mono" style="color: oklch(0.70 0.18 240);">
+								<span class="label-text-alt font-mono text-primary">
 									{pendingAttachments.length} file{pendingAttachments.length !== 1 ? 's' : ''}
 								</span>
 							{/if}
@@ -1380,11 +1359,8 @@
 						<!-- Dropzone -->
 						<div
 							bind:this={dropzoneRef}
-							class="relative rounded-lg p-6 text-center cursor-pointer transition-all duration-200"
-							style="
-								background: {isDragOver ? 'oklch(0.25 0.08 240 / 0.3)' : 'oklch(0.18 0.01 250)'};
-								border: 2px dashed {isDragOver ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'};
-							"
+							class="relative rounded-lg p-6 text-center cursor-pointer transition-all duration-200 {isDragOver ? 'bg-primary/20 border-primary' : 'bg-base-200 border-base-content/30'}"
+							style="border: 2px dashed;"
 							ondrop={handleDrop}
 							ondragover={handleDragOver}
 							ondragenter={handleDragEnter}
@@ -1396,21 +1372,21 @@
 						>
 							{#if isDragOver}
 								<div class="pointer-events-none">
-									<svg class="w-12 h-12 mx-auto mb-3" style="color: oklch(0.70 0.18 240);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<svg class="w-12 h-12 mx-auto mb-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
 									</svg>
-									<p class="font-mono text-sm" style="color: oklch(0.70 0.18 240);">
+									<p class="font-mono text-sm text-primary">
 										Drop files here
 									</p>
 								</div>
 							{:else}
-								<svg class="w-10 h-10 mx-auto mb-2" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<svg class="w-10 h-10 mx-auto mb-2 text-base-content/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
 								</svg>
-								<p class="font-mono text-sm" style="color: oklch(0.55 0.02 250);">
+								<p class="font-mono text-sm text-base-content/70">
 									Drop files here or click to browse
 								</p>
-								<p class="font-mono text-xs mt-1" style="color: oklch(0.45 0.02 250);">
+								<p class="font-mono text-xs mt-1 text-base-content/50">
 									Images, PDFs, text files supported
 								</p>
 							{/if}
@@ -1421,8 +1397,7 @@
 							<div class="mt-3 space-y-2">
 								{#each pendingAttachments as att (att.id)}
 									<div
-										class="flex items-center gap-3 p-2 rounded-lg"
-										style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.30 0.02 250);"
+										class="flex items-center gap-3 p-2 rounded-lg bg-base-100 border border-base-content/20"
 									>
 										<!-- Preview/Icon -->
 										{#if att.category === 'image' && att.preview}
@@ -1433,8 +1408,7 @@
 											/>
 										{:else}
 											<div
-												class="w-10 h-10 flex items-center justify-center rounded"
-												style="background: oklch(0.25 0.02 250);"
+												class="w-10 h-10 flex items-center justify-center rounded bg-base-200"
 											>
 												<svg class="w-5 h-5" style="color: {att.iconColor};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 													<path stroke-linecap="round" stroke-linejoin="round" d={att.icon} />
@@ -1444,10 +1418,10 @@
 
 										<!-- File info -->
 										<div class="flex-1 min-w-0">
-											<p class="font-mono text-sm truncate" style="color: oklch(0.80 0.02 250);">
+											<p class="font-mono text-sm truncate text-base-content">
 												{att.file.name}
 											</p>
-											<p class="font-mono text-xs" style="color: oklch(0.50 0.02 250);">
+											<p class="font-mono text-xs text-base-content/60">
 												{formatFileSize(att.file.size)}
 											</p>
 										</div>
@@ -1460,7 +1434,7 @@
 											disabled={isSubmitting}
 											aria-label="Remove attachment"
 										>
-											<svg class="w-4 h-4" style="color: oklch(0.60 0.15 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<svg class="w-4 h-4 text-error/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 											</svg>
 										</button>
@@ -1473,23 +1447,22 @@
 					<!-- Review Override - Industrial -->
 					<div class="form-control">
 						<label class="label">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Review Override
 							</span>
 							{#if isLoadingReviewPreview}
-								<span class="loading loading-spinner loading-xs" style="color: oklch(0.55 0.02 250);"></span>
+								<span class="loading loading-spinner loading-xs text-base-content/70"></span>
 							{/if}
 						</label>
 
 						<!-- Computed default display -->
 						{#if computedReviewAction && !isLoadingReviewPreview}
 							<div
-								class="rounded-lg p-3 mb-3"
-								style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.30 0.02 250);"
+								class="rounded-lg p-3 mb-3 bg-base-100 border border-base-content/20"
 							>
 								<div class="flex items-center gap-2 mb-1">
 									{#if computedReviewAction === 'review'}
-										<span class="flex items-center gap-1.5 text-sm font-medium" style="color: oklch(0.75 0.15 200);">
+										<span class="flex items-center gap-1.5 text-sm font-medium text-info">
 											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 												<path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -1497,19 +1470,19 @@
 											Requires Review
 										</span>
 									{:else}
-										<span class="flex items-center gap-1.5 text-sm font-medium" style="color: oklch(0.75 0.15 145);">
+										<span class="flex items-center gap-1.5 text-sm font-medium text-success">
 											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 											</svg>
 											Auto-Proceed
 										</span>
 									{/if}
-									<span class="text-xs" style="color: oklch(0.50 0.02 250);">
+									<span class="text-xs text-base-content/60">
 										(project default for P{formData.priority} {formData.type})
 									</span>
 								</div>
 								{#if computedReviewReason}
-									<p class="text-xs" style="color: oklch(0.55 0.02 250);">
+									<p class="text-xs text-base-content/70">
 										{computedReviewReason}
 									</p>
 								{/if}
@@ -1520,11 +1493,8 @@
 						<div class="space-y-2">
 							<!-- Use project rules (default) -->
 							<label
-								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all"
-								style="
-									background: {reviewOverride === null ? 'oklch(0.25 0.08 240 / 0.15)' : 'oklch(0.18 0.01 250)'};
-									border: 1px solid {reviewOverride === null ? 'oklch(0.50 0.15 240 / 0.5)' : 'oklch(0.30 0.02 250)'};
-								"
+								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all {reviewOverride === null ? 'bg-primary/10 border-primary/50' : 'bg-base-200 border-base-content/20'}"
+								style="border-width: 1px; border-style: solid;"
 							>
 								<input
 									type="radio"
@@ -1535,10 +1505,10 @@
 									disabled={isSubmitting}
 								/>
 								<div class="flex-1">
-									<span class="text-sm font-medium" style="color: oklch(0.80 0.02 250);">
+									<span class="text-sm font-medium text-base-content">
 										Use project rules
 									</span>
-									<p class="text-xs mt-0.5" style="color: oklch(0.50 0.02 250);">
+									<p class="text-xs mt-0.5 text-base-content/60">
 										Apply the configured review rules for this type and priority
 									</p>
 								</div>
@@ -1546,11 +1516,8 @@
 
 							<!-- Always require review -->
 							<label
-								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all"
-								style="
-									background: {reviewOverride === 'always_review' ? 'oklch(0.25 0.10 200 / 0.15)' : 'oklch(0.18 0.01 250)'};
-									border: 1px solid {reviewOverride === 'always_review' ? 'oklch(0.50 0.15 200 / 0.5)' : 'oklch(0.30 0.02 250)'};
-								"
+								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all {reviewOverride === 'always_review' ? 'bg-info/10 border-info/50' : 'bg-base-200 border-base-content/20'}"
+								style="border-width: 1px; border-style: solid;"
 							>
 								<input
 									type="radio"
@@ -1561,14 +1528,14 @@
 									disabled={isSubmitting}
 								/>
 								<div class="flex-1">
-									<span class="flex items-center gap-1.5 text-sm font-medium" style="color: oklch(0.80 0.02 250);">
-										<svg class="w-4 h-4" style="color: oklch(0.75 0.15 200);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<span class="flex items-center gap-1.5 text-sm font-medium text-base-content">
+										<svg class="w-4 h-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 											<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 											<path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
 										</svg>
 										Always require review
 									</span>
-									<p class="text-xs mt-0.5" style="color: oklch(0.50 0.02 250);">
+									<p class="text-xs mt-0.5 text-base-content/60">
 										Override project rules - this task always needs human review
 									</p>
 								</div>
@@ -1576,11 +1543,8 @@
 
 							<!-- Always auto-proceed -->
 							<label
-								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all"
-								style="
-									background: {reviewOverride === 'always_auto' ? 'oklch(0.25 0.10 145 / 0.15)' : 'oklch(0.18 0.01 250)'};
-									border: 1px solid {reviewOverride === 'always_auto' ? 'oklch(0.50 0.15 145 / 0.5)' : 'oklch(0.30 0.02 250)'};
-								"
+								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all {reviewOverride === 'always_auto' ? 'bg-success/10 border-success/50' : 'bg-base-200 border-base-content/20'}"
+								style="border-width: 1px; border-style: solid;"
 							>
 								<input
 									type="radio"
@@ -1591,13 +1555,13 @@
 									disabled={isSubmitting}
 								/>
 								<div class="flex-1">
-									<span class="flex items-center gap-1.5 text-sm font-medium" style="color: oklch(0.80 0.02 250);">
-										<svg class="w-4 h-4" style="color: oklch(0.75 0.15 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<span class="flex items-center gap-1.5 text-sm font-medium text-base-content">
+										<svg class="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 										</svg>
 										Always auto-proceed
 									</span>
-									<p class="text-xs mt-0.5" style="color: oklch(0.50 0.02 250);">
+									<p class="text-xs mt-0.5 text-base-content/60">
 										Override project rules - this task can auto-proceed without review
 									</p>
 								</div>
@@ -1605,7 +1569,7 @@
 						</div>
 
 						<label class="label">
-							<span class="label-text-alt" style="color: oklch(0.45 0.02 250);">
+							<span class="label-text-alt text-base-content/50">
 								Override the project's review rules for this specific task
 							</span>
 						</label>
@@ -1614,10 +1578,10 @@
 					<!-- Dependencies (Optional) - Industrial -->
 					<div class="form-control">
 						<div class="flex items-center justify-between mb-2">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Dependencies
 								{#if selectedDependencies.length > 0}
-									<span class="ml-1 badge badge-xs" style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);">{selectedDependencies.length}</span>
+									<span class="ml-1 badge badge-xs bg-base-content/20 text-base-content/80">{selectedDependencies.length}</span>
 								{/if}
 							</span>
 							<!-- Add dependency button -->
@@ -1642,8 +1606,7 @@
 								<!-- Dropdown menu - Industrial -->
 								{#if showDependencyDropdown}
 									<div
-										class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto"
-										style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+										class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto bg-base-200 border border-base-content/30"
 									>
 										{#if availableTasks.length === 0}
 											<div class="p-3 text-sm text-base-content/50 text-center">
@@ -1668,7 +1631,7 @@
 											</div>
 										{/if}
 										<!-- Close button - Industrial -->
-										<div class="p-2" style="border-top: 1px solid oklch(0.35 0.02 250);">
+										<div class="p-2 border-t border-base-content/30">
 											<button
 												type="button"
 												class="btn btn-xs btn-ghost w-full"
@@ -1684,11 +1647,10 @@
 
 						<!-- Selected dependencies list -->
 						{#if selectedDependencies.length > 0}
-							<div class="space-y-2 p-2 rounded" style="background: oklch(0.18 0.01 250);">
+							<div class="space-y-2 p-2 rounded bg-base-200">
 								{#each selectedDependencies as dep (dep.id)}
 									<div
-										class="flex items-center gap-2 text-sm p-2 rounded group"
-										style="background: oklch(0.20 0.01 250); border-left: 2px solid oklch(0.70 0.18 240 / 0.3);"
+										class="flex items-center gap-2 text-sm p-2 rounded group bg-base-100 border-l-2 border-primary/30"
 									>
 										<span class="badge badge-xs {priorityColors[dep.priority] || 'badge-ghost'}">
 											P{dep.priority}
@@ -1711,13 +1673,13 @@
 								{/each}
 							</div>
 						{:else}
-							<div class="p-3 rounded text-center" style="background: oklch(0.18 0.01 250);">
+							<div class="p-3 rounded text-center bg-base-200">
 								{#if formData.project}
-									<span class="text-sm" style="color: oklch(0.45 0.02 250);">No dependencies selected</span>
-									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Click "Add" to select tasks this depends on</p>
+									<span class="text-sm text-base-content/50">No dependencies selected</span>
+									<p class="text-xs mt-1 text-base-content/40">Click "Add" to select tasks this depends on</p>
 								{:else}
-									<span class="text-sm" style="color: oklch(0.45 0.02 250);">Select a project first</span>
-									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Dependencies are loaded based on the selected project</p>
+									<span class="text-sm text-base-content/50">Select a project first</span>
+									<p class="text-xs mt-1 text-base-content/40">Dependencies are loaded based on the selected project</p>
 								{/if}
 							</div>
 						{/if}
@@ -1726,8 +1688,7 @@
 					<!-- Error Message - Industrial -->
 					{#if submitError}
 						<div
-							class="alert font-mono text-sm"
-							style="background: oklch(0.35 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
+							class="alert alert-error font-mono text-sm"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -1749,8 +1710,7 @@
 					<!-- Success Message - Industrial -->
 					{#if successMessage}
 						<div
-							class="alert font-mono text-sm"
-							style="background: oklch(0.35 0.15 150); border: 1px solid oklch(0.50 0.18 150); color: oklch(0.95 0.02 250);"
+							class="alert alert-success font-mono text-sm"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -1773,15 +1733,11 @@
 
 			<!-- Footer Actions - Industrial -->
 			<div
-				class="p-6"
-				style="
-					background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
-					border-top: 1px solid oklch(0.35 0.02 250);
-				"
+				class="p-6 bg-base-200 border-t border-base-content/30"
 			>
 				<div class="flex items-center justify-between">
 					<!-- Keyboard shortcuts hint -->
-					<div class="text-xs font-mono hidden sm:block" style="color: oklch(0.45 0.02 250);">
+					<div class="text-xs font-mono hidden sm:block text-base-content/50">
 						⌘↵ Start · ⌥↵ Save · ⌘⇧↵ New
 					</div>
 
@@ -1826,14 +1782,12 @@
 								</button>
 								<ul
 									tabindex="0"
-									class="dropdown-content menu rounded-box z-[1] w-56 p-2 shadow-lg"
-									style="background: oklch(0.22 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+									class="dropdown-content menu rounded-box z-[1] w-56 p-2 shadow-lg bg-base-100 border border-base-content/30"
 								>
 									<li>
 										<button
 											type="button"
-											class="font-mono text-sm flex items-center gap-2 {defaultSaveAction === 'close' ? 'bg-primary/20' : ''}"
-											style="color: oklch(0.80 0.02 250);"
+											class="font-mono text-sm flex items-center gap-2 text-base-content {defaultSaveAction === 'close' ? 'bg-primary/20' : ''}"
 											onclick={() => submitWithAction('close')}
 											disabled={isSubmitting}
 										>
@@ -1845,14 +1799,13 @@
 												<span class="w-4"></span>
 											{/if}
 											Save
-											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌥↵</span>
+											<span class="ml-auto text-xs text-base-content/60">⌥↵</span>
 										</button>
 									</li>
 									<li>
 										<button
 											type="button"
-											class="font-mono text-sm flex items-center gap-2 {defaultSaveAction === 'new' ? 'bg-primary/20' : ''}"
-											style="color: oklch(0.80 0.02 250);"
+											class="font-mono text-sm flex items-center gap-2 text-base-content {defaultSaveAction === 'new' ? 'bg-primary/20' : ''}"
 											onclick={() => submitWithAction('new')}
 											disabled={isSubmitting}
 										>
@@ -1864,14 +1817,13 @@
 												<span class="w-4"></span>
 											{/if}
 											Save & New
-											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌘⇧↵</span>
+											<span class="ml-auto text-xs text-base-content/60">⌘⇧↵</span>
 										</button>
 									</li>
 									<li>
 										<button
 											type="button"
-											class="font-mono text-sm flex items-center gap-2 {defaultSaveAction === 'start' ? 'bg-primary/20' : ''}"
-											style="color: oklch(0.80 0.02 250);"
+											class="font-mono text-sm flex items-center gap-2 text-base-content {defaultSaveAction === 'start' ? 'bg-primary/20' : ''}"
 											onclick={() => submitWithAction('start')}
 											disabled={isSubmitting}
 										>
@@ -1883,7 +1835,7 @@
 												<span class="w-4"></span>
 											{/if}
 											Save & Start
-											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌘↵</span>
+											<span class="ml-auto text-xs text-base-content/60">⌘↵</span>
 										</button>
 									</li>
 								</ul>
