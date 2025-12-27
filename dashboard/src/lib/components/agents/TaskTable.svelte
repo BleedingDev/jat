@@ -2709,7 +2709,7 @@
 											{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
 											{@const reviewStatus = computeReviewStatus(task, reviewRules)}
 											<tr
-												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
+												class="industrial-row hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
 												onclick={() => handleRowClick(task.id)}
 												style="
 												background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : taskIsActive ? 'linear-gradient(90deg, oklch(0.75 0.15 85 / 0.08), transparent)' : ''};
