@@ -1661,18 +1661,21 @@
 
 	// Track hovered session for keyboard shortcuts (Alt+A, Alt+C, etc.)
 	// Focus-follows-mouse: auto-focus input on hover (Hyprland-style)
-	// Only steals focus if the current focus is not an input/textarea elsewhere
+	// Always steals focus between session cards, only protects search boxes/filters
 	function handleCardMouseEnter() {
 		setHoveredSession(sessionName);
 
 		// Focus-follows-mouse: focus the input when hovering over the card
-		// Skip if user is actively typing in another input (search box, filter, etc.)
-		const activeEl = document.activeElement;
-		const isTypingElsewhere = activeEl &&
+		// Skip ONLY if user is typing in a non-session input (search box, filter, etc.)
+		// Other session card inputs are fine to steal from (true Hyprland behavior)
+		const activeEl = document.activeElement as HTMLElement | null;
+		const isSessionInput = activeEl?.dataset?.sessionInput === 'true';
+		const isNonSessionInput = activeEl &&
 			(activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') &&
-			activeEl !== inputRef;
+			activeEl !== inputRef &&
+			!isSessionInput;
 
-		if (!isTypingElsewhere && inputRef) {
+		if (!isNonSessionInput && inputRef) {
 			inputRef.focus({ preventScroll: true });
 		}
 	}
@@ -6278,6 +6281,7 @@
 								: ''}"
 							style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250); min-height: 24px; max-height: 96px;"
 							disabled={sendingInput || !onSendInput}
+							data-session-input="true"
 						></textarea>
 						{#if inputText.trim()}
 							<button
