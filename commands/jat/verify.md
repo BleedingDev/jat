@@ -1,884 +1,252 @@
 ---
-argument-hint: [quick | full]
+argument-hint: [url | path]
 ---
 
-Comprehensive verification before completing a task - code quality, tests, security, documentation, and browser testing.
+Escalatory browser verification - open the app and test it in a real browser.
 
-# Verify Task Quality
+# Browser Verification (Escalatory Command)
 
-**Purpose:** Ensure work is complete and correct before marking task done.
+**Use this when:** User asks you to "go verify in browser" or "actually test this" after you've shown "READY FOR REVIEW".
 
-**Use when:**
-- Before `/agent/complete` to catch issues
-- After major changes to validate
-- Before handing off work to another agent
-- Anytime you want quality assurance
+**What this does:**
+1. Opens browser to the relevant page
+2. Tests the specific feature you built
+3. Checks console for errors
+4. Reports what you see
 
-**Usage:**
-- `/agent/verify` or `/agent/verify full` - Complete verification (static + browser)
-- `/agent/verify quick` - Static checks only (no browser testing)
-
----
-
-## Verification Levels
-
-### Quick Mode (Static Checks Only)
-
-Fast verification without browser:
-1. Type checking
-2. Linting
-3. Security scan
-4. Documentation check
-5. Git status check
-
-**Use when:**
-- Backend/API changes (no UI)
-- Quick sanity check
-- CI/CD pipeline would catch issues anyway
-
-### Full Mode (Default - Static + Browser)
-
-Comprehensive verification including browser testing:
-1. All static checks (quick mode)
-2. **Browser testing with Chrome DevTools MCP**
-3. Visual verification
-4. User interaction testing
-5. Console error checking
-6. Network request validation
-
-**Use when:**
-- UI/UX changes (anything user-facing)
-- Component modifications
-- Route/page changes
-- Before completing any frontend work
+**This is NOT for:** Static checks (tests, lint, types) - those are in `/jat:complete`.
 
 ---
 
-## Execution Steps
+## Browser Tools Overview
 
-### PART 1: Static Verification (Always)
+JAT includes lightweight browser automation tools in `~/bin/`:
 
-#### 1. Type Checking
+| Tool | Purpose |
+|------|---------|
+| `browser-start.js` | Launch Chrome with DevTools port |
+| `browser-nav.js` | Navigate to URL |
+| `browser-screenshot.js` | Capture screenshot |
+| `browser-eval.js` | Execute JavaScript in page |
+| `browser-pick.js` | Click element by selector |
+| `browser-cookies.js` | Get/set cookies |
 
-```bash
-npm run check
-```
+These tools are **low-token** - they just run commands and return results.
 
-**What to verify:**
-- No TypeScript errors
-- All types properly defined
-- No `any` types introduced (unless justified)
-- Proper type guards used
+### Need Deeper Testing?
 
-**If errors found:**
-- Count total errors
-- Categorize by type
-- Determine if blocking (new errors) vs existing
-- **Decision:**
-  - New errors introduced? → MUST FIX before completing
-  - Existing errors? → Note in verification report
-  - Too many new errors? → Call code-refactorer agent
-
-#### 2. Linting
+If the basic browser tools aren't enough (complex debugging, network inspection, performance profiling), you can enable the **ChromeDevTools MCP**:
 
 ```bash
-npm run lint
-```
-
-**What to verify:**
-- No ESLint errors
-- Svelte 5 syntax compliance (check CLAUDE.md Pre-Flight Checklist)
-- No deprecated patterns (on:click vs onclick, etc.)
-- Code style consistency
-
-**If errors found:**
-- Auto-fix if possible: `npm run lint -- --fix`
-- Manual fix for non-auto-fixable
-- If many errors, call code-refactorer
-
-#### 3. Security Scan
-
-**Check for common security issues:**
-
-```bash
-# Grep for potential secrets
-grep -r "API_KEY\|SECRET\|PASSWORD\|TOKEN" --include="*.ts" --include="*.js" --include="*.svelte" src/
-
-# Check for hardcoded credentials
-grep -r "sk_\|pk_\|password\s*=\|apiKey\s*=" --include="*.ts" --include="*.js" --include="*.svelte" src/
-
-# Check for dangerous patterns
-grep -r "eval(\|innerHTML\|dangerouslySetInnerHTML" --include="*.ts" --include="*.js" --include="*.svelte" src/
-```
-
-**What to verify:**
-- No secrets in source code
-- No API keys committed
-- No SQL injection vulnerabilities
-- No XSS vulnerabilities
-- Proper input validation
-- Security patterns from CLAUDE.md followed
-
-**If issues found:**
-- BLOCK completion until fixed
-- Security is non-negotiable
-
-#### 4. Documentation Check
-
-**Verify documentation is current:**
-
-```bash
-# Check if CLAUDE.md needs updates
-git diff CLAUDE.md
-
-# Check if docs/ needs updates
-git diff docs/
-```
-
-**What to verify:**
-- New patterns documented in CLAUDE.md
-- Critical patterns in Pre-Flight Checklist
-- Common Pitfalls updated if new pitfall found
-- Security Best Practices updated if security pattern added
-- Feature docs in /docs/ updated if architecture changed
-
-**If docs missing:**
-- Update CLAUDE.md for patterns/security/pitfalls
-- Update /docs/ for architecture/features
-- Include doc updates in commit
-
-#### 5. Git Status Check
-
-```bash
-git status
-```
-
-**What to verify:**
-- No unexpected files modified
-- No debug files committed (.log, .tmp, etc.)
-- No large files (check file sizes)
-- Changes align with task scope
-
-**If issues found:**
-- Remove debug files
-- Revert unintended changes
-- Clean up git state
-
----
-
-### PART 2: Browser Verification (Full Mode Only)
-
-**CRITICAL: Only run if changes affect browser/UI**
-
-Skip if:
-- Backend API changes only
-- Database migrations
-- Server-side utilities
-- Documentation only changes
-
-Run if:
-- Any Svelte component changes
-- Route/page changes
-- CSS/styling changes
-- User interactions
-- Form handling
-- State management affecting UI
-
-#### Step 1: Start Development Server
-
-```bash
-# Check if dev server already running
-lsof -i :5173 || lsof -i :3000
-
-# If not running, start it in background
-npm run dev &
-VITE_PID=$!
-
-# Wait for server to be ready
-sleep 5
-```
-
-**Track PID to kill later:**
-```bash
-echo $VITE_PID > /tmp/verify-dev-server.pid
-```
-
-#### Step 2: Open Browser with Chrome
-
-```bash
-# Start Chrome with debugging enabled
-browser-start.js --profile
-
-# Navigate to dev server
-browser-nav.js "http://localhost:5173"
-```
-
-#### Step 3: Navigate to Feature Under Test
-
-**Determine URL from task context:**
-- Check file changes → infer route
-- Check task description → extract feature
-- Ask task-specific questions if unclear
-
-```bash
-# Navigate to specific feature
-browser-nav.js "http://localhost:5173/account/settings"
-```
-
-#### Step 4: Take Initial Screenshot and Analyze
-
-```bash
-# Take screenshot of current page
-screenshot_path=$(browser-screenshot.js)
-echo "Screenshot saved: $screenshot_path"
-
-# Extract page content and structure via JavaScript
-browser-eval.js 'document.body.innerText' > /tmp/page-text.txt
-browser-eval.js 'document.querySelectorAll("button, input, a").length'
-
-# Or use interactive picker to explore elements
-browser-pick.js "Click on the main content area to inspect"
-```
-
-**Analyze output:**
-- Does expected content appear?
-- Are new components visible?
-- Is structure correct?
-
-#### Step 5: Test User Interactions
-
-**For each interaction the feature supports:**
-
-**Example: Testing a form**
-```bash
-# 1. Use interactive picker to identify elements
-browser-pick.js "Select the email input field"
-# Returns: selector or path to element
-
-# 2. Fill form fields using JavaScript
-browser-eval.js 'document.querySelector("input[type=email]").value = "test@example.com"'
-browser-eval.js 'document.querySelector("input[name=name]").value = "Test User"'
-
-# 3. Click submit button
-browser-eval.js 'document.querySelector("button[type=submit]").click()'
-
-# 4. Wait for result (simple polling approach)
-sleep 2
-browser-eval.js 'document.body.innerText.includes("Profile updated successfully")'
-
-# 5. Take screenshot of result
-browser-screenshot.js
-```
-
-**Example: Testing navigation**
-```bash
-# Click navigation link using JavaScript
-browser-eval.js 'document.querySelector("a.nav-link").click()'
-
-# Wait for navigation
-sleep 2
-
-# Verify navigation occurred
-browser-eval.js 'document.title'
-browser-eval.js 'document.body.innerText.includes("Expected Page Title")'
-```
-
-**Example: Testing dynamic content**
-```bash
-# Trigger action that loads data
-browser-eval.js 'document.querySelector("button.load-data").click()'
-
-# Wait for loading to complete (longer timeout for data)
-sleep 5
-
-# Verify data appears
-browser-eval.js 'document.body.innerText.includes("Data loaded")'
-browser-screenshot.js
-```
-
-#### Step 6: Check Console for Errors
-
-**CRITICAL: Check for JavaScript errors**
-
-```bash
-# Capture console errors via JavaScript
-browser-eval.js '
-  window.__errors = [];
-  window.__originalConsoleError = console.error;
-  console.error = (...args) => {
-    window.__errors.push(args.join(" "));
-    window.__originalConsoleError(...args);
-  };
-  "Console monitoring started"
-'
-
-# Perform your testing interactions here...
-# (form fills, clicks, navigation)
-
-# Retrieve captured errors
-browser-eval.js 'JSON.stringify(window.__errors)' > /tmp/console-errors.json
-
-# Check for errors
-cat /tmp/console-errors.json
-```
-
-**What to look for:**
-- Uncaught exceptions
-- Network errors (404, 500, CORS)
-- React/Svelte warnings
-- Type errors at runtime
-- Failed API calls
-
-**If errors found:**
-- Critical errors → BLOCK completion
-- Warnings → Investigate, may be acceptable
-- Third-party errors → Note but may not block
-
-#### Step 7: Check Network Requests
-
-**For features that make API calls:**
-
-```bash
-# Monkey-patch fetch to capture requests
-browser-eval.js '
-  window.__requests = [];
-  window.__originalFetch = fetch;
-  window.fetch = async (...args) => {
-    const [url, options] = args;
-    const startTime = Date.now();
-    try {
-      const response = await window.__originalFetch(...args);
-      window.__requests.push({
-        url,
-        method: options?.method || "GET",
-        status: response.status,
-        duration: Date.now() - startTime
-      });
-      return response;
-    } catch (error) {
-      window.__requests.push({
-        url,
-        method: options?.method || "GET",
-        error: error.message
-      });
-      throw error;
+# Enable ChromeDevTools MCP (burns more tokens but gives full DevTools access)
+# Add to .mcp.json:
+{
+  "mcpServers": {
+    "chromedevtools": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-chromedevtools"]
     }
-  };
-  "Network monitoring started"
-'
-
-# Perform your testing interactions...
-
-# Retrieve captured requests
-browser-eval.js 'JSON.stringify(window.__requests)' > /tmp/network-requests.json
-
-# Analyze requests
-cat /tmp/network-requests.json | jq '.'
-```
-
-**What to verify:**
-- API calls succeed (200-299 status)
-- Correct endpoints hit
-- Proper error handling (4xx, 5xx)
-- No unnecessary requests (N+1 queries)
-- Proper authentication headers
-
-#### Step 8: Visual Verification (Screenshot)
-
-**Take screenshot for visual confirmation:**
-
-```bash
-# Take viewport screenshot
-screenshot_path=$(browser-screenshot.js)
-echo "Screenshot saved: $screenshot_path"
-```
-
-**What to verify:**
-- Layout looks correct
-- No visual glitches
-- Responsive design works
-- Colors/styling correct
-- No overflow/clipping issues
-
-**For responsive testing:**
-```bash
-# Test mobile viewport (375x667)
-browser-eval.js 'window.resizeTo(375, 667)'
-sleep 1
-browser-screenshot.js
-echo "Mobile screenshot saved"
-
-# Test tablet viewport (768x1024)
-browser-eval.js 'window.resizeTo(768, 1024)'
-sleep 1
-browser-screenshot.js
-echo "Tablet screenshot saved"
-
-# Test desktop (1920x1080)
-browser-eval.js 'window.resizeTo(1920, 1080)'
-sleep 1
-browser-screenshot.js
-echo "Desktop screenshot saved"
-```
-
-#### Step 9: Test Edge Cases
-
-**Common edge cases to test:**
-
-**Empty states:**
-```bash
-# Navigate to page with no data
-browser-nav.js "http://localhost:5173/empty-page"
-
-# Wait and verify empty state message appears
-sleep 2
-browser-eval.js 'document.body.innerText.includes("No items found")'
-```
-
-**Error states:**
-```bash
-# Trigger error condition (invalid input)
-browser-eval.js 'document.querySelector("input[type=email]").value = "invalid-email"'
-browser-eval.js 'document.querySelector("button[type=submit]").click()'
-
-# Wait for error message
-sleep 1
-
-# Verify error message appears
-browser-eval.js 'document.body.innerText.includes("Invalid email address")'
-```
-
-**Loading states:**
-```bash
-# Trigger action with delay
-browser-eval.js 'document.querySelector("button.load-slow").click()'
-
-# Check loading indicator appears (quick check before it disappears)
-sleep 0.5
-browser-eval.js 'document.querySelector(".loading-spinner") !== null'
-```
-
-#### Step 10: Cleanup Browser
-
-```bash
-# Browser will stay open (manual close or use pkill chrome if needed)
-# Note: browser-*.js tools don't have explicit page close
-
-# Kill dev server if we started it
-if [ -f /tmp/verify-dev-server.pid ]; then
-  kill $(cat /tmp/verify-dev-server.pid)
-  rm /tmp/verify-dev-server.pid
-fi
-```
-
----
-
-### PART 3: Decision Making
-
-**Aggregate all verification results:**
-
-```typescript
-const verificationResults = {
-  static: {
-    typeCheck: { passed: true, errors: 0 },
-    linting: { passed: false, errors: 3 },
-    security: { passed: true, issues: [] },
-    documentation: { passed: true, updated: ["CLAUDE.md"] },
-    gitStatus: { passed: true, clean: true }
-  },
-  browser: {
-    pageLoads: { passed: true, url: "..." },
-    interactions: { passed: true, tested: 5 },
-    consoleErrors: { passed: false, errors: [{ ... }] },
-    networkRequests: { passed: true, requests: 8 },
-    visualCheck: { passed: true, screenshots: 3 },
-    edgeCases: { passed: true, tested: 3 }
   }
 }
 ```
 
-**Decision logic:**
+**When to enable ChromeDevTools MCP:**
+- Network waterfall analysis
+- Performance profiling
+- Complex console debugging
+- DOM inspection with full tree
+- Memory leak detection
 
-**✅ PASS - Can complete task:**
-- All static checks pass
-- All browser tests pass (if applicable)
-- No critical errors
-- Documentation updated
-
-**⚠️ MINOR ISSUES - Fix before completing:**
-- Lint errors (auto-fixable)
-- Non-critical console warnings
-- Missing documentation
-- **Action:** Fix issues, re-run verify
-
-**❌ FAIL - Cannot complete:**
-- Type errors introduced
-- Security vulnerabilities
-- Critical console errors
-- Feature doesn't work as expected
-- **Action:** Requires refactoring
+**For most verification, the basic browser tools are sufficient.**
 
 ---
 
-### PART 4: Self-Correction Loop
+## Quick Start
 
-**If verification fails with fixable issues:**
+```bash
+# If user says "verify this" - figure out what page to test based on your work
+/jat:verify
 
-#### Option 1: Self-Fix (Simple Issues)
+# If user gives a specific URL
+/jat:verify http://localhost:5173/tasks
 
-**For issues like:**
-- Lint errors
-- Missing documentation
-- Simple type errors
-
-```typescript
-// Fix the issues directly
-// Re-run verification
-await verify()
-```
-
-#### Option 2: Call code-refactorer Agent (Complex Issues)
-
-**For issues like:**
-- Many type errors
-- Architectural problems
-- Complex bugs found in browser testing
-
-```typescript
-// Launch code-refactorer with context
-await Task({
-  subagent_type: "code-refactorer",
-  description: "Fix verification issues",
-  prompt: `
-    Verification failed with the following issues:
-
-    ${JSON.stringify(verificationResults, null, 2)}
-
-    Please fix:
-    1. Type errors in userStore.svelte.ts
-    2. Console error: "Cannot read property 'id' of undefined"
-    3. Network error: POST /api/users returns 500
-
-    Files to focus on:
-    - src/lib/stores/userStore.svelte.ts
-    - src/lib/components/UserProfile.svelte
-    - src/routes/api/users/+server.ts
-
-    After fixing, re-run verification to confirm.
-  `
-})
-```
-
-**code-refactorer agent will:**
-1. Analyze the issues
-2. Fix the code
-3. Run verification again
-4. Report back when passing
-
-#### Option 3: Ask for Help
-
-**If issues are unclear or require decisions:**
-
-```typescript
-await AskUserQuestion({
-  questions: [{
-    question: "Verification found console error: 'User ID undefined'. This might be expected during logout. Should we suppress this warning or fix the root cause?",
-    header: "Error handling",
-    options: [
-      { label: "Suppress warning", description: "Add error boundary for logout state" },
-      { label: "Fix root cause", description: "Ensure user object always defined" }
-    ],
-    multiSelect: false
-  }]
-})
+# If user gives a path hint
+/jat:verify /tasks
 ```
 
 ---
 
-## Output Format
+## Implementation
 
-After completing verification, format output:
+### STEP 1: Determine What to Test
 
+Based on your recent work, identify:
+- **URL**: What page should you open?
+- **Feature**: What specific thing should you test?
+- **Success criteria**: How do you know it works?
+
+If unclear, ask the user:
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║                    ✅ TASK VERIFICATION REPORT                           ║
-║                                                                          ║
-║                    Mode: [Quick | Full]                                  ║
-╚══════════════════════════════════════════════════════════════════════════╝
-
-┌─ STATIC VERIFICATION ──────────────────────────────────────────────────┐
-│                                                                        │
-│  ✅ Type Check: PASSED (0 errors)                                      │
-│  ✅ Linting: PASSED (0 errors, 2 auto-fixed)                           │
-│  ✅ Security: PASSED (no issues found)                                 │
-│  ✅ Documentation: PASSED (CLAUDE.md updated)                          │
-│  ✅ Git Status: PASSED (clean, expected changes only)                  │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
-
-┌─ BROWSER VERIFICATION ─────────────────────────────────────────────────┐
-│                                                                        │
-│  🌐 Page: http://localhost:5173/account/settings                       │
-│                                                                        │
-│  ✅ Page Load: PASSED (1.2s load time)                                 │
-│  ✅ User Interactions: PASSED (5 interactions tested)                  │
-│     • Fill email field → Success                                       │
-│     • Fill name field → Success                                        │
-│     • Click save button → Success                                      │
-│     • Form submission → Success                                        │
-│     • Success message displayed → Success                              │
-│                                                                        │
-│  ✅ Console Check: PASSED (0 errors, 0 warnings)                       │
-│                                                                        │
-│  ✅ Network Requests: PASSED (8 requests, all successful)              │
-│     • GET /api/user/profile → 200 OK (125ms)                           │
-│     • PUT /api/user/profile → 200 OK (89ms)                            │
-│     • [6 other requests...]                                            │
-│                                                                        │
-│  ✅ Visual Check: PASSED (3 viewports tested)                          │
-│     • Mobile (375x667): Layout correct                                 │
-│     • Tablet (768x1024): Layout correct                                │
-│     • Desktop (1920x1080): Layout correct                              │
-│                                                                        │
-│  ✅ Edge Cases: PASSED (3 scenarios tested)                            │
-│     • Empty email → Error message shown                                │
-│     • Invalid email → Validation works                                 │
-│     • Network error → Error handling works                             │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
-
-┌─ VERIFICATION SUMMARY ─────────────────────────────────────────────────┐
-│                                                                        │
-│  ✅ OVERALL RESULT: PASSED                                             │
-│                                                                        │
-│  All checks passed. Task is ready for completion.                      │
-│                                                                        │
-│  Quality Score: 100/100                                                │
-│  ├─ Static checks: 50/50                                               │
-│  └─ Browser tests: 50/50                                               │
-│                                                                        │
-│  Ready for: /agent/complete                                            │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
-
-╔══════════════════════════════════════════════════════════════════════════╗
-║                                                                          ║
-║                    ✅ VERIFICATION COMPLETE ✅                            ║
-║                                                                          ║
-║                    Status: READY TO COMPLETE                             ║
-║                                                                          ║
-╚══════════════════════════════════════════════════════════════════════════╝
+I made changes to [files]. Which page should I verify?
+- http://localhost:5173/tasks
+- http://localhost:5173/work
+- Other URL?
 ```
 
-**If verification fails:**
+### STEP 2: Open Browser and Navigate
+
+```bash
+# Start browser if needed
+browser-start.js
+
+# Navigate to the page
+browser-nav.js --url "http://localhost:5173/tasks"
+
+# Take initial screenshot
+browser-screenshot.js --output /tmp/verify-initial.png
+```
+
+Show the screenshot to the user: "Here's what I see..."
+
+### STEP 3: Test the Feature
+
+Based on what you built, interact with it:
+
+```bash
+# Click a button
+browser-pick.js --selector "button.create-task"
+
+# Fill a form field
+browser-eval.js "document.querySelector('input[name=title]').value = 'Test task'"
+
+# Check if element exists
+browser-eval.js "!!document.querySelector('.success-message')"
+
+# Wait for something to appear
+browser-eval.js "document.body.innerText.includes('Task created')"
+```
+
+Take screenshots after each significant action.
+
+### STEP 4: Check Console for Errors
+
+```bash
+# Check for JavaScript errors
+browser-eval.js "window.__errors || []"
+
+# Or set up error capture first
+browser-eval.js "window.__errors = []; const origError = console.error; console.error = (...args) => { window.__errors.push(args.join(' ')); origError.apply(console, args); }"
+
+# Then test the feature, then check
+browser-eval.js "window.__errors"
+```
+
+### STEP 5: Report Findings
+
+Output a verification report:
 
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║                    ⚠️  VERIFICATION FAILED                               ║
-║                                                                          ║
-║                    Mode: Full                                            ║
-╚══════════════════════════════════════════════════════════════════════════╝
+┌─ 🔍 BROWSER VERIFICATION ─────────────────────────────────────────────────┐
+│                                                                           │
+│  URL: http://localhost:5173/tasks                                         │
+│  Feature: Task creation drawer                                            │
+│                                                                           │
+│  ✓ Page loaded successfully                                               │
+│  ✓ "Create Task" button visible and clickable                             │
+│  ✓ Drawer opens on click                                                  │
+│  ✓ Form fields render correctly                                           │
+│  ✓ Submit creates task (appears in list)                                  │
+│  ✓ No console errors                                                      │
+│                                                                           │
+│  Screenshots saved:                                                       │
+│  • /tmp/verify-initial.png                                                │
+│  • /tmp/verify-drawer-open.png                                            │
+│  • /tmp/verify-task-created.png                                           │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
 
-┌─ ISSUES FOUND ─────────────────────────────────────────────────────────┐
-│                                                                        │
-│  ❌ Console Errors: 2 critical errors                                  │
-│     1. TypeError: Cannot read property 'id' of undefined               │
-│        at UserProfile.svelte:45                                        │
-│        Impact: Profile page crashes on load                            │
-│                                                                        │
-│     2. Network Error: POST /api/users → 500 Internal Server Error      │
-│        Impact: Cannot save user profile                                │
-│                                                                        │
-│  ⚠️  Linting: 5 errors (4 auto-fixable)                                │
-│     • src/lib/components/UserProfile.svelte                            │
-│       - Using deprecated 'on:click' syntax (3 instances)               │
-│     • src/routes/account/settings/+page.svelte                         │
-│       - Unused variable 'oldEmail' (1 instance)                        │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
-
-┌─ RECOMMENDED ACTIONS ──────────────────────────────────────────────────┐
-│                                                                        │
-│  1. 🔧 Auto-fix linting errors:                                        │
-│     npm run lint -- --fix                                              │
-│                                                                        │
-│  2. 🐛 Debug console errors:                                           │
-│     • Add null check for user object in UserProfile.svelte:45          │
-│     • Check API endpoint /api/users for server error                   │
-│                                                                        │
-│  3. ♻️  Or call code-refactorer agent:                                 │
-│     Issues are complex enough to warrant specialized refactoring       │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
-
-╔══════════════════════════════════════════════════════════════════════════╗
-║                                                                          ║
-║                    ❌ CANNOT COMPLETE - FIX ISSUES FIRST ❌              ║
-║                                                                          ║
-║                    Blocking Issues: 2 critical errors                    ║
-║                                                                          ║
-╚══════════════════════════════════════════════════════════════════════════╝
-
-💡 Next steps:
-   • Fix the issues above
-   • Re-run /agent/verify to confirm fixes
-   • Then proceed with /agent/complete
+🔍 READY FOR REVIEW - Browser verification passed
 ```
+
+Or if issues found:
+
+```
+┌─ 🔍 BROWSER VERIFICATION ─────────────────────────────────────────────────┐
+│                                                                           │
+│  URL: http://localhost:5173/tasks                                         │
+│  Feature: Task creation drawer                                            │
+│                                                                           │
+│  ✓ Page loaded successfully                                               │
+│  ✓ "Create Task" button visible                                           │
+│  ✗ Drawer fails to open - console error:                                  │
+│      TypeError: Cannot read property 'open' of undefined                  │
+│  ✗ Button click has no visible effect                                     │
+│                                                                           │
+│  Screenshots saved:                                                       │
+│  • /tmp/verify-error.png                                                  │
+│                                                                           │
+└───────────────────────────────────────────────────────────────────────────┘
+
+⚠️ ISSUES FOUND - Fixing before completion...
+```
+
+If issues found, fix them and re-verify.
 
 ---
 
-## Integration with Agent Workflow
+## Common Verification Patterns
 
-### Automatic Verification
+### Testing a New Component
+1. Navigate to page containing component
+2. Screenshot the component
+3. Interact with it (click, hover, input)
+4. Verify expected behavior
+5. Check console
 
-**Enhanced `/agent/complete`:**
-```bash
-/agent/complete
-  → Auto-runs /agent/verify first
-  → If passes: Continues with completion
-  → If fails: Blocks completion, shows issues
-```
+### Testing a Form
+1. Navigate to form page
+2. Fill in fields with test data
+3. Submit form
+4. Verify success message or redirect
+5. Verify data persisted (if applicable)
 
-**User can configure:**
-```bash
-/admin/configure
-  → "Auto-verify before complete?" → Yes/No
-  → "Verification mode" → Quick/Full/Smart
-```
+### Testing a Bug Fix
+1. Navigate to page where bug occurred
+2. Reproduce the original bug steps
+3. Verify bug no longer occurs
+4. Screenshot the working state
 
-**Smart mode:**
-- Detects if changes are frontend → Full verification
-- Detects if changes are backend → Quick verification
-
-### Manual Verification
-
-```bash
-# Before completing, manually verify
-/agent/verify
-
-# If passes
-/agent/complete
-
-# If fails, fix and re-verify
-[fix issues]
-/agent/verify
-/agent/complete
-```
+### Testing Visual Changes
+1. Navigate to affected pages
+2. Take screenshots
+3. Compare to expected appearance
+4. Check responsive behavior (if relevant)
 
 ---
 
-## Best Practices
+## Error Handling
 
-### For UI/Frontend Work
+**Browser won't start:**
+```bash
+# Check if browser-tools are installed
+ls ~/bin/browser-*.js
 
-**ALWAYS use full verification:**
-- Any Svelte component changes
-- Any route/page changes
-- Any styling changes
-- Any user interaction changes
+# Try starting manually
+browser-start.js --headless
+```
 
-**Test thoroughly:**
-- Happy path (expected usage)
-- Error states (validation, network errors)
-- Edge cases (empty data, max limits)
-- Responsive design (mobile, tablet, desktop)
+**Page won't load:**
+- Check dev server is running: `curl http://localhost:5173`
+- Check for build errors: `npm run build`
 
-### For Backend/API Work
-
-**Quick verification usually sufficient:**
-- API endpoints (test separately with API client)
-- Database queries
-- Server utilities
-- Background jobs
-
-**But consider full if:**
-- Changes affect error responses shown in UI
-- Changes affect data displayed in browser
-- Changes affect user permissions (test in browser)
-
-### Performance Considerations
-
-**Quick mode:**
-- Fast (<30 seconds)
-- Run frequently during development
-- Before commits
-
-**Full mode:**
-- Slower (2-5 minutes depending on feature complexity)
-- Run before task completion
-- Run after major changes
-
-**Optimization tips:**
-- Keep dev server running (don't restart each time)
-- Reuse browser page between verifications
-- Use snapshots over screenshots when possible
-- Test only affected routes/features
+**Console errors unrelated to your work:**
+- Note them as "pre-existing" in your report
+- Focus on NEW errors introduced by your changes
 
 ---
 
-## Common Verification Scenarios
+## After Verification
 
-### Scenario 1: Simple Component Fix
+If verification **passed**: Return to "🔍 READY FOR REVIEW" state. User can now run `/jat:complete`.
 
-```bash
-# Fixed a button component
-/agent/verify full
-  → Page loads: ✅
-  → Button clickable: ✅
-  → Console clean: ✅
-  → Visual check: ✅
-  → PASSED
-
-/agent/complete
-```
-
-### Scenario 2: Complex Form Implementation
-
-```bash
-# Built new user registration form
-/agent/verify full
-  → Fill all fields: ✅
-  → Submit form: ❌ (500 error)
-  → Console: ❌ (validation error)
-  → FAILED
-
-# Fix validation logic
-[make changes]
-
-/agent/verify full
-  → Fill all fields: ✅
-  → Submit form: ✅
-  → Success message: ✅
-  → PASSED
-
-/agent/complete
-```
-
-### Scenario 3: Too Many Issues
-
-```bash
-# Large refactor, many issues
-/agent/verify full
-  → Type errors: 15
-  → Console errors: 8
-  → Network errors: 3
-  → FAILED
-
-# Too complex to fix quickly, call refactorer
-# verification will invoke code-refactorer automatically
-# refactorer fixes issues
-# re-runs verification
-  → PASSED
-
-/agent/complete
-```
-
----
-
-**IMPORTANT:**
-- Always verify before completing frontend work
-- Use browser testing for anything user-facing
-- Check console for errors - critical indicator
-- Visual testing catches layout issues
-- Self-correction loop prevents broken commits
-- Full verification is comprehensive quality gate
+If verification **failed**: Fix the issues, re-run verification, then return to "🔍 READY FOR REVIEW".

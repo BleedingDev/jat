@@ -1,6 +1,6 @@
 ## Agent Workflow Commands (Jomarchy Agent Tools)
 
-**7 streamlined commands for multi-agent coordination** located in `~/code/jat/commands/jat/`
+**5 streamlined commands for multi-agent coordination** located in `~/code/jat/commands/jat/`
 
 **One agent = one session = one task.** Each Claude session handles exactly one task from start to completion.
 
@@ -9,13 +9,9 @@
 - `/jat:complete [task-id]` - Finish work, verify, commit, close task, end session
 - `/jat:commit` - Create well-organized commits with automatic documentation updates
 
-**Coordination:**
-- `/jat:status` - Check current work status, locks, messages
-
-**Quality & Planning:**
-- `/jat:verify [task-id]` - Pre-completion quality checks
-- `/jat:plan` - Convert planning docs/conversation to Beads tasks
-- `/jat:bead` - Convert PRD/spec into structured Beads tasks with dependencies
+**Escalation & Planning:**
+- `/jat:verify [url]` - **Escalatory**: browser verification when user wants deeper testing
+- `/jat:bead [prd-path]` - Convert PRD/spec into structured Beads tasks with dependencies
 
 **Maintenance:**
 - `jat-doctor` - Bash script to diagnose installation issues (run anytime)
@@ -37,11 +33,21 @@
 /jat:start MyAgent task-abc   # Use MyAgent, start task
 ```
 
+**Escalatory Verification:**
+```bash
+# Agent says "READY FOR REVIEW"
+# User wants deeper testing...
+/jat:verify                   # Open browser, test the feature, check console
+/jat:verify /tasks            # Verify specific page
+```
+
 **Session Lifecycle:**
 ```
 spawn agent → work on task → review → /jat:complete → session ends
-                                      ↓
-                          spawn new agent for next task
+                               │
+                     (optional escalation)
+                               │
+                          /jat:verify → browser test → back to review
 ```
 
 **Session-Aware:**
