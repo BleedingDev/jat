@@ -27,6 +27,7 @@ const JAT_CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
  * @property {string} [model] - Default Claude model
  * @property {number} [agent_stagger] - Stagger delay between agent spawns (seconds)
  * @property {number} [claude_startup_timeout] - Claude startup timeout (seconds)
+ * @property {number} [auto_proceed_delay] - Delay before spawning next task on auto-proceed (seconds)
  */
 
 /**
@@ -165,7 +166,8 @@ export async function getJatDefaults() {
 		claude_flags: '--dangerously-skip-permissions',
 		model: 'opus',
 		agent_stagger: 15,
-		claude_startup_timeout: 20
+		claude_startup_timeout: 20,
+		auto_proceed_delay: 2
 	};
 
 	// Override with config values if present
@@ -178,6 +180,7 @@ export async function getJatDefaults() {
 		if (configDefaults.model) defaults.model = configDefaults.model;
 		if (typeof configDefaults.agent_stagger === 'number') defaults.agent_stagger = configDefaults.agent_stagger;
 		if (typeof configDefaults.claude_startup_timeout === 'number') defaults.claude_startup_timeout = configDefaults.claude_startup_timeout;
+		if (typeof configDefaults.auto_proceed_delay === 'number') defaults.auto_proceed_delay = configDefaults.auto_proceed_delay;
 	}
 
 	return defaults;

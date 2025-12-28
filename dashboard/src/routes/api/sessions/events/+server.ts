@@ -221,8 +221,7 @@ const SIGNAL_STATE_MAP: Record<string, string> = {
 	'review': 'ready-for-review',
 	'needs_input': 'needs-input',
 	'idle': 'idle',
-	'completed': 'completed',
-	'auto_proceed': 'auto_proceed',  // Preserve auto_proceed for special handling (spawns next task)
+	'completed': 'completed',  // autoProceed: true in payload triggers auto-spawn of next task
 	'starting': 'starting',
 	'compacting': 'compacting',
 	'completing': 'completing',

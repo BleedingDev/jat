@@ -15,6 +15,7 @@
 
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { slide } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { browser } from '$app/environment';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
@@ -229,9 +230,65 @@
 		return buildEpicChildMap(taskList);
 	});
 
-	// Group sessions by epic for a given project
-	// Returns { epicSessions: Map<epicId, sessions[]>, nonEpicSessions: sessions[] }
-	function getSessionsByEpic(sessions: typeof workSessionsState.sessions) {
+	// O(1) task lookup map - avoids creating arrays for every lookup
+	const taskLookup = $derived.by(() => {
+		const map = new Map<string, Task>();
+		const taskList = allTasks.length > 0 ? allTasks : tasks;
+		for (const task of taskList) {
+			map.set(task.id, task);
+		}
+		return map;
+	});
+
+	// Memoized session grouping by project - computed once per project, reused
+	const sessionsByEpicCache = $derived.by(() => {
+		const cache = new Map<string, { epicSessions: Map<string, typeof workSessionsState.sessions>, nonEpicSessions: typeof workSessionsState.sessions }>();
+
+		for (const [project, sessions] of sessionsByProject.entries()) {
+			const epicSessions = new Map<string, typeof workSessionsState.sessions>();
+			const nonEpicSessions: typeof workSessionsState.sessions = [];
+
+			for (const session of sessions) {
+				const taskId = session.task?.id;
+				if (!taskId) {
+					nonEpicSessions.push(session);
+					continue;
+				}
+
+				// O(1) lookup instead of O(n) array search
+				const task = taskLookup.get(taskId);
+				if (task?.issue_type === 'epic') {
+					const existing = epicSessions.get(taskId) || [];
+					existing.push(session);
+					epicSessions.set(taskId, existing);
+					continue;
+				}
+
+				const parentEpic = getParentEpicId(taskId, epicChildMap);
+				if (parentEpic) {
+					const existing = epicSessions.get(parentEpic) || [];
+					existing.push(session);
+					epicSessions.set(parentEpic, existing);
+				} else {
+					nonEpicSessions.push(session);
+				}
+			}
+
+			cache.set(project, { epicSessions, nonEpicSessions });
+		}
+
+		return cache;
+	});
+
+	// Get cached session grouping for a project (O(1) lookup)
+	function getSessionsByEpic(sessions: typeof workSessionsState.sessions, project?: string) {
+		// If project is provided, use the memoized cache
+		if (project) {
+			const cached = sessionsByEpicCache.get(project);
+			if (cached) return cached;
+		}
+
+		// Fallback for direct session array (shouldn't be needed in normal flow)
 		const epicSessions = new Map<string, typeof workSessionsState.sessions>();
 		const nonEpicSessions: typeof workSessionsState.sessions = [];
 
@@ -242,17 +299,14 @@
 				continue;
 			}
 
-			// Check if this task is an epic itself
-			const task = [...allTasks, ...tasks].find(t => t.id === taskId);
+			const task = taskLookup.get(taskId);
 			if (task?.issue_type === 'epic') {
-				// Session is working on an epic directly
 				const existing = epicSessions.get(taskId) || [];
 				existing.push(session);
 				epicSessions.set(taskId, existing);
 				continue;
 			}
 
-			// Check if task belongs to an epic (via hierarchy or dependency)
 			const parentEpic = getParentEpicId(taskId, epicChildMap);
 			if (parentEpic) {
 				const existing = epicSessions.get(parentEpic) || [];
@@ -266,9 +320,9 @@
 		return { epicSessions, nonEpicSessions };
 	}
 
-	// Get epic task info for display
+	// Get epic task info for display (O(1) lookup)
 	function getEpicTask(epicId: string): Task | undefined {
-		return [...allTasks, ...tasks].find(t => t.id === epicId);
+		return taskLookup.get(epicId);
 	}
 
 	// Helper to get section key
@@ -440,14 +494,91 @@
 		return collapsedEpicGroups.has(getEpicGroupKey(project, groupId));
 	}
 
+	// Check if all epic groups in a project are collapsed
+	// Returns true if ALL groups are collapsed, false if ANY is expanded
+	function areAllEpicGroupsCollapsed(project: string, sessions: any[]): boolean {
+		const { epicSessions, nonEpicSessions } = getSessionsByEpic(sessions, project);
+
+		// Check each epic group
+		for (const epicId of epicSessions.keys()) {
+			if (!isEpicGroupCollapsed(project, epicId)) {
+				return false; // Found an expanded group
+			}
+		}
+
+		// Check "other" group if it exists and there are also epics (so header shows)
+		if (nonEpicSessions.length > 0 && epicSessions.size > 0) {
+			if (!isEpicGroupCollapsed(project, 'other')) {
+				return false; // Other group is expanded
+			}
+		}
+
+		// If we only have non-epic sessions (no epics), they're always shown (no collapse header)
+		if (nonEpicSessions.length > 0 && epicSessions.size === 0) {
+			return false; // No accordion, always expanded
+		}
+
+		return true; // All groups are collapsed
+	}
+
+	// Calculate the effective height for sessions section
+	// When all groups are collapsed, shrink to just fit headers
+	function getEffectiveSessionsHeight(project: string, sessions: any[], userHeight: number): number {
+		const { epicSessions, nonEpicSessions } = getSessionsByEpic(sessions, project);
+		const allCollapsed = areAllEpicGroupsCollapsed(project, sessions);
+
+		if (!allCollapsed) {
+			return userHeight; // Use user-set height when any group is expanded
+		}
+
+		// Calculate minimum height for collapsed headers
+		const HEADER_HEIGHT = 36; // Each collapsed header is ~36px
+		const CONTAINER_PADDING = 16; // Padding in the container
+
+		let numHeaders = epicSessions.size; // One header per epic
+		if (nonEpicSessions.length > 0 && epicSessions.size > 0) {
+			numHeaders += 1; // Add "Other Sessions" header
+		}
+
+		// Minimum height to show all collapsed headers
+		const minHeight = (numHeaders * HEADER_HEIGHT) + CONTAINER_PADDING;
+		return Math.max(minHeight, 60); // At least 60px
+	}
+
+	// Toggle epic group collapse with accordion behavior
+	// When expanding an epic group, collapse all other epic groups in the same project
 	function toggleEpicGroupCollapse(project: string, groupId: string) {
 		const key = getEpicGroupKey(project, groupId);
+		const isCurrentlyCollapsed = collapsedEpicGroups.has(key);
+		const willExpand = isCurrentlyCollapsed;
+
 		const newSet = new Set(collapsedEpicGroups);
-		if (newSet.has(key)) {
+
+		// Accordion behavior: if expanding, collapse all OTHER epic groups in this project
+		if (willExpand) {
+			// Get all epic groups for this project from sessions (uses cache)
+			const sessions = sessionsByProject.get(project) || [];
+			const { epicSessions, nonEpicSessions } = getSessionsByEpic(sessions, project);
+
+			// Collapse all other epic groups in this project
+			for (const epicId of epicSessions.keys()) {
+				if (epicId !== groupId) {
+					newSet.add(getEpicGroupKey(project, epicId));
+				}
+			}
+			// Also collapse "other" group if it's not the one being expanded
+			if (groupId !== 'other' && nonEpicSessions.length > 0 && epicSessions.size > 0) {
+				newSet.add(getEpicGroupKey(project, 'other'));
+			}
+		}
+
+		// Toggle the clicked group
+		if (isCurrentlyCollapsed) {
 			newSet.delete(key);
 		} else {
 			newSet.add(key);
 		}
+
 		collapsedEpicGroups = newSet;
 		saveCollapsedEpicGroups(newSet);
 	}
@@ -1316,12 +1447,13 @@
 						<div class="flex flex-col">
 							<!-- Sessions Section - grouped by epic -->
 							{#if filteredSessions.length > 0 && !sessionState.collapsed}
-								{@const { epicSessions, nonEpicSessions } = getSessionsByEpic(filteredSessions)}
+								{@const { epicSessions, nonEpicSessions } = getSessionsByEpic(filteredSessions, project)}
+								{@const effectiveHeight = getEffectiveSessionsHeight(project, filteredSessions, sessionState.height)}
 								<div class="border-b border-base-300" transition:slide={{ duration: 200 }}>
-									<!-- Sessions content - fixed height constrains cards, user can resize via divider -->
+									<!-- Sessions content - auto-shrinks when all groups collapsed -->
 									<div
-										class="overflow-hidden transition-all duration-200"
-										style="height: {sessionState.height}px;"
+										class="overflow-hidden transition-all duration-300"
+										style="height: {effectiveHeight}px;"
 									>
 										<div class="flex flex-col gap-2 overflow-y-auto h-full p-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 											<!-- Epic session groups -->
@@ -1345,7 +1477,7 @@
 													</div>
 													<!-- Epic sessions (horizontal scroll) -->
 													{#if !isEpicCollapsed}
-													<div class="flex gap-3 overflow-x-auto pl-3 h-full scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent" transition:slide={{ duration: 200 }}>
+													<div class="flex gap-3 overflow-x-auto pl-3 h-full scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent" transition:slide|local={{ duration: 300, easing: quintOut }}>
 														{#each epicSessionList as session (session.sessionName)}
 															{@const isSessionDragging = draggedSession?.sessionName === session.sessionName}
 															{@const isSessionDragOver = dragOverSession?.sessionName === session.sessionName && dragOverSession?.project === project}
@@ -1425,7 +1557,7 @@
 													{/if}
 													<!-- Non-epic sessions (horizontal scroll) -->
 													{#if !isOtherCollapsed || epicSessions.size === 0}
-													<div class="flex gap-3 overflow-x-auto h-full {epicSessions.size > 0 ? 'pl-3' : ''} scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent" transition:slide={{ duration: 200 }}>
+													<div class="flex gap-3 overflow-x-auto h-full {epicSessions.size > 0 ? 'pl-3' : ''} scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent" transition:slide|local={{ duration: 300, easing: quintOut }}>
 														{#each nonEpicSessions as session (session.sessionName)}
 															{@const isSessionDragging = draggedSession?.sessionName === session.sessionName}
 															{@const isSessionDragOver = dragOverSession?.sessionName === session.sessionName && dragOverSession?.project === project}

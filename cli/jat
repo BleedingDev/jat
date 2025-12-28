@@ -125,6 +125,10 @@ launch_claude() {
     local claude_flags
     claude_flags=$(jq -r '.defaults.claude_flags // "--dangerously-skip-permissions"' "$CONFIG_FILE")
 
+    # JAT bootstrap prompt - minimal identity, commands load full docs on-demand
+    local jat_bootstrap='You are a JAT agent. Run /jat:start to begin work.'
+    claude_flags="$claude_flags --append-system-prompt '$jat_bootstrap'"
+
     # Build initial prompt (without -p flag which makes it non-interactive)
     local initial_prompt=""
     if [[ "$skip_agent" != "true" ]]; then

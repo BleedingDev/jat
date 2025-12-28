@@ -13,10 +13,12 @@
  *   Clears the signal file after processing
  *
  * Signal Types:
- *   - state: Session state change (working, review, idle, auto_proceed, needs_input, completed)
+ *   - state: Session state change (working, review, idle, needs_input, completed, starting, compacting, completing)
  *   - tasks: Suggested follow-up tasks (JSON array)
  *   - action: Human action request (JSON object)
  *   - complete: Full completion bundle (state + tasks + actions)
+ *
+ * Note: completed signals with autoProceed: true trigger automatic spawning of next task.
  */
 
 import { json } from '@sveltejs/kit';

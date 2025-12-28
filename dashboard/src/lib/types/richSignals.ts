@@ -375,6 +375,14 @@ export interface CompletedSignal {
 	finalCommit: string;
 	/** Pull request link if one was created */
 	prLink?: string;
+
+	// Auto-proceed fields (consolidated from AutoProceedSignal)
+	/** Whether this completion should auto-proceed to next task */
+	autoProceed?: boolean;
+	/** Next task to pick up (if auto-proceed enabled) */
+	nextTaskId?: string;
+	/** Title of the next task */
+	nextTaskTitle?: string;
 }
 
 // =============================================================================
@@ -519,26 +527,6 @@ export interface CompactingSignal {
 }
 
 // =============================================================================
-// AUTO PROCEED SIGNAL
-// =============================================================================
-
-/**
- * Auto proceed signal emitted when task can be auto-closed.
- *
- * Indicates dashboard can automatically close session and pick next task.
- */
-export interface AutoProceedSignal {
-	type: 'auto_proceed';
-
-	/** Task ID that was completed */
-	taskId: string;
-	/** Next task to pick up (if known) */
-	nextTaskId?: string;
-	/** Title of the next task */
-	nextTaskTitle?: string;
-}
-
-// =============================================================================
 // UNION TYPE
 // =============================================================================
 
@@ -570,8 +558,7 @@ export type RichSignal =
 	| CompletedSignal
 	| IdleSignal
 	| StartingSignal
-	| CompactingSignal
-	| AutoProceedSignal;
+	| CompactingSignal;
 
 /**
  * Type guard to check if a signal is a specific type.
@@ -608,8 +595,12 @@ export function isCompactingSignal(signal: RichSignal): signal is CompactingSign
 	return signal.type === 'compacting';
 }
 
-export function isAutoProceedSignal(signal: RichSignal): signal is AutoProceedSignal {
-	return signal.type === 'auto_proceed';
+/**
+ * Check if a completed signal has auto-proceed enabled.
+ * Auto-proceed signals are now part of CompletedSignal with autoProceed=true.
+ */
+export function isAutoProceedSignal(signal: RichSignal): signal is CompletedSignal {
+	return signal.type === 'completed' && (signal as CompletedSignal).autoProceed === true;
 }
 
 // =============================================================================

@@ -317,8 +317,8 @@ function handleSessionState(data: SessionEvent): void {
 	const { sessionName, state, signalPayload } = data;
 	if (!sessionName || !state) return;
 
-	// Special handling for auto_proceed - spawn next task
-	if (state === 'auto_proceed') {
+	// Auto-proceed: completed signal with autoProceed=true spawns next task
+	if (state === 'completed' && signalPayload?.autoProceed) {
 		handleAutoProceed(data);
 		return;
 	}
@@ -470,12 +470,14 @@ function handleSessionDestroyed(data: SessionEvent): void {
 }
 
 /**
- * Handle auto_proceed signal: spawn next task automatically
+ * Handle auto-proceed: spawn next task automatically
  *
- * When an agent emits auto_proceed signal, this handler:
+ * When an agent emits a completed signal with autoProceed=true, this handler:
  * 1. Updates session state to show "auto-proceeding"
  * 2. Calls /api/sessions/next to spawn a new session for the next ready task
  * 3. The new session will appear via session-created event
+ *
+ * Signal: jat-signal completed '{"taskId":"...","autoProceed":true,"nextTaskId":"..."}'
  */
 async function handleAutoProceed(data: SessionEvent): Promise<void> {
 	const { sessionName, signalPayload } = data;

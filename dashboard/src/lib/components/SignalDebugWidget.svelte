@@ -78,11 +78,6 @@
 			bg: 'oklch(0.60 0.15 200 / 0.15)',
 			text: 'oklch(0.75 0.15 200)',
 			border: 'oklch(0.60 0.15 200 / 0.4)'
-		},
-		auto_proceed: {
-			bg: 'oklch(0.60 0.15 170 / 0.15)',
-			text: 'oklch(0.75 0.15 170)',
-			border: 'oklch(0.60 0.15 170 / 0.4)'
 		}
 	};
 

@@ -44,8 +44,7 @@ const SIGNAL_STATE_MAP = {
 	'review': 'ready-for-review',
 	'needs_input': 'needs-input',
 	'idle': 'idle',
-	'completed': 'completed',
-	'auto_proceed': 'completed',
+	'completed': 'completed',  // autoProceed: true in payload triggers auto-spawn of next task
 	'starting': 'starting',
 	'compacting': 'compacting',
 	'completing': 'completing',
@@ -74,7 +73,7 @@ function readSignalState(sessionName) {
 		// This ensures completed sessions stay visible in dashboard until user takes action
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		const isCompletedState = signal.type === 'state' && (signal.state === 'completed' || signal.state === 'auto_proceed');
+		const isCompletedState = signal.type === 'state' && signal.state === 'completed';
 		const ttl = signal.type === 'complete' || isCompletedState ? COMPLETED_STATE_TTL_MS : SIGNAL_TTL_MS;
 		if (ageMs > ttl) {
 			return null;

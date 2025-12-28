@@ -7,12 +7,15 @@ Lightweight bash tools for agent orchestration, database operations, monitoring,
 @~/code/jat/shared/bash-patterns.md
 @~/code/jat/shared/beads.md
 @~/code/jat/shared/tools.md
-@~/code/jat/shared/workflow-commands.md
-@~/code/jat/shared/statusline.md
-@~/code/jat/shared/signals.md
-@~/code/jat/shared/suggested-tasks.md
 @~/code/jat/shared/agent-app-interface.md
 @~/code/jat/shared/automation.md
+
+<!-- NOTE: Agent-execution docs (signals.md, workflow-commands.md, statusline.md,
+     suggested-tasks.md) are NOT imported here. They're embedded in the command
+     files (/jat:start.md, /jat:complete.md) which load on-demand when agents
+     invoke those commands. This CLAUDE.md is for developers working on jat
+     source code, not for agents executing workflows. -->
+
 
 ## Project Structure
 

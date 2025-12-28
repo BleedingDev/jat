@@ -554,12 +554,6 @@
 			text: 'oklch(0.80 0.18 145)',
 			border: 'oklch(0.35 0.12 145)'
 		},
-		auto_proceed: {
-			icon: '🚀',
-			bg: 'oklch(0.22 0.10 145)',
-			text: 'oklch(0.80 0.18 145)',
-			border: 'oklch(0.35 0.12 145)'
-		},
 		idle: {
 			icon: '💤',
 			bg: 'oklch(0.20 0.01 250)',
@@ -1116,6 +1110,32 @@
 													Task: <span class="font-mono">{completedData.taskId || event.task_id}</span>
 												</div>
 											{/if}
+
+											<!-- Auto-proceed indicator (consolidated signal) -->
+											{#if completedData.autoProceed}
+												<div class="mt-2 pt-2" style="border-top: 1px solid oklch(0.35 0.12 145);">
+													<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.18 145);">
+														<span>🚀</span>
+														<span class="font-medium">AUTO PROCEED</span>
+													</div>
+													{#if completedData.nextTaskId}
+														<div class="flex items-center gap-2 text-[10px] mt-1" style="color: oklch(0.85 0.12 200);">
+															<span class="loading loading-spinner loading-xs"></span>
+															<span>Spawning:</span>
+															<span class="font-mono font-medium">{completedData.nextTaskId}</span>
+														</div>
+														{#if completedData.nextTaskTitle}
+															<div class="text-[10px] ml-5 truncate" style="color: oklch(0.65 0.05 200);">
+																{completedData.nextTaskTitle}
+															</div>
+														{/if}
+													{:else}
+														<div class="text-[10px] mt-1" style="color: oklch(0.55 0.02 250);">
+															Finding next ready task...
+														</div>
+													{/if}
+												</div>
+											{/if}
 										</div>
 									{:else if (event.state === 'review' || event.type === 'review') && hasRichSignalData(event)}
 										<!-- Rich Review Signal Card -->
@@ -1609,45 +1629,6 @@
 											{/if}
 											<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">
 												Agent is running completion steps (commit, close, release, announce).
-											</div>
-										</div>
-									{:else if event.state === 'auto_proceed' || event.type === 'auto_proceed'}
-										<!-- Auto-proceed state - spawning next task -->
-										<div class="space-y-2">
-											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.18 145);">
-												<span>🚀</span>
-												<span class="font-medium">AUTO PROCEED</span>
-											</div>
-
-											<!-- Completed task -->
-											{#if event.task_id || event.data?.taskId}
-												<div class="flex items-center gap-2 text-[10px]" style="color: oklch(0.75 0.18 145);">
-													<span>✓</span>
-													<span>Completed:</span>
-													<span class="font-mono font-medium">{event.task_id || event.data?.taskId}</span>
-												</div>
-											{/if}
-
-											<!-- Next task being spawned -->
-											{#if event.data?.nextTaskId}
-												<div class="flex items-center gap-2 text-[10px]" style="color: oklch(0.85 0.12 200);">
-													<span class="loading loading-spinner loading-xs"></span>
-													<span>Spawning:</span>
-													<span class="font-mono font-medium">{event.data.nextTaskId}</span>
-												</div>
-												{#if event.data?.nextTaskTitle}
-													<div class="text-[10px] ml-5 truncate" style="color: oklch(0.65 0.05 200);">
-														{event.data.nextTaskTitle}
-													</div>
-												{/if}
-											{:else}
-												<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">
-													Finding next ready task...
-												</div>
-											{/if}
-
-											<div class="text-[9px] mt-1" style="color: oklch(0.50 0.02 250);">
-												Session will auto-close after spawning next task.
 											</div>
 										</div>
 									{:else if event.type === 'action' && event.data}

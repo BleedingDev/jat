@@ -1,5 +1,4 @@
 ---
-argument-hint:
 ---
 
 Complete current task properly with full verification. Session ends after completion.
@@ -498,8 +497,8 @@ This step implements the review rules system that allows project-level configura
 0. Check session epic context (.claude/sessions/context-{session_id}.json)
    └─ If epic context exists with reviewThreshold:
       └─ Compare task.priority to threshold
-      └─ If priority > threshold: run `jat-signal completed` (require review)
-      └─ If priority <= threshold: run `jat-signal auto_proceed`
+      └─ If priority > threshold: COMPLETION_MODE="review_required" → completed signal (no autoProceed)
+      └─ If priority <= threshold: COMPLETION_MODE="auto_proceed" → completed signal with autoProceed: true
    └─ Epic context takes precedence over all other rules
 
 1. Check task.notes for [REVIEW_OVERRIDE:...] pattern
@@ -526,7 +525,7 @@ task_notes=$(echo "$task_json" | jq -r '.[0].notes // ""')
 task_priority=$(echo "$task_json" | jq -r '.[0].priority')
 task_type=$(echo "$task_json" | jq -r '.[0].issue_type')
 
-COMPLETION_SIGNAL=""  # Will be set by first matching rule (idle, auto_proceed, completed)
+COMPLETION_MODE=""  # Will be set by first matching rule: "review_required" or "auto_proceed"
 
 # Step 0: Check session epic context (highest priority)
 # Session context is set by dashboard when spawning agents for epic execution
@@ -546,40 +545,40 @@ if [[ -f "$context_file" ]]; then
     case "$epic_threshold" in
       "all")
         echo "📋 Epic context: reviewThreshold='all' → All tasks require review"
-        COMPLETION_SIGNAL="idle"
+        COMPLETION_MODE="review_required"
         ;;
       "none")
         echo "📋 Epic context: reviewThreshold='none' → All tasks auto-proceed"
-        COMPLETION_SIGNAL="auto_proceed"
+        COMPLETION_MODE="auto_proceed"
         ;;
       "p0")
         # Only P0 requires review; P1+ auto-proceed
         if (( task_priority == 0 )); then
           echo "📋 Epic context: P0 task requires review (threshold: p0)"
-          COMPLETION_SIGNAL="idle"
+          COMPLETION_MODE="review_required"
         else
           echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0)"
-          COMPLETION_SIGNAL="auto_proceed"
+          COMPLETION_MODE="auto_proceed"
         fi
         ;;
       "p0-p1")
         # P0-P1 require review; P2+ auto-proceed
         if (( task_priority <= 1 )); then
           echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p1)"
-          COMPLETION_SIGNAL="idle"
+          COMPLETION_MODE="review_required"
         else
           echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p1)"
-          COMPLETION_SIGNAL="auto_proceed"
+          COMPLETION_MODE="auto_proceed"
         fi
         ;;
       "p0-p2")
         # P0-P2 require review; P3+ auto-proceed
         if (( task_priority <= 2 )); then
           echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p2)"
-          COMPLETION_SIGNAL="idle"
+          COMPLETION_MODE="review_required"
         else
           echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p2)"
-          COMPLETION_SIGNAL="auto_proceed"
+          COMPLETION_MODE="auto_proceed"
         fi
         ;;
       *)
@@ -589,20 +588,20 @@ if [[ -f "$context_file" ]]; then
   fi
 fi
 
-# If epic context didn't set signal, continue with other rules
-if [[ -z "$COMPLETION_SIGNAL" ]]; then
-  COMPLETION_SIGNAL="idle"  # Default: requires review
+# If epic context didn't set mode, continue with other rules
+if [[ -z "$COMPLETION_MODE" ]]; then
+  COMPLETION_MODE="review_required"  # Default: requires review
 
   # Step 1: Check for per-task override in notes
   if echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:always_review\]'; then
     echo "📋 Review override detected: always_review"
-    COMPLETION_SIGNAL="idle"
+    COMPLETION_MODE="review_required"
   elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:auto_proceed\]'; then
     echo "📋 Review override detected: auto_proceed"
-    COMPLETION_SIGNAL="auto_proceed"
+    COMPLETION_MODE="auto_proceed"
   elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:force_review\]'; then
     echo "📋 Review override detected: force_review"
-    COMPLETION_SIGNAL="idle"
+    COMPLETION_MODE="review_required"
   else
   # Step 2: Load review-rules.json and apply type-based rules
   rules_file=".beads/review-rules.json"
@@ -618,18 +617,18 @@ if [[ -z "$COMPLETION_SIGNAL" ]]; then
       # (lower number = higher priority, e.g., P0 < P3)
       if (( task_priority <= max_auto )); then
         echo "📋 Auto-proceed: P${task_priority} ${task_type} (max: P${max_auto})"
-        COMPLETION_SIGNAL="auto_proceed"
+        COMPLETION_MODE="auto_proceed"
       else
         echo "📋 Review required: P${task_priority} ${task_type} (max auto: P${max_auto})"
-        COMPLETION_SIGNAL="idle"
+        COMPLETION_MODE="review_required"
       fi
     else
       # No rule for this type, check defaultAction
       default_action=$(jq -r '.defaultAction // "review"' "$rules_file")
       if [[ "$default_action" == "auto" ]]; then
-        COMPLETION_SIGNAL="auto_proceed"
+        COMPLETION_MODE="auto_proceed"
       else
-        COMPLETION_SIGNAL="idle"
+        COMPLETION_MODE="review_required"
       fi
     fi
   else
@@ -642,40 +641,51 @@ if [[ -z "$COMPLETION_SIGNAL" ]]; then
     # - Other (bug, feature, task): auto-proceed for P0-P3
     case "$task_type" in
       epic)
-        COMPLETION_SIGNAL="idle"  # Epics always require review
+        COMPLETION_MODE="review_required"  # Epics always require review
         ;;
       chore)
-        COMPLETION_SIGNAL="auto_proceed"  # Chores always auto-proceed
+        COMPLETION_MODE="auto_proceed"  # Chores always auto-proceed
         ;;
       *)
         # bug, feature, task: auto-proceed for P0-P3, review for P4
         if (( task_priority <= 3 )); then
-          COMPLETION_SIGNAL="auto_proceed"
+          COMPLETION_MODE="auto_proceed"
         else
-          COMPLETION_SIGNAL="idle"
+          COMPLETION_MODE="review_required"
         fi
         ;;
     esac
   fi
-  fi  # End of: if [[ -z "$COMPLETION_SIGNAL" ]]
+  fi  # End of: if [[ -z "$COMPLETION_MODE" ]]
 fi  # End of: else (no REVIEW_OVERRIDE found)
 
 # Emit the completion signal with JSON payload
-if [[ "$COMPLETION_SIGNAL" == "idle" ]]; then
-  # Use completed signal (not idle) to show task was finished
+# Both cases use 'completed' signal - autoProceed=true triggers next task spawn
+if [[ "$COMPLETION_MODE" == "review_required" ]]; then
+  # Standard completed signal - task finished, awaiting review
   jat-signal completed '{"taskId":"'"$task_id"'","outcome":"success"}'
-elif [[ "$COMPLETION_SIGNAL" == "auto_proceed" ]]; then
-  jat-signal auto_proceed '{"taskId":"'"$task_id"'"}'
+elif [[ "$COMPLETION_MODE" == "auto_proceed" ]]; then
+  # Query next ready task before emitting completed signal with autoProceed
+  next_task_json=$(bd ready --json 2>/dev/null | jq -r '.[0] // empty')
+  next_task_id=""
+  next_task_title=""
+  if [[ -n "$next_task_json" ]]; then
+    next_task_id=$(echo "$next_task_json" | jq -r '.id // empty')
+    next_task_title=$(echo "$next_task_json" | jq -r '.title // empty')
+  fi
+
+  # Emit completed with autoProceed=true - dashboard will spawn next task
+  jat-signal completed '{"taskId":"'"$task_id"'","outcome":"success","autoProceed":true,"nextTaskId":"'"$next_task_id"'","nextTaskTitle":"'"$next_task_title"'"}'
 fi
 ```
 
 #### Review Override Values
 
-| Override Value | Effect | Use Case |
-|----------------|--------|----------|
-| `always_review` | Run `jat-signal completed` | Testing override behavior |
-| `auto_proceed` | Run `jat-signal auto_proceed` | Skip review for specific task |
-| `force_review` | Run `jat-signal completed` | Force review even if rules say auto |
+| Override Value | COMPLETION_MODE | Signal Emitted | Use Case |
+|----------------|-----------------|----------------|----------|
+| `always_review` | `review_required` | `completed` (no autoProceed) | Testing override behavior |
+| `auto_proceed` | `auto_proceed` | `completed` with `autoProceed=true` | Skip review for specific task |
+| `force_review` | `review_required` | `completed` (no autoProceed) | Force review even if rules say auto |
 
 #### Example review-rules.json
 
@@ -876,76 +886,76 @@ After emitting the signal, output a comprehensive completion summary. **This is 
 The terminal summary should mirror everything in the signal - the user viewing the terminal deserves the same complete information as the dashboard UI.
 
 ```
-╔════════════════════════════════════════════════════════════════════════════════╗
-║  ✅ TASK COMPLETED: $task_id                                                   ║
-║  👤 Agent: $agent_name                                                         ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ✅ TASK COMPLETED: $task_id                                              ║
+║  👤 Agent: $agent_name                                                    ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
-┌─ 📋 WHAT WAS ACCOMPLISHED ─────────────────────────────────────────────────────┐
-│                                                                                 │
-│  • [Summary bullet 1 - specific accomplishment]                                │
-│  • [Summary bullet 2 - specific accomplishment]                                │
-│  • [Summary bullet 3 - specific accomplishment]                                │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📋 WHAT WAS ACCOMPLISHED ────────────────────────────────────────────────┐
+│                                                                          │
+│  • [Summary bullet 1 - specific accomplishment]                          │
+│  • [Summary bullet 2 - specific accomplishment]                          │
+│  • [Summary bullet 3 - specific accomplishment]                          │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ ⚡ QUALITY STATUS ─────────────────────────────────────────────────────────────┐
-│                                                                                 │
-│  Tests: [passing/failing/none/skipped] ([N/N] if applicable)                   │
-│  Build: [clean/warnings/errors]                                                 │
-│  Pre-existing: [note if any issues were pre-existing]                          │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ ⚡ QUALITY STATUS ───────────────────────────────────────────────────────┐
+│                                                                          │
+│  Tests: [passing/failing/none/skipped] ([N/N] if applicable)             │
+│  Build: [clean/warnings/errors]                                          │
+│  Pre-existing: [note if any issues were pre-existing]                    │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🧑 HUMAN ACTIONS REQUIRED ────────────────────────────────────────────────────┐
-│  (Manual steps needed to complete this work)                                    │
-│                                                                                 │
-│  1. [Action title]                                                             │
-│     → [Detailed description of what to do]                                     │
-│                                                                                 │
-│  2. [Action title]                                                             │
-│     → [Detailed description of what to do]                                     │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🧑 HUMAN ACTIONS REQUIRED ───────────────────────────────────────────────┐
+│  (Manual steps needed to complete this work)                             │
+│                                                                          │
+│  1. [Action title]                                                       │
+│     → [Detailed description of what to do]                               │
+│                                                                          │
+│  2. [Action title]                                                       │
+│     → [Detailed description of what to do]                               │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 💡 SUGGESTED FOLLOW-UP TASKS ─────────────────────────────────────────────────┐
-│  (Ideas discovered during this work - use dashboard to create in Beads)        │
-│                                                                                 │
-│  [P2] [feature] Add Apple Sign-In support                                      │
-│       Similar flow to Google OAuth, needs Apple Developer account setup        │
-│       Reason: Discovered while implementing Google OAuth                       │
-│                                                                                 │
-│  [P3] [task] Add OAuth error tracking                                          │
-│       Log failed OAuth attempts to Sentry for debugging                        │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 💡 SUGGESTED FOLLOW-UP TASKS ────────────────────────────────────────────┐
+│  (Ideas discovered during this work - use dashboard to create in Beads)  │
+│                                                                          │
+│  [P2] [feature] Add Apple Sign-In support                                │
+│       Similar flow to Google OAuth, needs Apple Developer account setup  │
+│       Reason: Discovered while implementing Google OAuth                 │
+│                                                                          │
+│  [P3] [task] Add OAuth error tracking                                    │
+│       Log failed OAuth attempts to Sentry for debugging                  │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔗 CROSS-AGENT INTEL ─────────────────────────────────────────────────────────┐
-│  (Knowledge to share with other agents working in this codebase)               │
-│                                                                                 │
-│  📁 Files modified:                                                            │
-│     • src/lib/auth/oauth.ts                                                    │
-│     • src/routes/auth/callback/+server.ts                                      │
-│                                                                                 │
-│  📐 Patterns to follow:                                                        │
-│     • Use authError() helper for consistent error responses                    │
-│                                                                                 │
-│  ⚠️ Gotchas:                                                                   │
-│     • Token refresh can fail silently - always check response.ok               │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔗 CROSS-AGENT INTEL ────────────────────────────────────────────────────┐
+│  (Knowledge to share with other agents working in this codebase)         │
+│                                                                          │
+│  📁 Files modified:                                                       │
+│     • src/lib/auth/oauth.ts                                              │
+│     • src/routes/auth/callback/+server.ts                                │
+│                                                                          │
+│  📐 Patterns to follow:                                                   │
+│     • Use authError() helper for consistent error responses              │
+│                                                                          │
+│  ⚠️ Gotchas:                                                             │
+│     • Token refresh can fail silently - always check response.ok         │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔄 PATTERN APPLICABILITY ─────────────────────────────────────────────────────┐
-│  (How this work pattern could apply elsewhere in the project)                  │
-│                                                                                 │
-│  The retry-with-backoff pattern used for token refresh could also be applied   │
-│  to: API calls in src/lib/api.ts, webhook deliveries, database reconnection.   │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔄 PATTERN APPLICABILITY ────────────────────────────────────────────────┐
+│  (How this work pattern could apply elsewhere in the project)            │
+│                                                                          │
+│  The retry-with-backoff pattern used for token refresh could also be appl│
+│  to: API calls in src/lib/api.ts, webhook deliveries, database reconnecti│
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Session complete. Dashboard shows interactive UI for creating suggested tasks.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 **Section Guidelines:**
@@ -1032,7 +1042,7 @@ Share knowledge that helps other agents working in the same codebase:
 ### Example: Full Completion Flow
 
 ```bash
-# Step 7.5 already ran and emitted idle or auto_proceed
+# Step 7.5 already ran and set COMPLETION_MODE (review_required or auto_proceed)
 
 # Step 8: Emit structured completion signal
 jat-signal complete '{
@@ -1097,76 +1107,76 @@ jat-signal complete '{
 
 Terminal output (full debrief):
 ```
-╔════════════════════════════════════════════════════════════════════════════════╗
-║  ✅ TASK COMPLETED: chimaro-xyz                                                ║
-║  👤 Agent: CalmMeadow                                                          ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ✅ TASK COMPLETED: chimaro-xyz                                           ║
+║  👤 Agent: CalmMeadow                                                     ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
-┌─ 📋 WHAT WAS ACCOMPLISHED ─────────────────────────────────────────────────────┐
-│                                                                                 │
-│  • Created migration for auth_mode column                                      │
-│  • Added anonymous session handling                                            │
-│  • Updated session middleware to detect auth mode                              │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📋 WHAT WAS ACCOMPLISHED ────────────────────────────────────────────────┐
+│                                                                          │
+│  • Created migration for auth_mode column                                │
+│  • Added anonymous session handling                                      │
+│  • Updated session middleware to detect auth mode                        │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ ⚡ QUALITY STATUS ─────────────────────────────────────────────────────────────┐
-│                                                                                 │
-│  Tests: passing                                                                │
-│  Build: warnings (pre-existing - unrelated type errors)                        │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ ⚡ QUALITY STATUS ───────────────────────────────────────────────────────┐
+│                                                                          │
+│  Tests: passing                                                          │
+│  Build: warnings (pre-existing - unrelated type errors)                  │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🧑 HUMAN ACTIONS REQUIRED ────────────────────────────────────────────────────┐
-│  (Manual steps needed to complete this work)                                    │
-│                                                                                 │
-│  1. Run database migration                                                     │
-│     → Run: npx prisma migrate deploy                                           │
-│       This adds the auth_mode column to the sessions table.                    │
-│                                                                                 │
-│  2. Enable Anonymous Auth                                                      │
-│     → In Supabase dashboard:                                                   │
-│       1. Go to Authentication > Providers                                      │
-│       2. Enable Anonymous Sign-ins                                             │
-│       3. Set session duration to 24 hours                                      │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🧑 HUMAN ACTIONS REQUIRED ───────────────────────────────────────────────┐
+│  (Manual steps needed to complete this work)                             │
+│                                                                          │
+│  1. Run database migration                                               │
+│     → Run: npx prisma migrate deploy                                     │
+│       This adds the auth_mode column to the sessions table.              │
+│                                                                          │
+│  2. Enable Anonymous Auth                                                │
+│     → In Supabase dashboard:                                             │
+│       1. Go to Authentication > Providers                                │
+│       2. Enable Anonymous Sign-ins                                       │
+│       3. Set session duration to 24 hours                                │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 💡 SUGGESTED FOLLOW-UP TASKS ─────────────────────────────────────────────────┐
-│  (Ideas discovered during this work - use dashboard to create in Beads)        │
-│                                                                                 │
-│  [P2] [feature] Add auth mode indicator to UI                                  │
-│       Show users whether they are in anonymous or authenticated mode.          │
-│       Display upgrade prompt for anon users.                                   │
-│       Reason: UX improvement discovered while implementing auth modes          │
-│                                                                                 │
-│  [P3] [task] Add anon session cleanup job                                      │
-│       Cron job to delete anonymous sessions older than 7 days to prevent       │
-│       database bloat.                                                          │
-│       Reason: Tech debt - anon sessions will accumulate without cleanup        │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 💡 SUGGESTED FOLLOW-UP TASKS ────────────────────────────────────────────┐
+│  (Ideas discovered during this work - use dashboard to create in Beads)  │
+│                                                                          │
+│  [P2] [feature] Add auth mode indicator to UI                            │
+│       Show users whether they are in anonymous or authenticated mode.    │
+│       Display upgrade prompt for anon users.                             │
+│       Reason: UX improvement discovered while implementing auth modes    │
+│                                                                          │
+│  [P3] [task] Add anon session cleanup job                                │
+│       Cron job to delete anonymous sessions older than 7 days to prevent │
+│       database bloat.                                                    │
+│       Reason: Tech debt - anon sessions will accumulate without cleanup  │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔗 CROSS-AGENT INTEL ─────────────────────────────────────────────────────────┐
-│  (Knowledge to share with other agents working in this codebase)               │
-│                                                                                 │
-│  📁 Files modified:                                                            │
-│     • prisma/migrations/20251208_add_auth_mode.sql                             │
-│     • src/lib/server/session.ts                                                │
-│     • src/hooks.server.ts                                                      │
-│                                                                                 │
-│  📐 Patterns to follow:                                                        │
-│     • Session objects now have authMode: anon | authenticated                  │
-│     • Use isAnonymous(session) helper to check auth state                      │
-│                                                                                 │
-│  ⚠️ Gotchas:                                                                   │
-│     • Supabase anon sessions have different JWT structure - check for aud      │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔗 CROSS-AGENT INTEL ────────────────────────────────────────────────────┐
+│  (Knowledge to share with other agents working in this codebase)         │
+│                                                                          │
+│  📁 Files modified:                                                       │
+│     • prisma/migrations/20251208_add_auth_mode.sql                       │
+│     • src/lib/server/session.ts                                          │
+│     • src/hooks.server.ts                                                │
+│                                                                          │
+│  📐 Patterns to follow:                                                   │
+│     • Session objects now have authMode: anon | authenticated            │
+│     • Use isAnonymous(session) helper to check auth state                │
+│                                                                          │
+│  ⚠️ Gotchas:                                                             │
+│     • Supabase anon sessions have different JWT structure - check for aud│
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Session complete. Dashboard shows interactive UI for creating suggested tasks.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ---
@@ -1316,48 +1326,48 @@ Create a backfilled task record? [Proceed? Y/n] Y
 Signal: completed (task: jat-abc, outcome: success)
 [JAT-SIGNAL:completed] {"taskId":"jat-abc","outcome":"success"}
 
-╔════════════════════════════════════════════════════════════════════════════════╗
-║  ✅ TASK COMPLETED: jat-abc                                                    ║
-║  👤 Agent: SwiftMoon (Backfilled)                                              ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ✅ TASK COMPLETED: jat-abc                                               ║
+║  👤 Agent: SwiftMoon (Backfilled)                                         ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
-┌─ 📋 WHAT WAS ACCOMPLISHED ─────────────────────────────────────────────────────┐
-│                                                                                 │
-│  • Fixed jat CLI -p flag for non-interactive sessions                          │
-│  • Changed to positional argument for prompt passing                           │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📋 WHAT WAS ACCOMPLISHED ────────────────────────────────────────────────┐
+│                                                                          │
+│  • Fixed jat CLI -p flag for non-interactive sessions                    │
+│  • Changed to positional argument for prompt passing                     │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ ⚡ QUALITY STATUS ─────────────────────────────────────────────────────────────┐
-│                                                                                 │
-│  Tests: none (no tests configured)                                             │
-│  Build: clean                                                                   │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ ⚡ QUALITY STATUS ───────────────────────────────────────────────────────┐
+│                                                                          │
+│  Tests: none (no tests configured)                                       │
+│  Build: clean                                                            │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 💡 SUGGESTED FOLLOW-UP TASKS ─────────────────────────────────────────────────┐
-│  (Ideas discovered during this work - use dashboard to create in Beads)        │
-│                                                                                 │
-│  [P3] [task] Add tests for jat CLI argument parsing                            │
-│       Cover edge cases: quotes, special characters, multi-word prompts         │
-│       Reason: No tests exist for CLI argument handling                         │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 💡 SUGGESTED FOLLOW-UP TASKS ────────────────────────────────────────────┐
+│  (Ideas discovered during this work - use dashboard to create in Beads)  │
+│                                                                          │
+│  [P3] [task] Add tests for jat CLI argument parsing                      │
+│       Cover edge cases: quotes, special characters, multi-word prompts   │
+│       Reason: No tests exist for CLI argument handling                   │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔗 CROSS-AGENT INTEL ─────────────────────────────────────────────────────────┐
-│  (Knowledge to share with other agents working in this codebase)               │
-│                                                                                 │
-│  📁 Files modified:                                                            │
-│     • cli/jat                                                                  │
-│                                                                                 │
-│  ⚠️ Gotchas:                                                                   │
-│     • Use positional args, not flags for prompts in Claude Code invocation     │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔗 CROSS-AGENT INTEL ────────────────────────────────────────────────────┐
+│  (Knowledge to share with other agents working in this codebase)         │
+│                                                                          │
+│  📁 Files modified:                                                       │
+│     • cli/jat                                                            │
+│                                                                          │
+│  ⚠️ Gotchas:                                                             │
+│     • Use positional args, not flags for prompts in Claude Code invocatio│
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Session complete. Dashboard shows interactive UI for creating suggested tasks.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ---
@@ -1393,84 +1403,84 @@ Signal: completed (task: jat-abc, outcome: success)
 Signal: completed (task: jat-abc, outcome: success)
 [JAT-SIGNAL:completed] {"taskId":"jat-abc","outcome":"success"}
 
-╔════════════════════════════════════════════════════════════════════════════════╗
-║  ✅ TASK COMPLETED: jat-abc                                                    ║
-║  👤 Agent: JustGrove                                                           ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ✅ TASK COMPLETED: jat-abc                                               ║
+║  👤 Agent: JustGrove                                                      ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
-┌─ 📋 WHAT WAS ACCOMPLISHED ─────────────────────────────────────────────────────┐
-│                                                                                 │
-│  • Added user settings page at /account/settings                               │
-│  • Implemented form fields for profile, notifications                          │
-│  • Added form validation with error messages                                   │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📋 WHAT WAS ACCOMPLISHED ────────────────────────────────────────────────┐
+│                                                                          │
+│  • Added user settings page at /account/settings                         │
+│  • Implemented form fields for profile, notifications                    │
+│  • Added form validation with error messages                             │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ ⚡ QUALITY STATUS ─────────────────────────────────────────────────────────────┐
-│                                                                                 │
-│  Tests: passing (12/12)                                                        │
-│  Build: clean                                                                   │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ ⚡ QUALITY STATUS ───────────────────────────────────────────────────────┐
+│                                                                          │
+│  Tests: passing (12/12)                                                  │
+│  Build: clean                                                            │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🧑 HUMAN ACTIONS REQUIRED ────────────────────────────────────────────────────┐
-│  (Manual steps needed to complete this work)                                    │
-│                                                                                 │
-│  1. Update navigation menu                                                     │
-│     → Add link to Settings page in the account dropdown menu                   │
-│       Location: src/lib/components/NavMenu.svelte, line ~45                    │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🧑 HUMAN ACTIONS REQUIRED ───────────────────────────────────────────────┐
+│  (Manual steps needed to complete this work)                             │
+│                                                                          │
+│  1. Update navigation menu                                               │
+│     → Add link to Settings page in the account dropdown menu             │
+│       Location: src/lib/components/NavMenu.svelte, line ~45              │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 💡 SUGGESTED FOLLOW-UP TASKS ─────────────────────────────────────────────────┐
-│  (Ideas discovered during this work - use dashboard to create in Beads)        │
-│                                                                                 │
-│  [P2] [feature] Add email notification preferences                             │
-│       Allow users to configure which emails they receive                       │
-│       Reason: Settings page exists but notification controls are minimal       │
-│                                                                                 │
-│  [P3] [task] Add settings page to E2E test suite                               │
-│       Cover form submission, validation errors, and success states             │
-│       Reason: Currently only unit tests exist for this page                    │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 💡 SUGGESTED FOLLOW-UP TASKS ────────────────────────────────────────────┐
+│  (Ideas discovered during this work - use dashboard to create in Beads)  │
+│                                                                          │
+│  [P2] [feature] Add email notification preferences                       │
+│       Allow users to configure which emails they receive                 │
+│       Reason: Settings page exists but notification controls are minimal │
+│                                                                          │
+│  [P3] [task] Add settings page to E2E test suite                         │
+│       Cover form submission, validation errors, and success states       │
+│       Reason: Currently only unit tests exist for this page              │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔗 CROSS-AGENT INTEL ─────────────────────────────────────────────────────────┐
-│  (Knowledge to share with other agents working in this codebase)               │
-│                                                                                 │
-│  📁 Files modified:                                                            │
-│     • src/routes/account/settings/+page.svelte                                 │
-│     • src/routes/account/settings/+page.server.ts                              │
-│     • src/lib/api/user.ts                                                      │
-│                                                                                 │
-│  📐 Patterns to follow:                                                        │
-│     • Use form actions for server-side validation                              │
-│     • Use $page.form for progressive enhancement                               │
-│                                                                                 │
-│  ⚠️ Gotchas:                                                                   │
-│     • API returns nested user.profile object - flatten before form binding     │
-│     • Form reset after successful save requires manual invalidation            │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔗 CROSS-AGENT INTEL ────────────────────────────────────────────────────┐
+│  (Knowledge to share with other agents working in this codebase)         │
+│                                                                          │
+│  📁 Files modified:                                                       │
+│     • src/routes/account/settings/+page.svelte                           │
+│     • src/routes/account/settings/+page.server.ts                        │
+│     • src/lib/api/user.ts                                                │
+│                                                                          │
+│  📐 Patterns to follow:                                                   │
+│     • Use form actions for server-side validation                        │
+│     • Use $page.form for progressive enhancement                         │
+│                                                                          │
+│  ⚠️ Gotchas:                                                             │
+│     • API returns nested user.profile object - flatten before form bindin│
+│     • Form reset after successful save requires manual invalidation      │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔄 PATTERN APPLICABILITY ─────────────────────────────────────────────────────┐
-│  (How this work pattern could apply elsewhere in the project)                  │
-│                                                                                 │
-│  The form-with-server-validation pattern used here could be applied to:        │
-│  • Account deletion flow (src/routes/account/delete)                           │
-│  • Team settings page (src/routes/team/settings)                               │
-│  • Any other form that needs server-side validation with progressive enhance.  │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔄 PATTERN APPLICABILITY ────────────────────────────────────────────────┐
+│  (How this work pattern could apply elsewhere in the project)            │
+│                                                                          │
+│  The form-with-server-validation pattern used here could be applied to:  │
+│  • Account deletion flow (src/routes/account/delete)                     │
+│  • Team settings page (src/routes/team/settings)                         │
+│  • Any other form that needs server-side validation with progressive enha│
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Session complete. Dashboard shows interactive UI for creating suggested tasks.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 **Signals explained:**
-- `jat-signal completed '{"taskId":"...","outcome":"success"}'` - Task finished; dashboard shows COMPLETED state, session stays open for review
-- `jat-signal auto_proceed '{"taskId":"..."}'` - Auto-proceed enabled; dashboard can auto-close session
+- `jat-signal completed '{"taskId":"...","outcome":"success"}'` - Task finished, requires review; dashboard shows COMPLETED state
+- `jat-signal completed '{"taskId":"...","outcome":"success","autoProceed":true,"nextTaskId":"...","nextTaskTitle":"..."}'` - Auto-proceed enabled; dashboard spawns next task
 - `jat-signal tasks '[...]'` - Follow-up tasks discovered during work
 
 The signal used depends on review rules (see Step 7.5).
@@ -1485,7 +1495,7 @@ The completion flow uses these signals (captured by PostToolUse hook):
 |----------------|-------------|------------------|
 | `jat-signal completing '{...}'` | During each completion step | Shows progress bar and current step |
 | `jat-signal completed '{"taskId":"...","outcome":"success"}'` | After `bd close`, when review required | Shows "COMPLETED" state (green), session stays open for review |
-| `jat-signal auto_proceed '{"taskId":"..."}'` | After `bd close`, when auto-proceed enabled | Dashboard can auto-close session, optionally spawn next |
+| `jat-signal completed '{"taskId":"...","autoProceed":true,...}'` | After `bd close`, when auto-proceed enabled | Dashboard spawns next task automatically |
 | `jat-signal action '{...}'` | When manual steps are required | Shows prominent action checklist |
 | `jat-signal tasks '[...]'` | When follow-up work discovered | Shows "N Suggested Tasks" badge, offers Beads creation |
 | `jat-signal complete '{...}'` | After all completion steps | Full completion bundle with summary, suggested tasks, cross-agent intel |
@@ -1770,7 +1780,7 @@ Or run /jat:verify to see detailed error report
 | 5.5 | Auto-Close Eligible Epics | ALWAYS | - |
 | 6 | Release Reservations | ALWAYS | `releasing` (60%) |
 | 7 | Announce Completion | ALWAYS | `announcing` (80%) |
-| 7.5 | Determine Review Action | ALWAYS (sets COMPLETION_MARKER) | - |
+| 7.5 | Determine Review Action | ALWAYS (sets COMPLETION_MODE) | - |
 | 8 | Show Final Summary with Reflection | ALWAYS | (100% implied) |
 | 9 | Handle CREATE_TASKS Input | If dashboard sends task creation request | - |
 
@@ -1929,74 +1939,74 @@ When you pick up an epic that has become READY (all children completed), your jo
 When completing an epic, use this modified summary with full debrief sections:
 
 ```
-╔════════════════════════════════════════════════════════════════════════════════╗
-║  ✅ EPIC VERIFIED: jat-abc "Improve Dashboard Performance"                     ║
-║  👤 Agent: $agent_name                                                         ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ✅ EPIC VERIFIED: jat-abc "Improve Dashboard Performance"                ║
+║  👤 Agent: $agent_name                                                    ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
-┌─ 📦 CHILD TASKS COMPLETED ─────────────────────────────────────────────────────┐
-│                                                                                 │
-│  ✓ jat-abc.1: Add caching layer (by CalmMeadow)                                │
-│  ✓ jat-abc.2: Optimize database queries (by SwiftMoon)                         │
-│  ✓ jat-abc.3: Add performance tests (by JustGrove)                             │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📦 CHILD TASKS COMPLETED ────────────────────────────────────────────────┐
+│                                                                          │
+│  ✓ jat-abc.1: Add caching layer (by CalmMeadow)                          │
+│  ✓ jat-abc.2: Optimize database queries (by SwiftMoon)                   │
+│  ✓ jat-abc.3: Add performance tests (by JustGrove)                       │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔍 VERIFICATION RESULTS ──────────────────────────────────────────────────────┐
-│                                                                                 │
-│  • Integration tests: passing                                                  │
-│  • Performance target: achieved (P99 < 200ms)                                  │
-│  • No regressions detected                                                     │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔍 VERIFICATION RESULTS ─────────────────────────────────────────────────┐
+│                                                                          │
+│  • Integration tests: passing                                            │
+│  • Performance target: achieved (P99 < 200ms)                            │
+│  • No regressions detected                                               │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🧑 HUMAN ACTIONS REQUIRED (from child tasks) ─────────────────────────────────┐
-│                                                                                 │
-│  1. Deploy cache layer to production                                           │
-│     → From jat-abc.1: Run cache warmup script after deploy                     │
-│                                                                                 │
-│  2. Update monitoring dashboards                                               │
-│     → From jat-abc.3: Add P99 latency alerts for new endpoints                 │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🧑 HUMAN ACTIONS REQUIRED (from child tasks) ────────────────────────────┐
+│                                                                          │
+│  1. Deploy cache layer to production                                     │
+│     → From jat-abc.1: Run cache warmup script after deploy               │
+│                                                                          │
+│  2. Update monitoring dashboards                                         │
+│     → From jat-abc.3: Add P99 latency alerts for new endpoints           │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 📊 EPIC IMPACT ───────────────────────────────────────────────────────────────┐
-│                                                                                 │
-│  • Dashboard load time reduced by 75%                                          │
-│  • Database query time reduced by 60%                                          │
-│  • User-facing latency P99 now under 200ms                                     │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📊 EPIC IMPACT ──────────────────────────────────────────────────────────┐
+│                                                                          │
+│  • Dashboard load time reduced by 75%                                    │
+│  • Database query time reduced by 60%                                    │
+│  • User-facing latency P99 now under 200ms                               │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 💡 SUGGESTED FOLLOW-UP TASKS ─────────────────────────────────────────────────┐
-│  (Discovered during epic verification)                                          │
-│                                                                                 │
-│  [P3] [task] Add cache invalidation monitoring                                 │
-│       Track cache hit/miss ratios, alert on degradation                        │
-│       Reason: Caching layer deployed but no observability yet                  │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 💡 SUGGESTED FOLLOW-UP TASKS ────────────────────────────────────────────┐
+│  (Discovered during epic verification)                                   │
+│                                                                          │
+│  [P3] [task] Add cache invalidation monitoring                           │
+│       Track cache hit/miss ratios, alert on degradation                  │
+│       Reason: Caching layer deployed but no observability yet            │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔗 CROSS-AGENT INTEL (aggregated from children) ──────────────────────────────┐
-│                                                                                 │
-│  📁 Files modified across epic:                                                │
-│     • src/lib/cache/redis.ts (jat-abc.1)                                       │
-│     • src/lib/db/queries.ts (jat-abc.2)                                        │
-│     • tests/integration/performance.test.ts (jat-abc.3)                        │
-│                                                                                 │
-│  📐 Patterns established:                                                      │
-│     • Use Redis client from $lib/cache for all caching                         │
-│     • Performance tests should use P99 not average latency                     │
-│                                                                                 │
-│  ⚠️ Gotchas:                                                                   │
-│     • Cache TTL must match session duration (from jat-abc.1)                   │
-│     • Query planner hints needed for complex joins (from jat-abc.2)            │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 🔗 CROSS-AGENT INTEL (aggregated from children) ─────────────────────────┐
+│                                                                          │
+│  📁 Files modified across epic:                                           │
+│     • src/lib/cache/redis.ts (jat-abc.1)                                 │
+│     • src/lib/db/queries.ts (jat-abc.2)                                  │
+│     • tests/integration/performance.test.ts (jat-abc.3)                  │
+│                                                                          │
+│  📐 Patterns established:                                                 │
+│     • Use Redis client from $lib/cache for all caching                   │
+│     • Performance tests should use P99 not average latency               │
+│                                                                          │
+│  ⚠️ Gotchas:                                                             │
+│     • Cache TTL must match session duration (from jat-abc.1)             │
+│     • Query planner hints needed for complex joins (from jat-abc.2)      │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Epic complete. All work verified and integrated.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ---
@@ -2024,26 +2034,26 @@ fi
 When completing a child task that belongs to an epic, add an "EPIC STATUS" section after the header:
 
 ```
-╔════════════════════════════════════════════════════════════════════════════════╗
-║  ✅ TASK COMPLETED: jat-abc.3 "Add performance tests"                          ║
-║  👤 Agent: JustGrove                                                           ║
-╚════════════════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ✅ TASK COMPLETED: jat-abc.3 "Add performance tests"                     ║
+║  👤 Agent: JustGrove                                                      ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
-┌─ 📦 EPIC STATUS ───────────────────────────────────────────────────────────────┐
-│                                                                                 │
-│  Parent: jat-abc "Improve Dashboard Performance"                               │
-│  Progress: 3/3 children complete                                               │
-│  🎉 Epic is now READY for verification!                                        │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📦 EPIC STATUS ──────────────────────────────────────────────────────────┐
+│                                                                          │
+│  Parent: jat-abc "Improve Dashboard Performance"                         │
+│  Progress: 3/3 children complete                                         │
+│  🎉 Epic is now READY for verification!                                   │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─ 📋 WHAT WAS ACCOMPLISHED ─────────────────────────────────────────────────────┐
-│                                                                                 │
-│  • Added integration performance test suite                                    │
-│  • Implemented P99 latency assertions                                          │
-│  • Set up load test fixtures                                                   │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─ 📋 WHAT WAS ACCOMPLISHED ────────────────────────────────────────────────┐
+│                                                                          │
+│  • Added integration performance test suite                              │
+│  • Implemented P99 latency assertions                                    │
+│  • Set up load test fixtures                                             │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 
 [... rest of standard full debrief sections ...]
 ```

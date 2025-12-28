@@ -948,6 +948,8 @@
 
 		// Set up ResizeObserver after a short delay to ensure DOM is fully ready
 		// This auto-resizes tmux session to match the SessionCard width
+		// Add random stagger (0-200ms) to spread requests when multiple cards mount
+		const staggerDelay = 100 + Math.floor(Math.random() * 200);
 		setTimeout(() => {
 			if (
 				scrollContainerRef &&
@@ -965,7 +967,7 @@
 					resizeTmuxSession(initialColumns);
 				}
 			}
-		}, 100);
+		}, staggerDelay);
 	});
 
 	// ResizeObserver instance (not reactive, just for cleanup)
@@ -1217,6 +1219,8 @@
 	// Using $state so the $effect guard works correctly
 	let resizeObserverSetup = $state(false);
 	let lastResizedWidth = $state(0);
+	let lastResizedHeight = $state(0);
+	let pendingResizeKey: string | null = null; // Track in-flight resize requests
 	let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const RESIZE_DEBOUNCE_MS = 300; // Wait for resize to stabilize
 	const MIN_COLUMN_CHANGE = 5; // Only resize if columns change by this much
@@ -1337,9 +1341,29 @@
 
 	/**
 	 * Resize tmux session to match container width (height is user-configurable)
+	 * Includes deduplication to prevent multiple calls with same dimensions
 	 */
 	async function resizeTmuxSession(columns: number) {
 		if (!sessionName) return;
+
+		// Create a unique key for this resize request
+		const resizeKey = `${columns}x${tmuxHeight}`;
+
+		// Skip if we already have a pending request with these exact dimensions
+		if (pendingResizeKey === resizeKey) {
+			return;
+		}
+
+		// Skip if we've already resized to these exact dimensions
+		if (lastResizedWidth === columns && lastResizedHeight === tmuxHeight) {
+			return;
+		}
+
+		// Mark this resize as pending and update last dimensions immediately
+		// to prevent duplicate calls before the async request completes
+		pendingResizeKey = resizeKey;
+		lastResizedWidth = columns;
+		lastResizedHeight = tmuxHeight;
 
 		try {
 			// Use throttledFetch to prevent overwhelming server when multiple cards mount
@@ -1355,12 +1379,22 @@
 				},
 			);
 
-			if (response.ok) {
-				lastResizedWidth = columns;
+			if (!response.ok) {
+				// Reset on failure so we can retry later
+				lastResizedWidth = 0;
+				lastResizedHeight = 0;
 			}
 		} catch (error) {
+			// Reset on failure so we can retry later
+			lastResizedWidth = 0;
+			lastResizedHeight = 0;
 			// Silently fail - resize is a UX enhancement, not critical
 			console.debug("Failed to resize tmux session:", error);
+		} finally {
+			// Clear pending key
+			if (pendingResizeKey === resizeKey) {
+				pendingResizeKey = null;
+			}
 		}
 	}
 
@@ -3579,7 +3613,19 @@
 		if (e.key === "Enter" && !e.shiftKey) {
 			// Enter without Shift submits the input
 			e.preventDefault();
-			sendTextInput();
+			// If input is empty, send Enter to tmux (for "Press Enter to continue" prompts)
+			const hasText = inputText.trim().length > 0;
+			const hasFiles = attachedFiles.length > 0;
+			if (!hasText && !hasFiles && onSendInput) {
+				onSendInput("enter", "key");
+				// Trigger visual flash feedback for the Enter action
+				submitFlash = true;
+				setTimeout(() => {
+					submitFlash = false;
+				}, 300);
+			} else {
+				sendTextInput();
+			}
 		} else if (e.key === "Enter" && e.shiftKey) {
 			// Shift+Enter inserts newline (default textarea behavior)
 			// Let it happen naturally, then resize

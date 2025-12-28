@@ -88,7 +88,7 @@ export interface WorkSession {
 	_recoveringTimestamp?: number;
 	/** Rule ID that triggered recovery (for display) */
 	_recoveringRuleId?: string;
-	/** Next task ID for auto-proceed (set when auto_proceed signal received) */
+	/** Next task ID for auto-proceed (set when completed signal with autoProceed=true received) */
 	_autoProceedNextTaskId?: string;
 	/** Next task title for auto-proceed display */
 	_autoProceedNextTaskTitle?: string;

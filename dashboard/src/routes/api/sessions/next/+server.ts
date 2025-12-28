@@ -2,7 +2,8 @@
  * Next Session API - Spawn session for next ready task
  *
  * POST /api/sessions/next
- * Purpose: After auto_proceed signal, spawn a new session for the next ready task
+ * Purpose: After completed signal with autoProceed: true,
+ *          spawn a new session for the next ready task
  *
  * Input: { completedTaskId, completedSessionName, nextTaskId?, project? }
  * Output: { success, nextTaskId, nextTaskTitle, sessionName } or { success: false, reason }
@@ -83,7 +84,15 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		}
 
-		// 3. Spawn new session for next task
+		// 3. Apply configurable delay before spawning (allows user to see completion)
+		const jatDefaults = await getJatDefaults();
+		const autoProceedDelay = jatDefaults.auto_proceed_delay || 2;
+		if (autoProceedDelay > 0) {
+			console.log(`[next] Waiting ${autoProceedDelay}s before spawning next task...`);
+			await new Promise(resolve => setTimeout(resolve, autoProceedDelay * 1000));
+		}
+
+		// 4. Spawn new session for next task
 		const projectPath = nextTask.project_path || project || process.cwd().replace('/dashboard', '');
 		const sessionName = `jat-pending-${Date.now()}`;
 
@@ -114,8 +123,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}, { status: 500 });
 		}
 
-		// 4. Wait for Claude to start and send initial prompt
-		const jatDefaults = await getJatDefaults();
+		// 5. Wait for Claude to start and send initial prompt
 		const maxWaitSeconds = jatDefaults.claude_startup_timeout || 20;
 		const checkIntervalMs = 500;
 		let claudeReady = false;

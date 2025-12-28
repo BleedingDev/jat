@@ -106,9 +106,9 @@
 
 	// Build epic->child mapping for dependency-based grouping
 	// This allows tasks linked to epics via depends_on to be grouped under the epic
+	// NOTE: Uses `tasks` (not allTasks) for O(n) performance in projects page context.
 	const epicChildMap = $derived.by(() => {
-		const taskList = allTasks.length > 0 ? allTasks : tasks;
-		return buildEpicChildMap(taskList);
+		return buildEpicChildMap(tasks);
 	});
 
 	// Track previously seen task IDs and statuses for animations
@@ -786,14 +786,16 @@
 
 	// Calculate recommended tasks - top 3 highest-impact ready tasks
 	// Uses scoring based on: unblocks count, active epic, idle agents, priority
+	// NOTE: Uses `tasks` (not allTasks) for O(n) performance in projects page context.
+	// For full cross-project analysis, use the main /tasks page instead.
 	const recommendedTasks = $derived.by(() => {
-		const allTasksList = allTasks.length > 0 ? allTasks : tasks;
 		const scores = new Map<string, RecommendationScore>();
 
 		// Only calculate for open tasks (ready to start)
+		// Use filteredTasks for both iteration and dependency analysis
 		for (const task of filteredTasks) {
 			if (task.status === 'open') {
-				const score = calculateRecommendationScore(task, allTasksList, agents);
+				const score = calculateRecommendationScore(task, tasks, agents);
 				if (score.isRecommended) {
 					scores.set(task.id, score);
 				}
@@ -810,9 +812,10 @@
 
 	// Calculate critical paths for all incomplete epics
 	// Task: jat-puza.5 - Critical path highlighting in TaskTable
+	// NOTE: Uses `tasks` (not allTasks) for O(n) performance in projects page context.
+	// For full cross-project analysis, use the main /tasks page instead.
 	const criticalPaths = $derived.by(() => {
-		const allTasksList = allTasks.length > 0 ? allTasks : tasks;
-		return calculateAllCriticalPaths(allTasksList);
+		return calculateAllCriticalPaths(tasks);
 	});
 
 	// Type order for grouping (BUG first, then features, tasks, chores, epics, no type last)

@@ -170,6 +170,12 @@ export async function POST({ request }) {
 			claudeCmd += ' --dangerously-skip-permissions';
 		}
 
+		// JAT bootstrap prompt - minimal identity, commands load full docs on-demand
+		// This is added via --append-system-prompt so only dashboard-spawned agents get it
+		const jatBootstrap = `You are a JAT agent. Run /jat:start to begin work.`;
+		claudeCmd += ` --append-system-prompt '${jatBootstrap}'`;
+
+
 		// Create session with explicit dimensions to ensure proper terminal width from the start
 		// Without -x and -y, tmux uses default 80x24 which may not match dashboard card width
 		// Use sleep to allow shell to initialize before sending keys - without this delay,
