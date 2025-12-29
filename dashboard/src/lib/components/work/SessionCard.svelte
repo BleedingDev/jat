@@ -64,6 +64,7 @@
 		type SessionState,
 		getServerStateVisual,
 	} from "$lib/config/statusColors";
+	import { SIGNAL_TTL } from "$lib/config/constants";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
 	import {
 		setHoveredSession,
@@ -2479,9 +2480,6 @@
 		// Without this, Svelte may not detect changes to the Set contents
 		const _titlesVersion = existingTaskTitlesVersion;
 
-		// Use longer TTL for suggested tasks since they should persist until user acts
-		const SIGNAL_TTL_MS = 30 * 60 * 1000; // 30 minutes
-
 		// Only process signal-based suggested tasks
 		if (
 			!signalSuggestedTasks ||
@@ -2491,8 +2489,9 @@
 			return [];
 		}
 
+		// Use longer TTL since suggested tasks wait for user action
 		const ageMs = Date.now() - signalSuggestedTasksTimestamp;
-		if (ageMs >= SIGNAL_TTL_MS) {
+		if (ageMs >= SIGNAL_TTL.USER_WAITING_MS) {
 			return [];
 		}
 
@@ -3385,6 +3384,27 @@
 			case "kill":
 				// Kill tmux session
 				await onKillSession?.();
+				break;
+
+			case "resume":
+				// Resume completed session using Claude's -r flag
+				if (sessionName) {
+					try {
+						const response = await fetch(
+							`/api/sessions/${encodeURIComponent(sessionName)}/resume`,
+							{ method: "POST" },
+						);
+						if (response.ok) {
+							const data = await response.json();
+							console.log("[SessionCard] Resume session result:", data);
+						} else {
+							const errorData = await response.json();
+							console.error("[SessionCard] Resume session failed:", errorData);
+						}
+					} catch (e) {
+						console.error("[SessionCard] Failed to resume session:", e);
+					}
+				}
 				break;
 
 			default:

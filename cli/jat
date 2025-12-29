@@ -812,6 +812,8 @@ COMMANDS:
     jat init                   Auto-detect projects in ~/code
     jat add <path> [name]      Add a project from any path
     jat remove <name>          Remove a project from config
+    jat resume <session-id>    Resume a previous Claude Code session
+    jat resume --list          List recent sessions available to resume
     jat config [project]       Show config (all or specific project)
     jat edit                   Edit config file
     jat colors                 Recolor all Hyprland windows
@@ -843,6 +845,8 @@ EXAMPLES:
     jat add ~/projects/my-app  # Add project from custom path
     jat add . webapp           # Add current dir with custom name
     jat remove old-project     # Remove project from config
+    jat resume --list          # Show recent sessions to resume
+    jat resume 4a5001aa        # Resume session with ID starting with 4a5001aa
 
 CONFIG:
     ~/.config/jat/projects.json
@@ -1160,6 +1164,274 @@ install_hooks() {
 }
 
 #------------------------------------------------------------------------------
+# Resume Session
+#------------------------------------------------------------------------------
+
+resume_session() {
+    local session_id="$1"
+    local project="${2:-}"
+
+    # Handle help and list flags first
+    if [[ -z "$session_id" ]] || [[ "$session_id" == "--help" ]] || [[ "$session_id" == "-h" ]]; then
+        echo -e "${BOLD}Resume a Claude Code session${NC}"
+        echo ""
+        echo -e "${DIM}Usage:${NC}"
+        echo "  jat resume <session-id> [project]"
+        echo "  jat resume --list [project]"
+        echo ""
+        echo -e "${DIM}Examples:${NC}"
+        echo "  jat resume 4a5001aa-04eb-47f6-a4da-75048baf4c79"
+        echo "  jat resume 4a5001aa chimaro      # Partial ID + project"
+        echo "  jat resume --list                # Show recent sessions"
+        echo "  jat resume --list chimaro        # Show sessions for project"
+        echo ""
+        return 0
+    fi
+
+    # Handle --list flag
+    if [[ "$session_id" == "--list" ]] || [[ "$session_id" == "-l" ]]; then
+        list_sessions "$project"
+        return $?
+    fi
+
+    # Find full session ID if partial provided
+    local full_session_id=""
+    local found_project=""
+    local agent_name=""
+    local task_id=""
+
+    # Search through signal files in /tmp for matching session
+    for signal_file in /tmp/jat-signal-*.json; do
+        [[ ! -f "$signal_file" ]] && continue
+        [[ "$signal_file" == *"-tmux-"* ]] && continue  # Skip tmux-keyed files
+
+        local file_session_id file_project file_agent file_task file_tmux
+        file_session_id=$(jq -r '.session_id // empty' "$signal_file" 2>/dev/null)
+
+        if [[ -n "$file_session_id" ]] && [[ "$file_session_id" == "$session_id"* ]]; then
+            full_session_id="$file_session_id"
+            found_project=$(jq -r '.data.project // empty' "$signal_file" 2>/dev/null)
+            agent_name=$(jq -r '.data.agentName // empty' "$signal_file" 2>/dev/null)
+            task_id=$(jq -r '.task_id // empty' "$signal_file" 2>/dev/null)
+            # If agent name not in data, extract from tmux_session (format: jat-AgentName)
+            if [[ -z "$agent_name" ]]; then
+                file_tmux=$(jq -r '.tmux_session // empty' "$signal_file" 2>/dev/null)
+                if [[ "$file_tmux" == jat-* ]]; then
+                    agent_name="${file_tmux#jat-}"
+                fi
+            fi
+            break
+        fi
+    done
+
+    # Also search timeline files for historical sessions or to fill in missing data
+    # Even if we found the session in signal files, we may need more data from timeline
+    if [[ -z "$full_session_id" ]] || [[ -z "$found_project" ]] || [[ -z "$agent_name" ]]; then
+        local search_id="${full_session_id:-$session_id}"
+        for timeline_file in /tmp/jat-timeline-*.jsonl; do
+            [[ ! -f "$timeline_file" ]] && continue
+
+            # Search for session_id that starts with the provided prefix
+            # Prefer "starting" signals as they have the most complete data
+            local line
+            line=$(grep "\"session_id\":\"$search_id" "$timeline_file" 2>/dev/null | grep '"state":"starting"' | head -1)
+            # Fall back to any matching line if no starting signal
+            if [[ -z "$line" ]]; then
+                line=$(grep "\"session_id\":\"$search_id" "$timeline_file" 2>/dev/null | head -1)
+            fi
+            if [[ -n "$line" ]]; then
+                # Only update values we don't have yet
+                [[ -z "$full_session_id" ]] && full_session_id=$(echo "$line" | jq -r '.session_id // empty')
+                [[ -z "$found_project" ]] && found_project=$(echo "$line" | jq -r '.data.project // empty')
+                [[ -z "$task_id" ]] && task_id=$(echo "$line" | jq -r '.task_id // empty')
+                # For agent name, check data first, then tmux_session
+                if [[ -z "$agent_name" ]]; then
+                    agent_name=$(echo "$line" | jq -r '.data.agentName // empty')
+                    if [[ -z "$agent_name" ]]; then
+                        local file_tmux
+                        file_tmux=$(echo "$line" | jq -r '.tmux_session // empty')
+                        if [[ "$file_tmux" == jat-* ]]; then
+                            agent_name="${file_tmux#jat-}"
+                        fi
+                    fi
+                fi
+                break
+            fi
+        done
+    fi
+
+    # If still not found, try using the session ID directly (might be complete)
+    if [[ -z "$full_session_id" ]]; then
+        # Check if it looks like a UUID
+        if [[ "$session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            full_session_id="$session_id"
+        else
+            echo -e "${RED}Error: Session not found: $session_id${NC}"
+            echo ""
+            echo "Use 'jat resume --list' to see recent sessions"
+            return 1
+        fi
+    fi
+
+    # Determine project path
+    local project_path=""
+    if [[ -n "$project" ]]; then
+        # User specified project
+        local config
+        config=$(get_project_config "$project")
+        if [[ -z "$config" ]]; then
+            echo -e "${RED}Unknown project: $project${NC}"
+            return 1
+        fi
+        project_path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+    elif [[ -n "$found_project" ]]; then
+        # Use project from signal
+        local config
+        config=$(get_project_config "$found_project")
+        if [[ -n "$config" ]]; then
+            project_path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+            project="$found_project"
+        fi
+    fi
+
+    # Fall back to current directory if no project found
+    if [[ -z "$project_path" ]]; then
+        project_path="$(pwd)"
+        project=$(basename "$project_path")
+    fi
+
+    echo ""
+    echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║  ${CYAN}🔄 Resuming Session${NC}${BOLD}                                        ║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  ${DIM}Session:${NC} ${full_session_id:0:8}..."
+    [[ -n "$agent_name" ]] && echo -e "  ${DIM}Agent:${NC} $agent_name"
+    [[ -n "$task_id" ]] && echo -e "  ${DIM}Task:${NC} $task_id"
+    echo -e "  ${DIM}Project:${NC} $project_path"
+    echo ""
+
+    # Build environment
+    local tools_path
+    tools_path=$(jq -r '.defaults.tools_path // "~/.local/bin"' "$CONFIG_FILE" | sed "s|^~|$HOME|")
+    local env_vars="PATH=$PATH:$tools_path:$project_path/.claude/tools"
+    env_vars="$env_vars AGENT_MAIL_URL=http://localhost:8765"
+
+    # Get claude flags from config
+    local claude_flags
+    claude_flags=$(jq -r '.defaults.claude_flags // "--dangerously-skip-permissions"' "$CONFIG_FILE")
+
+    # JAT bootstrap prompt
+    local jat_bootstrap='You are a JAT agent. Run /jat:start to begin work.'
+    claude_flags="$claude_flags --append-system-prompt '$jat_bootstrap'"
+
+    # Create session name - use resume-{short-id} format
+    local session_name="jat-resume-${full_session_id:0:8}"
+
+    # Window title
+    local window_title="${project^^}: Claude (resumed)"
+    [[ -n "$agent_name" ]] && window_title="${project^^}: $agent_name (resumed)"
+
+    echo -e "${DIM}  → Launching Claude Code with session resume...${NC}"
+
+    # Launch terminal with tmux session containing resumed Claude
+    $TERMINAL -T "$window_title" -e bash -c "
+        cd '$project_path'
+        tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$project_path'
+        tmux set-option -t '$session_name' history-limit 50000
+        sleep 0.3
+        tmux send-keys -t '$session_name' '$env_vars claude $claude_flags -r \"$full_session_id\"' Enter
+        tmux attach-session -t '$session_name'
+    " &
+
+    echo ""
+    echo -e "${GREEN}✓ Session resume launched${NC}"
+    echo ""
+    echo -e "${DIM}Claude will resume from the previous conversation state.${NC}"
+}
+
+list_sessions() {
+    local filter_project="$1"
+
+    echo ""
+    echo -e "${BOLD}Recent Sessions:${NC}"
+    echo ""
+
+    # Collect sessions from timeline files
+    local sessions=""
+
+    for timeline_file in /tmp/jat-timeline-*.jsonl; do
+        [[ ! -f "$timeline_file" ]] && continue
+
+        # Get the most recent starting signal from each timeline
+        # Note: signals have type="state" and state="starting"
+        local starting_line
+        starting_line=$(grep '"state":"starting"' "$timeline_file" 2>/dev/null | tail -1)
+
+        if [[ -n "$starting_line" ]]; then
+            local session_id agent_name task_id project timestamp tmux_session
+            session_id=$(echo "$starting_line" | jq -r '.session_id // empty')
+            agent_name=$(echo "$starting_line" | jq -r '.data.agentName // empty')
+            task_id=$(echo "$starting_line" | jq -r '.task_id // empty')
+            project=$(echo "$starting_line" | jq -r '.data.project // empty')
+            timestamp=$(echo "$starting_line" | jq -r '.timestamp // empty')
+            tmux_session=$(echo "$starting_line" | jq -r '.tmux_session // empty')
+
+            # Filter by project if specified
+            if [[ -n "$filter_project" ]] && [[ "$project" != "$filter_project" ]]; then
+                continue
+            fi
+
+            # Check if session is still active (tmux session exists)
+            local status="${DIM}ended${NC}"
+            if tmux has-session -t "$tmux_session" 2>/dev/null; then
+                status="${GREEN}active${NC}"
+            fi
+
+            # Format timestamp
+            local formatted_time
+            if [[ -n "$timestamp" ]]; then
+                formatted_time=$(date -d "$timestamp" "+%Y-%m-%d %H:%M" 2>/dev/null || echo "$timestamp")
+            else
+                formatted_time="-"
+            fi
+
+            sessions+="$timestamp|$session_id|$agent_name|$task_id|$project|$status|$formatted_time"$'\n'
+        fi
+    done
+
+    if [[ -z "$sessions" ]]; then
+        echo -e "  ${DIM}No sessions found${NC}"
+        echo ""
+        return 0
+    fi
+
+    # Print header
+    printf "  ${DIM}%-10s %-12s %-12s %-15s %-8s %-16s${NC}\n" \
+        "SESSION" "AGENT" "TASK" "PROJECT" "STATUS" "TIME"
+    printf "  ${DIM}%-10s %-12s %-12s %-15s %-8s %-16s${NC}\n" \
+        "──────────" "────────────" "────────────" "───────────────" "────────" "────────────────"
+
+    # Sort by timestamp descending and print
+    echo "$sessions" | sort -t'|' -k1 -rn | head -20 | while IFS='|' read -r ts session_id agent_name task_id project status formatted_time; do
+        [[ -z "$session_id" ]] && continue
+
+        # Truncate fields for display
+        local short_id="${session_id:0:8}"
+        local short_agent="${agent_name:0:11}"
+        local short_task="${task_id:0:11}"
+        local short_project="${project:0:14}"
+
+        printf "  %-10s %-12s %-12s %-15s %-8b %-16s\n" \
+            "$short_id" "$short_agent" "$short_task" "$short_project" "$status" "$formatted_time"
+    done
+
+    echo ""
+    echo -e "${DIM}Resume with: jat resume <session-id>${NC}"
+    echo ""
+}
+
+#------------------------------------------------------------------------------
 # Main
 #------------------------------------------------------------------------------
 
@@ -1204,6 +1476,9 @@ main() {
             ;;
         remove|rm)
             remove_project "$@"
+            ;;
+        resume)
+            resume_session "$@"
             ;;
         *)
             # Assume it's a project name
