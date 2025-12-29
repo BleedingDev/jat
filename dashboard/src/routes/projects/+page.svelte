@@ -39,7 +39,7 @@
 	import { getProjectFromTaskId, filterTasksByProject, buildEpicChildMap, getParentEpicId } from '$lib/utils/projectUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import { openTaskDrawer, openProjectDrawer } from '$lib/stores/drawerStore';
-	import { SORT_OPTIONS, getSortBy, getSortDir, handleSortClick, initSort, type SortOption } from '$lib/stores/workSort.svelte';
+	import { SORT_OPTIONS, getSortBy, getSortDir, handleSortClick, initSort, workSortState, type SortOption } from '$lib/stores/workSort.svelte';
 	import { maximizeSessionPanel } from '$lib/stores/hoveredSession';
 	import { getSessionMaximizeHeight } from '$lib/stores/preferences.svelte';
 
@@ -149,9 +149,10 @@
 	let projectToHide = $state<string | null>(null);
 	let isHiding = $state(false);
 
-	// Reactive sort state - must be derived for template reactivity
-	const currentSortBy = $derived(getSortBy());
-	const currentSortDir = $derived(getSortDir());
+	// Reactive sort state - use workSortState object for cross-module reactivity
+	// The getter properties on workSortState access $state variables, making them reactive
+	const currentSortBy = $derived(workSortState.sortBy);
+	const currentSortDir = $derived(workSortState.sortDir);
 
 	// Derive all projects (from JAT config, sessions, AND tasks)
 	// Config projects are shown even if empty (for onboarding new projects)
@@ -323,6 +324,22 @@
 
 		return { epicSessions, nonEpicSessions };
 	}
+
+	// Pre-computed sorted sessions by project - this is the key fix for sorting reactivity
+	// By computing this at the component level as a $derived, it properly tracks currentSortBy/currentSortDir
+	const sortedSessionsByProject = $derived.by(() => {
+		const result = new Map<string, typeof workSessionsState.sessions>();
+
+		for (const [project, sessions] of sessionsByProject.entries()) {
+			const searchTerm = projectSearchTerms.get(project) || '';
+			const sessionOrder = sessionOrderByProject.get(project) || [];
+			const filtered = filterSessions(sessions, searchTerm);
+			const sorted = sortSessionsWithOrder(filtered, project, sessionOrder, currentSortBy, currentSortDir);
+			result.set(project, sorted);
+		}
+
+		return result;
+	});
 
 	// Get epic task info for display (O(1) lookup)
 	function getEpicTask(epicId: string): Task | undefined {
@@ -1268,7 +1285,7 @@
 				{@const currentSortOption = SORT_OPTIONS.find(o => o.value === currentSortBy)}
 				{@const isManualSort = currentSortBy === 'manual'}
 				{@const sessionOrder = sessionOrderByProject.get(project) || []}
-				{@const filteredSessions = sortSessionsWithOrder(filterSessions(sessions, searchTerm), project, sessionOrder, currentSortBy, currentSortDir)}
+				{@const filteredSessions = sortedSessionsByProject.get(project) || []}
 				{@const filteredTasks = filterTasks(projectTasks, searchTerm)}
 				{@const openTaskCount = projectTasks.filter(t => t.status !== 'closed').length}
 				{@const filteredOpenTaskCount = filteredTasks.filter(t => t.status !== 'closed').length}
@@ -1455,7 +1472,7 @@
 						<div class="flex flex-col">
 							<!-- Sessions Section - grouped by epic -->
 							{#if filteredSessions.length > 0 && !sessionState.collapsed}
-								{@const { epicSessions, nonEpicSessions } = getSessionsByEpic(filteredSessions, project)}
+								{@const { epicSessions, nonEpicSessions } = getSessionsByEpic(filteredSessions)}
 								{@const effectiveHeight = getEffectiveSessionsHeight(project, filteredSessions, sessionState.height)}
 								<div class="border-b border-base-300" transition:slide={{ duration: 200 }}>
 									<!-- Sessions content - auto-shrinks when all groups collapsed -->
