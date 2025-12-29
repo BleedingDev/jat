@@ -72,7 +72,7 @@
 	<!-- Dropdown Menu - Industrial -->
 	<ul
 		tabindex="0"
-		class="dropdown-content menu rounded-box z-[60] w-full p-2 shadow-lg max-h-80 overflow-y-auto bg-base-200 border border-base-300"
+		class="dropdown-content menu rounded-box z-[60] min-w-40 w-max p-2 shadow-lg max-h-80 overflow-y-auto overflow-x-hidden bg-base-200 border border-base-300"
 	>
 		{#each projects as project}
 			<li>
