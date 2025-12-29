@@ -50,6 +50,7 @@
 	import ServerStatusBadge from "./ServerStatusBadge.svelte";
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
 	import { workSessionsState } from "$lib/stores/workSessions.svelte";
+	import { autoKillCountdowns, cancelAutoKill } from "$lib/stores/sessionEvents";
 	import EventStack from "./EventStack.svelte";
 	import StreakCelebration from "$lib/components/StreakCelebration.svelte";
 	import SuggestedTasksSection from "./SuggestedTasksSection.svelte";
@@ -1161,7 +1162,8 @@
 	);
 
 	// Track existing task titles for "already created" detection
-	let existingTaskTitles = $state<Set<string>>(new Set());
+	// Map from normalized title -> task ID (allows showing clickable task ID badge)
+	let existingTaskTitles = $state<Map<string, string>>(new Map());
 	// Version counter to force $derived reactivity when existingTaskTitles is updated
 	let existingTaskTitlesVersion = $state(0);
 
@@ -1181,14 +1183,15 @@
 			}
 
 			const data = await response.json();
-			const titles = new Set<string>();
+			const titleToId = new Map<string, string>();
 			for (const task of data.tasks || []) {
-				if (task.title) {
+				if (task.title && task.id) {
 					// Normalize: lowercase and trim for comparison
-					titles.add(task.title.toLowerCase().trim());
+					// Store mapping to task ID for clickable badges
+					titleToId.set(task.title.toLowerCase().trim(), task.id);
 				}
 			}
-			existingTaskTitles = titles;
+			existingTaskTitles = titleToId;
 			existingTaskTitlesVersion++; // Bump version to trigger $derived reactivity
 		} catch (error) {
 			console.error(
@@ -1700,6 +1703,11 @@
 	// Handle click anywhere in the card to center it and focus input
 	// This combines: maximize panel, scroll to top, glow animation, and focus input textarea
 	function handleCardClick() {
+		// Cancel any scheduled auto-kill when user interacts with the session
+		if (autoKillCountdownValue !== null) {
+			cancelAutoKill(sessionName);
+		}
+
 		// Maximize panel, scroll to top, and trigger glow animation via store
 		jumpToSession(sessionName, agentName);
 
@@ -2386,6 +2394,17 @@
 		output ? /\[JAT:AUTO_PROCEED\]/.test(output.slice(-3000)) : false,
 	);
 
+	// Get auto-kill countdown for this session (null if not scheduled)
+	let autoKillCountdownValue = $state<number | null>(null);
+
+	// Subscribe to auto-kill countdowns store
+	$effect(() => {
+		const unsubscribe = autoKillCountdowns.subscribe(map => {
+			autoKillCountdownValue = map.get(sessionName) ?? null;
+		});
+		return unsubscribe;
+	});
+
 	// Detect human action markers in output and from signal API
 	// Sources:
 	// 1. Terminal markers: [JAT:HUMAN_ACTION {"title":"...","description":"..."}]
@@ -2455,6 +2474,8 @@
 		edited: boolean;
 		/** Whether this task already exists in Beads (matched by title) */
 		alreadyCreated?: boolean;
+		/** Task ID if this task was already created (for displaying clickable badge) */
+		taskId?: string;
 		/** Local edits (if edited=true, these override the original values) */
 		edits?: {
 			type?: string;
@@ -2508,9 +2529,10 @@
 			// Check if task title already exists in Beads (normalized comparison)
 			const effectiveTitle = hasEdits && edits.title ? edits.title : task.title;
 			const normalizedTitle = effectiveTitle?.toLowerCase().trim() || "";
-			const alreadyCreated = normalizedTitle
-				? existingTaskTitles.has(normalizedTitle)
-				: false;
+			const existingTaskId = normalizedTitle
+				? existingTaskTitles.get(normalizedTitle)
+				: undefined;
+			const alreadyCreated = !!existingTaskId;
 
 			return {
 				...task,
@@ -2526,6 +2548,7 @@
 				selected: isSelected,
 				edited: hasEdits ?? false,
 				alreadyCreated,
+				taskId: existingTaskId,
 			};
 		});
 	});
@@ -3756,6 +3779,24 @@
 			setTimeout(() => {
 				copyFlash = false;
 			}, 300);
+		} else if (
+			(e.key === "ArrowUp" ||
+				e.key === "ArrowDown" ||
+				e.key === "ArrowLeft" ||
+				e.key === "ArrowRight") &&
+			!inputText.trim() &&
+			onSendInput
+		) {
+			// Arrow keys: When input is empty, transmit to tmux for navigation
+			// (e.g., navigating Claude Code's option prompts or history)
+			e.preventDefault();
+			const keyMap: Record<string, string> = {
+				ArrowUp: "up",
+				ArrowDown: "down",
+				ArrowLeft: "left",
+				ArrowRight: "right",
+			};
+			onSendInput(keyMap[e.key], "key");
 		}
 		// Note: Ctrl+V is handled by onpaste event, not here
 	}
@@ -5242,6 +5283,8 @@
 						maxEvents={20}
 						pollInterval={5000}
 						autoExpand={sessionState === "completed"}
+						onCleanup={() => handleStatusAction("cleanup")}
+						onComplete={() => handleStatusAction("complete")}
 						onRollback={(event) => {
 							// Open confirmation modal before rolling back
 							if (event.git_sha) {
@@ -6555,6 +6598,7 @@
 									{dormantTooltip}
 									nextTask={nextTaskInfo}
 									{nextTaskLoading}
+									autoKillCountdown={autoKillCountdownValue}
 									dropUp={true}
 									alignRight={true}
 									onAction={handleStatusAction}
@@ -6653,6 +6697,7 @@
 	onCreateTasks={createSuggestedTasksViaBulkApi}
 	{agentName}
 	{sessionName}
+	onTaskClick={(taskId) => onTaskClick?.(taskId)}
 />
 
 <!-- Rollback Confirmation Modal -->
