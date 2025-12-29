@@ -80,6 +80,7 @@
 		pollInterval = 5000,
 		onRollback,
 		onCreateTasks,
+		onCreateAndStartTasks,
 		onTaskClick,
 		onFileClick,
 		onDiffClick,
@@ -99,6 +100,8 @@
 		pollInterval?: number;
 		onRollback?: (event: TimelineEvent) => void;
 		onCreateTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: any[]; failed: any[] }>;
+		/** Callback when user wants to create tasks AND spawn agent sessions */
+		onCreateAndStartTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: any[]; failed: any[] }>;
 		/** Callback when a task ID is clicked */
 		onTaskClick?: (taskId: string) => void;
 		/** Callback when a file path is clicked */
@@ -474,6 +477,41 @@
 
 		try {
 			const results = await onCreateTasks(tasks);
+			createResults = results;
+			showCreateFeedback = true;
+
+			// Clear selection for successfully created tasks
+			if (results.success.length > 0) {
+				const eventTasksState = tasksStateByEvent.get(eventKey);
+				if (eventTasksState) {
+					for (const success of results.success) {
+						// Find and deselect the task
+						for (const [key, state] of eventTasksState.entries()) {
+							if (state.selected) {
+								eventTasksState.set(key, { ...state, selected: false });
+							}
+						}
+					}
+					tasksStateByEvent = new Map(tasksStateByEvent);
+				}
+			}
+		} catch (err: any) {
+			createResults = { success: [], failed: [{ title: 'Error', error: err.message }] };
+			showCreateFeedback = true;
+		} finally {
+			isCreatingTasks = false;
+		}
+	}
+
+	// Handle task creation AND start agent sessions
+	async function handleCreateAndStartTasks(eventKey: string, tasks: SuggestedTaskWithState[]) {
+		if (!onCreateAndStartTasks) return;
+
+		isCreatingTasks = true;
+		showCreateFeedback = false;
+
+		try {
+			const results = await onCreateAndStartTasks(tasks);
 			createResults = results;
 			showCreateFeedback = true;
 
@@ -930,6 +968,7 @@
 											onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
 											getTaskKey={getSuggestedTaskKey}
 											onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+											onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
 											onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
 											onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
 											isCreating={isCreatingTasks}
@@ -1019,6 +1058,7 @@
 														onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
 														getTaskKey={getSuggestedTaskKey}
 														onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+														onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
 														onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
 														onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
 														isCreating={isCreatingTasks}

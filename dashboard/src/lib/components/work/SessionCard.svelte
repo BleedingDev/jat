@@ -2848,6 +2848,79 @@
 		}
 	}
 
+	/** Create tasks AND spawn agent sessions for each - returns results for feedback UI */
+	async function createAndStartTimelineEventTasks(
+		selectedTasks: SuggestedTaskWithState[],
+	): Promise<{ success: any[]; failed: any[] }> {
+		// First, create the tasks
+		const createResult = await createTimelineEventTasks(selectedTasks);
+
+		// If no tasks were successfully created, return early
+		if (createResult.success.length === 0) {
+			return createResult;
+		}
+
+		// Spawn agents for each successfully created task (with 2s stagger)
+		const spawnResults: { success: any[]; failed: any[] } = {
+			success: [],
+			failed: [...createResult.failed],
+		};
+
+		for (let i = 0; i < createResult.success.length; i++) {
+			const createdTask = createResult.success[i];
+			if (!createdTask.taskId) {
+				spawnResults.success.push(createdTask); // Still count as success even without spawn
+				continue;
+			}
+
+			try {
+				// Add stagger between spawns (except first)
+				if (i > 0) {
+					await new Promise((resolve) => setTimeout(resolve, 2000));
+				}
+
+				const spawnResponse = await fetch("/api/work/spawn", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ taskId: createdTask.taskId }),
+				});
+
+				const spawnData = await spawnResponse.json();
+
+				if (spawnResponse.ok && spawnData.agentName) {
+					spawnResults.success.push({
+						...createdTask,
+						agentName: spawnData.agentName,
+						spawned: true,
+					});
+					console.log(
+						`[EventStack] Spawned agent ${spawnData.agentName} for task ${createdTask.taskId}`,
+					);
+				} else {
+					spawnResults.success.push({
+						...createdTask,
+						spawnError: spawnData.message || "Spawn failed",
+					});
+					console.warn(
+						`[EventStack] Created task ${createdTask.taskId} but spawn failed:`,
+						spawnData.message,
+					);
+				}
+			} catch (err: any) {
+				spawnResults.success.push({
+					...createdTask,
+					spawnError: err.message,
+				});
+				console.warn(
+					`[EventStack] Created task ${createdTask.taskId} but spawn failed:`,
+					err.message,
+				);
+			}
+		}
+
+		return spawnResults;
+	}
+
 	// Task to display - either active task or last completed task
 	// Show lastCompletedTask in most states to maintain task linkage throughout the session lifecycle
 	// During completing/completed states, the task prop may be null (task closed in Beads),
@@ -5180,6 +5253,7 @@
 							}
 						}}
 						onCreateTasks={createTimelineEventTasks}
+						onCreateAndStartTasks={createAndStartTimelineEventTasks}
 						{availableProjects}
 						{defaultProject}
 						onSelectOption={async (optionId) => {
