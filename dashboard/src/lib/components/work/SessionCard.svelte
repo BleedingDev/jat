@@ -466,6 +466,7 @@
 	let autoCloseCountdown = $state<number | null>(null); // Seconds remaining (3, 2, 1, null)
 	let autoCloseTimer: ReturnType<typeof setInterval> | null = null;
 	let autoCloseHeld = $state(false); // User clicked "Hold for Review"
+	let autoCompleteTriggered = $state(false); // Track if auto-complete has been triggered for this review cycle
 
 	// Real-time elapsed time clock (ticks every second)
 	let currentTime = $state(Date.now());
@@ -2326,6 +2327,43 @@
 			// Clear next task info and reset failed flag when leaving completed state
 			nextTaskInfo = null;
 			nextTaskFetchFailed = false;
+		}
+	});
+
+	// Auto-complete effect: When session enters ready-for-review and review rules say 'auto',
+	// automatically trigger /jat:complete without user intervention.
+	// This enables low-priority work (e.g., P4 chores) to complete without clicks.
+	$effect(() => {
+		// Only trigger in agent mode (not server mode)
+		if (!isAgentMode) return;
+
+		// Only trigger when entering ready-for-review state
+		if (sessionState !== "ready-for-review") {
+			// Reset the trigger flag when leaving ready-for-review
+			// This allows auto-complete to trigger again on next review cycle
+			if (autoCompleteTriggered) {
+				autoCompleteTriggered = false;
+			}
+			return;
+		}
+
+		// Check review rules - if 'auto', trigger completion automatically
+		if (reviewStatus?.action === "auto" && !autoCompleteTriggered) {
+			autoCompleteTriggered = true;
+			console.log(
+				`[SessionCard] Auto-completing ${sessionName} (review rules: auto for ${reviewStatus.reason})`,
+			);
+
+			// Brief delay so user sees the state transition in the UI
+			setTimeout(async () => {
+				try {
+					await sendWorkflowCommand("/jat:complete --proceed");
+				} catch (error) {
+					console.error("[SessionCard] Auto-complete failed:", error);
+					// Reset flag so user can manually complete
+					autoCompleteTriggered = false;
+				}
+			}, 500);
 		}
 	});
 
@@ -5341,7 +5379,7 @@
 
 			<!-- Input Section (z-[55] to layer above collapsed AND expanded EventStack z-50) -->
 			<div
-				class="relative px-3 py-2 flex-shrink-0 z-[45]"
+				class="relative px-3 py-2 flex-shrink-0 z-[50]"
 				style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);"
 			>
 				<!-- Attached Files Preview -->

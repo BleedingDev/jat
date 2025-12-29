@@ -171,6 +171,8 @@ export interface CompletionBundle {
 	nextTaskId?: string;
 	/** Title of the next task */
 	nextTaskTitle?: string;
+	/** AI-suggested new title for the task (if task evolved/pivoted during work) */
+	suggestedRename?: string;
 }
 
 // =============================================================================

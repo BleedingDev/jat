@@ -802,6 +802,9 @@ interface CompletionBundle {
     patterns?: string[];    // Conventions to follow
     gotchas?: string[];     // Surprises or tricky areas
   };
+
+  // OPTIONAL - Suggested rename for the task (if it evolved/pivoted)
+  suggestedRename?: string; // AI-suggested new title reflecting actual work done
 }
 ```
 
@@ -1031,6 +1034,30 @@ Share knowledge that helps other agents working in the same codebase:
 - **patterns**: Conventions you followed or established
 - **gotchas**: Non-obvious issues you encountered
 
+#### Suggested Task Rename (suggestedRename)
+
+When a task has evolved or pivoted significantly from its original title, include a `suggestedRename` field with a better title that reflects the actual work done.
+
+**When to include:**
+- Original title was vague (e.g., "Fix bug" → "Fix race condition in OAuth token refresh")
+- Work evolved beyond original scope (e.g., "Add button" → "Implement complete user settings UI")
+- Title no longer describes the work (e.g., "Research caching" → "Implement Redis caching layer")
+- Task pivoted to different approach (e.g., "Add database field" → "Migrate to new user preferences schema")
+
+**When NOT to include:**
+- Original title accurately describes the work
+- Changes are minor clarifications that don't add value
+- Task was completed exactly as specified
+
+**Example:**
+```json
+{
+  "suggestedRename": "Implement OAuth 2.0 authentication with token refresh and session management"
+}
+```
+
+The dashboard will show this suggestion and allow the user to apply it with one click.
+
 ---
 
 ### Example: Full Completion Flow
@@ -1096,7 +1123,8 @@ jat-signal complete '{
     "gotchas": [
       "Supabase anon sessions have different JWT structure - check for aud claim"
     ]
-  }
+  },
+  "suggestedRename": "Add anonymous session support with auth mode detection"
 }'
 ```
 

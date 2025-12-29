@@ -383,6 +383,10 @@ export interface CompletedSignal {
 	nextTaskId?: string;
 	/** Title of the next task */
 	nextTaskTitle?: string;
+
+	// Task rename suggestion
+	/** AI-suggested new title for the task (if task evolved/pivoted during work) */
+	suggestedRename?: string;
 }
 
 // =============================================================================
