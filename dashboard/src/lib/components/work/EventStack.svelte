@@ -294,6 +294,33 @@
 			result = result.filter((e) => e.type !== 'tasks');
 		}
 
+		// Deduplicate user_input when dashboard_input exists for the same input
+		// When dashboard sends input via tmux, BOTH dashboard_input (from API) and user_input
+		// (from Claude Code's UserPromptSubmit hook) are created. Prefer dashboard_input.
+		const dashboardInputs = result.filter((e) => e.type === 'dashboard_input');
+		if (dashboardInputs.length > 0) {
+			// Build a map of input text → timestamp for dashboard_input events
+			const dashboardInputMap = new Map<string, number>();
+			for (const e of dashboardInputs) {
+				const inputText = e.data?.input as string;
+				if (inputText) {
+					dashboardInputMap.set(inputText, new Date(e.timestamp).getTime());
+				}
+			}
+			// Filter out user_input events that match a dashboard_input within 30 seconds
+			result = result.filter((e) => {
+				if (e.type !== 'user_input') return true;
+				const promptText = e.data?.prompt as string;
+				if (!promptText) return true;
+				const dashboardTime = dashboardInputMap.get(promptText);
+				if (!dashboardTime) return true;
+				const userInputTime = new Date(e.timestamp).getTime();
+				const timeDiff = Math.abs(userInputTime - dashboardTime);
+				// Hide user_input if dashboard_input exists within 30 seconds
+				return timeDiff > 30000;
+			});
+		}
+
 		// Filter by time range
 		if (filters.startTime) {
 			const startTs = filters.startTime.getTime();
@@ -387,8 +414,8 @@
 	// Fetch existing task titles from Beads for "already created" detection
 	async function fetchExistingTaskTitles() {
 		try {
-			// Fetch all tasks (no status filter to include all states)
-			const response = await fetch('/api/tasks?limit=1000');
+			// Fetch all tasks (high limit to capture recent tasks)
+			const response = await fetch('/api/tasks?limit=5000');
 			if (response.ok) {
 				const data = await response.json();
 				const tasks = data.tasks || [];
