@@ -2357,7 +2357,7 @@
 			// Brief delay so user sees the state transition in the UI
 			setTimeout(async () => {
 				try {
-					await sendWorkflowCommand("/jat:complete --proceed");
+					await sendWorkflowCommand("/jat:complete --kill");
 				} catch (error) {
 					console.error("[SessionCard] Auto-complete failed:", error);
 					// Reset flag so user can manually complete
@@ -3499,8 +3499,13 @@
 				break;
 
 			case "complete":
-				// Run /jat:complete command
+				// Run /jat:complete command (user will review completion block)
 				await sendWorkflowCommand("/jat:complete");
+				break;
+
+			case "complete-kill":
+				// Run /jat:complete --kill command (self-destruct session)
+				await sendWorkflowCommand("/jat:complete --kill");
 				break;
 
 			case "escape":
@@ -4352,6 +4357,7 @@
 						variant="integrated"
 						alignRight={true}
 						showCommands={true}
+						showEpic={true}
 						onCommand={sendWorkflowCommand}
 						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 					/>
@@ -4989,6 +4995,7 @@
 						alignRight={true}
 						variant="integrated"
 						showCommands={true}
+						showEpic={true}
 						onCommand={sendWorkflowCommand}
 						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 					/>
@@ -5371,6 +5378,38 @@
 							// Send custom text input to the terminal via EventStack's needs_input card
 							if (onSendInput) {
 								await onSendInput(text, "text");
+							}
+						}}
+						onApplyRename={async (taskId, newTitle) => {
+							// Apply suggested rename to task via PATCH API
+							try {
+								const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+									method: 'PATCH',
+									headers: { 'Content-Type': 'application/json' },
+									body: JSON.stringify({ title: newTitle })
+								});
+								if (!response.ok) {
+									const error = await response.json();
+									console.error('[SessionCard] Failed to apply rename:', error);
+								}
+							} catch (e) {
+								console.error('[SessionCard] Failed to apply rename:', e);
+							}
+						}}
+						onApplyLabels={async (taskId, labels) => {
+							// Apply suggested labels to task via PATCH API
+							try {
+								const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+									method: 'PATCH',
+									headers: { 'Content-Type': 'application/json' },
+									body: JSON.stringify({ labels })
+								});
+								if (!response.ok) {
+									const error = await response.json();
+									console.error('[SessionCard] Failed to apply labels:', error);
+								}
+							} catch (e) {
+								console.error('[SessionCard] Failed to apply labels:', e);
 							}
 						}}
 					/>
@@ -6661,11 +6700,13 @@
 									nextTask={nextTaskInfo}
 									{nextTaskLoading}
 									autoKillCountdown={autoKillCountdownValue}
+									onCancelAutoKill={() => cancelAutoKill(sessionName)}
 									dropUp={true}
 									alignRight={true}
 									onAction={handleStatusAction}
 									disabled={sendingInput || !onSendInput}
 									showCommands={true}
+									showEpic={true}
 									onCommand={sendWorkflowCommand}
 									task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 								/>
@@ -6684,6 +6725,7 @@
 								onAction={handleStatusAction}
 								disabled={sendingInput || !onSendInput}
 								showCommands={true}
+								showEpic={true}
 								onCommand={sendWorkflowCommand}
 								task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 							/>

@@ -42,6 +42,19 @@
 		epicTitle?: string;
 	}
 
+	interface Epic {
+		id: string;
+		title: string;
+		priority: number;
+		dependency_count?: number;
+	}
+
+	interface TaskInfo {
+		id: string;
+		issue_type?: string;
+		priority?: number;
+	}
+
 	interface Props {
 		sessionState: SessionState;
 		sessionName: string;
@@ -60,11 +73,19 @@
 		nextTaskLoading?: boolean;
 		/** Seconds until auto-kill (null = no auto-kill scheduled) */
 		autoKillCountdown?: number | null;
+		/** Callback to cancel auto-kill countdown (called when dropdown opens) */
+		onCancelAutoKill?: () => void;
 		onAction?: (actionId: string) => Promise<void> | void;
 		/** Whether to show slash commands section in dropdown */
 		showCommands?: boolean;
 		/** Callback to run a slash command */
 		onCommand?: (command: string) => Promise<void> | void;
+		/** Current task info for epic linking (id, issue_type, priority) */
+		task?: TaskInfo | null;
+		/** Whether to show add to epic section in dropdown */
+		showEpic?: boolean;
+		/** Callback when task is linked to an epic */
+		onLinkToEpic?: (epicId: string) => Promise<void> | void;
 		class?: string;
 	}
 
@@ -80,9 +101,13 @@
 		nextTask = null,
 		nextTaskLoading = false,
 		autoKillCountdown = null,
+		onCancelAutoKill,
 		onAction,
 		showCommands = false,
 		onCommand,
+		task = null,
+		showEpic = false,
+		onLinkToEpic,
 		class: className = ''
 	}: Props = $props();
 
@@ -99,6 +124,23 @@
 	let commandSearchQuery = $state('');
 	let commandSearchInput: HTMLInputElement;
 	let selectedCommandIndex = $state(0);
+
+	// Epic state
+	let epics = $state<Epic[]>([]);
+	let epicsLoading = $state(false);
+	let epicsError = $state<string | null>(null);
+	let epicExpanded = $state(false);
+	let epicSearchQuery = $state('');
+	let epicSearchInput: HTMLInputElement;
+	let selectedEpicIndex = $state(0);
+	let linkingEpicId = $state<string | null>(null);
+
+	// Create epic state
+	let showCreateEpic = $state(false);
+	let newEpicTitle = $state('');
+	let creatingEpic = $state(false);
+	let createEpicError = $state<string | null>(null);
+	let newEpicInput: HTMLInputElement;
 
 	// Get config from centralized statusColors.ts
 	const config = $derived(getSessionStateVisual(sessionState));
@@ -212,6 +254,35 @@
 		}
 	});
 
+	// Fetch epics when dropdown opens (if showEpic is enabled and we have a task)
+	$effect(() => {
+		if (isOpen && showEpic && task && epics.length === 0 && !epicsLoading) {
+			fetchEpics();
+		}
+	});
+
+	// Focus epic search input when epic section expands
+	$effect(() => {
+		if (epicExpanded && epicSearchInput) {
+			setTimeout(() => epicSearchInput?.focus(), 50);
+		}
+	});
+
+	// Reset epic search and selection when section collapses or dropdown closes
+	$effect(() => {
+		if (!epicExpanded || !isOpen) {
+			epicSearchQuery = '';
+			selectedEpicIndex = 0;
+		}
+	});
+
+	// Reset selected epic index when search query changes
+	$effect(() => {
+		if (epicSearchQuery !== undefined) {
+			selectedEpicIndex = 0;
+		}
+	});
+
 	// Handle keyboard navigation in commands search
 	function handleCommandKeyDown(e: KeyboardEvent) {
 		const maxIndex = filteredCommands.length - 1;
@@ -273,6 +344,154 @@
 		}
 	}
 
+	// Fetch available epics for the current project
+	async function fetchEpics() {
+		if (!task) return;
+
+		epicsLoading = true;
+		epicsError = null;
+		try {
+			// Extract project from task ID (e.g., "jat-abc" -> "jat")
+			const project = task.id.split('-')[0];
+			const response = await fetch(`/api/epics?project=${project}`);
+			if (!response.ok) throw new Error('Failed to fetch epics');
+			const data = await response.json();
+			epics = data.epics || [];
+		} catch (err) {
+			epicsError = err instanceof Error ? err.message : 'Failed to load epics';
+		} finally {
+			epicsLoading = false;
+		}
+	}
+
+	// Filter epics based on search query
+	function filterEpics(query: string): Epic[] {
+		if (!query.trim()) {
+			return epics;
+		}
+		const q = query.toLowerCase();
+		return epics.filter(epic =>
+			epic.id.toLowerCase().includes(q) ||
+			epic.title.toLowerCase().includes(q)
+		);
+	}
+
+	const filteredEpics = $derived(filterEpics(epicSearchQuery));
+
+	// Handle keyboard navigation in epic search
+	function handleEpicKeyDown(e: KeyboardEvent) {
+		const maxIndex = filteredEpics.length - 1;
+
+		switch (e.key) {
+			case 'ArrowDown':
+				e.preventDefault();
+				selectedEpicIndex = Math.min(selectedEpicIndex + 1, maxIndex);
+				break;
+			case 'ArrowUp':
+				e.preventDefault();
+				selectedEpicIndex = Math.max(selectedEpicIndex - 1, 0);
+				break;
+			case 'Enter':
+				e.preventDefault();
+				if (filteredEpics[selectedEpicIndex]) {
+					linkToEpic(filteredEpics[selectedEpicIndex].id);
+				}
+				break;
+			case 'Escape':
+				e.preventDefault();
+				if (epicSearchQuery) {
+					epicSearchQuery = '';
+				} else {
+					epicExpanded = false;
+				}
+				break;
+		}
+	}
+
+	// Link current task to an epic
+	async function linkToEpic(epicId: string) {
+		if (disabled || isExecuting || !task || linkingEpicId) return;
+
+		linkingEpicId = epicId;
+		try {
+			const response = await fetch(`/api/tasks/${task.id}/epic`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ epicId })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || 'Failed to link task to epic');
+			}
+
+			// Call the callback if provided
+			await onLinkToEpic?.(epicId);
+
+			// Close dropdown on success
+			isOpen = false;
+		} catch (err) {
+			console.error('Failed to link task to epic:', err);
+			epicsError = err instanceof Error ? err.message : 'Failed to link task';
+		} finally {
+			linkingEpicId = null;
+		}
+	}
+
+	async function createEpic() {
+		if (disabled || isExecuting || !task || creatingEpic || !newEpicTitle.trim()) return;
+
+		creatingEpic = true;
+		createEpicError = null;
+
+		try {
+			// Extract project from current task ID (e.g., "jat-abc" -> "jat")
+			const project = task.id.split('-')[0];
+
+			const response = await fetch('/api/epics', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					title: newEpicTitle.trim(),
+					project,
+					linkTaskId: task.id // Automatically link the current task
+				})
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || 'Failed to create epic');
+			}
+
+			const data = await response.json();
+
+			// Call the callback if provided (epic was auto-linked)
+			await onLinkToEpic?.(data.epicId);
+
+			// Reset form and close
+			newEpicTitle = '';
+			showCreateEpic = false;
+			isOpen = false;
+		} catch (err) {
+			console.error('Failed to create epic:', err);
+			createEpicError = err instanceof Error ? err.message : 'Failed to create epic';
+		} finally {
+			creatingEpic = false;
+		}
+	}
+
+	function handleCreateEpicKeyDown(e: KeyboardEvent) {
+		if (e.key === 'Enter' && newEpicTitle.trim()) {
+			e.preventDefault();
+			createEpic();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			showCreateEpic = false;
+			newEpicTitle = '';
+			createEpicError = null;
+		}
+	}
+
 	// Get icon for known commands
 	function getCommandIcon(invocation: string): string {
 		if (invocation.includes('start')) return 'M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z';
@@ -294,8 +513,7 @@
 	function playActionSound(actionId: string): void {
 		switch (actionId) {
 			case 'complete':
-			case 'complete-next':
-			case 'complete-done':
+			case 'complete-kill':
 				playTaskCompleteSound();
 				break;
 			case 'cleanup':
@@ -421,7 +639,15 @@
 	<!-- Status Badge Button -->
 	<button
 		type="button"
-		onclick={() => !disabled && (isOpen = !isOpen)}
+		onclick={() => {
+			if (disabled) return;
+			const wasOpen = isOpen;
+			isOpen = !isOpen;
+			// Cancel auto-kill countdown when user opens dropdown (shows they're paying attention)
+			if (!wasOpen && autoKillCountdown !== null && autoKillCountdown > 0 && onCancelAutoKill) {
+				onCancelAutoKill();
+			}
+		}}
 		class="font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant === 'integrated' ? 'text-[11px] px-2 py-0.5 hover:bg-white/5 rounded' : 'text-[10px] px-1.5 pt-0.5 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'}"
 		class:animate-pulse={config.pulse && variant === 'badge'}
 		class:cursor-not-allowed={disabled}
@@ -500,6 +726,197 @@
 					</li>
 				{/each}
 			</ul>
+
+			<!-- Epic section (collapsible) - Add task to epic -->
+			{#if showEpic && task && task.issue_type !== 'epic'}
+				<div
+					class="border-t commands-divider"
+				>
+					<!-- Epic header (toggle) -->
+					<button
+						type="button"
+						onclick={() => epicExpanded = !epicExpanded}
+						class="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-semibold text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors"
+					>
+						<span class="flex items-center gap-1.5">
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<!-- Mountain/Epic icon -->
+								<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+							</svg>
+							Add to Epic
+						</span>
+						<svg
+							class="w-3 h-3 transition-transform"
+							class:rotate-180={epicExpanded}
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+						</svg>
+					</button>
+
+					<!-- Epic list (expandable) -->
+					{#if epicExpanded}
+						<div
+							class="commands-panel"
+							transition:slide={{ duration: 150 }}
+						>
+							<!-- Search input (show when there are many epics) -->
+							{#if epics.length > 3}
+								<div class="px-2 py-1.5 border-b commands-search-border">
+									<div class="relative flex items-center gap-1.5">
+										<svg
+											class="w-3 h-3 flex-shrink-0 commands-search-icon"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+											stroke-width="2"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+										</svg>
+										<input
+											bind:this={epicSearchInput}
+											bind:value={epicSearchQuery}
+											onkeydown={handleEpicKeyDown}
+											type="text"
+											placeholder="Filter epics..."
+											class="w-full bg-transparent text-[10px] font-mono focus:outline-none commands-search-input"
+											autocomplete="off"
+										/>
+										{#if epicSearchQuery}
+											<button
+												type="button"
+												onclick={() => { epicSearchQuery = ''; epicSearchInput?.focus(); }}
+												class="text-white/40 hover:text-white/70 transition-colors"
+											>
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											</button>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							{#if epicsLoading}
+								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									<span class="loading loading-spinner loading-xs"></span>
+									<span class="ml-1">Loading epics...</span>
+								</div>
+							{:else if epicsError}
+								<div class="px-3 py-2 text-center text-[10px] text-error">
+									<span>⚠ {epicsError}</span>
+									<button class="btn btn-xs btn-ghost ml-1" onclick={fetchEpics}>Retry</button>
+								</div>
+							{:else if epics.length === 0}
+								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									No open epics in this project
+								</div>
+							{:else if filteredEpics.length === 0}
+								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									No epics match "{epicSearchQuery}"
+								</div>
+							{:else}
+								<ul class="py-0.5 max-h-[180px] overflow-y-auto">
+									{#each filteredEpics as epic, index (epic.id)}
+										<li>
+											<button
+												type="button"
+												onclick={() => linkToEpic(epic.id)}
+												class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 hover:text-base-content {index === selectedEpicIndex ? 'command-item-selected' : 'command-item-default'}"
+												disabled={disabled || linkingEpicId !== null}
+												onmouseenter={() => { selectedEpicIndex = index; }}
+											>
+												{#if linkingEpicId === epic.id}
+													<span class="loading loading-spinner loading-xs flex-shrink-0"></span>
+												{:else}
+													<span class="text-[10px] flex-shrink-0">🏔️</span>
+												{/if}
+												<div class="flex flex-col min-w-0 flex-1">
+													<span class="font-mono text-[10px] text-secondary">{epic.id}</span>
+													<span class="truncate">{epic.title}</span>
+												</div>
+												{#if epic.dependency_count !== undefined}
+													<span class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 flex-shrink-0">
+														{epic.dependency_count} tasks
+													</span>
+												{/if}
+												{#if index === selectedEpicIndex && epics.length > 3}
+													<kbd class="kbd kbd-xs font-mono command-kbd flex-shrink-0">↵</kbd>
+												{/if}
+											</button>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+
+							<!-- Create New Epic section -->
+							<div class="border-t border-base-content/10 mt-1">
+								{#if showCreateEpic}
+									<div class="px-2 py-2">
+										<div class="flex flex-col gap-1.5">
+											<input
+												bind:this={newEpicInput}
+												bind:value={newEpicTitle}
+												onkeydown={handleCreateEpicKeyDown}
+												type="text"
+												placeholder="Epic title..."
+												class="w-full px-2 py-1 bg-base-300 text-[11px] rounded border border-base-content/20 focus:border-primary focus:outline-none"
+												disabled={creatingEpic}
+												autofocus
+											/>
+											{#if createEpicError}
+												<span class="text-[9px] text-error">{createEpicError}</span>
+											{/if}
+											<div class="flex items-center justify-between gap-2">
+												<span class="text-[9px] text-base-content/40">
+													Enter to create, Esc to cancel
+												</span>
+												<div class="flex gap-1">
+													<button
+														type="button"
+														onclick={() => { showCreateEpic = false; newEpicTitle = ''; createEpicError = null; }}
+														class="btn btn-xs btn-ghost text-[10px]"
+														disabled={creatingEpic}
+													>
+														Cancel
+													</button>
+													<button
+														type="button"
+														onclick={createEpic}
+														class="btn btn-xs btn-primary text-[10px]"
+														disabled={creatingEpic || !newEpicTitle.trim()}
+													>
+														{#if creatingEpic}
+															<span class="loading loading-spinner loading-xs"></span>
+														{:else}
+															Create
+														{/if}
+													</button>
+												</div>
+											</div>
+										</div>
+									</div>
+								{:else}
+									<button
+										type="button"
+										onclick={() => { showCreateEpic = true; setTimeout(() => newEpicInput?.focus(), 50); }}
+										class="w-full px-3 py-1.5 flex items-center gap-2 text-[10px] text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
+										disabled={disabled || linkingEpicId !== null}
+									>
+										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+										</svg>
+										<span>Create New Epic</span>
+									</button>
+								{/if}
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
 
 			<!-- Commands section (collapsible) -->
 			{#if showCommands}
