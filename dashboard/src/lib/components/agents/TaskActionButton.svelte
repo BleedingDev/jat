@@ -2,7 +2,7 @@
 	import { computeAgentStatus, type AgentStatusInput, type AgentStatus } from '$lib/utils/agentStatusUtils';
 	import { createPutRequest } from '$lib/utils/bulkApiHelpers';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
-	import { successToast } from '$lib/stores/toasts.svelte';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 
 	interface Task {
@@ -145,8 +145,10 @@
 				// Show user-friendly error - session files cleaned up is common after restart
 				if (response.status === 404) {
 					resumeError = 'Session expired - release task and restart';
+					errorToast('Resume failed', 'Session expired - release task and restart');
 				} else {
 					resumeError = data.message || data.error || 'Resume failed';
+					errorToast('Resume failed', data.message || data.error || 'Could not resume session');
 				}
 				console.error('Resume failed:', data.message || data.error);
 			} else {
@@ -158,6 +160,7 @@
 			}
 		} catch (err) {
 			resumeError = 'Network error';
+			errorToast('Resume failed', 'Network error - check your connection');
 			console.error('Resume error:', err);
 		} finally {
 			resuming = false;
