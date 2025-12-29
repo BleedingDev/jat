@@ -198,12 +198,22 @@
 	// Track collapsed projects (for project mode's two-level hierarchy)
 	let collapsedProjects = $state<Set<string>>(new Set());
 
+	// Reactive epic queue state - must be $derived for template reactivity
+	// (Functions called in {@const} don't track reactive dependencies in Svelte 5)
+	const epicQueueIsActive = $derived(getIsActive());
+	const epicQueueId = $derived(getEpicId());
+	const epicQueueRunningAgents = $derived(getRunningAgents());
+
 	// Keyboard navigation: track focused group index for arrow key navigation
 	let focusedGroupIndex = $state<number>(-1);
 
 	// Get array of visible group keys for keyboard navigation
 	const visibleGroupKeys = $derived.by(() => {
 		const keys: (string | null)[] = [];
+		// No visible group headers in 'none' mode
+		if (groupingMode === 'none') {
+			return keys;
+		}
 		for (const [groupKey, typeTasks] of groupedTasks.entries()) {
 			if (typeTasks.length > 0) {
 				// Check if this group should show a header
@@ -696,6 +706,16 @@
 
 		const humanOnly = params.get('humanOnly');
 		humanTasksOnly = humanOnly === 'true';
+
+		// Restore sort state from URL
+		const sortCol = params.get('sort');
+		if (sortCol && ['id', 'title', 'priority', 'updated'].includes(sortCol)) {
+			sortColumn = sortCol;
+		}
+		const sortDir = params.get('sortDir');
+		if (sortDir && ['asc', 'desc'].includes(sortDir)) {
+			sortDirection = sortDir;
+		}
 	});
 
 	// Update URL when filters change
@@ -720,6 +740,14 @@
 		}
 		if (humanTasksOnly) {
 			params.set('humanOnly', 'true');
+		}
+
+		// Persist sort state to URL (only if not default)
+		if (sortColumn !== 'priority') {
+			params.set('sort', sortColumn);
+		}
+		if (sortDirection !== 'asc') {
+			params.set('sortDir', sortDirection);
 		}
 
 		const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
@@ -821,29 +849,11 @@
 	// Type order for grouping (BUG first, then features, tasks, chores, epics, no type last)
 	const typeOrder = ['bug', 'feature', 'task', 'chore', 'epic', null];
 
-	// Sort function for project mode: dependency-aware, respects user-selected column
-	// Priority: 1) Working agents, 2) Assigned, 3) No unresolved deps, 4) User-selected column
+	// Sort function for project mode: user's sort column is PRIMARY
+	// Secondary tiebreakers: working agents, assigned, no blockers
 	function sortTasksForProjectMode(tasksToSort: Task[]): Task[] {
 		return [...tasksToSort].sort((a, b) => {
-			// First: tasks with working agents come first
-			const aWorking = isAgentWorking(a.assignee);
-			const bWorking = isAgentWorking(b.assignee);
-			if (aWorking && !bWorking) return -1;
-			if (!aWorking && bWorking) return 1;
-
-			// Second: tasks with any assignee come before unassigned
-			const aAssigned = !!a.assignee;
-			const bAssigned = !!b.assignee;
-			if (aAssigned && !bAssigned) return -1;
-			if (!aAssigned && bAssigned) return 1;
-
-			// Third: tasks with NO unresolved dependencies come before those with blockers
-			const aUnresolvedDeps = (a.depends_on || []).filter(d => d.status !== 'closed').length;
-			const bUnresolvedDeps = (b.depends_on || []).filter(d => d.status !== 'closed').length;
-			if (aUnresolvedDeps === 0 && bUnresolvedDeps > 0) return -1;
-			if (aUnresolvedDeps > 0 && bUnresolvedDeps === 0) return 1;
-
-			// Fourth: sort by user-selected column (respects sortColumn and sortDirection)
+			// PRIMARY: sort by user-selected column
 			let aVal, bVal;
 
 			switch (sortColumn) {
@@ -885,17 +895,41 @@
 					return aCreated.localeCompare(bCreated);
 			}
 
+			let primaryComparison: number;
 			if (typeof aVal === 'number' && typeof bVal === 'number') {
-				return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+				primaryComparison = sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+			} else {
+				const strComparison = String(aVal).localeCompare(String(bVal));
+				primaryComparison = sortDirection === 'asc' ? strComparison : -strComparison;
 			}
 
-			const comparison = String(aVal).localeCompare(String(bVal));
-			return sortDirection === 'asc' ? comparison : -comparison;
+			// If primary sort is equal, use tiebreakers
+			if (primaryComparison !== 0) return primaryComparison;
+
+			// Tiebreaker 1: tasks with working agents come first
+			const aWorking = isAgentWorking(a.assignee);
+			const bWorking = isAgentWorking(b.assignee);
+			if (aWorking && !bWorking) return -1;
+			if (!aWorking && bWorking) return 1;
+
+			// Tiebreaker 2: tasks with any assignee come before unassigned
+			const aAssigned = !!a.assignee;
+			const bAssigned = !!b.assignee;
+			if (aAssigned && !bAssigned) return -1;
+			if (!aAssigned && bAssigned) return 1;
+
+			// Tiebreaker 3: tasks with NO unresolved dependencies come before those with blockers
+			const aUnresolvedDeps = (a.depends_on || []).filter(d => d.status !== 'closed').length;
+			const bUnresolvedDeps = (b.depends_on || []).filter(d => d.status !== 'closed').length;
+			if (aUnresolvedDeps === 0 && bUnresolvedDeps > 0) return -1;
+			if (aUnresolvedDeps > 0 && bUnresolvedDeps === 0) return 1;
+
+			return 0;
 		});
 	}
 
 	// Sort function used within each group
-	// Priority: 1) Tasks with working agents first, 2) Then by selected sort column
+	// Priority: 1) User's sort column, 2) Tiebreakers (working, assigned)
 	function sortTasks(tasksToSort: Task[]): Task[] {
 		// Use specialized sorting for project mode
 		if (groupingMode === 'project') {
@@ -903,26 +937,16 @@
 		}
 
 		return [...tasksToSort].sort((a, b) => {
-			// First priority: tasks with working agents come first
-			const aWorking = isAgentWorking(a.assignee);
-			const bWorking = isAgentWorking(b.assignee);
-			if (aWorking && !bWorking) return -1;
-			if (!aWorking && bWorking) return 1;
-
-			// Second priority: tasks with any assignee come before unassigned
-			const aAssigned = !!a.assignee;
-			const bAssigned = !!b.assignee;
-			if (aAssigned && !bAssigned) return -1;
-			if (!aAssigned && bAssigned) return 1;
-
-			// Third priority: apply regular sort column
+			// PRIMARY: apply user's sort column first
 			let aVal, bVal;
 
 			switch (sortColumn) {
 				case 'id':
 					// Use hierarchical-aware comparison for IDs (handles jat-abc.1, jat-abc.10 correctly)
 					const idComparison = compareTaskIds(a.id || '', b.id || '');
-					return sortDirection === 'asc' ? idComparison : -idComparison;
+					const idResult = sortDirection === 'asc' ? idComparison : -idComparison;
+					if (idResult !== 0) return idResult;
+					break;
 				case 'title':
 					aVal = a.title || '';
 					bVal = b.title || '';
@@ -948,15 +972,34 @@
 					bVal = b.updated_at || '';
 					break;
 				default:
-					return 0;
+					aVal = a.priority ?? 99;
+					bVal = b.priority ?? 99;
 			}
 
+			let primaryComparison: number;
 			if (typeof aVal === 'number' && typeof bVal === 'number') {
-				return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+				primaryComparison = sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+			} else {
+				const strComparison = String(aVal).localeCompare(String(bVal));
+				primaryComparison = sortDirection === 'asc' ? strComparison : -strComparison;
 			}
 
-			const comparison = String(aVal).localeCompare(String(bVal));
-			return sortDirection === 'asc' ? comparison : -comparison;
+			// If primary sort is equal, use tiebreakers
+			if (primaryComparison !== 0) return primaryComparison;
+
+			// Tiebreaker 1: tasks with working agents come first
+			const aWorking = isAgentWorking(a.assignee);
+			const bWorking = isAgentWorking(b.assignee);
+			if (aWorking && !bWorking) return -1;
+			if (!aWorking && bWorking) return 1;
+
+			// Tiebreaker 2: tasks with any assignee come before unassigned
+			const aAssigned = !!a.assignee;
+			const bAssigned = !!b.assignee;
+			if (aAssigned && !bAssigned) return -1;
+			if (!aAssigned && bAssigned) return 1;
+
+			return 0;
 		});
 	}
 
@@ -995,6 +1038,12 @@
 		const _sortDir = sortDirection;
 
 		const groups = new Map<string | null, Task[]>();
+
+		// For 'none' mode, put all tasks in a single group and sort by user's column
+		if (groupingMode === 'none') {
+			groups.set('__all__', sortTasks([...filteredTasks]));
+			return groups;
+		}
 
 		// For 'type' mode, initialize groups in order
 		if (groupingMode === 'type') {
@@ -1306,6 +1355,8 @@
 		selectedTypes = new Set();
 		selectedLabels = new Set();
 		humanTasksOnly = false;
+		sortColumn = 'priority';
+		sortDirection = 'asc';
 		updateURL();
 	}
 
@@ -1317,6 +1368,7 @@
 			sortColumn = column;
 			sortDirection = 'asc';
 		}
+		updateURL();
 	}
 
 	// Copy to clipboard
@@ -2051,8 +2103,92 @@
 				/>
 			{/if}
 
+			<!-- Sort Dropdown - Industrial Style -->
+			<div class="dropdown">
+				<div
+					tabindex="0"
+					role="button"
+					class="px-2.5 py-1 rounded cursor-pointer transition-all industrial-hover flex items-center gap-1.5 font-mono text-xs tracking-wider bg-base-200 border border-base-300 text-base-content/60"
+				>
+					<span class="uppercase">Sort</span>
+					<span class="px-1.5 py-0.5 rounded text-xs font-mono bg-primary/20 text-primary">
+						{sortColumn === 'id' ? 'ID' : sortColumn === 'title' ? 'Title' : sortColumn === 'priority' ? 'Pri' : 'Age'}
+						{sortDirection === 'asc' ? '↑' : '↓'}
+					</span>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="1.5"
+						stroke="currentColor"
+						class="w-3.5 h-3.5 text-base-content/50"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+					</svg>
+				</div>
+				<ul
+					tabindex="0"
+					class="dropdown-content z-40 menu p-2 shadow rounded-box w-40 bg-base-200 border border-base-300"
+				>
+					<li>
+						<button
+							class="gap-2 {sortColumn === 'priority' ? 'active' : ''}"
+							onclick={() => handleSort('priority')}
+						>
+							<span>Priority</span>
+							{#if sortColumn === 'priority'}
+								<span class="text-primary ml-auto">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+							{/if}
+						</button>
+					</li>
+					<li>
+						<button
+							class="gap-2 {sortColumn === 'updated' ? 'active' : ''}"
+							onclick={() => handleSort('updated')}
+						>
+							<span>Age</span>
+							{#if sortColumn === 'updated'}
+								<span class="text-primary ml-auto">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+							{/if}
+						</button>
+					</li>
+					<li>
+						<button
+							class="gap-2 {sortColumn === 'title' ? 'active' : ''}"
+							onclick={() => handleSort('title')}
+						>
+							<span>Title</span>
+							{#if sortColumn === 'title'}
+								<span class="text-primary ml-auto">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+							{/if}
+						</button>
+					</li>
+					<li>
+						<button
+							class="gap-2 {sortColumn === 'id' ? 'active' : ''}"
+							onclick={() => handleSort('id')}
+						>
+							<span>ID</span>
+							{#if sortColumn === 'id'}
+								<span class="text-primary ml-auto">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+							{/if}
+						</button>
+					</li>
+				</ul>
+			</div>
+
 			<!-- Grouping Mode Toggle - Industrial btn-group -->
 			<div class="join rounded border border-base-content/20">
+				<!-- No grouping (flat list icon) -->
+				<button
+					class="join-item btn btn-xs px-2 border-none {groupingMode === 'none' ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
+					onclick={() => setGroupingMode('none')}
+					title="No Grouping - Flat sorted list"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5" />
+					</svg>
+				</button>
 				<!-- Project grouping (cube/package icon) - DEFAULT -->
 				<button
 					class="join-item btn btn-xs px-2 border-none {groupingMode === 'project' ? 'bg-primary/60 text-primary-content' : 'bg-base-100 text-base-content/50'}"
@@ -2137,7 +2273,7 @@
 			</button>
 
 			<!-- Clear Filters - Industrial -->
-			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0 || humanTasksOnly}
+			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0 || humanTasksOnly || sortColumn !== 'priority' || sortDirection !== 'asc'}
 				<button
 					class="px-3 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover text-error border border-error/30"
 					onclick={clearAllFilters}
@@ -2585,8 +2721,8 @@
 								{@const hasChildTasks = epicTasks.some(t => extractParentId(t.id) === epicKey)}
 								{@const showEpicHeader = epicTasks.length >= 2 || hasChildTasks}
 								{@const isEpicJustCompleted = completedEpicIds.includes(epicKey)}
-								{@const isRunningEpic = getIsActive() && getEpicId() === epicKey}
-								{@const epicQueueAgents = isRunningEpic ? getRunningAgents() : []}
+								{@const isRunningEpic = epicQueueIsActive && epicQueueId === epicKey}
+								{@const epicQueueAgents = isRunningEpic ? epicQueueRunningAgents : []}
 								{@const allEpicChildren = epicChildrenAllMap.get(epicKey) || []}
 								{@const closedChildrenCount = allEpicChildren.filter(t => t.status === 'closed').length}
 								{@const totalChildrenCount = allEpicChildren.length}
@@ -3005,11 +3141,11 @@
 							const parent = extractParentId(t.id);
 							return parent === groupKey;
 						})}
-						{@const showGroupHeader = groupingMode !== 'parent' || typeTasks.length >= 2 || hasChildTasks}
+						{@const showGroupHeader = groupingMode !== 'none' && (groupingMode !== 'parent' || typeTasks.length >= 2 || hasChildTasks)}
 						{@const groupIndex = visibleGroupKeys.indexOf(groupKey)}
 						{@const isEpicJustCompleted = groupingMode === 'parent' && groupKey && completedEpicIds.includes(groupKey)}
-						{@const isParentRunningEpic = groupingMode === 'parent' && getIsActive() && getEpicId() === groupKey}
-						{@const parentEpicQueueAgents = isParentRunningEpic ? getRunningAgents() : []}
+						{@const isParentRunningEpic = groupingMode === 'parent' && epicQueueIsActive && epicQueueId === groupKey}
+						{@const parentEpicQueueAgents = isParentRunningEpic ? epicQueueRunningAgents : []}
 						{@const parentAllTasksList = allTasks.length > 0 ? allTasks : tasks}
 						{@const parentAllChildren = epicChildrenAllMap.get(groupKey) || []}
 						{@const parentClosedCount = parentAllChildren.filter(t => t.status === 'closed').length}
