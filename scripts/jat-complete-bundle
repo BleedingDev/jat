@@ -1,0 +1,354 @@
+#!/bin/bash
+#
+# jat-complete-bundle - Generate CompletionBundle JSON via LLM
+#
+# Usage:
+#   jat-complete-bundle --task <task-id> --agent <agent-name> [options]
+#
+# Options:
+#   --task <id>       Task ID (required)
+#   --agent <name>    Agent name (required)
+#   --mode <mode>     Completion mode: review_required (default) or auto_proceed
+#   --next-task <id>  Next task ID (for auto_proceed mode)
+#   --help            Show this help
+#
+# Environment:
+#   ANTHROPIC_API_KEY  API key for Anthropic (required)
+#
+# Output:
+#   Outputs valid JSON suitable for: jat-signal complete "$JSON"
+#
+# Example:
+#   jat-complete-bundle --task jat-abc --agent FreeOcean
+#   jat-complete-bundle --task jat-abc --agent FreeOcean --mode auto_proceed --next-task jat-def
+
+set -euo pipefail
+
+# Colors for user-facing messages (stderr only, stdout is for JSON)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Log to stderr (so stdout remains clean for JSON output)
+log() { echo -e "$@" >&2; }
+log_dim() { echo -e "${DIM}$@${NC}" >&2; }
+log_error() { echo -e "${RED}Error: $@${NC}" >&2; }
+log_success() { echo -e "${GREEN}$@${NC}" >&2; }
+log_warn() { echo -e "${YELLOW}$@${NC}" >&2; }
+
+show_usage() {
+    cat >&2 <<'EOF'
+jat-complete-bundle - Generate CompletionBundle JSON via LLM
+
+Usage:
+  jat-complete-bundle --task <task-id> --agent <agent-name> [options]
+
+Options:
+  --task <id>       Task ID (required)
+  --agent <name>    Agent name (required)
+  --mode <mode>     Completion mode: review_required (default) or auto_proceed
+  --next-task <id>  Next task ID (for auto_proceed mode)
+  --help            Show this help
+
+Environment:
+  ANTHROPIC_API_KEY  API key for Anthropic (required)
+
+Output:
+  Outputs valid JSON suitable for: jat-signal complete "$JSON"
+
+Example:
+  jat-complete-bundle --task jat-abc --agent FreeOcean
+  BUNDLE=$(jat-complete-bundle --task jat-abc --agent FreeOcean)
+  jat-signal complete "$BUNDLE"
+EOF
+    exit 0
+}
+
+# Parse arguments
+TASK_ID=""
+AGENT_NAME=""
+COMPLETION_MODE="review_required"
+NEXT_TASK_ID=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --task)
+            TASK_ID="$2"
+            shift 2
+            ;;
+        --agent)
+            AGENT_NAME="$2"
+            shift 2
+            ;;
+        --mode)
+            COMPLETION_MODE="$2"
+            shift 2
+            ;;
+        --next-task)
+            NEXT_TASK_ID="$2"
+            shift 2
+            ;;
+        --help|-h)
+            show_usage
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            show_usage
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$TASK_ID" ]]; then
+    log_error "Task ID is required (--task <id>)"
+    exit 1
+fi
+
+if [[ -z "$AGENT_NAME" ]]; then
+    log_error "Agent name is required (--agent <name>)"
+    exit 1
+fi
+
+# Check for API key
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    log_error "ANTHROPIC_API_KEY environment variable is required"
+    exit 1
+fi
+
+log_dim "Gathering context for completion bundle..."
+
+# ============================================================================
+# CONTEXT GATHERING
+# ============================================================================
+
+# 1. Get task details from Beads
+log_dim "  • Fetching task details from Beads..."
+TASK_JSON=$(bd show "$TASK_ID" --json 2>/dev/null || echo "[]")
+
+if [[ "$TASK_JSON" == "[]" ]] || [[ -z "$TASK_JSON" ]]; then
+    log_error "Task not found: $TASK_ID"
+    exit 1
+fi
+
+TASK_TITLE=$(echo "$TASK_JSON" | jq -r '.[0].title // "Unknown"')
+TASK_TYPE=$(echo "$TASK_JSON" | jq -r '.[0].issue_type // "task"')
+TASK_PRIORITY=$(echo "$TASK_JSON" | jq -r '.[0].priority // 2')
+TASK_DESC=$(echo "$TASK_JSON" | jq -r '.[0].description // ""')
+
+# 2. Get git status and diff
+log_dim "  • Collecting git status..."
+GIT_STATUS=$(git status --porcelain 2>/dev/null | head -50 || echo "")
+GIT_DIFF_STAT=$(git diff --stat HEAD 2>/dev/null | tail -20 || echo "")
+GIT_DIFF_STAGED=$(git diff --staged --stat 2>/dev/null | tail -20 || echo "")
+
+# Get list of modified files
+MODIFIED_FILES=$(git diff --name-only HEAD 2>/dev/null || echo "")
+STAGED_FILES=$(git diff --staged --name-only 2>/dev/null || echo "")
+ALL_CHANGED_FILES=$(echo -e "$MODIFIED_FILES\n$STAGED_FILES" | sort -u | grep -v '^$' || echo "")
+FILE_COUNT=$(echo "$ALL_CHANGED_FILES" | grep -c '.' || echo "0")
+
+# 3. Get recent commits (if any new commits were made)
+log_dim "  • Checking recent commits..."
+RECENT_COMMITS=$(git log --oneline -5 2>/dev/null || echo "")
+
+# 4. Count lines changed
+LINES_ADDED=$(git diff HEAD --numstat 2>/dev/null | awk '{sum+=$1} END {print sum+0}' || echo "0")
+LINES_REMOVED=$(git diff HEAD --numstat 2>/dev/null | awk '{sum+=$2} END {print sum+0}' || echo "0")
+
+# 5. Check test status (if test command exists)
+log_dim "  • Checking for test/build status..."
+TESTS_STATUS="none"
+BUILD_STATUS="clean"
+
+# Try to detect test status from common patterns
+if [[ -f "package.json" ]]; then
+    # Check if tests exist
+    if grep -q '"test"' package.json 2>/dev/null; then
+        TESTS_STATUS="skipped"  # Tests exist but we're not running them
+    fi
+fi
+
+# 6. Get project name from current directory
+PROJECT_NAME=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+
+# 7. Format files list for prompt (limit to first 20)
+FILES_FOR_PROMPT=""
+if [[ -n "$ALL_CHANGED_FILES" ]]; then
+    FILES_FOR_PROMPT=$(echo "$ALL_CHANGED_FILES" | head -20)
+fi
+
+log_dim "  • Task: $TASK_TITLE"
+log_dim "  • Files changed: $FILE_COUNT"
+log_dim "  • Lines: +$LINES_ADDED / -$LINES_REMOVED"
+
+# ============================================================================
+# BUILD LLM PROMPT
+# ============================================================================
+
+log_dim "Calling LLM to generate completion bundle..."
+
+# Build the prompt with all context
+PROMPT=$(cat <<PROMPT_EOF
+You are generating a CompletionBundle JSON for a completed task. Based on the context below, generate ONLY valid JSON (no markdown, no explanation).
+
+## Task Information
+- Task ID: $TASK_ID
+- Title: $TASK_TITLE
+- Type: $TASK_TYPE
+- Priority: P$TASK_PRIORITY
+- Description: $TASK_DESC
+
+## Git Changes
+Files changed ($FILE_COUNT files):
+$FILES_FOR_PROMPT
+
+Diff summary:
+$GIT_DIFF_STAT
+
+Lines: +$LINES_ADDED / -$LINES_REMOVED
+
+Recent commits:
+$RECENT_COMMITS
+
+## Required Output Schema
+
+Generate a JSON object with these fields:
+
+{
+  "taskId": "$TASK_ID",
+  "agentName": "$AGENT_NAME",
+  "completionMode": "$COMPLETION_MODE",
+  $(if [[ -n "$NEXT_TASK_ID" ]]; then echo "\"nextTaskId\": \"$NEXT_TASK_ID\","; fi)
+
+  "summary": [
+    // 2-5 bullet points describing what was accomplished
+    // Be specific about what was done, not vague
+  ],
+
+  "quality": {
+    "tests": "passing" | "failing" | "none" | "skipped",
+    "build": "clean" | "warnings" | "errors",
+    "preExisting": "optional note about pre-existing issues"
+  },
+
+  "suggestedTasks": [
+    // REQUIRED: 1-3 follow-up tasks discovered during work
+    // Look for: tech debt, tests to add, docs to update, related improvements
+    {
+      "type": "feature" | "bug" | "task" | "chore",
+      "title": "Short task title",
+      "description": "What needs to be done",
+      "priority": 2,  // 0-4, where 0 is critical
+      "reason": "Why this was discovered during the work"
+    }
+  ],
+
+  "humanActions": [
+    // Only if manual steps are needed (deploy, config, etc)
+    {
+      "title": "Short action title",
+      "description": "Detailed steps to take"
+    }
+  ],
+
+  "crossAgentIntel": {
+    "files": ["key files modified"],
+    "patterns": ["conventions used that other agents should follow"],
+    "gotchas": ["non-obvious issues or surprises"]
+  },
+
+  // AI-generated insights (all optional)
+  "suggestedRename": "new title if task evolved/pivoted significantly",
+  "suggestedLabels": ["labels based on actual work done, e.g. auth, api, ui"],
+  "riskLevel": "low" | "medium" | "high",
+  "breakingChanges": ["list of breaking changes, or omit if none"],
+  "documentationNeeds": ["docs that need updating, e.g. README, API docs"]
+}
+
+## Guidelines
+1. Summary should be specific accomplishments, not vague ("Added X feature" not "Made changes")
+2. ALWAYS include at least one suggested task - there's always follow-up work or tech debt
+3. Only include humanActions if manual steps are truly required (deploy, config, etc)
+4. crossAgentIntel should help other agents working in the same codebase
+5. Include suggestedRename ONLY if the original title no longer reflects the work done
+6. suggestedLabels should reflect what the work actually touched (auth, ui, api, db, tests, etc)
+7. riskLevel: low=routine changes, medium=core logic changes, high=breaking/security/data changes
+8. breakingChanges: list specific breaking changes, omit field entirely if none
+9. documentationNeeds: list specific docs needing updates, omit if none
+10. Be concise but informative
+
+Output ONLY the JSON object. No markdown code blocks, no explanation text.
+PROMPT_EOF
+)
+
+# ============================================================================
+# CALL ANTHROPIC API
+# ============================================================================
+
+# Make the API call using curl
+API_RESPONSE=$(curl -s "https://api.anthropic.com/v1/messages" \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
+    -d "$(jq -n \
+        --arg prompt "$PROMPT" \
+        '{
+            model: "claude-3-5-haiku-latest",
+            max_tokens: 2048,
+            messages: [
+                {
+                    role: "user",
+                    content: $prompt
+                }
+            ]
+        }'
+    )" 2>/dev/null)
+
+# Check for API errors
+if echo "$API_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
+    ERROR_MSG=$(echo "$API_RESPONSE" | jq -r '.error.message // "Unknown error"')
+    log_error "API error: $ERROR_MSG"
+    exit 1
+fi
+
+# Extract the content from the response
+BUNDLE_JSON=$(echo "$API_RESPONSE" | jq -r '.content[0].text // empty')
+
+if [[ -z "$BUNDLE_JSON" ]]; then
+    log_error "Empty response from API"
+    log_dim "Full response: $API_RESPONSE"
+    exit 1
+fi
+
+# Clean up the JSON (remove any markdown code blocks if present)
+BUNDLE_JSON=$(echo "$BUNDLE_JSON" | sed 's/^```json//g; s/^```//g; s/```$//g' | tr -d '\n' | jq -c '.')
+
+# Validate it's valid JSON
+if ! echo "$BUNDLE_JSON" | jq -e '.' >/dev/null 2>&1; then
+    log_error "Invalid JSON from LLM response"
+    log_dim "Raw response: $BUNDLE_JSON"
+    exit 1
+fi
+
+# Ensure required fields are present
+BUNDLE_JSON=$(echo "$BUNDLE_JSON" | jq \
+    --arg taskId "$TASK_ID" \
+    --arg agentName "$AGENT_NAME" \
+    --arg mode "$COMPLETION_MODE" \
+    '. + {taskId: $taskId, agentName: $agentName, completionMode: $mode}')
+
+# Add nextTaskId if provided
+if [[ -n "$NEXT_TASK_ID" ]]; then
+    NEXT_TASK_TITLE=$(bd show "$NEXT_TASK_ID" --json 2>/dev/null | jq -r '.[0].title // "Unknown"' || echo "Unknown")
+    BUNDLE_JSON=$(echo "$BUNDLE_JSON" | jq \
+        --arg nextId "$NEXT_TASK_ID" \
+        --arg nextTitle "$NEXT_TASK_TITLE" \
+        '. + {nextTaskId: $nextId, nextTaskTitle: $nextTitle}')
+fi
+
+log_success "Generated completion bundle successfully"
+
+# Output the final JSON to stdout
+echo "$BUNDLE_JSON"

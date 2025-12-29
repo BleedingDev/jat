@@ -169,6 +169,32 @@ else
 fi
 
 echo ""
+echo -e "${BLUE}Setting up jat-complete-bundle...${NC}"
+echo ""
+
+# Symlink jat-complete-bundle (completion bundle generator)
+BUNDLE_SOURCE="$PROJECT_ROOT/scripts/jat-complete-bundle"
+BUNDLE_TARGET="$HOME/.local/bin/jat-complete-bundle"
+
+if [ -f "$BUNDLE_SOURCE" ]; then
+    if [ -L "$BUNDLE_TARGET" ]; then
+        CURRENT_TARGET=$(readlink "$BUNDLE_TARGET")
+        if [ "$CURRENT_TARGET" = "$BUNDLE_SOURCE" ]; then
+            echo -e "  ${GREEN}✓${NC} jat-complete-bundle (already linked)"
+        else
+            echo -e "  ${YELLOW}↻${NC} jat-complete-bundle (updating link)"
+            rm "$BUNDLE_TARGET"
+            ln -s "$BUNDLE_SOURCE" "$BUNDLE_TARGET"
+        fi
+    else
+        echo -e "  ${GREEN}+${NC} jat-complete-bundle (linked)"
+        ln -s "$BUNDLE_SOURCE" "$BUNDLE_TARGET"
+    fi
+else
+    echo -e "  ${YELLOW}⚠${NC} jat-complete-bundle not found at $BUNDLE_SOURCE"
+fi
+
+echo ""
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}Agent Tools Setup Complete${NC}"
 echo -e "${GREEN}=========================================${NC}"
