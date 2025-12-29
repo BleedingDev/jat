@@ -572,7 +572,7 @@
 			createResults = results;
 			showCreateFeedback = true;
 
-			// Clear selection for successfully created tasks
+			// Clear selection for successfully created tasks and update existingTaskTitles
 			if (results.success.length > 0) {
 				const eventTasksState = tasksStateByEvent.get(eventKey);
 				if (eventTasksState) {
@@ -586,6 +586,16 @@
 					}
 					tasksStateByEvent = new Map(tasksStateByEvent);
 				}
+
+				// Update existingTaskTitles with newly created tasks so they show as "already created"
+				const updatedTitles = new Map(existingTaskTitles);
+				for (const success of results.success) {
+					if (success.title && success.taskId) {
+						const normalizedTitle = success.title.toLowerCase().trim();
+						updatedTitles.set(normalizedTitle, success.taskId);
+					}
+				}
+				existingTaskTitles = updatedTitles;
 			}
 		} catch (err: any) {
 			createResults = { success: [], failed: [{ title: 'Error', error: err.message }] };
@@ -607,7 +617,7 @@
 			createResults = results;
 			showCreateFeedback = true;
 
-			// Clear selection for successfully created tasks
+			// Clear selection for successfully created tasks and update existingTaskTitles
 			if (results.success.length > 0) {
 				const eventTasksState = tasksStateByEvent.get(eventKey);
 				if (eventTasksState) {
@@ -621,6 +631,16 @@
 					}
 					tasksStateByEvent = new Map(tasksStateByEvent);
 				}
+
+				// Update existingTaskTitles with newly created tasks so they show as "already created"
+				const updatedTitles = new Map(existingTaskTitles);
+				for (const success of results.success) {
+					if (success.title && success.taskId) {
+						const normalizedTitle = success.title.toLowerCase().trim();
+						updatedTitles.set(normalizedTitle, success.taskId);
+					}
+				}
+				existingTaskTitles = updatedTitles;
 			}
 		} catch (err: any) {
 			createResults = { success: [], failed: [{ title: 'Error', error: err.message }] };
