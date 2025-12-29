@@ -149,9 +149,33 @@ function escapeForShell(str: string): string {
 }
 
 /**
+ * Check if an epic is still open (not closed)
+ * @param epicId - The epic task ID to check
+ * @param projectPath - Optional project path to run command in
+ * @returns true if epic exists and is not closed, false otherwise
+ */
+async function isEpicOpen(epicId: string, projectPath?: string): Promise<boolean> {
+	try {
+		let command = `bd show '${escapeForShell(epicId)}' --json`;
+		if (projectPath) {
+			command = `cd '${escapeForShell(projectPath)}' && ${command}`;
+		}
+		const { stdout } = await execAsync(command);
+		const epic = JSON.parse(stdout.trim());
+		return epic.status !== 'closed';
+	} catch {
+		// If we can't check, assume epic doesn't exist or is closed
+		return false;
+	}
+}
+
+/**
  * Link a task to an epic by adding epic->child dependency
  * Uses bd dep add with CORRECT direction: epic depends on child (not child depends on epic)
  * This ensures child is READY and epic is BLOCKED until child completes
+ *
+ * IMPORTANT: This function checks if the epic is still open before linking.
+ * Tasks will NOT be linked to closed epics (prevents stale epic state bugs).
  *
  * @param epicId - The parent epic task ID
  * @param childId - The newly created child task ID
@@ -162,8 +186,24 @@ async function linkTaskToEpic(
 	epicId: string,
 	childId: string,
 	projectPath?: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
 	try {
+		// Check if epic is still open before linking
+		// This prevents linking to closed epics (e.g., when dashboard state is stale)
+		const epicOpen = await isEpicOpen(epicId, projectPath);
+		if (!epicOpen) {
+			console.warn(
+				`Skipping epic link: Epic ${epicId} is closed or not found. ` +
+					`Task ${childId} was NOT linked. This can happen when dashboard epic state ` +
+					`becomes stale after an epic is closed by an agent.`
+			);
+			return {
+				success: true,
+				skipped: true,
+				error: `Epic ${epicId} is closed - task not linked`
+			};
+		}
+
 		// CRITICAL: Dependency direction is epic depends on child
 		// This makes child READY (can be worked on) and epic BLOCKED (until children complete)
 		// The command is: bd dep add [A] [B] meaning "A depends on B"
@@ -327,9 +367,15 @@ async function createTask(
 			}
 
 			const linkResult = await linkTaskToEpic(epicId, taskId, epicProjectPath);
-			if (linkResult.success) {
+			if (linkResult.success && !linkResult.skipped) {
 				taskResult.linkedToEpic = true;
 				console.log(`Linked task ${taskId} to epic ${epicId}`);
+			} else if (linkResult.skipped) {
+				// Epic was closed - task created but not linked (this is expected, not an error)
+				taskResult.linkedToEpic = false;
+				console.log(
+					`Task ${taskId} created but not linked to epic ${epicId} (epic is closed)`
+				);
 			} else {
 				taskResult.epicLinkError = linkResult.error;
 				console.error(`Failed to link task ${taskId} to epic ${epicId}: ${linkResult.error}`);
