@@ -4373,6 +4373,7 @@
 						onCommand={sendWorkflowCommand}
 						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 						project={defaultProject || null}
+						onViewEpic={(epicId) => onTaskClick?.(epicId)}
 					/>
 				{/if}
 			</div>
@@ -5012,6 +5013,7 @@
 						onCommand={sendWorkflowCommand}
 						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 						project={defaultProject || null}
+						onViewEpic={(epicId) => onTaskClick?.(epicId)}
 					/>
 				</div>
 			</div>
@@ -6724,6 +6726,7 @@
 									onCommand={sendWorkflowCommand}
 									task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 									project={defaultProject || null}
+									onViewEpic={(epicId) => onTaskClick?.(epicId)}
 								/>
 							{/if}
 						{:else if sessionState === "ready-for-review" || sessionState === "idle" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}
@@ -6744,6 +6747,7 @@
 								onCommand={sendWorkflowCommand}
 								task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 								project={defaultProject || null}
+								onViewEpic={(epicId) => onTaskClick?.(epicId)}
 							/>
 						{:else if detectedOptions.length > 0}
 							<!-- Prompt options detected: show quick action buttons -->

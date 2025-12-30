@@ -88,6 +88,8 @@
 		project?: string | null;
 		/** Callback when task is linked to an epic */
 		onLinkToEpic?: (epicId: string) => Promise<void> | void;
+		/** Callback when an epic is clicked without a task (for viewing/navigation) */
+		onViewEpic?: (epicId: string) => Promise<void> | void;
 		class?: string;
 	}
 
@@ -111,6 +113,7 @@
 		showEpic = false,
 		project = null,
 		onLinkToEpic,
+		onViewEpic,
 		class: className = ''
 	}: Props = $props();
 
@@ -831,15 +834,23 @@
 										No epics match "{epicSearchQuery}"
 									</div>
 								{:else}
+									{@const canInteract = canLink || onViewEpic}
 									<ul class="py-0.5 max-h-[180px] overflow-y-auto">
 										{#each filteredEpics as epic, index (epic.id)}
 											<li>
 												<button
 													type="button"
-													onclick={() => canLink && linkToEpic(epic.id)}
-													class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 {canLink ? 'hover:text-base-content' : 'opacity-60 cursor-default'} {index === selectedEpicIndex && canLink ? 'command-item-selected' : 'command-item-default'}"
-													disabled={disabled || linkingEpicId !== null || !canLink}
-													onmouseenter={() => { if (canLink) selectedEpicIndex = index; }}
+													onclick={() => {
+														if (canLink) {
+															linkToEpic(epic.id);
+														} else if (onViewEpic) {
+															onViewEpic(epic.id);
+															isOpen = false;
+														}
+													}}
+													class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 {canInteract ? 'hover:text-base-content' : 'opacity-60 cursor-default'} {index === selectedEpicIndex && canInteract ? 'command-item-selected' : 'command-item-default'}"
+													disabled={disabled || linkingEpicId !== null || !canInteract}
+													onmouseenter={() => { if (canInteract) selectedEpicIndex = index; }}
 												>
 													{#if linkingEpicId === epic.id}
 														<span class="loading loading-spinner loading-xs flex-shrink-0"></span>
@@ -855,7 +866,12 @@
 															{epic.dependency_count} tasks
 														</span>
 													{/if}
-													{#if index === selectedEpicIndex && epics.length > 3 && canLink}
+													{#if !canLink && onViewEpic}
+														<span class="text-[9px] px-1 py-0.5 rounded bg-info/20 text-info flex-shrink-0">
+															view
+														</span>
+													{/if}
+													{#if index === selectedEpicIndex && epics.length > 3 && canInteract}
 														<kbd class="kbd kbd-xs font-mono command-kbd flex-shrink-0">↵</kbd>
 													{/if}
 												</button>
