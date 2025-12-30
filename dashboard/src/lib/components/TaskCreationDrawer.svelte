@@ -737,6 +737,23 @@
 			return;
 		}
 
+		// Wait for any in-progress AI analysis to complete before saving
+		// This handles the case where user pastes and immediately hits save shortcut
+		if (isLoadingSuggestions) {
+			// Wait for up to 5 seconds for analysis to complete
+			const startWait = Date.now();
+			while (isLoadingSuggestions && Date.now() - startWait < 5000) {
+				await new Promise(resolve => setTimeout(resolve, 100));
+				await tick(); // Ensure Svelte reactivity updates are flushed
+			}
+		}
+
+		// Run AI analysis if not already done and we have content
+		// This ensures suggestions are applied even if user skipped the description blur
+		if (!suggestionsApplied && formData.title.trim() && formData.description.trim()) {
+			await fetchSuggestions();
+		}
+
 		isSubmitting = true;
 
 		try {
