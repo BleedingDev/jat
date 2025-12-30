@@ -774,9 +774,27 @@ await writeFile(contextPath, JSON.stringify(context, null, 2));
 
 ### STEP 8: Emit Structured Completion Signal
 
-**Use the `jat-complete-bundle` tool to generate the completion bundle.**
+**🚨 MANDATORY: Use `jat-complete-bundle` to generate the completion bundle.**
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  ⚠️  DO NOT manually construct the completion signal JSON.                │
+│                                                                            │
+│  You MUST call jat-complete-bundle which:                                  │
+│    • Gathers git context automatically                                     │
+│    • Uses LLM to generate rich summaries                                   │
+│    • Includes suggested tasks, human actions, cross-agent intel            │
+│    • Produces consistent, high-quality completion bundles                  │
+│                                                                            │
+│  Manual construction results in incomplete/low-quality completion signals. │
+└────────────────────────────────────────────────────────────────────────────┘
+```
 
 The tool gathers all context (task details, git status, diffs, commits) and calls the Anthropic API to generate a structured CompletionBundle JSON.
+
+**Prerequisites:**
+- `ANTHROPIC_API_KEY` environment variable must be set (check with `echo $ANTHROPIC_API_KEY`)
+- Task must exist in Beads
 
 ```bash
 # Generate the completion bundle (uses COMPLETION_MODE from Step 7.5)
@@ -796,14 +814,16 @@ jat-signal complete "$BUNDLE"
    - Summary bullets
    - Quality signals (tests, build status)
    - Human actions (if manual steps needed)
-   - Suggested follow-up tasks
+   - Suggested follow-up tasks (ALWAYS at least one)
    - Cross-agent intel (files, patterns, gotchas)
    - AI insights (suggested rename, labels, risk level)
 4. Outputs valid JSON for `jat-signal complete`
 
-**Requirements:**
-- `ANTHROPIC_API_KEY` environment variable must be set
-- Task must exist in Beads
+**If `jat-complete-bundle` fails:**
+- Check `ANTHROPIC_API_KEY` is set
+- Check task ID is valid with `bd show $task_id`
+- Check network connectivity
+- Do NOT fall back to manual signal construction
 
 #### Then Output Terminal Debrief
 
@@ -998,7 +1018,9 @@ Or run /jat:verify to see detailed error report
 | 6 | Release Reservations | ALWAYS | `releasing` (60%) |
 | 7 | Announce Completion | ALWAYS | `announcing` (80%) |
 | 7.5 | Determine Review Action | ALWAYS (sets COMPLETION_MODE) | - |
-| 8 | Emit Completion Bundle | ALWAYS | (100% implied) |
+| **8** | **Call `jat-complete-bundle`** | **ALWAYS (MANDATORY)** | **(100% implied)** |
+
+**⚠️ Step 8 is MANDATORY:** You must call `jat-complete-bundle` to generate the completion signal. Do not manually construct the JSON.
 
 ---
 

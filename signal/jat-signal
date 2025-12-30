@@ -56,8 +56,8 @@ show_usage() {
     echo "  compacting '{...}'    - Summarizing context"
     echo "  question '{...}'      - Structured question for dashboard"
     echo ""
-    echo "Completion Signal (bundles summary, quality, suggested tasks, human actions):"
-    echo "  complete '{...}'      - Full completion bundle"
+    echo "Completion Signal (USE jat-complete-bundle TO GENERATE):"
+    echo "  complete '{...}'      - Full completion bundle (see below)"
     echo ""
     echo "Options:"
     echo "  --no-validate         Skip schema validation"
@@ -68,7 +68,11 @@ show_usage() {
     echo "  jat-signal review '{\"taskId\":\"jat-abc\",\"summary\":[\"Added login\"]}'"
     echo "  jat-signal needs_input '{\"taskId\":\"jat-abc\",\"question\":\"Which lib?\",\"questionType\":\"choice\"}'"
     echo "  jat-signal idle '{\"readyForWork\":true}'"
-    echo "  jat-signal complete '{\"taskId\":\"jat-abc\",\"agentName\":\"Agent\",\"completionMode\":\"review_required\",\"summary\":[\"Added auth\"],\"quality\":{\"tests\":\"passing\",\"build\":\"clean\"},\"suggestedTasks\":[]}'"
+    echo ""
+    echo "COMPLETE SIGNAL - DO NOT MANUALLY CONSTRUCT:"
+    echo "  Use jat-complete-bundle to generate the JSON payload:"
+    echo "    BUNDLE=\$(jat-complete-bundle --task jat-abc --agent AgentName)"
+    echo "    jat-signal complete \"\$BUNDLE\""
     echo ""
     echo "Required Fields by Signal Type:"
     echo "  working:     taskId, taskTitle"
@@ -79,7 +83,7 @@ show_usage() {
     echo "  starting:    agentName"
     echo "  compacting:  reason, contextSizeBefore"
     echo "  question:    question, questionType"
-    echo "  complete:    taskId, agentName, summary, quality, completionMode, suggestedTasks"
+    echo "  complete:    (use jat-complete-bundle, do not construct manually)"
 }
 
 # Parse options
