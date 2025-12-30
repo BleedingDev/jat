@@ -21,7 +21,7 @@ Signal files expire after a time-to-live (TTL) to prevent stale data. Different 
 
 | TTL Type | Duration | States | Purpose |
 |----------|----------|--------|---------|
-| **Transient** | 1 minute | `working`, `starting`, `idle`, `compacting`, `completing` | Agent is actively working, frequent updates expected |
+| **Transient** | 1 minute | `working`, `starting`, `idle`, `compacting` | Agent is actively working, frequent updates expected |
 | **User-Waiting** | 30 minutes | `completed`, `review`, `needs_input` | Waiting for human action - user may step away |
 
 **Why this matters:**
@@ -50,7 +50,6 @@ Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 | `starting` | `jat-signal starting '{...}'` | agentName (optional: sessionId, taskId, taskTitle, project) |
 | `working` | `jat-signal working '{...}'` | taskId, taskTitle |
 | `compacting` | `jat-signal compacting '{...}'` | reason, contextSizeBefore |
-| `completing` | `jat-signal completing '{...}'` | taskId, currentStep |
 | `review` | `jat-signal review '{...}'` | taskId |
 | `needs_input` | `jat-signal needs_input '{...}'` | taskId, question, questionType |
 | `idle` | `jat-signal idle '{...}'` | readyForWork |
@@ -104,55 +103,47 @@ The dashboard writes this signal directly to the timeline file when a user sends
 - Collapsed view shows truncated input text (first 60 chars)
 - Click-to-copy the full input text
 
-**Completion Signals** - Two signals work together for task completion:
+**Completion Signal** - A single signal is emitted at the end of `/jat:complete`:
 
 | Signal | Command | Purpose |
 |--------|---------|---------|
-| `completing` | `jat-signal completing '{...}'` | **Progress tracking** - emitted during each step of `/jat:complete` (verifying → committing → closing → releasing → announcing). Shows dashboard progress. |
 | `complete` | `jat-signal complete '{...}'` | **Final bundle** - emitted ONCE at the end. Sets state to "completed" AND provides rich data (summary, quality, suggestedTasks, humanActions). |
 
-### completing vs complete: When to Use Each
-
-**Key distinction:**
-- **`completing`** = "I'm in the middle of completing" (multiple emissions, progress updates)
-- **`complete`** = "I'm done completing" (single emission, final result)
-
-**`completing` signal** - Emitted during `/jat:complete` workflow steps:
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  /jat:complete workflow with completing signals                     │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  Step 3: jat-signal completing '{"currentStep":"verifying"}'   0%  │
-│       ↓                                                             │
-│  Step 4: jat-signal completing '{"currentStep":"committing"}'  20% │
-│       ↓                                                             │
-│  Step 5: jat-signal completing '{"currentStep":"closing"}'     40% │
-│       ↓                                                             │
-│  Step 6: jat-signal completing '{"currentStep":"releasing"}'   60% │
-│       ↓                                                             │
-│  Step 7: jat-signal completing '{"currentStep":"announcing"}'  80% │
-│       ↓                                                             │
-│  Step 8: jat-signal complete '{"completionMode":"..."}'       100% │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+### complete Signal
 
 **`complete` signal** - Emitted once after all completion steps:
 - Triggers dashboard to show "COMPLETED" state
 - Contains the full CompletionBundle with summary, quality, suggested tasks
 - Determines what happens next (review_required vs auto_proceed)
 
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  /jat:complete workflow                                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Step 3: Verify task (tests, lint, security)                        │
+│       ↓                                                             │
+│  Step 4: Commit changes                                             │
+│       ↓                                                             │
+│  Step 5: Close task in Beads (bd close)                             │
+│       ↓                                                             │
+│  Step 6: Release file reservations                                  │
+│       ↓                                                             │
+│  Step 7: Announce completion (Agent Mail)                           │
+│       ↓                                                             │
+│  Step 7.5: Determine completion mode (review rules)                 │
+│       ↓                                                             │
+│  Step 8: jat-signal complete '{"completionMode":"..."}'       100% │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 **Dashboard behavior:**
 | Signal | Dashboard State | Dashboard Display |
 |--------|-----------------|-------------------|
-| `completing` | ⏳ COMPLETING | Progress bar with current step |
 | `complete` | ✅ COMPLETED | Completion summary, quality badges, suggested tasks |
 
-**When completing events are hidden:**
-Once a task completes, intermediate `completing` events are automatically hidden from the timeline. Only the final `completed` event is shown. This keeps the timeline clean.
-
-> **Note:** Always emit `completing` signals during the workflow AND `complete` at the end. The `completing` signals provide real-time feedback while work is happening.
+> **Note:** Only the `complete` signal is emitted during `/jat:complete`. No intermediate progress signals are sent.
 
 ### Signal Schemas (Full Field Reference)
 
@@ -233,9 +224,6 @@ jat-signal working '{"taskId":"jat-abc","taskTitle":"Add auth flow"}'
 
 # Context compacting (auto-summarization)
 jat-signal compacting '{"reason":"context_limit","contextSizeBefore":180000}'
-
-# Running completion steps
-jat-signal completing '{"taskId":"jat-abc","currentStep":"committing"}'
 
 # Waiting for user input
 jat-signal needs_input '{"taskId":"jat-abc","question":"Which auth library?","questionType":"choice"}'
@@ -404,7 +392,6 @@ $effect(() => {
 | Compacting | `compacting` | 📦 | Orange | Summarizing context |
 | Needs Input | `needs_input` | ❓ | Purple | Waiting for user response |
 | Ready for Review | `review` | 👁 | Cyan | Asking to mark complete |
-| Completing | `completing` | ⏳ | Teal | Running /jat:complete steps |
 | Completed | `completed` | ✅ | Green | Task finished (review required) |
 | Completed + Auto-Proceed | `completed` (completionMode='auto_proceed') | 🚀 | Green | Task finished, spawning next task |
 | Idle | `idle` | 💤 | Gray | No active task |
@@ -430,7 +417,6 @@ Collapsed cards show context-specific summaries from signal payloads:
 | `dashboard_input` | Truncated input (first 60 chars) | - |
 | `working` | `data.approach` (what agent plans to do) | `data.taskTitle` |
 | `review` | First `data.summary` item or `data.reviewFocus` | `data.taskTitle` |
-| `completing` | `data.currentStep` (e.g., "Committing...") | `data.taskTitle` |
 | `completed` | `data.outcome` (e.g., "Task completed successfully") | `data.taskTitle` |
 | `needs_input` | `data.question` (what agent is asking) | `data.taskTitle` |
 | `question` | `data.question` (the question text) | - |
@@ -455,7 +441,6 @@ Each event type has a custom UI in the expanded timeline:
 | `review` | Summary items, files modified, tests status |
 | `needs_input` | Question, question type, options if provided |
 | `question` | Interactive question UI with type-specific controls (see below) |
-| `completing` | Current step (hidden once task completes) |
 | `completed` | Green outcome badge, summary checklist, task ID |
 | `starting` | Agent name, session ID (full UUID), task ID and title, project |
 | `compacting` | Reason, context size before |
@@ -492,14 +477,14 @@ jat-signal question '{"question":"Proceed with migration?","questionType":"confi
 jat-signal question '{"question":"Enter name:","questionType":"input","timeout":60}'
 ```
 
-**Completing → Completed Transition:**
+**Completion Display:**
 
-When a task completes, intermediate `completing` events are automatically hidden from the timeline. Only the final `completed` event is shown with:
+When a task completes, the `complete` signal is shown with:
 - Green "✓ Task Completed Successfully" badge
 - "WHAT WAS DONE" summary checklist
 - Task ID reference
-
-This keeps the timeline clean - you see the steps while completion is in progress, then just the final result once done.
+- Quality badges (tests/build status)
+- Human actions and suggested tasks
 
 **JSONL Format:**
 
@@ -520,7 +505,6 @@ Signals must be written as compact single-line JSON (JSONL format), one event pe
 | Session just started | `jat-signal starting '{"agentName":"...","project":"..."}'` |
 | Starting work on task | `jat-signal working '{"taskId":"...","taskTitle":"..."}'` |
 | Context is compacting | `jat-signal compacting '{"reason":"...","contextSizeBefore":...}'` |
-| Running completion steps | `jat-signal completing '{"taskId":"...","currentStep":"..."}'` |
 | Need user input | `jat-signal needs_input '{"taskId":"...","question":"...","questionType":"..."}'` |
 | Structured question for dashboard | `jat-signal question '{"question":"...","questionType":"..."}'` |
 | Done coding, awaiting review | `jat-signal review '{"taskId":"..."}'` |
@@ -561,7 +545,6 @@ The dashboard renders rich signal cards based on the signal type. Each card prov
 | `WorkingSignalCard` | `working` | Task context, work plan, expected files, baseline for rollback |
 | `ReviewSignalCard` | `review` | Work summary, files modified, quality status, approve/reject actions |
 | `NeedsInputSignalCard` | `needs_input` | Question with options, context, timeout info |
-| `CompletingSignalCard` | `completing` | Progress through completion steps (verifying, committing, etc.) |
 | `IdleSignalCard` | `idle` | Session summary, suggested next task, start work actions |
 | `StartingSignalCard` | `starting` | Agent name, project, model, git status, tools available |
 | `CompactingSignalCard` | `compacting` | Reason, context size before/after, items being preserved |
@@ -573,7 +556,6 @@ The dashboard renders rich signal cards based on the signal type. Each card prov
 - `dashboard/src/lib/components/signals/WorkingSignalCard.svelte`
 - `dashboard/src/lib/components/signals/ReviewSignalCard.svelte`
 - `dashboard/src/lib/components/signals/NeedsInputSignalCard.svelte`
-- `dashboard/src/lib/components/signals/CompletingSignalCard.svelte`
 - `dashboard/src/lib/components/signals/IdleSignalCard.svelte`
 - `dashboard/src/lib/components/signals/StartingSignalCard.svelte`
 - `dashboard/src/lib/components/signals/CompactingSignalCard.svelte`
@@ -662,24 +644,9 @@ jat-signal review '{
   "reviewFocus":["Verify OAuth token handling"]
 }'
 
-# User approves, agent runs /jat:complete which emits completing signals for each step:
-
-# Step 3: Verifying (0% progress)
-jat-signal completing '{"taskId":"jat-abc","taskTitle":"Add auth flow","currentStep":"verifying","progress":0,"stepsCompleted":[],"stepsRemaining":["committing","closing","releasing","announcing"]}'
-
-# Step 4: Committing (20% progress)
-jat-signal completing '{"taskId":"jat-abc","taskTitle":"Add auth flow","currentStep":"committing","progress":20,"stepsCompleted":["verifying"],"stepsRemaining":["closing","releasing","announcing"]}'
-
-# Step 5: Closing in Beads (40% progress)
-jat-signal completing '{"taskId":"jat-abc","taskTitle":"Add auth flow","currentStep":"closing","progress":40,"stepsCompleted":["verifying","committing"],"stepsRemaining":["releasing","announcing"]}'
-
-# Step 6: Releasing reservations (60% progress)
-jat-signal completing '{"taskId":"jat-abc","taskTitle":"Add auth flow","currentStep":"releasing","progress":60,"stepsCompleted":["verifying","committing","closing"],"stepsRemaining":["announcing"]}'
-
-# Step 7: Announcing completion (80% progress)
-jat-signal completing '{"taskId":"jat-abc","taskTitle":"Add auth flow","currentStep":"announcing","progress":80,"stepsCompleted":["verifying","committing","closing","releasing"],"stepsRemaining":[]}'
-
-# Step 8: Final completion bundle (100% - the complete signal)
+# User approves, agent runs /jat:complete
+# Steps 3-7 execute (verify, commit, close, release, announce) without intermediate signals
+# Step 8: Final completion bundle via jat-complete-bundle
 jat-signal complete '{
   "taskId":"jat-abc",
   "agentName":"FairBay",
@@ -691,10 +658,8 @@ jat-signal complete '{
 ```
 
 **Key points:**
-- `completing` signals are emitted at each step to show real-time progress
-- `complete` signal is emitted once at the end with the full bundle
-- Dashboard shows progress bar during `completing`, then final result on `complete`
-- Timeline hides `completing` events after task completes (shows only `complete`)
+- Only the `complete` signal is emitted during `/jat:complete`
+- The `complete` signal is generated by `jat-complete-bundle` which gathers git context and LLM-generates the summary
 
 ### Auto-Proceed Flow
 
@@ -786,7 +751,7 @@ When `/jat:complete` determines the task can auto-proceed (based on review rules
 
 | Before | Signal | After |
 |--------|--------|-------|
-| `completing` | `complete` (completionMode="auto_proceed") | `auto-proceeding` |
+| `review` | `complete` (completionMode="auto_proceed") | `auto-proceeding` |
 | `auto-proceeding` | (spawn completes) | Session removed, new session appears |
 
 **Visual Feedback:**
