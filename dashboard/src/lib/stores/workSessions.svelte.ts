@@ -615,7 +615,10 @@ export function addSession(session: WorkSession): void {
 
 /**
  * Kill a tmux session
+ * Triggers exit animation before removing from state
  */
+const EXIT_ANIMATION_DURATION = 500;
+
 export async function kill(sessionName: string): Promise<boolean> {
 	try {
 		const response = await globalThis.fetch(`/api/sessions/${sessionName}`, {
@@ -627,8 +630,18 @@ export async function kill(sessionName: string): Promise<boolean> {
 			throw new Error(data.message || data.error || 'Failed to kill session');
 		}
 
-		// Remove from state
-		state.sessions = state.sessions.filter(s => s.sessionName !== sessionName);
+		// Mark as exiting to trigger animation
+		const sessionIndex = state.sessions.findIndex(s => s.sessionName === sessionName);
+		if (sessionIndex !== -1) {
+			state.sessions[sessionIndex]._isExiting = true;
+			// Force reactivity by reassigning the array
+			state.sessions = [...state.sessions];
+
+			// Remove after animation completes
+			setTimeout(() => {
+				state.sessions = state.sessions.filter(s => s.sessionName !== sessionName);
+			}, EXIT_ANIMATION_DURATION);
+		}
 		return true;
 	} catch (err) {
 		state.error = err instanceof Error ? err.message : 'Failed to kill session';
