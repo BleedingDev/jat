@@ -12,10 +12,10 @@
 // =============================================================================
 
 /**
- * Suggested task from jat-signal tasks command.
+ * Suggested task from jat-signal complete command.
  *
- * Agents can suggest tasks for creation via:
- *   jat-signal tasks '[{"type":"feature","title":"...","description":"...","priority":1}]'
+ * Agents can suggest follow-up tasks via the 'complete' signal's suggestedTasks field:
+ *   jat-signal complete '{"taskId":"...","suggestedTasks":[{"type":"feature","title":"..."}]}'
  *
  * The dashboard receives this data via SSE and displays it in the SessionCard.
  */
@@ -68,10 +68,10 @@ export interface SuggestedTaskWithState extends SuggestedTask {
 // =============================================================================
 
 /**
- * Human action from jat-signal action command.
+ * Human action from jat-signal complete command.
  *
- * Agents can request human actions via:
- *   jat-signal action '{"title":"Review PR","items":["Check tests","Review code"]}'
+ * Agents can request human actions via the 'complete' signal's humanActions field:
+ *   jat-signal complete '{"taskId":"...","humanActions":[{"title":"Review PR","items":["Check tests"]}]}'
  *
  * The dashboard displays these as a checklist on the SessionCard.
  */
@@ -103,10 +103,10 @@ export type SignalState =
  * Full signal data as returned by the signals API.
  */
 export interface SignalData {
-	/** Signal type: 'state', 'tasks', 'action', 'complete' */
-	type: 'state' | 'tasks' | 'action' | 'complete';
+	/** Signal type: 'state' or 'complete' */
+	type: 'state' | 'complete';
 	/** Signal data (varies by type) */
-	data: SignalState | SuggestedTask[] | HumanAction | CompletionBundle;
+	data: SignalState | CompletionBundle;
 	/** Timestamp when signal was received */
 	timestamp: number;
 	/** Task ID associated with the signal (for 'working' state) */

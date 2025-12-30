@@ -2,18 +2,13 @@
 #
 # jat-signal-validate - Validate signal payloads against JSON schema
 #
-# Usage (Data Signals):
-#   jat-signal-validate tasks '[{...}]'
-#   jat-signal-validate action '{...}'
+# Usage:
 #   jat-signal-validate complete '{...}'
-#
-# Usage (Rich State Signals):
 #   jat-signal-validate working '{"taskId":"...","taskTitle":"..."}'
 #   jat-signal-validate review '{"taskId":"...","summary":[...]}'
 #   jat-signal-validate needs_input '{"taskId":"...","question":"..."}'
 #   jat-signal-validate idle '{"readyForWork":true,...}'
 #   jat-signal-validate completing '{"taskId":"...","currentStep":"..."}'
-#   jat-signal-validate completed '{"taskId":"...","sessionStats":{...}}'
 #   jat-signal-validate starting '{"agentName":"...",...}'
 #   jat-signal-validate compacting '{"reason":"...","contextSizeBefore":...}'
 #   jat-signal-validate auto_proceed '{"taskId":"...",...}'
@@ -35,26 +30,20 @@ PAYLOAD="${2:-}"
 show_usage() {
     echo "Usage: jat-signal-validate <signal-type> <json-payload>"
     echo ""
-    echo "Data Signal Types:"
-    echo "  tasks    - Validate suggested tasks array"
-    echo "  action   - Validate human action object"
-    echo "  complete - Validate completion bundle object"
-    echo ""
-    echo "Rich State Signal Types:"
+    echo "Signal Types:"
+    echo "  complete    - Validate completion bundle object"
     echo "  working     - Validate rich working signal"
     echo "  review      - Validate rich review signal"
     echo "  needs_input - Validate rich needs_input signal"
     echo "  idle        - Validate rich idle signal"
     echo "  completing  - Validate rich completing signal"
-    echo "  completed   - Validate rich completed signal"
     echo "  starting    - Validate rich starting signal"
     echo "  compacting  - Validate rich compacting signal"
     echo "  auto_proceed - Validate rich auto_proceed signal"
     echo "  question    - Validate question signal for dashboard"
     echo ""
     echo "Examples:"
-    echo "  jat-signal-validate tasks '[{\"title\":\"Add tests\",\"priority\":2}]'"
-    echo "  jat-signal-validate action '{\"title\":\"Run migration\"}'"
+    echo "  jat-signal-validate complete '{\"taskId\":\"jat-abc\",\"agentName\":\"Agent\"}'"
     echo "  jat-signal-validate working '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Fix bug\"}'"
     echo "  jat-signal-validate review '{\"taskId\":\"jat-abc\",\"summary\":[\"Fixed the bug\"]}'"
 }
@@ -78,173 +67,6 @@ fi
 
 # Define validation functions for each signal type
 # Since we can't use ajv or jsonschema in bash, we implement basic validation with jq
-
-validate_tasks() {
-    local payload="$1"
-    local errors=()
-
-    # Must be an array
-    if ! echo "$payload" | jq -e 'type == "array"' >/dev/null 2>&1; then
-        echo "Error: tasks signal must be a JSON array" >&2
-        return 1
-    fi
-
-    # Check array is not empty
-    local count
-    count=$(echo "$payload" | jq 'length')
-    if [[ "$count" -eq 0 ]]; then
-        echo "Error: tasks array cannot be empty" >&2
-        return 1
-    fi
-
-    if [[ "$count" -gt 10 ]]; then
-        echo "Error: tasks array cannot have more than 10 items" >&2
-        return 1
-    fi
-
-    # Validate each task
-    local i=0
-    while [[ $i -lt $count ]]; do
-        local task
-        task=$(echo "$payload" | jq ".[$i]")
-
-        # Must have title
-        if ! echo "$task" | jq -e 'has("title")' >/dev/null 2>&1; then
-            echo "Error: task[$i] missing required field 'title'" >&2
-            return 1
-        fi
-
-        local title
-        title=$(echo "$task" | jq -r '.title // ""')
-        if [[ -z "$title" ]]; then
-            echo "Error: task[$i].title cannot be empty" >&2
-            return 1
-        fi
-
-        if [[ ${#title} -gt 200 ]]; then
-            echo "Error: task[$i].title exceeds 200 character limit" >&2
-            return 1
-        fi
-
-        # Validate type if present
-        local task_type
-        task_type=$(echo "$task" | jq -r '.type // ""')
-        if [[ -n "$task_type" ]]; then
-            case "$task_type" in
-                bug|feature|task|chore|epic) ;;
-                *)
-                    echo "Error: task[$i].type must be one of: bug, feature, task, chore, epic" >&2
-                    return 1
-                    ;;
-            esac
-        fi
-
-        # Validate priority if present
-        local priority
-        priority=$(echo "$task" | jq '.priority // null')
-        if [[ "$priority" != "null" ]]; then
-            if ! echo "$priority" | grep -qE '^[0-4]$'; then
-                echo "Error: task[$i].priority must be 0-4" >&2
-                return 1
-            fi
-        fi
-
-        # Validate description length if present
-        local desc_len
-        desc_len=$(echo "$task" | jq -r '.description // "" | length')
-        if [[ "$desc_len" -gt 2000 ]]; then
-            echo "Error: task[$i].description exceeds 2000 character limit" >&2
-            return 1
-        fi
-
-        # Validate project format if present
-        local project
-        project=$(echo "$task" | jq -r '.project // ""')
-        if [[ -n "$project" ]] && ! echo "$project" | grep -qE '^[a-z0-9_-]+$'; then
-            echo "Error: task[$i].project must match pattern ^[a-z0-9_-]+$" >&2
-            return 1
-        fi
-
-        # Validate depends_on is array if present
-        if echo "$task" | jq -e 'has("depends_on")' >/dev/null 2>&1; then
-            if ! echo "$task" | jq -e '.depends_on | type == "array"' >/dev/null 2>&1; then
-                echo "Error: task[$i].depends_on must be an array" >&2
-                return 1
-            fi
-        fi
-
-        # Check for unknown fields (strict validation)
-        local unknown
-        unknown=$(echo "$task" | jq -r 'keys - ["id","type","title","description","priority","reason","project","labels","depends_on"] | .[0] // ""')
-        if [[ -n "$unknown" ]]; then
-            echo "Error: task[$i] has unknown field '$unknown'" >&2
-            return 1
-        fi
-
-        i=$((i + 1))
-    done
-
-    return 0
-}
-
-validate_action() {
-    local payload="$1"
-
-    # Must be an object
-    if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
-        echo "Error: action signal must be a JSON object" >&2
-        return 1
-    fi
-
-    # Must have title
-    if ! echo "$payload" | jq -e 'has("title")' >/dev/null 2>&1; then
-        echo "Error: action missing required field 'title'" >&2
-        return 1
-    fi
-
-    local title
-    title=$(echo "$payload" | jq -r '.title // ""')
-    if [[ -z "$title" ]]; then
-        echo "Error: action.title cannot be empty" >&2
-        return 1
-    fi
-
-    if [[ ${#title} -gt 200 ]]; then
-        echo "Error: action.title exceeds 200 character limit" >&2
-        return 1
-    fi
-
-    # Validate description length if present
-    local desc_len
-    desc_len=$(echo "$payload" | jq -r '.description // "" | length')
-    if [[ "$desc_len" -gt 2000 ]]; then
-        echo "Error: action.description exceeds 2000 character limit" >&2
-        return 1
-    fi
-
-    # Validate items is array if present
-    if echo "$payload" | jq -e 'has("items")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.items | type == "array"' >/dev/null 2>&1; then
-            echo "Error: action.items must be an array" >&2
-            return 1
-        fi
-        # All items must be strings
-        if ! echo "$payload" | jq -e '.items | all(type == "string")' >/dev/null 2>&1; then
-            echo "Error: action.items must contain only strings" >&2
-            return 1
-        fi
-    fi
-
-    # Check for unknown fields
-    local unknown
-    unknown=$(echo "$payload" | jq -r 'keys - ["title","description","items"] | .[0] // ""')
-    if [[ -n "$unknown" ]]; then
-        echo "Error: action has unknown field '$unknown'" >&2
-        return 1
-    fi
-
-    return 0
-}
 
 validate_quality_signals() {
     local payload="$1"
@@ -887,217 +709,6 @@ validate_completing() {
     return 0
 }
 
-validate_completed() {
-    local payload="$1"
-
-    # Must be an object
-    if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
-        echo "Error: completed signal must be a JSON object" >&2
-        return 1
-    fi
-
-    # Required: taskId
-    if ! echo "$payload" | jq -e 'has("taskId")' >/dev/null 2>&1; then
-        echo "Error: completed signal missing required field 'taskId'" >&2
-        return 1
-    fi
-
-    local task_id
-    task_id=$(echo "$payload" | jq -r '.taskId // ""')
-    if [[ -z "$task_id" ]]; then
-        echo "Error: completed.taskId cannot be empty" >&2
-        return 1
-    fi
-
-    # Validate agentName if present (should be string)
-    if echo "$payload" | jq -e 'has("agentName")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.agentName | type == "string"' >/dev/null 2>&1; then
-            echo "Error: completed.agentName must be a string" >&2
-            return 1
-        fi
-    fi
-
-    # Validate summary is array of strings if present
-    if echo "$payload" | jq -e 'has("summary")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.summary | type == "array"' >/dev/null 2>&1; then
-            echo "Error: completed.summary must be an array" >&2
-            return 1
-        fi
-        if ! echo "$payload" | jq -e '.summary | all(type == "string")' >/dev/null 2>&1; then
-            echo "Error: completed.summary must contain only strings" >&2
-            return 1
-        fi
-    fi
-
-    # Validate quality if present
-    if echo "$payload" | jq -e 'has("quality")' >/dev/null 2>&1; then
-        local quality
-        quality=$(echo "$payload" | jq '.quality')
-        if ! echo "$quality" | jq -e 'type == "object"' >/dev/null 2>&1; then
-            echo "Error: completed.quality must be an object" >&2
-            return 1
-        fi
-        validate_quality_signals "$quality" "completed." || return 1
-    fi
-
-    # Validate humanActions if present
-    if echo "$payload" | jq -e 'has("humanActions")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.humanActions | type == "array"' >/dev/null 2>&1; then
-            echo "Error: completed.humanActions must be an array" >&2
-            return 1
-        fi
-        local count
-        count=$(echo "$payload" | jq '.humanActions | length')
-        local i=0
-        while [[ $i -lt $count ]]; do
-            local action
-            action=$(echo "$payload" | jq ".humanActions[$i]")
-
-            if ! echo "$action" | jq -e 'has("title")' >/dev/null 2>&1; then
-                echo "Error: completed.humanActions[$i] missing required field 'title'" >&2
-                return 1
-            fi
-
-            local title
-            title=$(echo "$action" | jq -r '.title // ""')
-            if [[ -z "$title" ]]; then
-                echo "Error: completed.humanActions[$i].title cannot be empty" >&2
-                return 1
-            fi
-
-            i=$((i + 1))
-        done
-    fi
-
-    # Validate suggestedTasks if present
-    if echo "$payload" | jq -e 'has("suggestedTasks")' >/dev/null 2>&1; then
-        local tasks
-        tasks=$(echo "$payload" | jq '.suggestedTasks')
-        if ! echo "$tasks" | jq -e 'type == "array"' >/dev/null 2>&1; then
-            echo "Error: completed.suggestedTasks must be an array" >&2
-            return 1
-        fi
-        local count
-        count=$(echo "$tasks" | jq 'length')
-        local i=0
-        while [[ $i -lt $count ]]; do
-            local task
-            task=$(echo "$tasks" | jq ".[$i]")
-
-            if ! echo "$task" | jq -e 'has("title")' >/dev/null 2>&1; then
-                echo "Error: completed.suggestedTasks[$i] missing required field 'title'" >&2
-                return 1
-            fi
-
-            local title
-            title=$(echo "$task" | jq -r '.title // ""')
-            if [[ -z "$title" ]]; then
-                echo "Error: completed.suggestedTasks[$i].title cannot be empty" >&2
-                return 1
-            fi
-
-            i=$((i + 1))
-        done
-    fi
-
-    # Validate crossAgentIntel if present
-    if echo "$payload" | jq -e 'has("crossAgentIntel")' >/dev/null 2>&1; then
-        local intel
-        intel=$(echo "$payload" | jq '.crossAgentIntel')
-        if ! echo "$intel" | jq -e 'type == "object"' >/dev/null 2>&1; then
-            echo "Error: completed.crossAgentIntel must be an object" >&2
-            return 1
-        fi
-        validate_cross_agent_intel "$intel" "completed." || return 1
-    fi
-
-    # Validate sessionStats if present (NEW: full validation)
-    if echo "$payload" | jq -e 'has("sessionStats")' >/dev/null 2>&1; then
-        local session_stats
-        session_stats=$(echo "$payload" | jq '.sessionStats')
-        if ! echo "$session_stats" | jq -e 'type == "object"' >/dev/null 2>&1; then
-            echo "Error: completed.sessionStats must be an object" >&2
-            return 1
-        fi
-
-        # Validate sessionStats.duration if present (non-negative integer)
-        local duration
-        duration=$(echo "$session_stats" | jq '.duration // null')
-        if [[ "$duration" != "null" ]]; then
-            if ! echo "$duration" | grep -qE '^[0-9]+$'; then
-                echo "Error: completed.sessionStats.duration must be a non-negative integer" >&2
-                return 1
-            fi
-        fi
-
-        # Validate sessionStats.tokensUsed if present (non-negative integer)
-        local tokens_used
-        tokens_used=$(echo "$session_stats" | jq '.tokensUsed // null')
-        if [[ "$tokens_used" != "null" ]]; then
-            if ! echo "$tokens_used" | grep -qE '^[0-9]+$'; then
-                echo "Error: completed.sessionStats.tokensUsed must be a non-negative integer" >&2
-                return 1
-            fi
-        fi
-
-        # Validate sessionStats.filesModified if present (non-negative integer)
-        local files_modified
-        files_modified=$(echo "$session_stats" | jq '.filesModified // null')
-        if [[ "$files_modified" != "null" ]]; then
-            if ! echo "$files_modified" | grep -qE '^[0-9]+$'; then
-                echo "Error: completed.sessionStats.filesModified must be a non-negative integer" >&2
-                return 1
-            fi
-        fi
-
-        # Validate sessionStats.linesChanged if present (non-negative integer)
-        local lines_changed
-        lines_changed=$(echo "$session_stats" | jq '.linesChanged // null')
-        if [[ "$lines_changed" != "null" ]]; then
-            if ! echo "$lines_changed" | grep -qE '^[0-9]+$'; then
-                echo "Error: completed.sessionStats.linesChanged must be a non-negative integer" >&2
-                return 1
-            fi
-        fi
-
-        # Validate sessionStats.commitsCreated if present (non-negative integer)
-        local commits_created
-        commits_created=$(echo "$session_stats" | jq '.commitsCreated // null')
-        if [[ "$commits_created" != "null" ]]; then
-            if ! echo "$commits_created" | grep -qE '^[0-9]+$'; then
-                echo "Error: completed.sessionStats.commitsCreated must be a non-negative integer" >&2
-                return 1
-            fi
-        fi
-
-        # Check for unknown fields in sessionStats
-        local unknown
-        unknown=$(echo "$session_stats" | jq -r 'keys - ["duration","tokensUsed","filesModified","linesChanged","commitsCreated"] | .[0] // ""')
-        if [[ -n "$unknown" ]]; then
-            echo "Error: completed.sessionStats has unknown field '$unknown'" >&2
-            return 1
-        fi
-    fi
-
-    # Validate finalCommit if present (should be string)
-    if echo "$payload" | jq -e 'has("finalCommit")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.finalCommit | type == "string"' >/dev/null 2>&1; then
-            echo "Error: completed.finalCommit must be a string" >&2
-            return 1
-        fi
-    fi
-
-    # Validate prLink if present (should be string)
-    if echo "$payload" | jq -e 'has("prLink")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.prLink | type == "string"' >/dev/null 2>&1; then
-            echo "Error: completed.prLink must be a string" >&2
-            return 1
-        fi
-    fi
-
-    return 0
-}
-
 validate_starting() {
     local payload="$1"
 
@@ -1498,9 +1109,38 @@ validate_complete() {
         validate_cross_agent_intel "$intel" "complete." || return 1
     fi
 
+    # Validate completionMode if present
+    local completion_mode
+    completion_mode=$(echo "$payload" | jq -r '.completionMode // ""')
+    if [[ -n "$completion_mode" ]]; then
+        case "$completion_mode" in
+            review_required|auto_proceed) ;;
+            *)
+                echo "Error: complete.completionMode must be one of: review_required, auto_proceed" >&2
+                return 1
+                ;;
+        esac
+    fi
+
+    # Validate nextTaskId if present (should be string)
+    if echo "$payload" | jq -e 'has("nextTaskId")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.nextTaskId | type == "string"' >/dev/null 2>&1; then
+            echo "Error: complete.nextTaskId must be a string" >&2
+            return 1
+        fi
+    fi
+
+    # Validate nextTaskTitle if present (should be string)
+    if echo "$payload" | jq -e 'has("nextTaskTitle")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.nextTaskTitle | type == "string"' >/dev/null 2>&1; then
+            echo "Error: complete.nextTaskTitle must be a string" >&2
+            return 1
+        fi
+    fi
+
     # Check for unknown fields
     local unknown
-    unknown=$(echo "$payload" | jq -r 'keys - ["taskId","agentName","summary","quality","humanActions","suggestedTasks","crossAgentIntel"] | .[0] // ""')
+    unknown=$(echo "$payload" | jq -r 'keys - ["taskId","agentName","completionMode","nextTaskId","nextTaskTitle","summary","quality","humanActions","suggestedTasks","crossAgentIntel"] | .[0] // ""')
     if [[ -n "$unknown" ]]; then
         echo "Error: complete has unknown field '$unknown'" >&2
         return 1
@@ -1511,17 +1151,9 @@ validate_complete() {
 
 # Run validation based on signal type
 case "$SIGNAL_TYPE" in
-    # Data signals
-    tasks)
-        validate_tasks "$PAYLOAD"
-        ;;
-    action)
-        validate_action "$PAYLOAD"
-        ;;
     complete)
         validate_complete "$PAYLOAD"
         ;;
-    # Rich state signals
     working)
         validate_working "$PAYLOAD"
         ;;
@@ -1537,9 +1169,6 @@ case "$SIGNAL_TYPE" in
     completing)
         validate_completing "$PAYLOAD"
         ;;
-    completed)
-        validate_completed "$PAYLOAD"
-        ;;
     starting)
         validate_starting "$PAYLOAD"
         ;;
@@ -1554,8 +1183,7 @@ case "$SIGNAL_TYPE" in
         ;;
     *)
         echo "Error: Unknown signal type '$SIGNAL_TYPE'" >&2
-        echo "Valid data types: tasks, action, complete" >&2
-        echo "Valid rich state types: working, review, needs_input, idle, completing, completed, starting, compacting, auto_proceed, question" >&2
+        echo "Valid types: complete, working, review, needs_input, idle, completing, starting, compacting, auto_proceed, question" >&2
         exit 2
         ;;
 esac

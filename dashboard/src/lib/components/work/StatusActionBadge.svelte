@@ -426,9 +426,14 @@
 
 	// Link current task to an epic
 	async function linkToEpic(epicId: string) {
-		if (disabled || isExecuting || !task || linkingEpicId) return;
+		console.log('[linkToEpic] Called with epicId:', epicId, 'task:', task, 'disabled:', disabled, 'isExecuting:', isExecuting, 'linkingEpicId:', linkingEpicId);
+		if (disabled || isExecuting || !task || linkingEpicId) {
+			console.log('[linkToEpic] Early return - disabled:', disabled, 'isExecuting:', isExecuting, 'task:', task, 'linkingEpicId:', linkingEpicId);
+			return;
+		}
 
 		linkingEpicId = epicId;
+		console.log('[linkToEpic] Making API call...');
 		try {
 			const response = await fetch(`/api/tasks/${task.id}/epic`, {
 				method: 'POST',
@@ -442,11 +447,14 @@
 			}
 
 			const data = await response.json();
+			console.log('[linkToEpic] API response:', data);
 
 			// Show toast notification based on result
 			if (data.alreadyLinked) {
+				console.log('[linkToEpic] Showing info toast - already linked');
 				infoToast(`Task already linked to epic`);
 			} else {
+				console.log('[linkToEpic] Showing success toast');
 				successToast(`Task ${task.id} linked to epic ${epicId}`);
 			}
 
@@ -859,11 +867,16 @@
 												<button
 													type="button"
 													onclick={() => {
+														console.log('[epic-button] Clicked epic:', epic.id, 'canLink:', canLink, 'task:', task, 'onViewEpic:', !!onViewEpic);
 														if (canLink) {
+															console.log('[epic-button] Calling linkToEpic');
 															linkToEpic(epic.id);
 														} else if (onViewEpic) {
+															console.log('[epic-button] Calling onViewEpic (no task or task is epic)');
 															onViewEpic(epic.id);
 															isOpen = false;
+														} else {
+															console.log('[epic-button] No action - canLink false and no onViewEpic');
 														}
 													}}
 													class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 {canInteract ? 'hover:text-base-content' : 'opacity-60 cursor-default'} {index === selectedEpicIndex && canInteract ? 'command-item-selected' : 'command-item-default'}"

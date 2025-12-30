@@ -5,7 +5,7 @@
   "definitions": {
     "signalState": {
       "type": "string",
-      "enum": ["working", "review", "idle", "auto_proceed", "needs_input", "completed", "starting", "compacting", "completing"],
+      "enum": ["working", "review", "idle", "auto_proceed", "needs_input", "starting", "compacting", "completing"],
       "description": "Valid state signal values"
     },
     "estimatedScope": {
@@ -163,21 +163,9 @@
         }
       }
     },
-    "tasksSignal": {
-      "type": "array",
-      "description": "Array of suggested tasks",
-      "items": {
-        "$ref": "#/definitions/suggestedTask"
-      },
-      "minItems": 1,
-      "maxItems": 10
-    },
-    "actionSignal": {
-      "$ref": "#/definitions/humanAction"
-    },
     "completeSignal": {
       "type": "object",
-      "description": "Full completion bundle from agent",
+      "description": "Full completion bundle from agent. Used by jat-signal complete command.",
       "additionalProperties": false,
       "properties": {
         "taskId": {
@@ -187,6 +175,19 @@
         "agentName": {
           "type": "string",
           "description": "Agent name that completed the task"
+        },
+        "completionMode": {
+          "type": "string",
+          "enum": ["review_required", "auto_proceed"],
+          "description": "How completion should be handled: review_required (wait for human), auto_proceed (pick next task)"
+        },
+        "nextTaskId": {
+          "type": "string",
+          "description": "Next task to pick up (only for auto_proceed mode)"
+        },
+        "nextTaskTitle": {
+          "type": "string",
+          "description": "Title of next task (only for auto_proceed mode)"
         },
         "summary": {
           "type": "array",
@@ -668,54 +669,6 @@
           "type": "string",
           "format": "date-time",
           "description": "ISO timestamp when current step started"
-        }
-      }
-    },
-    "completedSignal": {
-      "type": "object",
-      "description": "Enhanced completed signal with session stats",
-      "required": ["taskId", "agentName", "summary", "quality", "suggestedTasks", "sessionStats", "finalCommit"],
-      "additionalProperties": false,
-      "properties": {
-        "taskId": {
-          "type": "string",
-          "description": "Task ID that was completed"
-        },
-        "agentName": {
-          "type": "string",
-          "description": "Agent name that completed the task"
-        },
-        "summary": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Array of accomplishment bullet points"
-        },
-        "quality": {
-          "$ref": "#/definitions/qualitySignals"
-        },
-        "humanActions": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/humanAction" },
-          "description": "Human actions required"
-        },
-        "suggestedTasks": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/suggestedTask" },
-          "description": "Follow-up tasks discovered during work"
-        },
-        "crossAgentIntel": {
-          "$ref": "#/definitions/crossAgentIntel"
-        },
-        "sessionStats": {
-          "$ref": "#/definitions/sessionStats"
-        },
-        "finalCommit": {
-          "type": "string",
-          "description": "Git SHA of final state"
-        },
-        "prLink": {
-          "type": "string",
-          "description": "Pull request link if one was created"
         }
       }
     },

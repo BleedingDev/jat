@@ -243,17 +243,6 @@ case "$SIGNAL_TYPE" in
         echo "[JAT-SIGNAL:completing] $SIGNAL_DATA"
         ;;
 
-    completed|done)
-        require_json "completed" "$SIGNAL_DATA"
-        # Compact JSON to single line for hook parsing
-        SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
-        validate_payload "completed" "$SIGNAL_DATA"
-        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-        OUTCOME=$(echo "$SIGNAL_DATA" | jq -r '.outcome // ""')
-        echo "Signal: completed (task: ${TASK_ID}, outcome: ${OUTCOME})"
-        echo "[JAT-SIGNAL:completed] $SIGNAL_DATA"
-        ;;
-
     starting)
         require_json "starting" "$SIGNAL_DATA"
         # Compact JSON to single line for hook parsing
@@ -312,27 +301,6 @@ case "$SIGNAL_TYPE" in
         [[ ${#QUESTION_TEXT} -gt 50 ]] && QUESTION_SHORT="${QUESTION_SHORT}..."
         echo "Signal: question (type: ${QUESTION_TYPE}, options: ${OPTIONS_COUNT})"
         echo "[JAT-SIGNAL:question] $SIGNAL_DATA"
-        ;;
-
-    # Data signals
-    tasks)
-        require_json "tasks" "$SIGNAL_DATA"
-        # Compact JSON to single line for hook parsing
-        SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
-        validate_payload "tasks" "$SIGNAL_DATA"
-        TASK_COUNT=$(echo "$SIGNAL_DATA" | jq 'length')
-        echo "Signal: tasks (${TASK_COUNT} suggested)"
-        echo "[JAT-SIGNAL:tasks] $SIGNAL_DATA"
-        ;;
-
-    action)
-        require_json "action" "$SIGNAL_DATA"
-        # Compact JSON to single line for hook parsing
-        SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
-        validate_payload "action" "$SIGNAL_DATA"
-        ACTION_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.title // "untitled"')
-        echo "Signal: action (${ACTION_TITLE})"
-        echo "[JAT-SIGNAL:action] $SIGNAL_DATA"
         ;;
 
     complete)

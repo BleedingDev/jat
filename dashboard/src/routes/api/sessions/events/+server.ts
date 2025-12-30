@@ -180,7 +180,7 @@ const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let signalWatcher: FSWatcher | null = null;
 
 // Track signal file states for change detection (keyed by sessionName)
-const signalFileStates = new Map<string, { state: string | null; tasksHash: string | null; actionHash: string | null; completeHash: string | null }>();
+const signalFileStates = new Map<string, { state: string | null; completeHash: string | null }>();
 
 // Debounce timers for signal file changes (prevents multiple events for same write)
 const signalDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -269,9 +269,12 @@ function readSignalState(sessionName: string): string | null {
 }
 
 /**
- * Read suggested tasks from signal file
+ * Read suggested tasks from completion bundle signal file
  * Returns array of SuggestedTask or null if not available
  * Uses longer TTL since suggested tasks should persist until user acts
+ *
+ * Note: Suggested tasks are only emitted as part of 'complete' signals.
+ * The standalone 'tasks' signal type was removed as it was never used.
  */
 function readSignalSuggestedTasks(sessionName: string): SuggestedTask[] | null {
 	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
@@ -291,22 +294,7 @@ function readSignalSuggestedTasks(sessionName: string): SuggestedTask[] | null {
 		const content = readFileSync(signalFile, 'utf-8');
 		const signal = JSON.parse(content);
 
-		// Handle tasks signal (type: "tasks", data: [...])
-		if (signal.type === 'tasks' && Array.isArray(signal.data)) {
-			return signal.data.map((t: Partial<SuggestedTask>) => ({
-				id: t.id,
-				type: t.type || 'task',
-				title: t.title || '',
-				description: t.description || '',
-				priority: typeof t.priority === 'number' ? t.priority : 2,
-				reason: t.reason,
-				project: t.project,
-				labels: t.labels,
-				depends_on: t.depends_on
-			}));
-		}
-
-		// Handle complete signal with embedded suggestedTasks
+		// Suggested tasks come from complete signal with embedded suggestedTasks
 		if (signal.type === 'complete' && signal.data?.suggestedTasks) {
 			return signal.data.suggestedTasks.map((t: Partial<SuggestedTask>) => ({
 				id: t.id,
@@ -319,43 +307,6 @@ function readSignalSuggestedTasks(sessionName: string): SuggestedTask[] | null {
 				labels: t.labels,
 				depends_on: t.depends_on
 			}));
-		}
-
-		return null;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Read human action from signal file
- * Returns action data if type is "action", null otherwise
- */
-function readSignalAction(sessionName: string): HumanAction | null {
-	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
-
-	try {
-		if (!existsSync(signalFile)) {
-			return null;
-		}
-
-		// Check file age - action signals use short TTL
-		const stats = statSync(signalFile);
-		const ageMs = Date.now() - stats.mtimeMs;
-		if (ageMs > SIGNAL_TTL.TRANSIENT_MS) {
-			return null;
-		}
-
-		const content = readFileSync(signalFile, 'utf-8');
-		const signal = JSON.parse(content);
-
-		// Handle action signals
-		if (signal.type === 'action' && signal.data?.action) {
-			return {
-				action: signal.data.action,
-				message: signal.data.message,
-				timestamp: signal.timestamp
-			};
 		}
 
 		return null;
@@ -462,8 +413,8 @@ function processSignalFileChange(sessionName: string): void {
 	const signal = readSignalFile(sessionName);
 	if (!signal) return;
 
-	const prevFileState = signalFileStates.get(sessionName) || { state: null, tasksHash: null, actionHash: null, completeHash: null };
-	const currentFileState = { state: prevFileState.state, tasksHash: prevFileState.tasksHash, actionHash: prevFileState.actionHash, completeHash: prevFileState.completeHash };
+	const prevFileState = signalFileStates.get(sessionName) || { state: null, completeHash: null };
+	const currentFileState = { state: prevFileState.state, completeHash: prevFileState.completeHash };
 
 	// Handle state signals (working, review, needs_input, etc.)
 	// Include the full signal data payload for rich signal card rendering
@@ -532,36 +483,6 @@ function processSignalFileChange(sessionName: string): void {
 					});
 				}
 			}
-		}
-	}
-
-	// Handle tasks signals (legacy standalone tasks signal)
-	if (signal.type === 'tasks') {
-		const tasks = readSignalSuggestedTasks(sessionName);
-		const tasksHash = tasks ? simpleHash(JSON.stringify(tasks)) : null;
-		if (tasksHash !== prevFileState.tasksHash) {
-			currentFileState.tasksHash = tasksHash;
-			broadcast('session-signal', {
-				sessionName,
-				signalType: 'tasks',
-				suggestedTasks: tasks || []
-			});
-			console.log(`[SSE Signal] Tasks update for ${sessionName}: ${tasks?.length || 0} tasks`);
-		}
-	}
-
-	// Handle action signals (legacy standalone action signal)
-	if (signal.type === 'action') {
-		const action = readSignalAction(sessionName);
-		const actionHash = action ? simpleHash(JSON.stringify(action)) : null;
-		if (actionHash !== prevFileState.actionHash) {
-			currentFileState.actionHash = actionHash;
-			broadcast('session-signal', {
-				sessionName,
-				signalType: 'action',
-				action: action
-			});
-			console.log(`[SSE Signal] Action for ${sessionName}: ${action?.action}`);
 		}
 	}
 

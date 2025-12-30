@@ -66,12 +66,12 @@ export interface SuggestedTask {
 	depends_on?: string[];
 }
 
-// Human action interface (from jat-signal action type)
+// Human action interface (from jat-signal complete payload's humanActions field)
 export interface HumanAction {
 	title: string;
 	description?: string;
 	items?: string[];
-	// Legacy fields still supported in signal events
+	// Alternative field names for flexibility
 	action?: string;
 	message?: string;
 	timestamp?: string;
@@ -481,37 +481,17 @@ function handleSessionQuestion(_data: SessionEvent): void {
 }
 
 /**
- * Handle session-signal event: update suggested tasks or actions from jat-signal
- * These are real-time signals from agents via the signal system
+ * Handle session-signal event: reserved for future signal types
  *
- * Signal types:
- * - 'tasks': Suggested task list from agent
- * - 'action': Human action message from agent
+ * Note: The 'tasks' and 'action' signal types were removed as they were never
+ * actually emitted. Suggested tasks and human actions are now only delivered
+ * via the 'complete' signal's embedded suggestedTasks and humanActions fields,
+ * which are handled by handleSessionComplete().
  *
- * PERFORMANCE: Uses in-place mutation for fine-grained reactivity.
+ * This handler remains as a placeholder for potential future signal types.
  */
-function handleSessionSignal(data: SessionEvent): void {
-	const { sessionName, signalType, suggestedTasks, action } = data;
-	if (!sessionName) return;
-
-	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
-	if (sessionIndex === -1) {
-		return;
-	}
-
-	// Handle tasks signal type
-	if (signalType === 'tasks') {
-		// PERFORMANCE: Mutate in-place for fine-grained reactivity (Svelte 5 $state)
-		workSessionsState.sessions[sessionIndex]._signalSuggestedTasks = suggestedTasks || [];
-		workSessionsState.sessions[sessionIndex]._signalSuggestedTasksTimestamp = data.timestamp;
-	}
-
-	// Handle action signal type
-	if (signalType === 'action' && action) {
-		// Store the action for display in SessionCard
-		workSessionsState.sessions[sessionIndex]._signalAction = action;
-		workSessionsState.sessions[sessionIndex]._signalActionTimestamp = data.timestamp;
-	}
+function handleSessionSignal(_data: SessionEvent): void {
+	// Currently unused - all signals come via session-complete or session-state
 }
 
 /**
