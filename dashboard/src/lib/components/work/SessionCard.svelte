@@ -341,6 +341,14 @@
 		lastCompletedTask?.id ? getProjectFromTaskId(lastCompletedTask.id) : ''
 	);
 
+	// Task for StatusActionBadge epic linking - use current task OR last completed task
+	// This allows linking completed tasks to epics (e.g., if user forgot before completing)
+	const taskForEpicLinking = $derived(
+		task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } :
+		lastCompletedTask ? { id: lastCompletedTask.id, issue_type: lastCompletedTask.issue_type, priority: lastCompletedTask.priority } :
+		null
+	);
+
 	// Review status for auto-complete logic - computed from task and review rules
 	const reviewStatus = $derived.by(() => {
 		if (!task) return null;
@@ -4371,7 +4379,7 @@
 						showCommands={true}
 						showEpic={true}
 						onCommand={sendWorkflowCommand}
-						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+						task={taskForEpicLinking}
 						project={defaultProject || null}
 						onViewEpic={(epicId) => onTaskClick?.(epicId)}
 					/>
@@ -5011,7 +5019,7 @@
 						showCommands={true}
 						showEpic={true}
 						onCommand={sendWorkflowCommand}
-						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+						task={taskForEpicLinking}
 						project={defaultProject || null}
 						onViewEpic={(epicId) => onTaskClick?.(epicId)}
 					/>
@@ -6724,7 +6732,7 @@
 									showCommands={true}
 									showEpic={true}
 									onCommand={sendWorkflowCommand}
-									task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+									task={taskForEpicLinking}
 									project={defaultProject || null}
 									onViewEpic={(epicId) => onTaskClick?.(epicId)}
 								/>
@@ -6745,7 +6753,7 @@
 								showCommands={true}
 								showEpic={true}
 								onCommand={sendWorkflowCommand}
-								task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+								task={taskForEpicLinking}
 								project={defaultProject || null}
 								onViewEpic={(epicId) => onTaskClick?.(epicId)}
 							/>
