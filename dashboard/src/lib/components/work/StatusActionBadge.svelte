@@ -26,6 +26,7 @@
 		playTaskStartSound
 	} from '$lib/utils/soundEffects';
 	import { slide } from 'svelte/transition';
+	import { successToast, infoToast } from '$lib/stores/toasts.svelte';
 
 	interface SlashCommand {
 		name: string;
@@ -438,6 +439,15 @@
 			if (!response.ok) {
 				const data = await response.json();
 				throw new Error(data.error || 'Failed to link task to epic');
+			}
+
+			const data = await response.json();
+
+			// Show toast notification based on result
+			if (data.alreadyLinked) {
+				infoToast(`Task already linked to epic`);
+			} else {
+				successToast(`Task ${task.id} linked to epic ${epicId}`);
 			}
 
 			// Call the callback if provided
