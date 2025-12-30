@@ -89,6 +89,8 @@
 		setCtrlCIntercept,
 	} from "$lib/stores/preferences.svelte";
 	import { successToast } from "$lib/stores/toasts.svelte";
+	import { getReviewRules } from "$lib/stores/reviewRules.svelte";
+	import { computeReviewStatus } from "$lib/utils/reviewStatusUtils";
 	import { availableProjects as availableProjectsStore } from "$lib/stores/drawerStore";
 	import {
 		completeTask as epicCompleteTask,
@@ -335,6 +337,13 @@
 
 	// Default project derived from current task ID (for suggested tasks pre-selection)
 	const defaultProject = $derived(task?.id ? getProjectFromTaskId(task.id) : '');
+
+	// Review status for auto-complete logic - computed from task and review rules
+	const reviewStatus = $derived.by(() => {
+		if (!task) return null;
+		const rules = getReviewRules();
+		return computeReviewStatus(task, rules);
+	});
 
 	// Rich signal type detection - determine which signal card to render
 	// These derive typed signals from the generic richSignalPayload prop
