@@ -712,18 +712,18 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 	],
 	'ready-for-review': [
 		{
-			id: 'complete-next',
-			label: 'Complete & Next',
-			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			id: 'complete',
+			label: 'Complete',
+			icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'success',
-			description: 'Complete task and start next'
+			description: 'Complete task and review completion block'
 		},
 		{
-			id: 'complete-done',
-			label: 'Complete & Done',
-			icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'info',
-			description: 'Complete task and end session'
+			id: 'complete-kill',
+			label: 'Complete & Kill',
+			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'warning',
+			description: 'Complete task and self-destruct session'
 		},
 		{
 			id: 'attach',

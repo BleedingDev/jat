@@ -147,8 +147,7 @@ export async function PUT({ params, request }) {
 
 /**
  * Update task fields (partial updates supported)
- * Supports updating: title, description, priority, status, assignee, dependencies
- * Note: Labels are NOT supported by bd update command (only settable during creation)
+ * Supports updating: title, description, priority, status, assignee, dependencies, labels
  * @type {import('./$types').RequestHandler}
  */
 export async function PATCH({ params, request }) {
@@ -260,10 +259,18 @@ export async function PATCH({ params, request }) {
 			args.push(`--notes "${sanitizedNotes.replace(/"/g, '\\"')}"`);
 		}
 
-		// Note: Labels are NOT supported by bd update command
-		// Labels can only be set during task creation (bd create --labels)
-		// To update labels, you would need to use a different bd command (if available)
-		// For now, we skip labels updates in PATCH requests
+		// Update labels using --set-labels (replaces all existing labels)
+		if (updates.labels !== undefined) {
+			if (Array.isArray(updates.labels) && updates.labels.length > 0) {
+				// Join labels and quote properly for shell
+				const labelsArg = updates.labels.map((/** @type {string} */ l) => l.trim()).filter(Boolean).join(',');
+				args.push(`--set-labels "${labelsArg.replace(/"/g, '\\"')}"`);
+			} else if (typeof updates.labels === 'string' && updates.labels.trim()) {
+				// Support string format too (comma-separated)
+				args.push(`--set-labels "${updates.labels.replace(/"/g, '\\"')}"`);
+			}
+			// If empty array or empty string, we could clear labels but bd may not support that
+		}
 
 		// Execute bd update command (only if we have args)
 		if (args.length > 0) {

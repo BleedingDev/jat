@@ -28,6 +28,9 @@
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import EventStack from '$lib/components/work/EventStack.svelte';
+	import type { SuggestedTaskWithState } from '$lib/types/signals';
+	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
+	import { availableProjects as availableProjectsStore } from '$lib/stores/drawerStore';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -259,6 +262,18 @@
 	let signalsExpanded = $state(true);  // Expanded by default since it's the primary view
 	let signalsStats = $state<TaskSignalsResponse['stats'] | null>(null);
 	let resumingSessionId = $state<string | null>(null);  // Track which session is being resumed
+
+	// Available projects for suggested task creation
+	let availableProjects = $state<string[]>([]);
+	$effect(() => {
+		const unsubscribe = availableProjectsStore.subscribe((projects) => {
+			availableProjects = projects;
+		});
+		return unsubscribe;
+	});
+
+	// Derived: Default project from current task ID
+	const defaultProject = $derived(task?.id ? getProjectFromTaskId(task.id) || '' : '');
 
 	// Get unique sessions from signals (for Resume button)
 	// A task may have multiple sessions if different agents worked on it
@@ -1251,6 +1266,136 @@
 	}
 
 	/**
+	 * Create suggested tasks from EventStack timeline events
+	 * Returns results for feedback UI in SuggestedTasksSection
+	 */
+	async function createSuggestedTasks(
+		selectedTasks: SuggestedTaskWithState[]
+	): Promise<{ success: any[]; failed: any[] }> {
+		if (selectedTasks.length === 0) {
+			return { success: [], failed: [] };
+		}
+
+		// Map tasks to the bulk API format
+		const tasksToCreate = selectedTasks.map((t) => ({
+			type: t.edits?.type || t.type || 'task',
+			title: t.edits?.title || t.title,
+			description: t.edits?.description || t.description || '',
+			priority: t.edits?.priority ?? t.priority ?? 2,
+			project: t.edits?.project || t.project || defaultProject || undefined,
+			labels: t.edits?.labels || t.labels || undefined,
+			depends_on: t.edits?.depends_on || t.depends_on || undefined,
+		}));
+
+		try {
+			const response = await fetch('/api/tasks/bulk', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tasks: tasksToCreate }),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to create tasks');
+			}
+
+			const data = await response.json();
+
+			// Format results
+			const results = {
+				success: data.results?.filter((r: any) => r.success) || [],
+				failed: data.results?.filter((r: any) => !r.success) || [],
+			};
+
+			// Show toast feedback
+			if (results.success.length > 0) {
+				showToast('success', `✓ Created ${results.success.length} task${results.success.length > 1 ? 's' : ''}`);
+				// Broadcast task event to refresh task lists
+				broadcastTaskEvent({ type: 'tasks-created', taskIds: results.success.map((r: any) => r.taskId) });
+			}
+			if (results.failed.length > 0) {
+				showToast('error', `✗ Failed to create ${results.failed.length} task${results.failed.length > 1 ? 's' : ''}`);
+			}
+
+			return results;
+		} catch (error: any) {
+			console.error('[TaskDetailDrawer] Failed to create tasks:', error);
+			showToast('error', `✗ ${error.message}`);
+			return {
+				success: [],
+				failed: selectedTasks.map((t) => ({ title: t.title, error: error.message })),
+			};
+		}
+	}
+
+	/**
+	 * Create suggested tasks AND spawn agent sessions for each
+	 * Returns results for feedback UI in SuggestedTasksSection
+	 */
+	async function createAndStartSuggestedTasks(
+		selectedTasks: SuggestedTaskWithState[]
+	): Promise<{ success: any[]; failed: any[] }> {
+		// First, create the tasks
+		const createResult = await createSuggestedTasks(selectedTasks);
+
+		// If no tasks were successfully created, return early
+		if (createResult.success.length === 0) {
+			return createResult;
+		}
+
+		// Spawn agents for each successfully created task (with 2s stagger)
+		const spawnResults: { success: any[]; failed: any[] } = {
+			success: [],
+			failed: [...createResult.failed],
+		};
+
+		for (let i = 0; i < createResult.success.length; i++) {
+			const createdTask = createResult.success[i];
+			if (!createdTask.taskId) {
+				spawnResults.success.push(createdTask); // Still count as success even without spawn
+				continue;
+			}
+
+			try {
+				// Add stagger between spawns (except first)
+				if (i > 0) {
+					await new Promise((resolve) => setTimeout(resolve, 2000));
+				}
+
+				const spawnResponse = await fetch('/api/work/spawn', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ taskId: createdTask.taskId }),
+				});
+
+				const spawnData = await spawnResponse.json();
+
+				if (spawnResponse.ok && spawnData.agentName) {
+					spawnResults.success.push({
+						...createdTask,
+						agentName: spawnData.agentName,
+						spawned: true,
+					});
+					console.log(`[TaskDetailDrawer] Spawned agent ${spawnData.agentName} for task ${createdTask.taskId}`);
+				} else {
+					spawnResults.success.push({
+						...createdTask,
+						spawnError: spawnData.message || 'Spawn failed',
+					});
+				}
+			} catch (error: any) {
+				console.error(`[TaskDetailDrawer] Failed to spawn agent for ${createdTask.taskId}:`, error);
+				spawnResults.success.push({
+					...createdTask,
+					spawnError: error.message,
+				});
+			}
+		}
+
+		return spawnResults;
+	}
+
+	/**
 	 * Send a message to the agent working on this task
 	 */
 	async function handleSendMessage() {
@@ -2070,6 +2215,40 @@
 											git_sha: s.git_sha
 										}))}
 										onTaskClick={(id) => { taskId = id; }}
+										onCreateTasks={createSuggestedTasks}
+										onCreateAndStartTasks={createAndStartSuggestedTasks}
+										{availableProjects}
+										{defaultProject}
+										onApplyRename={async (tid, newTitle) => {
+											try {
+												const response = await fetch(`/api/tasks/${encodeURIComponent(tid)}`, {
+													method: 'PATCH',
+													headers: { 'Content-Type': 'application/json' },
+													body: JSON.stringify({ title: newTitle })
+												});
+												if (response.ok) {
+													// Refetch task to update drawer
+													await fetchTask();
+												}
+											} catch (e) {
+												console.error('[TaskDetailDrawer] Failed to apply rename:', e);
+											}
+										}}
+										onApplyLabels={async (tid, labels) => {
+											try {
+												const response = await fetch(`/api/tasks/${encodeURIComponent(tid)}`, {
+													method: 'PATCH',
+													headers: { 'Content-Type': 'application/json' },
+													body: JSON.stringify({ labels })
+												});
+												if (response.ok) {
+													// Refetch task to update drawer
+													await fetchTask();
+												}
+											} catch (e) {
+												console.error('[TaskDetailDrawer] Failed to apply labels:', e);
+											}
+										}}
 									/>
 								{:else}
 									<!-- Collapsed view - show just the latest signal -->

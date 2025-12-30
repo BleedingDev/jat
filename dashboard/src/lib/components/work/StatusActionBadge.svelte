@@ -84,6 +84,8 @@
 		task?: TaskInfo | null;
 		/** Whether to show add to epic section in dropdown */
 		showEpic?: boolean;
+		/** Project name for fetching epics when no task is selected */
+		project?: string | null;
 		/** Callback when task is linked to an epic */
 		onLinkToEpic?: (epicId: string) => Promise<void> | void;
 		class?: string;
@@ -107,6 +109,7 @@
 		onCommand,
 		task = null,
 		showEpic = false,
+		project = null,
 		onLinkToEpic,
 		class: className = ''
 	}: Props = $props();
@@ -254,9 +257,10 @@
 		}
 	});
 
-	// Fetch epics when dropdown opens (if showEpic is enabled and we have a task)
+	// Fetch epics when dropdown opens (if showEpic is enabled and we have a project source)
 	$effect(() => {
-		if (isOpen && showEpic && task && epics.length === 0 && !epicsLoading) {
+		const hasProjectSource = task || project;
+		if (isOpen && showEpic && hasProjectSource && epics.length === 0 && !epicsLoading) {
 			fetchEpics();
 		}
 	});
@@ -346,14 +350,14 @@
 
 	// Fetch available epics for the current project
 	async function fetchEpics() {
-		if (!task) return;
+		// Determine project: from task ID or from project prop
+		const projectName = task?.id?.split('-')[0] || project;
+		if (!projectName) return;
 
 		epicsLoading = true;
 		epicsError = null;
 		try {
-			// Extract project from task ID (e.g., "jat-abc" -> "jat")
-			const project = task.id.split('-')[0];
-			const response = await fetch(`/api/epics?project=${project}`);
+			const response = await fetch(`/api/epics?project=${projectName}`);
 			if (!response.ok) throw new Error('Failed to fetch epics');
 			const data = await response.json();
 			epics = data.epics || [];
@@ -728,7 +732,7 @@
 			</ul>
 
 			<!-- Epic section (collapsible) - Add task to epic -->
-			{#if showEpic && task && task.issue_type !== 'epic'}
+			{#if showEpic}
 				<div
 					class="border-t commands-divider"
 				>
@@ -763,156 +767,167 @@
 							class="commands-panel"
 							transition:slide={{ duration: 150 }}
 						>
-							<!-- Search input (show when there are many epics) -->
-							{#if epics.length > 3}
-								<div class="px-2 py-1.5 border-b commands-search-border">
-									<div class="relative flex items-center gap-1.5">
-										<svg
-											class="w-3 h-3 flex-shrink-0 commands-search-icon"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke="currentColor"
-											stroke-width="2"
-										>
-											<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-										</svg>
-										<input
-											bind:this={epicSearchInput}
-											bind:value={epicSearchQuery}
-											onkeydown={handleEpicKeyDown}
-											type="text"
-											placeholder="Filter epics..."
-											class="w-full bg-transparent text-[10px] font-mono focus:outline-none commands-search-input"
-											autocomplete="off"
-										/>
-										{#if epicSearchQuery}
+							<!-- Handle epic-type-task case -->
+							{#if task?.issue_type === 'epic'}
+								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									This task is already an epic
+								</div>
+							<!-- Show epic list (with or without a task) -->
+							{:else}
+								{@const canLink = task && task.issue_type !== 'epic'}
+								<!-- Search input (show when there are many epics) -->
+								{#if epics.length > 3}
+									<div class="px-2 py-1.5 border-b commands-search-border">
+										<div class="relative flex items-center gap-1.5">
+											<svg
+												class="w-3 h-3 flex-shrink-0 commands-search-icon"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+												stroke-width="2"
+											>
+												<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+											</svg>
+											<input
+												bind:this={epicSearchInput}
+												bind:value={epicSearchQuery}
+												onkeydown={handleEpicKeyDown}
+												type="text"
+												placeholder="Filter epics..."
+												class="w-full bg-transparent text-[10px] font-mono focus:outline-none commands-search-input"
+												autocomplete="off"
+											/>
+											{#if epicSearchQuery}
+												<button
+													type="button"
+													onclick={() => { epicSearchQuery = ''; epicSearchInput?.focus(); }}
+													class="text-white/40 hover:text-white/70 transition-colors"
+												>
+													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+													</svg>
+												</button>
+											{/if}
+										</div>
+									</div>
+								{/if}
+
+								{#if epicsLoading}
+									<div class="px-3 py-3 text-center text-[10px] text-white/50">
+										<span class="loading loading-spinner loading-xs"></span>
+										<span class="ml-1">Loading epics...</span>
+									</div>
+								{:else if epicsError}
+									<div class="px-3 py-2 text-center text-[10px] text-error">
+										<span>⚠ {epicsError}</span>
+										<button class="btn btn-xs btn-ghost ml-1" onclick={fetchEpics}>Retry</button>
+									</div>
+								{:else if epics.length === 0}
+									<div class="px-3 py-3 text-center text-[10px] text-white/50">
+										No open epics in this project
+									</div>
+								{:else if filteredEpics.length === 0}
+									<div class="px-3 py-3 text-center text-[10px] text-white/50">
+										No epics match "{epicSearchQuery}"
+									</div>
+								{:else}
+									<ul class="py-0.5 max-h-[180px] overflow-y-auto">
+										{#each filteredEpics as epic, index (epic.id)}
+											<li>
+												<button
+													type="button"
+													onclick={() => canLink && linkToEpic(epic.id)}
+													class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 {canLink ? 'hover:text-base-content' : 'opacity-60 cursor-default'} {index === selectedEpicIndex && canLink ? 'command-item-selected' : 'command-item-default'}"
+													disabled={disabled || linkingEpicId !== null || !canLink}
+													onmouseenter={() => { if (canLink) selectedEpicIndex = index; }}
+												>
+													{#if linkingEpicId === epic.id}
+														<span class="loading loading-spinner loading-xs flex-shrink-0"></span>
+													{:else}
+														<span class="text-[10px] flex-shrink-0">🏔️</span>
+													{/if}
+													<div class="flex flex-col min-w-0 flex-1">
+														<span class="font-mono text-[10px] text-secondary">{epic.id}</span>
+														<span class="truncate">{epic.title}</span>
+													</div>
+													{#if epic.dependency_count !== undefined}
+														<span class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 flex-shrink-0">
+															{epic.dependency_count} tasks
+														</span>
+													{/if}
+													{#if index === selectedEpicIndex && epics.length > 3 && canLink}
+														<kbd class="kbd kbd-xs font-mono command-kbd flex-shrink-0">↵</kbd>
+													{/if}
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+
+								<!-- Create New Epic section (only when we can link) -->
+								{#if canLink}
+									<div class="border-t border-base-content/10 mt-1">
+										{#if showCreateEpic}
+											<div class="px-2 py-2">
+												<div class="flex flex-col gap-1.5">
+													<input
+														bind:this={newEpicInput}
+														bind:value={newEpicTitle}
+														onkeydown={handleCreateEpicKeyDown}
+														type="text"
+														placeholder="Epic title..."
+														class="w-full px-2 py-1 bg-base-300 text-[11px] rounded border border-base-content/20 focus:border-primary focus:outline-none"
+														disabled={creatingEpic}
+														autofocus
+													/>
+													{#if createEpicError}
+														<span class="text-[9px] text-error">{createEpicError}</span>
+													{/if}
+													<div class="flex items-center justify-between gap-2">
+														<span class="text-[9px] text-base-content/40">
+															Enter to create, Esc to cancel
+														</span>
+														<div class="flex gap-1">
+															<button
+																type="button"
+																onclick={() => { showCreateEpic = false; newEpicTitle = ''; createEpicError = null; }}
+																class="btn btn-xs btn-ghost text-[10px]"
+																disabled={creatingEpic}
+															>
+																Cancel
+															</button>
+															<button
+																type="button"
+																onclick={createEpic}
+																class="btn btn-xs btn-primary text-[10px]"
+																disabled={creatingEpic || !newEpicTitle.trim()}
+															>
+																{#if creatingEpic}
+																	<span class="loading loading-spinner loading-xs"></span>
+																{:else}
+																	Create
+																{/if}
+															</button>
+														</div>
+													</div>
+												</div>
+											</div>
+										{:else}
 											<button
 												type="button"
-												onclick={() => { epicSearchQuery = ''; epicSearchInput?.focus(); }}
-												class="text-white/40 hover:text-white/70 transition-colors"
+												onclick={() => { showCreateEpic = true; setTimeout(() => newEpicInput?.focus(), 50); }}
+												class="w-full px-3 py-1.5 flex items-center gap-2 text-[10px] text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
+												disabled={disabled || linkingEpicId !== null}
 											>
 												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+													<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 												</svg>
+												<span>Create New Epic</span>
 											</button>
 										{/if}
 									</div>
-								</div>
-							{/if}
-
-							{#if epicsLoading}
-								<div class="px-3 py-3 text-center text-[10px] text-white/50">
-									<span class="loading loading-spinner loading-xs"></span>
-									<span class="ml-1">Loading epics...</span>
-								</div>
-							{:else if epicsError}
-								<div class="px-3 py-2 text-center text-[10px] text-error">
-									<span>⚠ {epicsError}</span>
-									<button class="btn btn-xs btn-ghost ml-1" onclick={fetchEpics}>Retry</button>
-								</div>
-							{:else if epics.length === 0}
-								<div class="px-3 py-3 text-center text-[10px] text-white/50">
-									No open epics in this project
-								</div>
-							{:else if filteredEpics.length === 0}
-								<div class="px-3 py-3 text-center text-[10px] text-white/50">
-									No epics match "{epicSearchQuery}"
-								</div>
-							{:else}
-								<ul class="py-0.5 max-h-[180px] overflow-y-auto">
-									{#each filteredEpics as epic, index (epic.id)}
-										<li>
-											<button
-												type="button"
-												onclick={() => linkToEpic(epic.id)}
-												class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 hover:text-base-content {index === selectedEpicIndex ? 'command-item-selected' : 'command-item-default'}"
-												disabled={disabled || linkingEpicId !== null}
-												onmouseenter={() => { selectedEpicIndex = index; }}
-											>
-												{#if linkingEpicId === epic.id}
-													<span class="loading loading-spinner loading-xs flex-shrink-0"></span>
-												{:else}
-													<span class="text-[10px] flex-shrink-0">🏔️</span>
-												{/if}
-												<div class="flex flex-col min-w-0 flex-1">
-													<span class="font-mono text-[10px] text-secondary">{epic.id}</span>
-													<span class="truncate">{epic.title}</span>
-												</div>
-												{#if epic.dependency_count !== undefined}
-													<span class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 flex-shrink-0">
-														{epic.dependency_count} tasks
-													</span>
-												{/if}
-												{#if index === selectedEpicIndex && epics.length > 3}
-													<kbd class="kbd kbd-xs font-mono command-kbd flex-shrink-0">↵</kbd>
-												{/if}
-											</button>
-										</li>
-									{/each}
-								</ul>
-							{/if}
-
-							<!-- Create New Epic section -->
-							<div class="border-t border-base-content/10 mt-1">
-								{#if showCreateEpic}
-									<div class="px-2 py-2">
-										<div class="flex flex-col gap-1.5">
-											<input
-												bind:this={newEpicInput}
-												bind:value={newEpicTitle}
-												onkeydown={handleCreateEpicKeyDown}
-												type="text"
-												placeholder="Epic title..."
-												class="w-full px-2 py-1 bg-base-300 text-[11px] rounded border border-base-content/20 focus:border-primary focus:outline-none"
-												disabled={creatingEpic}
-												autofocus
-											/>
-											{#if createEpicError}
-												<span class="text-[9px] text-error">{createEpicError}</span>
-											{/if}
-											<div class="flex items-center justify-between gap-2">
-												<span class="text-[9px] text-base-content/40">
-													Enter to create, Esc to cancel
-												</span>
-												<div class="flex gap-1">
-													<button
-														type="button"
-														onclick={() => { showCreateEpic = false; newEpicTitle = ''; createEpicError = null; }}
-														class="btn btn-xs btn-ghost text-[10px]"
-														disabled={creatingEpic}
-													>
-														Cancel
-													</button>
-													<button
-														type="button"
-														onclick={createEpic}
-														class="btn btn-xs btn-primary text-[10px]"
-														disabled={creatingEpic || !newEpicTitle.trim()}
-													>
-														{#if creatingEpic}
-															<span class="loading loading-spinner loading-xs"></span>
-														{:else}
-															Create
-														{/if}
-													</button>
-												</div>
-											</div>
-										</div>
-									</div>
-								{:else}
-									<button
-										type="button"
-										onclick={() => { showCreateEpic = true; setTimeout(() => newEpicInput?.focus(), 50); }}
-										class="w-full px-3 py-1.5 flex items-center gap-2 text-[10px] text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
-										disabled={disabled || linkingEpicId !== null}
-									>
-										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-										</svg>
-										<span>Create New Epic</span>
-									</button>
 								{/if}
-							</div>
+							{/if}
 						</div>
 					{/if}
 				</div>

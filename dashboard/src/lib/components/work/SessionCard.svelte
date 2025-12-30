@@ -335,8 +335,11 @@
 	const isServerMode = $derived(mode === "server");
 	const isCompactMode = $derived(mode === "compact");
 
-	// Default project derived from current task ID (for suggested tasks pre-selection)
-	const defaultProject = $derived(task?.id ? getProjectFromTaskId(task.id) : '');
+	// Default project derived from current task ID or last completed task (for suggested tasks pre-selection)
+	const defaultProject = $derived(
+		task?.id ? getProjectFromTaskId(task.id) :
+		lastCompletedTask?.id ? getProjectFromTaskId(lastCompletedTask.id) : ''
+	);
 
 	// Review status for auto-complete logic - computed from task and review rules
 	const reviewStatus = $derived.by(() => {
@@ -4369,6 +4372,7 @@
 						showEpic={true}
 						onCommand={sendWorkflowCommand}
 						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+						project={defaultProject || null}
 					/>
 				{/if}
 			</div>
@@ -5007,6 +5011,7 @@
 						showEpic={true}
 						onCommand={sendWorkflowCommand}
 						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+						project={defaultProject || null}
 					/>
 				</div>
 			</div>
@@ -6718,6 +6723,7 @@
 									showEpic={true}
 									onCommand={sendWorkflowCommand}
 									task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+									project={defaultProject || null}
 								/>
 							{/if}
 						{:else if sessionState === "ready-for-review" || sessionState === "idle" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}
@@ -6737,6 +6743,7 @@
 								showEpic={true}
 								onCommand={sendWorkflowCommand}
 								task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
+								project={defaultProject || null}
 							/>
 						{:else if detectedOptions.length > 0}
 							<!-- Prompt options detected: show quick action buttons -->

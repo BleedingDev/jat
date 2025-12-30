@@ -376,8 +376,14 @@ export interface CompletedSignal {
 	/** Pull request link if one was created */
 	prLink?: string;
 
-	// Auto-proceed fields (consolidated from AutoProceedSignal)
-	/** Whether this completion should auto-proceed to next task */
+	// Completion mode fields
+	/** Completion mode determines dashboard behavior
+	 * - 'review_required': User reviews completion before session ends
+	 * - 'auto_proceed': Auto-spawn next task and cleanup this session
+	 * - 'auto_kill': Cleanup session without spawning next task
+	 */
+	completionMode?: 'review_required' | 'auto_proceed' | 'auto_kill';
+	/** Whether this completion should auto-proceed to next task (legacy, prefer completionMode) */
 	autoProceed?: boolean;
 	/** Next task to pick up (if auto-proceed enabled) */
 	nextTaskId?: string;
@@ -387,6 +393,16 @@ export interface CompletedSignal {
 	// Task rename suggestion
 	/** AI-suggested new title for the task (if task evolved/pivoted during work) */
 	suggestedRename?: string;
+
+	// AI-generated insights
+	/** AI-suggested labels based on actual work done */
+	suggestedLabels?: string[];
+	/** Risk level assessment for the changes */
+	riskLevel?: 'low' | 'medium' | 'high';
+	/** List of breaking changes introduced (null/empty if none) */
+	breakingChanges?: string[];
+	/** Documentation that needs updating based on changes */
+	documentationNeeds?: string[];
 }
 
 // =============================================================================
