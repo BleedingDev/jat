@@ -467,11 +467,8 @@
 												{/if}
 											</span>
 										</div>
-										<!-- Right side: time + resume button + arrow -->
+										<!-- Right side: resume button + time + arrow -->
 										<div class="task-actions">
-											<span class="task-time">
-												{formatTime(task.closed_at || task.updated_at)}
-											</span>
 											<!-- Resume button - shows on hover when task has assignee -->
 											{#if task.assignee}
 												<button
@@ -490,6 +487,9 @@
 													{/if}
 												</button>
 											{/if}
+											<span class="task-time">
+												{formatTime(task.closed_at || task.updated_at)}
+											</span>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
 												fill="none"
