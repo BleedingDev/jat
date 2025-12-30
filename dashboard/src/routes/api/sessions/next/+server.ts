@@ -2,7 +2,7 @@
  * Next Session API - Spawn session for next ready task
  *
  * POST /api/sessions/next
- * Purpose: After completed signal with autoProceed: true,
+ * Purpose: After completed signal with completionMode: 'auto_proceed',
  *          spawn a new session for the next ready task
  *
  * Input: { completedTaskId, completedSessionName, nextTaskId?, project? }

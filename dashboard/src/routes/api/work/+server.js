@@ -38,7 +38,7 @@ const SIGNAL_STATE_MAP = {
 	'review': 'ready-for-review',
 	'needs_input': 'needs-input',
 	'idle': 'idle',
-	'completed': 'completed',  // autoProceed: true in payload triggers auto-spawn of next task
+	'completed': 'completed',  // completionMode: 'auto_proceed' in payload triggers auto-spawn of next task
 	'starting': 'starting',
 	'compacting': 'compacting',
 	'completing': 'completing',

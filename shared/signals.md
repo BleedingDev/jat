@@ -357,7 +357,7 @@ $effect(() => {
 | Ready for Review | `review` | 👁 | Cyan | Asking to mark complete |
 | Completing | `completing` | ⏳ | Teal | Running /jat:complete steps |
 | Completed | `completed` | ✅ | Green | Task finished (review required) |
-| Completed + Auto-Proceed | `completed` (autoProceed=true) | 🚀 | Green | Task finished, spawning next task |
+| Completed + Auto-Proceed | `completed` (completionMode='auto_proceed') | 🚀 | Green | Task finished, spawning next task |
 | Idle | `idle` | 💤 | Gray | No active task |
 
 ### Timeline / EventStack

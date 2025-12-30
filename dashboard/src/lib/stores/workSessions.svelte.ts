@@ -88,7 +88,7 @@ export interface WorkSession {
 	_recoveringTimestamp?: number;
 	/** Rule ID that triggered recovery (for display) */
 	_recoveringRuleId?: string;
-	/** Next task ID for auto-proceed (set when completed signal with autoProceed=true received) */
+	/** Next task ID for auto-proceed (set when completed signal with completionMode='auto_proceed' received) */
 	_autoProceedNextTaskId?: string;
 	/** Next task title for auto-proceed display */
 	_autoProceedNextTaskTitle?: string;
@@ -256,8 +256,9 @@ let bustCacheOnNextFetch = false;
  * Uses the terminal scrollback preference for line count
  * Implements exponential backoff when requests fail to prevent browser overload
  * @param includeUsage - Whether to include token usage/sparkline data (slow, default: false)
+ * @param bustCache - Whether to bust the server-side task cache (use after linking tasks to epics)
  */
-export async function fetch(includeUsage: boolean = false): Promise<void> {
+export async function fetch(includeUsage: boolean = false, bustCache: boolean = false): Promise<void> {
 	// Wrap entire function in try-catch to ensure no unhandled rejections escape
 	try {
 		// Check if we're in backoff period
@@ -287,8 +288,8 @@ export async function fetch(includeUsage: boolean = false): Promise<void> {
 		if (includeUsage) {
 			url += '&usage=true';
 		}
-		// Add bust param to invalidate server-side task cache (used after spawn)
-		if (bustCacheOnNextFetch) {
+		// Add bust param to invalidate server-side task cache (used after spawn or linking to epic)
+		if (bustCacheOnNextFetch || bustCache) {
 			url += '&bust=true';
 			bustCacheOnNextFetch = false; // Only bust once
 		}

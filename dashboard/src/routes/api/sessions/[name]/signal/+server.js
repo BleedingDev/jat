@@ -18,7 +18,7 @@
  *   - action: Human action request (JSON object)
  *   - complete: Full completion bundle (state + tasks + actions)
  *
- * Note: completed signals with autoProceed: true trigger automatic spawning of next task.
+ * Note: completed signals with completionMode: 'auto_proceed' trigger automatic spawning of next task.
  */
 
 import { json } from '@sveltejs/kit';

@@ -383,8 +383,6 @@ export interface CompletedSignal {
 	 * - 'auto_kill': Cleanup session without spawning next task
 	 */
 	completionMode?: 'review_required' | 'auto_proceed' | 'auto_kill';
-	/** Whether this completion should auto-proceed to next task (legacy, prefer completionMode) */
-	autoProceed?: boolean;
 	/** Next task to pick up (if auto-proceed enabled) */
 	nextTaskId?: string;
 	/** Title of the next task */
@@ -617,10 +615,10 @@ export function isCompactingSignal(signal: RichSignal): signal is CompactingSign
 
 /**
  * Check if a completed signal has auto-proceed enabled.
- * Auto-proceed signals are now part of CompletedSignal with autoProceed=true.
+ * Auto-proceed signals have completionMode: 'auto_proceed'.
  */
 export function isAutoProceedSignal(signal: RichSignal): signal is CompletedSignal {
-	return signal.type === 'completed' && (signal as CompletedSignal).autoProceed === true;
+	return signal.type === 'completed' && (signal as CompletedSignal).completionMode === 'auto_proceed';
 }
 
 // =============================================================================
