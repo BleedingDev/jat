@@ -253,8 +253,7 @@
 				.map((e) => e.task_id)
 		);
 		result = result.filter((e) => {
-			const eventType = e.type === 'state' ? e.state : e.type;
-			if (eventType === 'completing' && e.task_id && completedTaskIds.has(e.task_id)) {
+			if (e.type === 'completing' && e.task_id && completedTaskIds.has(e.task_id)) {
 				return false; // Hide completing events for completed tasks
 			}
 			return true;
@@ -270,8 +269,7 @@
 			}
 		}
 		result = result.filter((e) => {
-			const eventType = e.type === 'state' ? e.state : e.type;
-			if (eventType === 'completed' && e.task_id) {
+			if (e.type === 'completed' && e.task_id) {
 				const completeTime = completeTaskTimestamps.get(e.task_id);
 				if (completeTime) {
 					const completedTime = new Date(e.timestamp).getTime();
@@ -340,9 +338,8 @@
 			const current = result[i];
 			const prev = merged[merged.length - 1];
 
-			// Get event type (could be in type or state field)
-			const currentType = current.type === 'state' ? current.state : current.type;
-			const prevType = prev ? (prev.type === 'state' ? prev.state : prev.type) : null;
+			const currentType = current.type;
+			const prevType = prev?.type ?? null;
 
 			// Check if this is a duplicate/update of a previous event
 			// Merge if: same type AND same task_id AND type is one that updates frequently
@@ -1336,8 +1333,7 @@
 									{/if}
 
 									<!-- Auto-proceed indicator or Cleanup button -->
-									<!-- Check both autoProceed (boolean from richSignals.ts) and completionMode (string from signals.ts) -->
-									{#if completedData.autoProceed === true || completedData.completionMode === 'auto_proceed'}
+									{#if completedData.completionMode === 'auto_proceed'}
 										<div class="mt-2 pt-2 border-t border-base-300/50">
 											<div class="flex items-center gap-2 text-xs text-success">
 												<span>🚀</span>
@@ -1739,8 +1735,7 @@
 											{/if}
 
 											<!-- Auto-proceed indicator (consolidated signal) -->
-											<!-- Check both autoProceed (boolean from richSignals.ts) and completionMode (string from signals.ts) -->
-											{#if completedData.autoProceed === true || completedData.completionMode === 'auto_proceed'}
+											{#if completedData.completionMode === 'auto_proceed'}
 												<div class="mt-2 pt-2" style="border-top: 1px solid oklch(0.35 0.12 145);">
 													<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.18 145);">
 														<span>🚀</span>
