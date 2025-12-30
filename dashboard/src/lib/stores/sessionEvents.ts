@@ -602,7 +602,7 @@ function handleSessionDestroyed(data: SessionEvent): void {
 /**
  * Handle auto-proceed: spawn next task automatically (Epic Swarm scoped)
  *
- * When an agent emits an auto_proceed signal, this handler:
+ * When an agent completes with completionMode='auto_proceed' in their complete signal bundle:
  * 1. Checks if there's an active Epic Swarm
  * 2. Verifies the next task is a child of the active epic
  * 3. Updates session state to show "auto-proceeding"
@@ -611,7 +611,7 @@ function handleSessionDestroyed(data: SessionEvent): void {
  * IMPORTANT: Auto-proceed only works within an active Epic Swarm.
  * Without an epic, agents complete normally without auto-spawning.
  *
- * Signal: jat-signal auto_proceed '{"taskId":"...","nextTaskId":"...","nextTaskTitle":"..."}'
+ * Triggered by: jat-signal complete '{"completionMode":"auto_proceed","nextTaskId":"...","nextTaskTitle":"...",...}'
  */
 async function handleAutoProceed(data: SessionEvent): Promise<void> {
 	const { sessionName, signalPayload } = data;

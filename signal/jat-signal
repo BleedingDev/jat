@@ -277,21 +277,6 @@ case "$SIGNAL_TYPE" in
         echo "[JAT-SIGNAL:compacting] $SIGNAL_DATA"
         ;;
 
-    auto_proceed|auto-proceed)
-        require_json "auto_proceed" "$SIGNAL_DATA"
-        # Compact JSON to single line for hook parsing
-        SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
-        validate_payload "auto_proceed" "$SIGNAL_DATA"
-        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
-        NEXT_TASK=$(echo "$SIGNAL_DATA" | jq -r '.nextTaskId // ""')
-        if [[ -n "$NEXT_TASK" ]]; then
-            echo "Signal: auto_proceed (task: ${TASK_ID}, next: ${NEXT_TASK})"
-        else
-            echo "Signal: auto_proceed (task: ${TASK_ID})"
-        fi
-        echo "[JAT-SIGNAL:auto_proceed] $SIGNAL_DATA"
-        ;;
-
     question)
         require_json "question" "$SIGNAL_DATA"
         # Compact JSON to single line for hook parsing
