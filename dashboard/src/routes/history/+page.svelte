@@ -361,62 +361,70 @@
 
 			<!-- Daily Breakdown -->
 			<section class="daily-section">
+				<!-- Filters Section (always visible) -->
+				<div class="filters-bar">
+					<input
+						type="text"
+						placeholder="Search tasks..."
+						class="industrial-input w-48"
+						bind:value={searchQuery}
+					/>
+					<div class="dropdown dropdown-end">
+						<div
+							tabindex="0"
+							role="button"
+							class="filter-trigger"
+						>
+							{#if selectedProject !== 'All Projects'}
+								<span
+									class="project-dot"
+									style="background: {getProjectColor(selectedProject + '-x')}"
+								></span>
+							{/if}
+							<span>{selectedProject}</span>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 opacity-50">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+							</svg>
+						</div>
+						<ul tabindex="0" class="dropdown-content menu rounded-box z-50 min-w-44 w-max p-1 shadow-lg bg-base-200 border border-base-300 max-h-60 overflow-y-auto overflow-x-hidden">
+							{#each projects as project}
+								<li>
+									<button
+										type="button"
+										class="filter-option {selectedProject === project ? 'active' : ''}"
+										onclick={() => { handleProjectChange(project); document.activeElement?.blur(); }}
+									>
+										{#if project !== 'All Projects'}
+											<span
+												class="project-dot"
+												style="background: {getProjectColor(project + '-x')}"
+											></span>
+										{/if}
+										<span class="flex-1">{project}</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</div>
+					{#if searchQuery || selectedProject !== 'All Projects'}
+						<button
+							type="button"
+							class="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
+							onclick={() => { searchQuery = ''; handleProjectChange('All Projects'); }}
+						>
+							Clear filters
+						</button>
+					{/if}
+				</div>
+
 				<div class="day-list">
-					{#each tasksByDay as day, index}
+					{#each tasksByDay as day}
 						<div class="day-group">
 							<div class="day-header">
 								<span class="day-date">{day.displayDate}</span>
 								<span class="day-count"
 									>{day.tasks.length} task{day.tasks.length !== 1 ? 's' : ''}</span
 								>
-								{#if index === 0}
-									<!-- Filters on first day header row -->
-									<div class="day-header-filters">
-										<input
-											type="text"
-											placeholder="Search tasks..."
-											class="industrial-input w-40"
-											bind:value={searchQuery}
-										/>
-										<div class="dropdown dropdown-end">
-											<div
-												tabindex="0"
-												role="button"
-												class="filter-trigger"
-											>
-												{#if selectedProject !== 'All Projects'}
-													<span
-														class="project-dot"
-														style="background: {getProjectColor(selectedProject + '-x')}"
-													></span>
-												{/if}
-												<span>{selectedProject}</span>
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 opacity-50">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-												</svg>
-											</div>
-											<ul tabindex="0" class="dropdown-content menu rounded-box z-50 min-w-44 w-max p-1 shadow-lg bg-base-200 border border-base-300 max-h-60 overflow-y-auto overflow-x-hidden">
-												{#each projects as project}
-													<li>
-														<button
-															type="button"
-															class="filter-option {selectedProject === project ? 'active' : ''}"
-															onclick={() => { handleProjectChange(project); document.activeElement?.blur(); }}
-														>
-															{#if project !== 'All Projects'}
-																<span
-																	class="project-dot"
-																	style="background: {getProjectColor(project + '-x')}"
-																></span>
-															{/if}
-															<span class="flex-1">{project}</span>
-														</button>
-													</li>
-												{/each}
-											</ul>
-										</div>
-									</div>
-								{/if}
 							</div>
 							<div class="day-tasks">
 								{#each day.tasks as task}
@@ -626,6 +634,18 @@
 		flex: 1;
 	}
 
+	/* Filters Bar (always visible) */
+	.filters-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+		padding: 0.75rem 1rem;
+		background: var(--color-base-100);
+		border: 1px solid var(--color-base-300);
+		border-radius: 8px;
+	}
+
 	.day-list {
 		display: flex;
 		flex-direction: column;
@@ -661,13 +681,6 @@
 		padding: 0.125rem 0.5rem;
 		background: var(--color-base-300);
 		border-radius: 10px;
-	}
-
-	.day-header-filters {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin-left: auto;
 	}
 
 	.day-tasks {
