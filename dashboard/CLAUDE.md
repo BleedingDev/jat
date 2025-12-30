@@ -2526,6 +2526,172 @@ const userTemplates = allTemplates.filter(t => t.isUserTemplate);
 
 - jat-4e31: Add custom user templates (completed)
 
+## Swarm Settings
+
+### Overview
+
+The **SwarmSettingsEditor** component (`src/lib/components/config/SwarmSettingsEditor.svelte`) provides a unified interface for configuring agent swarm/orchestration behavior. It consolidates spawn settings and review rules into a single settings panel.
+
+**Location:** Settings page (`/config`) → Swarm Settings tab
+
+### Features
+
+The SwarmSettingsEditor manages two categories of settings:
+
+**1. Spawn Configuration:**
+- Default Claude model (opus/sonnet/haiku)
+- Maximum concurrent sessions (1-20)
+- Default agent count for swarm attacks
+- Spawn stagger delay (seconds between agent launches)
+- Claude startup timeout (seconds to wait for TUI)
+
+**2. Review Rules:**
+- Per task-type and priority auto-proceed vs review matrix
+- Embedded ReviewRulesEditor component
+- Controls which completions require human review
+
+### Spawn Settings
+
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| `model` | opus | opus, sonnet, haiku | Default Claude model for new sessions |
+| `max_sessions` | 12 | 1-20 | Maximum concurrent tmux sessions |
+| `default_agent_count` | 4 | 1-max_sessions | Default agents to spawn in swarm |
+| `agent_stagger` | 15 | 1-120 | Seconds between spawning each agent |
+| `claude_startup_timeout` | 20 | 5-120 | Seconds to wait for Claude TUI to start |
+
+**Storage:** Settings are persisted to `~/.config/jat/projects.json` under the `defaults` key.
+
+### Review Rules Matrix
+
+The embedded ReviewRulesEditor provides a visual matrix for configuring auto-proceed behavior:
+
+```
+              P0        P1        P2        P3        P4
+           (Critical) (High)   (Medium)  (Low)    (Lowest)
+bug         review    review    review    auto      auto
+feature     review    review    review    auto      auto
+task        review    review    auto      auto      auto
+chore       review    auto      auto      auto      auto
+epic        review    review    review    review    auto
+```
+
+**How it works:**
+- Click a cell to toggle between "auto-proceed" (green checkmark) and "requires review" (eye icon)
+- Lower-priority tasks (P3, P4) typically auto-proceed
+- Higher-priority tasks (P0, P1) typically require human review
+- Per-type notes can be added for team guidance
+
+**Storage:** Review rules are stored in `~/.config/jat/review-rules.json`.
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/config/defaults` | Get current spawn settings |
+| `PUT` | `/api/config/defaults` | Update spawn settings |
+| `GET` | `/api/review-rules` | Get review rules |
+| `PUT` | `/api/review-rules` | Update review rules |
+| `POST` | `/api/review-rules` | Reset to defaults |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SwarmSettingsEditor                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Spawn Configuration Section                             │   │
+│  │  • Model selector (dropdown)                             │   │
+│  │  • Max sessions (number input)                           │   │
+│  │  • Default agent count (number input)                    │   │
+│  │  • Agent stagger (number input)                          │   │
+│  │  • Claude startup timeout (number input)                 │   │
+│  │  • Reset to factory defaults button                      │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Review Rules Section                                    │   │
+│  │  └─ ReviewRulesEditor (embedded component)               │   │
+│  │     • 5x5 type/priority matrix                           │   │
+│  │     • Per-type notes column                              │   │
+│  │     • Reset to defaults                                  │   │
+│  │     • Save/discard controls                              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Constants
+
+Default values are defined in `src/lib/config/constants.ts`:
+
+```typescript
+export const JAT_DEFAULTS = {
+    terminal: 'alacritty',
+    editor: 'code',
+    tools_path: '~/.local/bin',
+    claude_flags: '--dangerously-skip-permissions',
+    model: 'opus',
+    agent_stagger: 15,
+    claude_startup_timeout: 20,
+    max_sessions: 12,
+    default_agent_count: 4,
+    // ... auto-kill settings ...
+} as const;
+```
+
+### Usage
+
+**From Dashboard UI:**
+1. Navigate to Settings (`/config`)
+2. Select "Swarm Settings" tab
+3. Adjust spawn configuration values
+4. Click matrix cells to toggle review rules
+5. Click "Save" to persist changes
+
+**Programmatic access:**
+```typescript
+// Fetch current settings
+const response = await fetch('/api/config/defaults');
+const { defaults } = await response.json();
+
+// Update settings
+await fetch('/api/config/defaults', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        defaults: {
+            model: 'sonnet',
+            max_sessions: 8,
+            agent_stagger: 20
+        }
+    })
+});
+```
+
+### Files
+
+**Components:**
+- `src/lib/components/config/SwarmSettingsEditor.svelte` - Main swarm settings UI
+- `src/lib/components/ReviewRulesEditor.svelte` - Review rules matrix (embedded)
+
+**Configuration:**
+- `src/lib/config/constants.ts` - JAT_DEFAULTS with default values
+
+**API:**
+- `src/routes/api/config/defaults/+server.ts` - Spawn settings endpoint
+- `src/routes/api/review-rules/+server.ts` - Review rules endpoint
+
+**Storage:**
+- `~/.config/jat/projects.json` - Spawn settings (under `defaults` key)
+- `~/.config/jat/review-rules.json` - Review rules matrix
+
+### Task Reference
+
+- jat-zzlgv: Document SwarmSettingsEditor in CLAUDE.md (this section)
+
 ## Keyboard Shortcuts
 
 ### Overview
