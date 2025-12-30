@@ -613,8 +613,11 @@ function handleSessionCreated(data: SessionEvent): void {
 }
 
 /**
- * Handle session-destroyed event: remove session from store
+ * Handle session-destroyed event: animate out then remove session from store
+ * Animation duration matches CSS .session-exit (500ms)
  */
+const EXIT_ANIMATION_DURATION = 500;
+
 function handleSessionDestroyed(data: SessionEvent): void {
 	const { sessionName } = data;
 	if (!sessionName) return;
@@ -622,7 +625,19 @@ function handleSessionDestroyed(data: SessionEvent): void {
 	// Clear automation trigger records for this session
 	clearSessionTriggers(sessionName);
 
-	workSessionsState.sessions = workSessionsState.sessions.filter(s => s.sessionName !== sessionName);
+	// Find the session and mark it as exiting (triggers CSS animation)
+	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
+	if (sessionIndex === -1) return;
+
+	// Mark as exiting to trigger animation
+	workSessionsState.sessions[sessionIndex]._isExiting = true;
+	// Force reactivity by reassigning the array
+	workSessionsState.sessions = [...workSessionsState.sessions];
+
+	// Remove session after animation completes
+	setTimeout(() => {
+		workSessionsState.sessions = workSessionsState.sessions.filter(s => s.sessionName !== sessionName);
+	}, EXIT_ANIMATION_DURATION);
 }
 
 /**

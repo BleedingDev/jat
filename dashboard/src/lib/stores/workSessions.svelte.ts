@@ -218,6 +218,8 @@ export interface WorkSession {
 	_activityState?: 'generating' | 'thinking' | 'idle';
 	/** Timestamp when activity state was last updated */
 	_activityStateTimestamp?: number;
+	/** Whether session is exiting (triggers exit animation before removal) */
+	_isExiting?: boolean;
 }
 
 interface WorkSessionsState {

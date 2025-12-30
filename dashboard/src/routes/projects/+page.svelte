@@ -1567,6 +1567,7 @@
 																	onSendInput={(input, type) => handleSendInput(session.sessionName, input, type)}
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
+																	isExiting={session._isExiting}
 																	onTaskDataChange={handleEpicLinkRefresh}
 																/>
 															</div>
@@ -1648,6 +1649,7 @@
 																	onSendInput={(input, type) => handleSendInput(session.sessionName, input, type)}
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
+																	isExiting={session._isExiting}
 																	onTaskDataChange={handleEpicLinkRefresh}
 																/>
 															</div>
