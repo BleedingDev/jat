@@ -3737,6 +3737,176 @@ Tailwind's `bg-gradient-*` cannot:
 
 - jat-k6zps: Audit app.css animations and document non-replaceable patterns
 
+## Animation Utility Classes
+
+### Overview
+
+The dashboard provides a comprehensive set of standardized animation utility classes in `app.css`. These classes ensure consistent UI interactions and replace duplicated `@keyframes` definitions across component `<style>` blocks.
+
+**Location:** `src/app.css` - "STANDARDIZED ANIMATION UTILITY CLASSES" section
+
+### Available Utility Classes
+
+#### Loading/Spinner Animations
+
+| Class | Duration | Use Case |
+|-------|----------|----------|
+| `animate-spin-fast` | 0.5s | Fast spinner for quick operations |
+| `skeleton-pulse` | 2s | Skeleton loading placeholders |
+
+**Note:** Tailwind's built-in `animate-spin` (1s) is also available.
+
+#### Entrance Animations
+
+| Class | Duration | Use Case |
+|-------|----------|----------|
+| `animate-slide-down` | 0.2s | Modals, dropdowns, notifications appearing from top |
+| `animate-slide-up` | 0.2s | Toasts, bottom sheets appearing from bottom |
+| `animate-scale-in` | 0.15s | Popovers, context menus scaling from center |
+| `animate-dropdown` | 0.15s | Dropdown menus with combined translate/scale |
+
+#### Feedback Animations
+
+| Class | Duration | Use Case |
+|-------|----------|----------|
+| `animate-pop` | 0.3s | Button clicks, badge updates (single pop) |
+| `animate-pulse-subtle` | 2s (infinite) | Attention indicators, active states |
+| `animate-ring-pulse` | 2s (infinite) | Avatar rings, selection indicators |
+| `animate-pulse-save` | 1.5s (infinite) | Dirty state indicators (unsaved changes) |
+
+#### Glow Animations
+
+| Class | Duration | Use Case |
+|-------|----------|----------|
+| `animate-glow-primary` | 2s (infinite) | Links, active elements (blue) |
+| `animate-glow-success` | 2s (infinite) | Completions, confirmations (green) |
+| `animate-glow-warning` | 2s (infinite) | Working states, attention (amber) |
+| `animate-glow-error` | 2s (infinite) | Errors, alerts (red) |
+| `animate-glow-secondary` | 2s (infinite) | Epic/special states (purple) |
+
+#### Transition Utilities
+
+| Class | Timing | Properties |
+|-------|--------|------------|
+| `transition-fast` | 0.1s | all |
+| `transition-normal` | 0.2s | all |
+| `transition-slow` | 0.3s | all |
+| `transition-opacity` | 0.2s | opacity only |
+| `transition-transform` | 0.2s | transform only |
+| `transition-colors` | 0.15s | color, background-color, border-color |
+
+#### Stagger Animation Delays
+
+Use with entrance animations for cascading effects on lists:
+
+```html
+<div class="animate-slide-up stagger-1">Item 1</div>
+<div class="animate-slide-up stagger-2">Item 2</div>
+<div class="animate-slide-up stagger-3">Item 3</div>
+```
+
+| Class | Delay |
+|-------|-------|
+| `stagger-1` | 0.05s |
+| `stagger-2` | 0.1s |
+| `stagger-3` | 0.15s |
+| `stagger-4` | 0.2s |
+| `stagger-5` | 0.25s |
+| `stagger-6` | 0.3s |
+| `stagger-7` | 0.35s |
+| `stagger-8` | 0.4s |
+
+### Usage Examples
+
+**Dropdown Menu:**
+```svelte
+<div class="dropdown-content animate-dropdown">
+  <ul class="menu">...</ul>
+</div>
+```
+
+**Loading Skeleton:**
+```svelte
+<div class="skeleton-pulse h-4 w-32 rounded bg-base-300"></div>
+```
+
+**Button with Click Feedback:**
+```svelte
+<button class="btn animate-pop" onclick={handleClick}>
+  Save
+</button>
+```
+
+**Active Session Indicator:**
+```svelte
+<div class="badge animate-glow-warning">WORKING</div>
+```
+
+**Staggered List Entrance:**
+```svelte
+{#each items as item, i}
+  <div class="animate-slide-up stagger-{Math.min(i + 1, 8)}">
+    {item.name}
+  </div>
+{/each}
+```
+
+### Reduced Motion Support
+
+All animation utilities respect the user's `prefers-reduced-motion` preference:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-down,
+  .animate-glow-success,
+  /* ... all animation classes ... */
+  {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+```
+
+### When to Use Utility Classes vs Component Animations
+
+**Use utility classes when:**
+- Animation is generic (fade in, slide, pulse)
+- Multiple components need the same animation
+- Animation doesn't need custom keyframes
+
+**Keep in component `<style>` when:**
+- Animation is component-specific (e.g., streak celebration stars)
+- Animation has many keyframes with complex timing
+- Animation uses component-specific CSS variables
+
+### Task-Specific Animation Classes (Pre-existing)
+
+These specialized classes are defined earlier in `app.css` for specific UI patterns:
+
+| Class | Purpose |
+|-------|---------|
+| `task-new-entrance` | New task sliding in with blue glow |
+| `task-exit` | Task removal with red fade |
+| `task-starting` | Green glow when work begins |
+| `task-completed` | Gold glow on completion |
+| `task-working-completed` | Amber→green transition |
+| `session-entrance` | Session card 3D slide-in |
+| `session-exit` | Session card 3D slide-out |
+| `epic-completed-celebration` | Gold/purple triumphant glow |
+| `epic-running` | Pulsing amber for active epics |
+| `shimmer-text` | Shimmer effect on text (ElevenLabs-style) |
+| `row-shimmer` | Shimmer effect on table rows |
+| `agent-highlight-flash` | Click-to-jump highlight effect |
+
+### Files
+
+- `src/app.css` - Animation utility class definitions
+- Dashboard components - Usage of utility classes
+
+### Task Reference
+
+- jat-3845b: Standardize animation utility classes
+
 ## References
 
 - [Tailwind CSS v4 Docs](https://tailwindcss.com/docs)

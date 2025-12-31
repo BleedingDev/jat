@@ -1066,3 +1066,337 @@
 .drawer-side.overflow-visible .tooltip::after {
 	z-index: 1000;
 }
+
+/* ==========================================================================
+   STANDARDIZED ANIMATION UTILITY CLASSES
+   Reusable animations for consistent UI interactions across the dashboard.
+   These replace duplicated @keyframes in component <style> blocks.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   LOADING/SPINNER ANIMATIONS
+   Use for async operations, data fetching, processing states
+   -------------------------------------------------------------------------- */
+
+/* Standard spinner - simple rotation for loading indicators */
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+
+.animate-spin-fast {
+	animation: spin 0.5s linear infinite;
+}
+
+/* Default Tailwind animate-spin is 1s - this provides faster option */
+
+/* Subtle pulse for loading skeletons and placeholders */
+@keyframes skeleton-pulse {
+	0%, 100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
+.skeleton-pulse {
+	animation: skeleton-pulse 2s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   ENTRANCE ANIMATIONS
+   Use for elements appearing in the UI (modals, dropdowns, cards)
+   -------------------------------------------------------------------------- */
+
+/* Slide down from top - modals, dropdowns, notifications */
+@keyframes slide-down {
+	from {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.animate-slide-down {
+	animation: slide-down 0.2s ease-out forwards;
+}
+
+/* Slide up from bottom - toasts, bottom sheets */
+@keyframes slide-up {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.animate-slide-up {
+	animation: slide-up 0.2s ease-out forwards;
+}
+
+/* Scale in from center - popovers, context menus */
+@keyframes scale-in {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+.animate-scale-in {
+	animation: scale-in 0.15s ease-out forwards;
+}
+
+/* Dropdown slide - consistent dropdown entrance animation */
+@keyframes dropdown-slide {
+	from {
+		opacity: 0;
+		transform: translateY(-8px) scale(0.96);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+.animate-dropdown {
+	animation: dropdown-slide 0.15s ease-out forwards;
+}
+
+/* --------------------------------------------------------------------------
+   FEEDBACK ANIMATIONS
+   Use for user interaction feedback (clicks, completions, errors)
+   -------------------------------------------------------------------------- */
+
+/* Pop/bounce - button clicks, badge updates */
+@keyframes pop {
+	0% {
+		transform: scale(1);
+	}
+	50% {
+		transform: scale(1.15);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
+.animate-pop {
+	animation: pop 0.3s ease-out;
+}
+
+/* Subtle pulse - attention indicators, active states */
+@keyframes pulse-subtle {
+	0%, 100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.85;
+	}
+}
+
+.animate-pulse-subtle {
+	animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Ring pulse - avatar rings, selection indicators */
+@keyframes ring-pulse {
+	0%, 100% {
+		box-shadow: 0 0 0 0 var(--anim-primary);
+	}
+	50% {
+		box-shadow: 0 0 0 4px color-mix(in oklch, var(--anim-primary) 0%, transparent);
+	}
+}
+
+.animate-ring-pulse {
+	animation: ring-pulse 2s ease-in-out infinite;
+}
+
+/* Save indicator pulse - dirty state indicators */
+@keyframes pulse-save {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.7; }
+}
+
+.animate-pulse-save {
+	animation: pulse-save 1.5s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   GLOW ANIMATIONS
+   Use for highlighting, emphasis, state changes
+   -------------------------------------------------------------------------- */
+
+/* Primary glow pulse - links, active elements */
+@keyframes glow-primary {
+	0%, 100% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--anim-primary) 0%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 12px 2px color-mix(in oklch, var(--anim-primary) 40%, transparent);
+	}
+}
+
+.animate-glow-primary {
+	animation: glow-primary 2s ease-in-out infinite;
+}
+
+/* Success glow pulse - completions, confirmations */
+@keyframes glow-success {
+	0%, 100% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--anim-success) 0%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 12px 2px color-mix(in oklch, var(--anim-success) 40%, transparent);
+	}
+}
+
+.animate-glow-success {
+	animation: glow-success 2s ease-in-out infinite;
+}
+
+/* Warning glow pulse - attention, working states */
+@keyframes glow-warning {
+	0%, 100% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--anim-warning) 0%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 12px 2px color-mix(in oklch, var(--anim-warning) 40%, transparent);
+	}
+}
+
+.animate-glow-warning {
+	animation: glow-warning 2s ease-in-out infinite;
+}
+
+/* Error glow pulse - errors, alerts */
+@keyframes glow-error {
+	0%, 100% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--anim-error) 0%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 12px 2px color-mix(in oklch, var(--anim-error) 40%, transparent);
+	}
+}
+
+.animate-glow-error {
+	animation: glow-error 2s ease-in-out infinite;
+}
+
+/* Secondary glow pulse - epic, special states */
+@keyframes glow-secondary {
+	0%, 100% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--anim-secondary) 0%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 12px 2px color-mix(in oklch, var(--anim-secondary) 40%, transparent);
+	}
+}
+
+.animate-glow-secondary {
+	animation: glow-secondary 2s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   TRANSITION UTILITIES
+   Common transition presets for consistent timing
+   -------------------------------------------------------------------------- */
+
+.transition-fast {
+	transition: all 0.1s ease;
+}
+
+.transition-normal {
+	transition: all 0.2s ease;
+}
+
+.transition-slow {
+	transition: all 0.3s ease;
+}
+
+/* Specific property transitions */
+.transition-opacity {
+	transition: opacity 0.2s ease;
+}
+
+.transition-transform {
+	transition: transform 0.2s ease;
+}
+
+.transition-colors {
+	transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+/* --------------------------------------------------------------------------
+   STAGGER ANIMATION DELAYS
+   Use with entrance animations for cascading effects on lists
+   -------------------------------------------------------------------------- */
+
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+
+/* --------------------------------------------------------------------------
+   REDUCED MOTION
+   Respect user preferences for reduced animations
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.animate-spin-fast,
+	.skeleton-pulse,
+	.animate-slide-down,
+	.animate-slide-up,
+	.animate-scale-in,
+	.animate-dropdown,
+	.animate-pop,
+	.animate-pulse-subtle,
+	.animate-ring-pulse,
+	.animate-pulse-save,
+	.animate-glow-primary,
+	.animate-glow-success,
+	.animate-glow-warning,
+	.animate-glow-error,
+	.animate-glow-secondary,
+	.task-new-entrance,
+	.task-exit,
+	.session-entrance,
+	.session-exit,
+	.task-starting,
+	.task-completed,
+	.task-working-completed,
+	.epic-completed-celebration,
+	.epic-running,
+	.radar-sweep,
+	.radar-pulse,
+	.agent-new-entrance,
+	.text-exit-animation,
+	.sparkline-animate,
+	.sparkline-area-animate,
+	.agent-highlight-flash,
+	.shimmer-text,
+	.shimmer-text-fast,
+	.shimmer-text-slow,
+	.row-shimmer,
+	.fade-in-left,
+	.fade-in,
+	.tracking-in-expand,
+	.puff-in-center {
+		animation: none !important;
+		transition: none !important;
+	}
+}

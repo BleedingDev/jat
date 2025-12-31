@@ -625,7 +625,7 @@
 				<h1 class="page-title">Files</h1>
 
 				<!-- Project Selector Dropdown -->
-				<div class="dropdown dropdown-end">
+				<div class="dropdown dropdown-start">
 					<button class="project-selector" tabindex="0">
 						<!-- Project color dot -->
 						{#if selectedProjectColor}
