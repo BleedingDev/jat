@@ -2872,6 +2872,268 @@ The **Project File Explorer** (`/files`) provides a full-featured file browser a
 | Rename | F2 | Rename file/folder |
 | Delete | Delete | Delete file/folder (with confirmation) |
 
+### FileEditor Component
+
+**File:** `src/lib/components/files/FileEditor.svelte`
+
+The FileEditor component is the main container that combines the tab bar and Monaco editor into a cohesive editing experience. It manages open files, dirty state tracking, and keyboard shortcuts.
+
+#### Component Props
+
+```typescript
+let {
+    openFiles = $bindable([]),           // Array of open files
+    activeFilePath = $bindable(null),    // Currently active file path
+    onFileClose = () => {},              // Called when tab is closed
+    onFileSave = () => {},               // Called when file is saved
+    onActiveFileChange = () => {},       // Called when active tab changes
+    onContentChange = () => {},          // Called on editor content change
+    onTabReorder = () => {},             // Called on drag-drop reorder
+    savingFiles = new Set<string>()      // Set of paths currently being saved
+}: {
+    openFiles: OpenFile[];
+    activeFilePath: string | null;
+    onFileClose?: (path: string) => void;
+    onFileSave?: (path: string, content: string) => void;
+    onActiveFileChange?: (path: string) => void;
+    onContentChange?: (path: string, content: string, dirty: boolean) => void;
+    onTabReorder?: (fromIndex: number, toIndex: number) => void;
+    savingFiles?: Set<string>;
+} = $props();
+```
+
+**Note:** `openFiles` and `activeFilePath` are bindable props, allowing parent components to reactively track and modify the editor state.
+
+#### OpenFile Type
+
+```typescript
+interface OpenFile {
+    path: string;           // Full file path
+    content: string;        // Current editor content
+    dirty: boolean;         // True if content differs from original
+    originalContent: string; // Content when file was opened
+}
+```
+
+#### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Tab Bar** | Horizontal tabs via FileTabBar component |
+| **Save Button** | Header button with saving spinner, pulses when file is dirty |
+| **Monaco Editor** | Full-featured code editor via MonacoWrapper |
+| **Language Detection** | Auto-detects 25+ languages from file extension |
+| **Dirty Tracking** | Compares content to original, enables/disables save button |
+| **Unsaved Confirmation** | Modal dialog when closing tabs with unsaved changes |
+| **Keyboard Shortcuts** | Alt+S save, Alt+W close, Alt+]/[ tab navigation |
+
+#### Language Detection
+
+The `getLanguage()` function maps file extensions to Monaco language identifiers:
+
+| Extensions | Language |
+|------------|----------|
+| `.ts`, `.tsx` | typescript |
+| `.js`, `.jsx`, `.mjs`, `.cjs` | javascript |
+| `.json` | json |
+| `.md` | markdown |
+| `.css` | css |
+| `.scss` | scss |
+| `.html`, `.htm` | html |
+| `.xml`, `.svg` | xml |
+| `.yaml`, `.yml` | yaml |
+| `.py` | python |
+| `.rs` | rust |
+| `.go` | go |
+| `.java` | java |
+| `.c`, `.h` | c |
+| `.cpp`, `.hpp` | cpp |
+| `.sh`, `.bash`, `.zsh` | shell |
+| `.sql` | sql |
+| `.graphql`, `.gql` | graphql |
+| `.svelte`, `.vue` | html (fallback) |
+| `.dockerfile` | dockerfile |
+| `.toml` | toml |
+| `.ini`, `.conf` | ini |
+| (default) | plaintext |
+
+#### Unsaved Changes Dialog
+
+When closing a tab with unsaved changes, a confirmation modal appears:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  ⚠️ Unsaved Changes                 │
+│                                                     │
+│  "filename.ts" has unsaved changes.                │
+│  Do you want to save before closing?               │
+│                                                     │
+│  [Don't Save]    [Cancel]    [Save & Close]        │
+└─────────────────────────────────────────────────────┘
+```
+
+**Actions:**
+- **Don't Save** - Closes tab, discards changes
+- **Cancel** - Returns to editing
+- **Save & Close** - Saves file, then closes tab
+
+#### Exported Methods
+
+The component exposes two methods for parent control:
+
+```typescript
+// Focus the Monaco editor
+export function focus() {
+    monacoRef?.focus();
+}
+
+// Trigger Monaco layout recalculation
+export function layout() {
+    monacoRef?.layout();
+}
+```
+
+**Usage:**
+```svelte
+<script>
+    let editorRef: { focus: () => void; layout: () => void };
+</script>
+
+<FileEditor bind:this={editorRef} ... />
+
+<button onclick={() => editorRef.focus()}>Focus Editor</button>
+```
+
+#### Usage Example
+
+```svelte
+<script lang="ts">
+    import FileEditor from '$lib/components/files/FileEditor.svelte';
+    import type { OpenFile } from '$lib/components/files/types';
+
+    let openFiles = $state<OpenFile[]>([]);
+    let activeFilePath = $state<string | null>(null);
+    let savingFiles = $state(new Set<string>());
+
+    function handleFileClose(path: string) {
+        openFiles = openFiles.filter(f => f.path !== path);
+        if (activeFilePath === path) {
+            activeFilePath = openFiles[0]?.path ?? null;
+        }
+    }
+
+    async function handleFileSave(path: string, content: string) {
+        savingFiles.add(path);
+        savingFiles = new Set(savingFiles); // Trigger reactivity
+
+        await fetch('/api/files/content', {
+            method: 'PUT',
+            body: JSON.stringify({ path, content })
+        });
+
+        savingFiles.delete(path);
+        savingFiles = new Set(savingFiles);
+
+        // Update original content to mark as clean
+        openFiles = openFiles.map(f =>
+            f.path === path ? { ...f, originalContent: content, dirty: false } : f
+        );
+    }
+</script>
+
+<FileEditor
+    bind:openFiles
+    bind:activeFilePath
+    {savingFiles}
+    onFileClose={handleFileClose}
+    onFileSave={handleFileSave}
+    onActiveFileChange={(path) => activeFilePath = path}
+    onContentChange={(path, content, dirty) => {
+        openFiles = openFiles.map(f =>
+            f.path === path ? { ...f, content, dirty } : f
+        );
+    }}
+    onTabReorder={(from, to) => {
+        const reordered = [...openFiles];
+        const [moved] = reordered.splice(from, 1);
+        reordered.splice(to, 0, moved);
+        openFiles = reordered;
+    }}
+/>
+```
+
+#### Visual States
+
+| State | Visual |
+|-------|--------|
+| **No files open** | Empty state with keyboard shortcut hints |
+| **Files open, none active** | Tab bar with "Select a tab to edit" message |
+| **Active file** | Tab bar + Monaco editor with file content |
+| **Unsaved changes** | Yellow dot on tab, pulsing save button |
+| **Saving** | Spinning loader in save button, button disabled |
+
+#### Styling
+
+The component uses a dark theme with oklch colors:
+
+| Element | Color |
+|---------|-------|
+| Background | `oklch(0.14 0.01 250)` |
+| Header | `oklch(0.16 0.01 250)` |
+| Save button (dirty) | `oklch(0.75 0.15 145)` green pulse |
+| Save button (saving) | `oklch(0.65 0.15 200)` blue spinner |
+| Border | `oklch(0.22 0.02 250)` |
+
+### FileTabBar Component
+
+**File:** `src/lib/components/files/FileTabBar.svelte`
+
+The FileTabBar component displays open files as draggable tabs with close buttons and dirty indicators.
+
+#### Component Props
+
+```typescript
+let {
+    openFiles = [],              // Array of open files
+    activeFilePath = null,       // Currently active file path
+    onTabSelect = () => {},      // Called when tab is clicked
+    onTabClose = () => {},       // Called when X button is clicked
+    onTabMiddleClick = () => {}, // Called on middle mouse button
+    onTabReorder = () => {}      // Called on drag-drop completion
+}: {
+    openFiles: OpenFile[];
+    activeFilePath: string | null;
+    onTabSelect?: (path: string) => void;
+    onTabClose?: (path: string) => void;
+    onTabMiddleClick?: (path: string) => void;
+    onTabReorder?: (fromIndex: number, toIndex: number) => void;
+} = $props();
+```
+
+#### Features
+
+| Feature | Description |
+|---------|-------------|
+| **File icons** | Color-coded by extension (TypeScript blue, JavaScript yellow, etc.) |
+| **Dirty indicator** | Yellow dot for unsaved changes |
+| **Close button** | Appears on hover, orange tint when dirty |
+| **Middle-click close** | Close tab with middle mouse button |
+| **Drag-and-drop** | Reorder tabs by dragging, visual drop indicators |
+| **Horizontal scroll** | Overflow tabs scroll horizontally |
+| **Keyboard focus** | Tab key navigation with visible focus ring |
+
+#### Drag-and-Drop
+
+Tabs support native HTML5 drag-and-drop:
+
+1. **Drag start** - Tab becomes semi-transparent
+2. **Drag over** - Target tab shows left/right glow indicator
+3. **Drop** - Calls `onTabReorder(fromIndex, toIndex)`
+
+**Visual indicators:**
+- `drag-over-left` - Blue glow on left edge (dropping before)
+- `drag-over-right` - Blue glow on right edge (dropping after)
+
 ### File Tabs
 
 **Behavior:**
@@ -2992,7 +3254,9 @@ Icons are determined by file extension in FileTree:
 
 **Components:**
 - `src/lib/components/files/FileTree.svelte` - Directory tree with CRUD
-- `src/lib/components/files/FileTabs.svelte` - Tab bar (if separate)
+- `src/lib/components/files/FileEditor.svelte` - Container with tabs and Monaco editor
+- `src/lib/components/files/FileTabBar.svelte` - Horizontal tab bar for open files
+- `src/lib/components/files/types.ts` - OpenFile and FileNode types
 
 **API:**
 - `src/routes/api/files/+server.ts` - Directory listing
@@ -3014,6 +3278,7 @@ Icons are determined by file extension in FileTree:
   - jat-5qtio: Add file/folder create, rename, delete operations (completed)
   - jat-myayu: Add persistent tab order storage (completed)
   - jat-q5835: Add documentation for tab order feature (completed)
+  - jat-hxpie: Create Documentation for FileEditor Component (completed)
 
 ## File Operations Error Handling
 

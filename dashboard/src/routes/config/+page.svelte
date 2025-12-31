@@ -45,6 +45,8 @@
 	import StateActionsEditor from '$lib/components/config/StateActionsEditor.svelte';
 	import KeyboardShortcutsEditor from '$lib/components/config/KeyboardShortcutsEditor.svelte';
 	import SwarmSettingsEditor from '$lib/components/config/SwarmSettingsEditor.svelte';
+	import ToolsList from '$lib/components/config/ToolsList.svelte';
+	import ToolsEditor from '$lib/components/config/ToolsEditor.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
@@ -88,8 +90,16 @@
 	const projectsLoading = $derived(isProjectsLoading());
 	const projectsError = $derived(getProjectsError());
 
+	// Tools editor state
+	interface ToolFile {
+		path: string;
+		name: string;
+		type: 'bash' | 'js' | 'markdown' | 'unknown';
+	}
+	let selectedTool = $state<ToolFile | null>(null);
+
 	// Valid tabs for URL sync
-	const validTabs = ['commands', 'projects', 'swarm', 'defaults', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts'];
+	const validTabs = ['commands', 'tools', 'projects', 'swarm', 'defaults', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts'];
 
 	// Sync activeTab from URL query parameter
 	$effect(() => {
@@ -318,6 +328,25 @@
 					>
 						<CommandsList onEditCommand={handleEditCommand} onAddCommand={handleAddCommand} />
 					</div>
+				{:else if activeTab === 'tools'}
+					<!-- Tools Tab -->
+					<div
+						role="tabpanel"
+						id="tools-panel"
+						aria-labelledby="tools-tab"
+						class="tools-panel"
+						transition:fade={{ duration: 150 }}
+					>
+						<ToolsList
+							selectedPath={selectedTool?.path}
+							onSelect={(tool) => (selectedTool = tool)}
+						/>
+						<ToolsEditor
+							toolPath={selectedTool?.path}
+							displayName={selectedTool?.name}
+							toolType={selectedTool?.type}
+						/>
+					</div>
 				{:else if activeTab === 'projects'}
 					<!-- Projects Tab -->
 					<div
@@ -521,12 +550,23 @@
 		min-height: 600px;
 	}
 
+	/* Tools panel - side by side layout (same as claude-panel) */
+	.tools-panel {
+		display: flex;
+		gap: 1.5rem;
+		min-height: 600px;
+	}
+
 	@media (max-width: 900px) {
 		.claude-panel {
 			flex-direction: column;
 		}
 
 		.docs-panel {
+			flex-direction: column;
+		}
+
+		.tools-panel {
 			flex-direction: column;
 		}
 	}

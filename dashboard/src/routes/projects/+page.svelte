@@ -151,6 +151,59 @@
 	// Key format: "project:epicId" or "project:other"
 	let groupFilterTerms = $state<Map<string, string>>(new Map());
 
+	// === Session Entrance Animation ===
+	// Track which sessions are currently animating their entrance
+	const ENTRANCE_ANIMATION_DURATION = 500; // matches CSS animation duration
+	let enteringSessionNames = $state<Set<string>>(new Set());
+	let hasInitializedEntranceTracking = $state(false);
+	let previousSessionNames = $state<Set<string>>(new Set());
+
+	// Pre-render effect: detect new sessions and mark them for entrance animation
+	$effect.pre(() => {
+		// Get current session names from the store
+		const currentNames = new Set(workSessionsState.sessions.map(s => s.sessionName));
+
+		// Skip animation on initial mount - only animate NEW sessions after first load
+		if (!hasInitializedEntranceTracking) {
+			if (workSessionsState.sessions.length > 0 || !isInitialLoad) {
+				previousSessionNames = currentNames;
+				hasInitializedEntranceTracking = true;
+			}
+			return;
+		}
+
+		// Find sessions that are new (in current but not in previous)
+		let hasChanges = false;
+		for (const name of currentNames) {
+			if (!previousSessionNames.has(name) && !enteringSessionNames.has(name)) {
+				hasChanges = true;
+				// Mark as entering
+				enteringSessionNames = new Set([...enteringSessionNames, name]);
+
+				// Clear after animation completes
+				setTimeout(() => {
+					enteringSessionNames = new Set([...enteringSessionNames].filter(n => n !== name));
+				}, ENTRANCE_ANIMATION_DURATION);
+			}
+		}
+
+		// Check if any sessions were removed
+		if (!hasChanges) {
+			for (const name of previousSessionNames) {
+				if (!currentNames.has(name)) {
+					hasChanges = true;
+					break;
+				}
+			}
+		}
+
+		// Only update previousSessionNames if the set contents actually changed
+		// This prevents infinite effect loops from creating new Set objects
+		if (hasChanges) {
+			previousSessionNames = currentNames;
+		}
+	});
+
 	// Get sort setting for a group (defaults to state/asc)
 	function getGroupSort(project: string, groupId: string): { sortBy: SortOption; sortDir: 'asc' | 'desc' } {
 		const key = `${project}:${groupId}`;
@@ -559,7 +612,10 @@
 	// Initialize section states for all projects (call this when projects change)
 	function initializeSectionStates(projects: string[]) {
 		let needsUpdate = false;
-		const newStates = new Map(sectionStates);
+		// Use $state.snapshot to avoid creating a reactive dependency on sectionStates
+		// This prevents infinite effect loops when this function is called from an effect
+		const currentStates = $state.snapshot(sectionStates);
+		const newStates = new Map(currentStates);
 
 		for (const project of projects) {
 			for (const section of ['sessions', 'tasks'] as const) {
@@ -1656,6 +1712,7 @@
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
 																	isExiting={session._isExiting}
+																	isEntering={enteringSessionNames.has(session.sessionName)}
 																	onTaskDataChange={handleEpicLinkRefresh}
 																/>
 															</div>
@@ -1775,6 +1832,7 @@
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
 																	isExiting={session._isExiting}
+																	isEntering={enteringSessionNames.has(session.sessionName)}
 																	onTaskDataChange={handleEpicLinkRefresh}
 																/>
 															</div>

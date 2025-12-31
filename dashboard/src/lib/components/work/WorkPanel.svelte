@@ -163,15 +163,6 @@
 		const currentNames = new Set(workSessions.map(s => s.sessionName));
 		const previousNames = new Set(previousWorkSessions.keys());
 
-		// DEBUG: Log EVERY effect run
-		console.log('[WorkPanel] effect.pre - sessions:', currentNames.size, 'prev:', previousNames.size, 'init:', hasInitialized);
-
-		// DEBUG: Log session changes
-		const newSessions = [...currentNames].filter(n => !previousNames.has(n));
-		if (newSessions.length > 0) {
-			console.log('[WorkPanel] NEW SESSIONS:', newSessions, 'hasInitialized:', hasInitialized);
-		}
-
 		// Find sessions that were in previous but not in current (removed)
 		for (const [name, prevSession] of previousWorkSessions) {
 			if (!currentNames.has(name) && !exitingSessionsData.has(name)) {
