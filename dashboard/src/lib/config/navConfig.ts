@@ -4,31 +4,36 @@
  *
  * NAVIGATION STRUCTURE:
  *
- * PRIMARY (main nav - always visible):
- *   /projects - Projects (default route, multi-project sessions view)
+ * MAIN (core workflow - always visible):
+ *   /work     - Work (default route, multi-project sessions view)
+ *   /files    - Files (project file browser)
  *   /servers  - Servers (project server sessions)
  *   /automation - Automation rules configuration
  *   /history  - History (completed task history with streak calendar)
  *   /config   - Config (JAT configuration files editor)
  *
- * SECONDARY (collapsible or less prominent):
+ * VIEWS (alternative visualizations):
  *   /graph    - Dependency visualization
- *   /timeline - Historical view (link from /projects)
+ *   /timeline - Historical view
  *   /kanban   - Agent kanban (sessions grouped by activity state)
- *   /triage   - Task triage (needs work, not ready for primetime)
+ *
+ * LABS (experimental, not production-ready):
+ *   /triage   - Task triage (needs work)
+ *   /swarm    - Swarm attack interface (experimental)
  *
  * DROPPED (removed):
- *   /         - Replaced by /projects as default
- *   /tasks    - Redundant with /projects (removed)
- *   /agents   - Redundant with /projects (removed)
+ *   /         - Replaced by /work as default
+ *   /tasks    - Redundant with /work (removed)
+ *   /agents   - Redundant with /work (removed)
+ *   /projects - Renamed to /work
  */
 
 export interface NavItem {
-	id: string; // Unique identifier (e.g., 'work', 'dash', 'projects')
-	label: string; // Display text (e.g., 'Tasks', 'Agents', 'Servers')
-	href: string; // Navigation target (e.g., '/work', '/dash')
+	id: string; // Unique identifier (e.g., 'work', 'files', 'servers')
+	label: string; // Display text (e.g., 'Work', 'Files', 'Servers')
+	href: string; // Navigation target (e.g., '/work', '/files')
 	icon: string; // Icon identifier (matches icon SVG paths in Sidebar.svelte)
-	primary?: boolean; // Primary nav items are always visible
+	category: 'main' | 'views' | 'labs'; // Section grouping
 }
 
 export interface UnifiedNavConfig {
@@ -48,84 +53,85 @@ export interface UnifiedNavConfig {
  */
 export const unifiedNavConfig: UnifiedNavConfig = {
 	navItems: [
-		// PRIMARY: Main navigation (always visible)
+		// MAIN: Core workflow (always visible)
 		{
-			id: 'projects',
-			label: 'Projects',
-			href: '/projects',
-			icon: 'folders',
-			primary: true
+			id: 'work',
+			label: 'Work',
+			href: '/work',
+			icon: 'tasks',
+			category: 'main'
 		},
 		{
 			id: 'files',
 			label: 'Files',
 			href: '/files',
 			icon: 'files',
-			primary: true
+			category: 'main'
 		},
 		{
 			id: 'servers',
 			label: 'Servers',
 			href: '/servers',
 			icon: 'servers',
-			primary: true
+			category: 'main'
 		},
 		{
 			id: 'automation',
 			label: 'Automation',
 			href: '/automation',
 			icon: 'automation',
-			primary: true
+			category: 'main'
 		},
 		{
 			id: 'history',
 			label: 'History',
 			href: '/history',
 			icon: 'history',
-			primary: true
+			category: 'main'
 		},
 		{
 			id: 'config',
 			label: 'Config',
 			href: '/config',
 			icon: 'settings',
-			primary: true
+			category: 'main'
 		},
-		// SECONDARY: Less prominent routes
+		// VIEWS: Alternative visualizations
 		{
 			id: 'graph',
 			label: 'Graph',
 			href: '/graph',
 			icon: 'graph',
-			primary: false
+			category: 'views'
 		},
 		{
 			id: 'timeline',
 			label: 'Timeline',
 			href: '/timeline',
 			icon: 'timeline',
-			primary: false
+			category: 'views'
 		},
 		{
 			id: 'kanban',
 			label: 'Kanban',
 			href: '/kanban',
 			icon: 'columns',
-			primary: false
+			category: 'views'
 		},
+		// LABS: Experimental features (not production-ready)
 		{
 			id: 'triage',
 			label: 'Triage',
 			href: '/triage',
 			icon: 'triage',
-			primary: false
+			category: 'labs'
 		},
 		{
 			id: 'swarm',
 			label: 'Swarm',
 			href: '/swarm',
 			icon: 'swarm',
-			primary: false
+			category: 'labs'
 		}
 	],
 	showProjectFilter: true,

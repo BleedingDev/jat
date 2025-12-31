@@ -1520,6 +1520,7 @@
 	let voiceFlash = $state(false); // Brief flash when voice recording starts/stops
 	let attachFlash = $state(false); // Brief flash when image is attached
 	let arrowFlash = $state(false); // Brief flash when arrow key navigates
+	let exitingText = $state<string | null>(null); // Text being animated out on submit
 
 	// Live streaming input state
 	// When enabled, characters are streamed to terminal as user types
@@ -3765,6 +3766,9 @@
 				await onSendInput(message, "text");
 			}
 
+			// Capture text for exit animation before clearing
+			const textToAnimate = inputText.trim();
+
 			// Clear input and attached files on success
 			inputText = "";
 			lastStreamedText = ""; // Reset streamed text tracking
@@ -3776,6 +3780,15 @@
 				if (file.preview) URL.revokeObjectURL(file.preview);
 			}
 			attachedFiles = [];
+
+			// Trigger text exit animation if there was text
+			if (textToAnimate) {
+				exitingText = textToAnimate;
+				setTimeout(() => {
+					exitingText = null;
+				}, 600); // Match animation duration
+			}
+
 			// Trigger visual flash feedback for successful submit
 			submitFlash = true;
 			setTimeout(() => {
@@ -6629,6 +6642,15 @@
 							disabled={sendingInput || !onSendInput}
 							data-session-input="true"
 						></textarea>
+						<!-- Text exit animation overlay -->
+						{#if exitingText}
+							<div
+								class="absolute inset-0 flex items-center px-2 font-mono text-exit-animation overflow-hidden"
+								style="background: oklch(0.22 0.02 250); color: oklch(0.80 0.02 250); font-size: 0.75rem; perspective: 500px; transform-style: preserve-3d;"
+							>
+								<span class="truncate">{exitingText}</span>
+							</div>
+						{/if}
 						{#if inputText.trim()}
 							<button
 								type="button"

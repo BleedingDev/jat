@@ -498,6 +498,28 @@
 	animation: agent-entrance 1.5s ease-out forwards;
 }
 
+/* Text exit animation - contracts letter spacing and fades backward on submit */
+@keyframes tracking-out-contract-bck {
+	0% {
+		transform: translateZ(0);
+		opacity: 1;
+		letter-spacing: normal;
+	}
+	60% {
+		opacity: 1;
+	}
+	100% {
+		letter-spacing: -0.5em;
+		transform: translateZ(-500px);
+		opacity: 0;
+	}
+}
+
+.text-exit-animation {
+	animation: tracking-out-contract-bck 0.6s cubic-bezier(0.550, 0.085, 0.680, 0.530) forwards;
+	pointer-events: none;
+}
+
 /* Sparkline draw animation - line draws from left to right */
 @keyframes sparkline-draw {
 	from {

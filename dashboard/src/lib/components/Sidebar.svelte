@@ -36,24 +36,29 @@
 
 	// Icon SVG paths (Heroicons outline)
 	const icons: Record<string, string> = {
-		// PRIMARY: Tasks, Agents, Servers
+		// MAIN: Core workflow
 		tasks: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
-		agents: 'M8.25 3v1.5M4.5 8.25H3M21 8.25h-1.5M4.5 12H3M21 12h-1.5M4.5 15.75H3M21 15.75h-1.5M8.25 19.5V21M12 3v1.5M12 19.5V21M15.75 3v1.5M15.75 19.5V21M6 6.75h12A2.25 2.25 0 0120.25 9v6a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 15V9A2.25 2.25 0 016 6.75zM9.75 9.75h4.5v4.5h-4.5v-4.5z',
-		servers: 'M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z',
 		files: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
-		// SECONDARY: Projects, Triage, Timeline, Kanban, Graph
-		folders: 'M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z',
-		triage: 'M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z',
-		timeline: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
-		columns: 'M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z',
-		graph: 'M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z',
+		servers: 'M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z',
 		automation: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
 		history: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+		settings: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+		// VIEWS: Alternative visualizations
+		graph: 'M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z',
+		timeline: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
+		columns: 'M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z',
+		// LABS: Experimental features
+		triage: 'M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z',
 		swarm: 'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z',
+		beaker: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 5.607c.28 1.12-.62 2.093-1.772 2.093H4.57c-1.152 0-2.052-.973-1.772-2.093L5 14.5',
 		// Utilities
-		help: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-		settings: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z M15 12a3 3 0 11-6 0 3 3 0 016 0z'
+		help: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
 	};
+
+	// Filter nav items by category
+	const mainItems = unifiedNavConfig.navItems.filter((item) => item.category === 'main');
+	const viewsItems = unifiedNavConfig.navItems.filter((item) => item.category === 'views');
+	const labsItems = unifiedNavConfig.navItems.filter((item) => item.category === 'labs');
 
 	// Help modal state
 	let showHelpModal = $state(false);
@@ -114,9 +119,9 @@
 		</div>
 
 		<!-- Main navigation items -->
-		<nav class="flex-1 px-2 py-3 space-y-1">
-			<!-- PRIMARY: Main navigation (Tasks, Agents, Servers) -->
-			{#each unifiedNavConfig.navItems.filter(item => item.primary !== false) as navItem, index}
+		<nav class="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
+			<!-- MAIN: Core workflow -->
+			{#each mainItems as navItem, index}
 				{@const active = isActive(navItem.href)}
 				<a
 					href={navItem.href}
@@ -173,20 +178,24 @@
 				</a>
 			{/each}
 
-			<!-- Separator between primary and secondary -->
-			<div
-				class="h-px mx-2 my-3"
-				style="background: linear-gradient(90deg, transparent, oklch(0.35 0.02 250), transparent);"
-			></div>
+			<!-- VIEWS section header -->
+			{#if !$isSidebarCollapsed}
+				<div class="pt-4 pb-1 px-3">
+					<span class="font-mono text-[9px] tracking-widest uppercase" style="color: oklch(0.45 0.02 250);">
+						Views
+					</span>
+				</div>
+			{:else}
+				<div class="h-px mx-2 my-2" style="background: oklch(0.30 0.02 250);"></div>
+			{/if}
 
-			<!-- SECONDARY: Less prominent routes (Triage, Timeline, Kanban, Graph) -->
-			{#each unifiedNavConfig.navItems.filter(item => item.primary === false) as navItem, index}
+			<!-- VIEWS: Alternative visualizations -->
+			{#each viewsItems as navItem, index}
 				{@const active = isActive(navItem.href)}
-				{@const primaryCount = unifiedNavConfig.navItems.filter(item => item.primary !== false).length}
 				<a
 					href={navItem.href}
 					class="w-full flex items-center gap-3 px-3 py-2 rounded transition-all duration-200 group
-						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (primaryCount + index) : ''}
+						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (mainItems.length + index) : ''}
 						{active ? '' : 'industrial-hover'}"
 					style="
 						background: {active ? 'linear-gradient(90deg, oklch(0.70 0.18 240 / 0.15) 0%, transparent 100%)' : 'transparent'};
@@ -196,7 +205,7 @@
 					"
 					data-tip={navItem.label}
 				>
-					<!-- Icon (smaller for secondary) -->
+					<!-- Icon (smaller for views) -->
 					<div
 						class="flex items-center justify-center w-5 h-5 rounded transition-all {$isSidebarCollapsed ? 'puff-in-center' : ''}"
 						style="
@@ -236,6 +245,86 @@
 					{/if}
 				</a>
 			{/each}
+
+			<!-- LABS section header with beaker icon -->
+			{#if !$isSidebarCollapsed}
+				<div class="pt-4 pb-1 px-3 flex items-center gap-1.5">
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="1.5"
+						stroke="currentColor"
+						class="w-3 h-3"
+						style="color: oklch(0.50 0.12 300);"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d={icons.beaker} />
+					</svg>
+					<span class="font-mono text-[9px] tracking-widest uppercase" style="color: oklch(0.50 0.12 300);">
+						Labs
+					</span>
+				</div>
+			{:else}
+				<div class="h-px mx-2 my-2" style="background: oklch(0.35 0.08 300);"></div>
+			{/if}
+
+			<!-- LABS: Experimental features (dimmed styling) -->
+			{#each labsItems as navItem, index}
+				{@const active = isActive(navItem.href)}
+				<a
+					href={navItem.href}
+					class="w-full flex items-center gap-3 px-3 py-2 rounded transition-all duration-200 group
+						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (mainItems.length + viewsItems.length + index) : ''}
+						{active ? '' : 'industrial-hover'}"
+					style="
+						background: {active ? 'linear-gradient(90deg, oklch(0.55 0.12 300 / 0.15) 0%, transparent 100%)' : 'transparent'};
+						border-left: 2px solid {active ? 'oklch(0.55 0.12 300 / 0.7)' : 'transparent'};
+						color: {active ? 'oklch(0.65 0.10 300)' : 'oklch(0.45 0.02 250)'};
+						opacity: {active ? 1 : 0.7};
+						text-decoration: none;
+					"
+					data-tip="{navItem.label} (experimental)"
+				>
+					<!-- Icon (smaller, dimmed for labs) -->
+					<div
+						class="flex items-center justify-center w-5 h-5 rounded transition-all {$isSidebarCollapsed ? 'puff-in-center' : ''}"
+						style="
+							background: {active ? 'oklch(0.55 0.12 300 / 0.1)' : 'transparent'};
+						"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width={active ? 1.75 : 1.5}
+							stroke="currentColor"
+							class="w-4 h-4 transition-all {active ? '' : 'group-hover:scale-110'}"
+							style="color: {active ? 'oklch(0.60 0.10 300)' : 'oklch(0.45 0.05 300)'};"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d={icons[navItem.icon]} />
+						</svg>
+					</div>
+
+					<!-- Label (hidden when collapsed) -->
+					{#if !$isSidebarCollapsed}
+						<span
+							class="fade-in font-mono text-[10px] tracking-wider uppercase transition-colors
+								{active ? '' : 'group-hover:text-base-content/60'}"
+							style="color: {active ? 'oklch(0.60 0.08 300)' : 'oklch(0.45 0.02 250)'};"
+						>
+							<span class="tracking-in-expand">{navItem.label}</span>
+						</span>
+
+						<!-- Active indicator line (extended, purple tint for labs) -->
+						{#if active}
+							<div
+								class="flex-1 h-px"
+								style="background: linear-gradient(90deg, oklch(0.55 0.12 300 / 0.3), transparent);"
+							></div>
+						{/if}
+					{/if}
+				</a>
+			{/each}
 		</nav>
 
 		<!-- Bottom utilities -->
@@ -246,55 +335,12 @@
 				style="background: linear-gradient(90deg, transparent, oklch(0.45 0.02 250), transparent);"
 			></div>
 
-			<!-- Settings link (Industrial) -->
-			{#if true}
-				{@const settingsActive = isActive('/settings')}
-				{@const totalNavItems = unifiedNavConfig.navItems.length}
-				<a
-					href="/settings"
-					aria-label="Settings"
-					class="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-all duration-200 group
-						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + totalNavItems : ''}
-						{settingsActive ? '' : 'industrial-hover'}"
-					style="
-						background: {settingsActive ? 'linear-gradient(90deg, oklch(0.70 0.18 240 / 0.2) 0%, transparent 100%)' : 'transparent'};
-						border-left: 2px solid {settingsActive ? 'oklch(0.70 0.18 240)' : 'transparent'};
-						color: {settingsActive ? 'oklch(0.80 0.15 240)' : 'oklch(0.60 0.02 250)'};
-						text-decoration: none;
-					"
-					data-tip="Settings"
-				>
-					<div class="flex items-center justify-center w-6 h-6 {$isSidebarCollapsed ? 'puff-in-center' : ''}">
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width={settingsActive ? 2 : 1.5}
-							stroke="currentColor"
-							class="w-4.5 h-4.5 group-hover:scale-110 transition-transform"
-							style="color: {settingsActive ? 'oklch(0.75 0.16 240)' : 'oklch(0.55 0.02 250)'};"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d={icons.settings} />
-						</svg>
-					</div>
-					{#if !$isSidebarCollapsed}
-						<span
-							class="fade-in font-mono text-xs tracking-wider uppercase transition-colors
-								{settingsActive ? '' : 'group-hover:text-base-content/70'}"
-							style="text-shadow: {settingsActive ? '0 0 10px oklch(0.70 0.18 240 / 0.4)' : 'none'};"
-						>
-							<span class="tracking-in-expand">Settings</span>
-						</span>
-					{/if}
-				</a>
-			{/if}
-
 			<!-- Help button (Industrial) -->
 			<button
 				onclick={toggleHelp}
 				aria-label="Show help guide"
 				class="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-all duration-200 group
-					{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (unifiedNavConfig.navItems.length + 1) : ''}
+					{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (mainItems.length + viewsItems.length + labsItems.length) : ''}
 					industrial-hover"
 				style="color: oklch(0.60 0.02 250);"
 				data-tip="Help & Shortcuts"

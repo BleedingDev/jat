@@ -245,29 +245,42 @@ async function getServerStatus(projectName, port) {
 /**
  * Get last activity time for a project
  * Checks multiple sources and returns the most recent:
- * 1. Agent session files (.claude/agent-*.txt)
+ * 1. Agent session files (.claude/agent-*.txt and .claude/sessions/agent-*.txt)
  * 2. Git commit time
  * 3. Directory mtime (fallback)
  * @param {string} projectPath
+ * @returns {Promise<{formatted: string|null, agentActivityMs: number}>}
  */
 async function getLastActivity(projectPath) {
 	let mostRecentMs = 0;
+	let agentActivityMs = 0;
 
 	// Check .claude/agent-*.txt files (most reliable indicator of recent activity)
-	try {
-		const claudeDir = join(projectPath, '.claude');
-		if (existsSync(claudeDir)) {
-			const entries = await readdir(claudeDir);
-			const agentFiles = entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
-			for (const file of agentFiles) {
-				const stats = await stat(join(claudeDir, file));
-				if (stats.mtimeMs > mostRecentMs) {
-					mostRecentMs = stats.mtimeMs;
+	// Also check .claude/sessions/agent-*.txt (new location)
+	const claudeDirs = [
+		join(projectPath, '.claude'),
+		join(projectPath, '.claude', 'sessions')
+	];
+
+	for (const claudeDir of claudeDirs) {
+		try {
+			if (existsSync(claudeDir)) {
+				const entries = await readdir(claudeDir);
+				const agentFiles = entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
+				for (const file of agentFiles) {
+					const stats = await stat(join(claudeDir, file));
+					if (stats.mtimeMs > mostRecentMs) {
+						mostRecentMs = stats.mtimeMs;
+					}
+					// Track agent activity separately (for sorting when servers are running)
+					if (stats.mtimeMs > agentActivityMs) {
+						agentActivityMs = stats.mtimeMs;
+					}
 				}
 			}
+		} catch {
+			// Ignore errors checking agent files
 		}
-	} catch {
-		// Ignore errors checking agent files
 	}
 
 	// Check git commit time
@@ -293,11 +306,14 @@ async function getLastActivity(projectPath) {
 			const stats = await stat(projectPath);
 			mostRecentMs = stats.mtimeMs;
 		} catch {
-			return null;
+			return { formatted: null, agentActivityMs: 0 };
 		}
 	}
 
-	return mostRecentMs > 0 ? formatRelativeTime(mostRecentMs) : null;
+	return {
+		formatted: mostRecentMs > 0 ? formatRelativeTime(mostRecentMs) : null,
+		agentActivityMs
+	};
 }
 
 /**
@@ -404,7 +420,7 @@ export async function GET({ url }) {
 		// Add stats if requested
 		if (includeStats) {
 			projects = await Promise.all(projects.map(async (project) => {
-				const [tasks, agents, status, lastActivity] = await Promise.all([
+				const [tasks, agents, status, activityData] = await Promise.all([
 					getProjectTaskCounts(project.path),
 					getProjectAgentCount(project.path),
 					getServerStatus(project.name, project.port),
@@ -416,13 +432,16 @@ export async function GET({ url }) {
 					tasks,
 					agents,
 					status,
-					// If server is running or starting, it's active now
-					lastActivity: (status === 'running' || status === 'starting') ? 'now' : lastActivity
+					// If server is running or starting, it's active now (for display)
+					lastActivity: (status === 'running' || status === 'starting') ? 'now' : activityData.formatted,
+					// Track agent activity separately for sorting tiebreakers
+					_agentActivityMs: activityData.agentActivityMs
 				};
 			}));
 		}
 
 		// Sort by last activity (most recent first) if stats included
+		// When both have "now" (servers running), use agent activity as tiebreaker
 		if (includeStats) {
 			projects.sort((a, b) => {
 				// Sort by lastActivity (most recent first)
@@ -438,8 +457,21 @@ export async function GET({ url }) {
 					return (order[unit] || 3) * 1000 + num;
 				};
 				// @ts-ignore - lastActivity exists when includeStats is true
-				return getScore(a.lastActivity) - getScore(b.lastActivity);
+				const scoreA = getScore(a.lastActivity);
+				const scoreB = getScore(b.lastActivity);
+
+				// If both have same score (e.g., both "now" from running servers),
+				// use agent activity timestamp as tiebreaker (more recent wins)
+				if (scoreA === scoreB) {
+					// @ts-ignore - _agentActivityMs exists when includeStats is true
+					return (b._agentActivityMs || 0) - (a._agentActivityMs || 0);
+				}
+
+				return scoreA - scoreB;
 			});
+
+			// Remove internal _agentActivityMs field from response
+			projects = projects.map(({ _agentActivityMs, ...project }) => project);
 		}
 
 		// Build response
