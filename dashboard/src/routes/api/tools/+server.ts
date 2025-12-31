@@ -58,6 +58,22 @@ const TOOL_CATEGORIES = [
 		filter: (name: string) => name.startsWith('bd-') || name.startsWith('backup-beads') || name.startsWith('rollback-beads')
 	},
 	{
+		id: 'signal',
+		name: 'Signal Tools',
+		description: 'Session state signaling for dashboard integration',
+		directory: 'tools/signal',
+		icon: 'M9.348 14.651a3.75 3.75 0 010-5.303m5.304 0a3.75 3.75 0 010 5.303m-7.425 2.122a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.007H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
+		filter: (name: string) => name.startsWith('jat-signal')
+	},
+	{
+		id: 'media',
+		name: 'Media Tools',
+		description: 'Image generation and avatar tools using Gemini API',
+		directory: 'tools/media',
+		icon: 'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
+		filter: (name: string) => name.startsWith('gemini-') || name.startsWith('avatar-')
+	},
+	{
 		id: 'scripts',
 		name: 'Setup Scripts',
 		description: 'Installation and configuration scripts',
