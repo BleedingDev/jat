@@ -652,12 +652,12 @@ export async function kill(sessionName: string): Promise<boolean> {
 
 /**
  * Send input to a session (e.g., "continue", "yes", or arbitrary text)
- * @param type - Input type: 'text' (default), 'enter', 'up', 'down', 'escape', 'ctrl-c', 'ctrl-d', 'ctrl-u', 'tab', 'raw'
+ * @param type - Input type: 'text' (default), 'enter', 'up', 'down', 'left', 'right', 'escape', 'ctrl-c', 'ctrl-d', 'ctrl-u', 'tab', 'delete', 'backspace', 'space', 'raw'
  */
 export async function sendInput(
 	sessionName: string,
 	input: string,
-	type: 'text' | 'enter' | 'up' | 'down' | 'escape' | 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'tab' | 'raw' = 'text'
+	type: 'text' | 'enter' | 'up' | 'down' | 'left' | 'right' | 'escape' | 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'tab' | 'delete' | 'backspace' | 'space' | 'raw' = 'text'
 ): Promise<boolean> {
 	debugUnthrottled('SEND_INPUT_START', { sessionName, type, inputLength: input.length });
 	const startTime = Date.now();

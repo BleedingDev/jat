@@ -77,7 +77,20 @@
 	}
 
 	async function handleSendInput(sessionName: string, input: string, type: 'text' | 'key' | 'raw') {
-		await sendInput(sessionName, input, type as 'text' | 'enter' | 'up' | 'down' | 'escape' | 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'tab' | 'raw');
+		if (type === 'raw') {
+			await sendInput(sessionName, input, 'raw');
+			return;
+		}
+		if (type === 'key') {
+			const specialKeys = ['ctrl-c', 'ctrl-d', 'ctrl-u', 'enter', 'escape', 'up', 'down', 'left', 'right', 'tab', 'delete', 'backspace', 'space'];
+			if (specialKeys.includes(input)) {
+				await sendInput(sessionName, '', input as 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'enter' | 'escape' | 'up' | 'down' | 'left' | 'right' | 'tab' | 'delete' | 'backspace' | 'space');
+				return;
+			}
+			await sendInput(sessionName, input, 'raw');
+			return;
+		}
+		await sendInput(sessionName, input, 'text');
 	}
 
 	function handleTaskClick(taskId: string) {

@@ -101,6 +101,21 @@ export async function POST({ params, request }) {
 				command = `tmux send-keys -t "${sessionId}" C-l`;
 				break;
 
+			case 'delete':
+				// Send Delete key (delete character forward)
+				command = `tmux send-keys -t "${sessionId}" DC`;
+				break;
+
+			case 'backspace':
+				// Send Backspace key (delete character backward)
+				command = `tmux send-keys -t "${sessionId}" BSpace`;
+				break;
+
+			case 'space':
+				// Send Space key (for toggling options in multi-select prompts)
+				command = `tmux send-keys -t "${sessionId}" Space`;
+				break;
+
 			case 'raw':
 				// Send raw keys without Enter
 				// Escape special characters for shell
@@ -124,7 +139,7 @@ export async function POST({ params, request }) {
 				success: true,
 				sessionId,
 				type,
-				input: ['ctrl-c', 'ctrl-d', 'ctrl-u', 'ctrl-l', 'tab', 'enter', 'down', 'up', 'left', 'right', 'escape'].includes(type) ? type : input,
+				input: ['ctrl-c', 'ctrl-d', 'ctrl-u', 'ctrl-l', 'tab', 'enter', 'down', 'up', 'left', 'right', 'escape', 'delete', 'backspace', 'space'].includes(type) ? type : input,
 				message: `Input sent to session ${sessionId}`,
 				timestamp: new Date().toISOString()
 			});

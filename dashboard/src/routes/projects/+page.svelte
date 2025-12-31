@@ -1013,9 +1013,9 @@
 			return;
 		}
 		if (type === 'key') {
-			const specialKeys = ['ctrl-c', 'ctrl-d', 'ctrl-u', 'enter', 'escape', 'up', 'down', 'tab'];
+			const specialKeys = ['ctrl-c', 'ctrl-d', 'ctrl-u', 'enter', 'escape', 'up', 'down', 'left', 'right', 'tab', 'delete', 'backspace', 'space'];
 			if (specialKeys.includes(input)) {
-				await sendInput(sessionName, '', input as 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'enter' | 'escape' | 'up' | 'down' | 'tab');
+				await sendInput(sessionName, '', input as 'ctrl-c' | 'ctrl-d' | 'ctrl-u' | 'enter' | 'escape' | 'up' | 'down' | 'left' | 'right' | 'tab' | 'delete' | 'backspace' | 'space');
 				return;
 			}
 			await sendInput(sessionName, input, 'raw');
