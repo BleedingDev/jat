@@ -137,16 +137,21 @@ async function scanBeadsProjects() {
  */
 async function getProjectTaskCounts(projectPath) {
 	try {
-		const { stdout } = await execAsync(`bd list --json`, {
+		const { stdout, stderr } = await execAsync(`bd list --json`, {
 			cwd: projectPath,
-			timeout: 5000
+			timeout: 10000,
+			maxBuffer: 10 * 1024 * 1024  // 10MB buffer for large task lists
 		});
+		if (stderr) {
+			console.error(`[getProjectTaskCounts] stderr for ${projectPath}:`, stderr);
+		}
 		/** @type {Array<{status: string}>} */
 		const tasks = JSON.parse(stdout || '[]');
 		const open = tasks.filter((/** @type {{status: string}} */ t) => t.status === 'open' || t.status === 'in_progress').length;
 		const total = tasks.length;
 		return { open, total };
-	} catch {
+	} catch (err) {
+		console.error(`[getProjectTaskCounts] Error for ${projectPath}:`, err.message);
 		return { open: 0, total: 0 };
 	}
 }
@@ -157,43 +162,73 @@ async function getProjectTaskCounts(projectPath) {
  */
 async function getProjectAgentCount(projectPath) {
 	try {
-		// Check both locations: .claude/sessions/ (new) and .claude/ (legacy)
+		// Get project name from path (e.g., /home/jw/code/jat -> jat)
+		const projectName = projectPath.split('/').pop();
+
+		// Count active tmux sessions with jat-* prefix for this project
+		// Sessions are named jat-{AgentName}, and we need to check which ones
+		// are working on this project
+		let active = 0;
+
+		try {
+			const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}" 2>/dev/null', { timeout: 2000 });
+			const sessions = stdout.trim().split('\n').filter(s => s.startsWith('jat-'));
+
+			// For each session, check if it's working on this project by reading its agent file
+			for (const sessionName of sessions) {
+				const agentName = sessionName.replace('jat-', '');
+				// Check if this agent has an agent file in this project's .claude/sessions/
+				const sessionsDir = join(projectPath, '.claude', 'sessions');
+				const claudeDir = join(projectPath, '.claude');
+
+				// Look for any agent file containing this agent name
+				let foundInProject = false;
+
+				// Check sessions directory
+				if (existsSync(sessionsDir)) {
+					const entries = await readdir(sessionsDir);
+					for (const file of entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'))) {
+						const content = await readFile(join(sessionsDir, file), 'utf-8');
+						if (content.trim() === agentName) {
+							foundInProject = true;
+							break;
+						}
+					}
+				}
+
+				// Check legacy location if not found
+				if (!foundInProject && existsSync(claudeDir)) {
+					const entries = await readdir(claudeDir);
+					for (const file of entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'))) {
+						const content = await readFile(join(claudeDir, file), 'utf-8');
+						if (content.trim() === agentName) {
+							foundInProject = true;
+							break;
+						}
+					}
+				}
+
+				if (foundInProject) {
+					active++;
+				}
+			}
+		} catch {
+			// tmux not available or no sessions
+		}
+
+		// Count total registered agents (all agent files)
+		let total = 0;
 		const sessionsDir = join(projectPath, '.claude', 'sessions');
 		const claudeDir = join(projectPath, '.claude');
 
-		let agentFiles = [];
-
-		// Check new location first (.claude/sessions/)
 		if (existsSync(sessionsDir)) {
 			const entries = await readdir(sessionsDir);
-			agentFiles = entries
-				.filter(f => f.startsWith('agent-') && f.endsWith('.txt'))
-				.map(f => join(sessionsDir, f));
+			total += entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt')).length;
 		}
 
-		// Also check legacy location (.claude/) for backwards compat
 		if (existsSync(claudeDir)) {
 			const entries = await readdir(claudeDir);
-			const legacyFiles = entries
-				.filter(f => f.startsWith('agent-') && f.endsWith('.txt'))
-				.map(f => join(claudeDir, f));
-			agentFiles = [...agentFiles, ...legacyFiles];
-		}
-
-		if (agentFiles.length === 0) {
-			return { active: 0, total: 0 };
-		}
-
-		const total = agentFiles.length;
-
-		// Count active (modified in last 30 min)
-		let active = 0;
-		const now = Date.now();
-		for (const filePath of agentFiles) {
-			const stats = await stat(filePath);
-			if (now - stats.mtimeMs < 30 * 60 * 1000) {
-				active++;
-			}
+			total += entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt')).length;
 		}
 
 		return { active, total };
