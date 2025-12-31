@@ -338,17 +338,19 @@
 			const current = result[i];
 			const prev = merged[merged.length - 1];
 
-			const currentType = current.type;
-			const prevType = prev?.type ?? null;
+			// For state signals, the actual state is in event.state, not event.type
+			// event.type is always "state" for state signals
+			const currentState = current.state ?? current.type;
+			const prevState = prev?.state ?? prev?.type ?? null;
 
 			// Check if this is a duplicate/update of a previous event
-			// Merge if: same type AND same task_id AND type is one that updates frequently
+			// Merge if: same state AND same task_id AND state is one that updates frequently
 			// Include 'completed' to prevent duplicate "Task completed" entries when hook fires multiple times
-			const mergableTypes = ['completing', 'compacting', 'completed'];
+			const mergableStates = ['completing', 'compacting', 'completed'];
 			const shouldMerge = prev &&
-				currentType === prevType &&
 				current.task_id === prev.task_id &&
-				mergableTypes.includes(currentType || '');
+				mergableStates.includes(currentState || '') &&
+				mergableStates.includes(prevState || '');
 
 			if (shouldMerge) {
 				// Skip this older event - we already have the newest one of this type

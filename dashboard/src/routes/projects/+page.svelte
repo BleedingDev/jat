@@ -1719,12 +1719,6 @@
 																	onFilterChange={(value) => setGroupFilter(project, 'other', value)}
 																/>
 															</div>
-																	placeholder="Filter..."
-																	value={otherGroupFilter}
-																	oninput={(e) => setGroupFilter(project, 'other', e.currentTarget.value)}
-																	class="input input-xs input-bordered w-20 focus:w-32 transition-all duration-200 bg-base-200/50"
-																/>
-															</div>
 														</div>
 													{/if}
 													<!-- Non-epic sessions (horizontal scroll) -->
