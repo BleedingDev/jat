@@ -87,6 +87,10 @@
 	// Help modal
 	let showHelpModal = $state(false);
 
+	// Update JAT state
+	let isUpdating = $state(false);
+	let updateResult = $state<{ success: boolean; message: string } | null>(null);
+
 	// Keyboard icon path
 	const keyboardIcon = 'M6.75 3a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 006.75 21h10.5a2.25 2.25 0 002.25-2.25V5.25A2.25 2.25 0 0017.25 3H6.75zm0 1.5h10.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H6.75a.75.75 0 01-.75-.75V5.25a.75.75 0 01.75-.75z';
 	const questionIcon = 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z';
@@ -215,6 +219,30 @@
 
 	function handleMaxSessionsChange(value: MaxSessions) {
 		setMaxSessions(value);
+	}
+
+	async function handleUpdate() {
+		isUpdating = true;
+		updateResult = null;
+
+		try {
+			const response = await fetch('/api/jat/update', { method: 'POST' });
+			const data = await response.json();
+
+			if (response.ok && data.success) {
+				updateResult = { success: true, message: data.message || 'Updated successfully!' };
+			} else {
+				updateResult = { success: false, message: data.error || 'Update failed' };
+			}
+		} catch (err) {
+			updateResult = { success: false, message: 'Network error during update' };
+		} finally {
+			isUpdating = false;
+			// Clear message after 5 seconds
+			setTimeout(() => {
+				updateResult = null;
+			}, 5000);
+		}
 	}
 </script>
 
@@ -538,16 +566,43 @@
 			</div>
 		</li>
 
-		<!-- Version -->
+		<!-- Version & Update -->
 		<div class="divider my-1 h-px bg-base-content/20"></div>
 		<li>
-			<div
-				class="text-[10px] px-2 py-1 font-mono cursor-default text-base-content/50"
-				title="Build version"
-			>
-				v{getVersionString()}
+			<div class="flex items-center justify-between px-2 py-1">
+				<div
+					class="text-[10px] font-mono cursor-default text-base-content/50"
+					title="Build version"
+				>
+					v{getVersionString()}
+				</div>
+				<button
+					onclick={handleUpdate}
+					disabled={isUpdating}
+					class="text-[10px] font-mono px-2 py-0.5 rounded transition-colors border {isUpdating ? 'bg-base-200 text-base-content/50 border-base-content/20 cursor-wait' : 'bg-info/20 text-info border-info/30 hover:bg-info/30'}"
+					title="Pull latest and run install.sh"
+				>
+					{#if isUpdating}
+						<span class="inline-flex items-center gap-1">
+							<svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+							</svg>
+							Updating...
+						</span>
+					{:else}
+						Update
+					{/if}
+				</button>
 			</div>
 		</li>
+		{#if updateResult}
+			<li>
+				<div class="px-2 py-1 text-[10px] {updateResult.success ? 'text-success' : 'text-error'}">
+					{updateResult.message}
+				</div>
+			</li>
+		{/if}
 	</ul>
 </div>
 
