@@ -220,7 +220,7 @@ export const JAT_DEFAULTS = {
 	/** Auto-cleanup completed sessions (disabled by default - powerful feature) */
 	auto_kill_enabled: false,
 	/** Seconds to wait before killing completed session */
-	auto_kill_delay: 30,
+	auto_kill_delay: 60,
 	/** Per-priority auto-kill enabled flags (P0=critical, P4=lowest) */
 	auto_kill_p0: false,
 	auto_kill_p1: false,
@@ -271,7 +271,7 @@ export const AUTO_KILL = {
 	 * Set to 0 for immediate kill (not recommended - allows no review time).
 	 * Set to null to disable auto-kill (session persists until manually closed).
 	 */
-	DEFAULT_DELAY_SECONDS: 30,
+	DEFAULT_DELAY_SECONDS: 60,
 
 	/**
 	 * Per-priority delay overrides (in seconds).
@@ -286,10 +286,10 @@ export const AUTO_KILL = {
 	 * - P3: Low priority - quick cleanup
 	 */
 	PRIORITY_DELAYS: {
-		0: 60,   // P0: 60 seconds - more time to review critical work
-		1: 45,   // P1: 45 seconds
-		2: 30,   // P2: 30 seconds (same as default)
-		3: 15    // P3: 15 seconds - quick tasks, quick cleanup
+		0: 90,   // P0: 90 seconds - more time to review critical work
+		1: 75,   // P1: 75 seconds
+		2: 60,   // P2: 60 seconds (same as default)
+		3: 30    // P3: 30 seconds - quick tasks, quick cleanup
 	} as Record<number, number | null>,
 
 	/**
