@@ -375,10 +375,17 @@
 		}
 	}
 
-	// Save to storage when open files change
+	// Save to storage when open files change (including order changes from drag-drop)
+	// Note: We use JSON.stringify to create a dependency on the full array structure,
+	// ensuring the effect re-runs when files are reordered, opened, or closed.
 	$effect(() => {
+		// Serialize paths to track full array structure including order
+		const pathsJson = JSON.stringify(openFiles.map(f => f.path));
+		const currentActivePath = activeFilePath;
+		const currentProject = selectedProject;
+
 		// Only save after initial restore is complete
-		if (restoredProjects.has(selectedProject || '')) {
+		if (currentProject && restoredProjects.has(currentProject)) {
 			saveOpenFilesToStorage();
 		}
 	});

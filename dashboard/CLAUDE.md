@@ -2743,6 +2743,20 @@ These are fixed and cannot be customized.
 | `Alt+1` through `Alt+9` | Jump to Session by Position | Work page only |
 | `Escape` | Close Modals/Drawers | Global |
 
+### Files Page Shortcuts
+
+These shortcuts are active on the `/files` page. They use Alt instead of Ctrl to avoid browser conflicts (Ctrl+S saves page, Ctrl+W closes tab, Ctrl+P prints).
+
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| `Alt+S` | Save File | Save current file (overrides global Alt+S on files page) |
+| `Alt+W` | Close Tab | Close current editor tab |
+| `Alt+P` | Quick File Finder | Open fuzzy file search modal |
+| `Alt+]` | Next Tab | Switch to next editor tab |
+| `Alt+[` | Previous Tab | Switch to previous editor tab |
+
+**Note:** Alt+S and Alt+P override global shortcuts when on the files page. This is intentional - file operations take priority in the file editor context.
+
 ### Command Shortcuts
 
 Users can assign custom keyboard shortcuts to any slash command. These are stored in browser localStorage.
