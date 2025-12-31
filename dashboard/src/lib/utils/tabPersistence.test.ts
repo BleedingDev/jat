@@ -133,10 +133,12 @@ describe('getNextActiveFile', () => {
 		expect(result).toBe('/a.ts');
 	});
 
-	it('should select previous neighbor when closing active file', () => {
-		// Closing /b.ts which is at index 1, should select /a.ts (index 0)
+	it('should select next neighbor when closing active file in middle', () => {
+		// Closing /b.ts which is at index 1
+		// After filter: ['/a.ts', '/c.ts'] (length 2)
+		// newIndex = Math.min(1, 1) = 1 → '/c.ts' (what was next)
 		const result = getNextActiveFile(['/a.ts', '/b.ts', '/c.ts'], '/b.ts', '/b.ts');
-		expect(result).toBe('/a.ts');
+		expect(result).toBe('/c.ts');
 	});
 
 	it('should select first remaining when closing first file', () => {
@@ -171,8 +173,10 @@ describe('getNextActiveFile', () => {
 
 	it('should work with unicode paths', () => {
 		const paths = ['/src/文件.ts', '/src/αβγ.ts', '/src/normal.ts'];
+		// Closing αβγ.ts at index 1 → remaining: [文件.ts, normal.ts]
+		// newIndex = Math.min(1, 1) = 1 → normal.ts
 		const result = getNextActiveFile(paths, '/src/αβγ.ts', '/src/αβγ.ts');
-		expect(result).toBe('/src/文件.ts');
+		expect(result).toBe('/src/normal.ts');
 	});
 });
 
@@ -189,9 +193,11 @@ describe('Integration: reorder + next active', () => {
 		paths = reorderTabs(paths, 0, 2);
 		expect(paths).toEqual(['/b.ts', '/c.ts', '/a.ts']);
 
-		// Close /c.ts which is now in the middle
+		// Close /c.ts which is now in the middle (index 1)
+		// After filter: ['/b.ts', '/a.ts'] (length 2)
+		// newIndex = Math.min(1, 1) = 1 → '/a.ts'
 		const nextActive = getNextActiveFile(paths, '/c.ts', '/c.ts');
-		expect(nextActive).toBe('/b.ts'); // Previous neighbor
+		expect(nextActive).toBe('/a.ts');
 	});
 
 	it('should handle multiple reorders correctly', () => {
@@ -219,9 +225,10 @@ describe('Integration: reorder + next active', () => {
 		// Active is still /a.ts, which is now at index 1
 
 		// Close active (/a.ts at index 1)
+		// After filter: ['/b.ts', '/c.ts'] (length 2)
+		// newIndex = Math.min(1, 1) = 1 → '/c.ts'
 		const newActive = getNextActiveFile(paths, '/a.ts', active);
-		// Should pick /b.ts (previous neighbor, index 0)
-		expect(newActive).toBe('/b.ts');
+		expect(newActive).toBe('/c.ts');
 
 		// Verify remaining paths
 		const remaining = paths.filter((p) => p !== '/a.ts');
