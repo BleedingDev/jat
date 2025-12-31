@@ -174,30 +174,30 @@
 
 	// Handle keyboard shortcuts
 	function handleKeyDown(e: KeyboardEvent) {
-		// Ctrl+S or Cmd+S to save
-		if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+		// Alt+S to save (Alt instead of Ctrl to avoid browser conflict)
+		if (e.altKey && e.key === 's') {
 			e.preventDefault();
 			if (activeFile && activeFile.dirty) {
 				onFileSave(activeFile.path, activeFile.content);
 			}
 		}
 
-		// Ctrl+W or Cmd+W to close tab
-		if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+		// Alt+W to close tab (Alt instead of Ctrl to avoid browser conflict)
+		if (e.altKey && e.key === 'w') {
 			e.preventDefault();
 			if (activeFilePath) {
 				handleTabClose(activeFilePath);
 			}
 		}
 
-		// Ctrl+Tab to switch to next tab
-		if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
+		// Alt+] to switch to next tab
+		if (e.altKey && e.key === ']') {
 			e.preventDefault();
 			switchToNextTab();
 		}
 
-		// Ctrl+Shift+Tab to switch to previous tab
-		if (e.ctrlKey && e.key === 'Tab' && e.shiftKey) {
+		// Alt+[ to switch to previous tab
+		if (e.altKey && e.key === '[') {
 			e.preventDefault();
 			switchToPreviousTab();
 		}
@@ -263,7 +263,7 @@
 				class:has-changes={activeFile?.dirty && !isActiveSaving}
 				disabled={!activeFile?.dirty || isActiveSaving}
 				onclick={handleSaveClick}
-				title={isActiveSaving ? 'Saving...' : activeFile?.dirty ? 'Save (Ctrl+S)' : 'No changes to save'}
+				title={isActiveSaving ? 'Saving...' : activeFile?.dirty ? 'Save (Alt+S)' : 'No changes to save'}
 			>
 				{#if isActiveSaving}
 					<span class="save-spinner"></span>
@@ -309,25 +309,25 @@
 			<p class="text-base-content/35 mt-1 text-sm">Select a file from the explorer to start editing</p>
 			<div class="shortcuts mt-4 text-xs text-base-content/30">
 				<div class="shortcut">
-					<kbd class="kbd kbd-xs">Ctrl</kbd>
+					<kbd class="kbd kbd-xs">Alt</kbd>
 					<span>+</span>
 					<kbd class="kbd kbd-xs">S</kbd>
 					<span class="ml-2">Save</span>
 				</div>
 				<div class="shortcut mt-1">
-					<kbd class="kbd kbd-xs">Ctrl</kbd>
+					<kbd class="kbd kbd-xs">Alt</kbd>
 					<span>+</span>
 					<kbd class="kbd kbd-xs">W</kbd>
 					<span class="ml-2">Close Tab</span>
 				</div>
 				<div class="shortcut mt-1">
-					<kbd class="kbd kbd-xs">Ctrl</kbd>
+					<kbd class="kbd kbd-xs">Alt</kbd>
 					<span>+</span>
-					<kbd class="kbd kbd-xs">Tab</kbd>
+					<kbd class="kbd kbd-xs">]</kbd>
 					<span class="ml-2">Next Tab</span>
 				</div>
 				<div class="shortcut mt-1">
-					<kbd class="kbd kbd-xs">Ctrl</kbd>
+					<kbd class="kbd kbd-xs">Alt</kbd>
 					<span>+</span>
 					<kbd class="kbd kbd-xs">P</kbd>
 					<span class="ml-2">Quick Open</span>

@@ -271,6 +271,25 @@
 		console.log('[Files] Content changed:', path, 'dirty:', dirty);
 	}
 
+	// Handle tab reorder (drag-and-drop)
+	function handleTabReorder(fromIndex: number, toIndex: number) {
+		if (fromIndex === toIndex) return;
+
+		// Create a copy of the array
+		const reordered = [...openFiles];
+
+		// Remove the item from the original position
+		const [movedItem] = reordered.splice(fromIndex, 1);
+
+		// Insert it at the new position
+		reordered.splice(toIndex, 0, movedItem);
+
+		// Update state
+		openFiles = reordered;
+
+		console.log('[Files] Tab reordered from', fromIndex, 'to', toIndex);
+	}
+
 	// Handle file delete from tree
 	function handleFileDelete(path: string) {
 		// If the deleted file is open, close it
@@ -366,8 +385,8 @@
 
 	// Handle global keyboard shortcuts
 	function handleKeyDown(e: KeyboardEvent) {
-		// Ctrl+P - Open quick file finder
-		if (e.ctrlKey && e.key === 'p') {
+		// Alt+P - Open quick file finder (Alt instead of Ctrl to avoid browser conflict)
+		if (e.altKey && e.key === 'p') {
 			e.preventDefault();
 			if (selectedProject) {
 				quickFinderOpen = true;
@@ -517,6 +536,7 @@
 							onFileSave={handleFileSave}
 							onActiveFileChange={handleActiveFileChange}
 							onContentChange={handleContentChange}
+							onTabReorder={handleTabReorder}
 							{savingFiles}
 						/>
 					{:else}
