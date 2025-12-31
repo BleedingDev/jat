@@ -8,7 +8,6 @@
  *   /work     - Work (default route, multi-project sessions view)
  *   /files    - Files (project file browser)
  *   /servers  - Servers (project server sessions)
- *   /automation - Automation rules configuration
  *   /history  - History (completed task history with streak calendar)
  *   /config   - Config (JAT configuration files editor)
  *
@@ -18,6 +17,7 @@
  *   /kanban   - Agent kanban (sessions grouped by activity state)
  *
  * LABS (experimental, not production-ready):
+ *   /automation - Automation rules configuration
  *   /triage   - Task triage (needs work)
  *   /swarm    - Swarm attack interface (experimental)
  *
@@ -76,13 +76,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		{
-			id: 'automation',
-			label: 'Automation',
-			href: '/automation',
-			icon: 'automation',
-			category: 'main'
-		},
-		{
 			id: 'history',
 			label: 'History',
 			href: '/history',
@@ -119,6 +112,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'views'
 		},
 		// LABS: Experimental features (not production-ready)
+		{
+			id: 'automation',
+			label: 'Automation',
+			href: '/automation',
+			icon: 'automation',
+			category: 'labs'
+		},
 		{
 			id: 'triage',
 			label: 'Triage',
