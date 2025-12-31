@@ -12,7 +12,7 @@ const execAsync = promisify(exec);
  *
  * Updates JAT by:
  * 1. Running git pull in ~/code/jat
- * 2. Running ./install.sh to update symlinks
+ * 2. Running symlink-tools.sh to update symlinks (non-interactive)
  *
  * Returns success/failure with message
  */
@@ -26,7 +26,7 @@ export async function POST() {
 
 	try {
 		// Step 1: Git pull
-		const { stdout: pullOutput, stderr: pullStderr } = await execAsync('git pull', {
+		const { stdout: pullOutput } = await execAsync('git pull', {
 			cwd: jatPath,
 			timeout: 30000 // 30 second timeout
 		});
@@ -34,10 +34,10 @@ export async function POST() {
 		// Check if already up to date
 		const isUpToDate = pullOutput.includes('Already up to date');
 
-		// Step 2: Run install.sh (even if up to date, ensures symlinks are correct)
-		const { stdout: installOutput, stderr: installStderr } = await execAsync('./install.sh', {
+		// Step 2: Run symlink-tools.sh directly (non-interactive, unlike install.sh)
+		const { stdout: symlinkOutput } = await execAsync('bash tools/scripts/symlink-tools.sh', {
 			cwd: jatPath,
-			timeout: 60000 // 60 second timeout for install
+			timeout: 30000
 		});
 
 		// Build result message
@@ -59,7 +59,7 @@ export async function POST() {
 			message,
 			details: {
 				gitPull: pullOutput.trim(),
-				installOutput: installOutput.substring(0, 500) // Truncate if long
+				symlinks: symlinkOutput.substring(0, 500)
 			}
 		});
 
@@ -67,7 +67,7 @@ export async function POST() {
 		// Handle specific error cases
 		const errorMessage = err.stderr || err.message || 'Unknown error';
 
-		if (errorMessage.includes('uncommitted changes')) {
+		if (errorMessage.includes('uncommitted changes') || errorMessage.includes('unstaged changes')) {
 			return json({
 				success: false,
 				error: 'Cannot update: uncommitted changes in JAT repo. Please commit or stash first.'
