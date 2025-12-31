@@ -2,7 +2,21 @@
 
 **Location:** Tools symlinked to `~/.local/bin/` after running `./install.sh`
 
-### Agent Mail (11 tools)
+### Directory Structure
+
+```
+tools/
+├── core/         # Database, monitoring, Beads review (16 tools)
+├── mail/         # Agent Mail coordination (14 tools)
+├── browser/      # Browser automation via CDP (12 tools)
+├── media/        # Image generation with Gemini (7 tools)
+├── scripts/      # Installation and setup (33 scripts)
+└── signal/       # JAT signal emission (3 tools)
+```
+
+---
+
+### Agent Mail (14 tools)
 
 | Tool | Purpose | Key Options |
 |------|---------|-------------|
@@ -25,75 +39,148 @@
 am-send "Subject" "Body" --from Me --to @active --importance high --thread task-123
 ```
 
-### Database (3 tools)
+---
+
+### Core Tools (tools/core/)
+
+Database, monitoring, and Beads review tools.
 
 | Tool | Purpose |
 |------|---------|
 | `db-query` | Run SQL, returns JSON |
-| `db-sessions` | List connections |
+| `db-sessions` | List database connections |
 | `db-schema` | Show table structure |
+| `db-connection-test` | Test database connectivity |
+| `edge-logs` | Stream Supabase edge function logs |
+| `lint-staged` | Lint staged git files |
+| `bd-check-review` | Check if task needs human review |
+| `bd-review-rules` | Display review rules for project |
+| `bd-review-rules-loader` | Load/parse review rules from config |
+| `bd-set-review-override` | Set review override for a task |
+| `backup-beads.sh` | Backup Beads database |
+| `rollback-beads.sh` | Rollback Beads to backup |
+| `beads-migrate-prefix.sh` | Migrate task ID prefixes |
 
-### Monitoring (5 tools)
+---
 
-| Tool | Purpose |
-|------|---------|
-| `edge-logs` | Stream edge function logs |
-| `quota-check` | API usage stats |
-| `error-log` | Error log entries |
-| `job-monitor` | Job status |
-| `perf-check` | Performance metrics |
+### Browser Automation (tools/browser/)
 
-### Development (7 tools)
-
-| Tool | Purpose |
-|------|---------|
-| `type-check-fast` | TypeScript check |
-| `lint-staged` | Lint staged files |
-| `migration-status` | DB migration state |
-| `component-deps` | Dependency tree |
-| `route-list` | List routes |
-| `build-size` | Bundle size |
-| `env-check` | Validate env vars |
-
-### Browser Automation (7 tools)
+Chrome DevTools Protocol (CDP) based browser control via Node.js.
 
 | Tool | Purpose | Example |
 |------|---------|---------|
-| `browser-start.js` | Launch Chrome | `--headless` |
-| `browser-nav.js` | Navigate | `browser-nav.js URL` |
-| `browser-eval.js` | Run JS in page | `"document.title"` |
-| `browser-screenshot.js` | Capture screen | `--output /tmp/x.png` |
-| `browser-pick.js` | Click selector | `--selector "button"` |
+| `browser-start.js` | Launch Chrome with CDP | `--headless` |
+| `browser-nav.js` | Navigate to URL | `browser-nav.js URL` |
+| `browser-eval.js` | Execute JS in page | `"document.title"` |
+| `browser-screenshot.js` | Capture screenshot | `--output /tmp/x.png` |
+| `browser-pick.js` | Click element by selector | `--selector "button"` |
 | `browser-cookies.js` | Get/set cookies | `--set "name=value"` |
+| `browser-wait.js` | Wait for condition | `--text "loaded"` |
+| `browser-console.js` | Capture console logs | (streams output) |
+| `browser-network.js` | Monitor network requests | (streams output) |
+| `browser-snapshot.js` | Capture DOM snapshot | (returns HTML) |
+| `browser-hn-scraper.js` | Hacker News scraper example | (demo) |
 
 **browser-eval quirk:** Supports multi-statement code with `return`:
 ```bash
 browser-eval.js "const x = 5; const y = 10; return x + y"
 ```
 
-### Media / Image Generation (3 tools)
+---
+
+### Media / Image Generation (tools/media/)
+
+AI image generation via Google Gemini API.
 
 | Tool | Purpose |
 |------|---------|
-| `gemini-image` | Generate image from prompt |
-| `gemini-edit` | Edit existing image |
-| `gemini-compose` | Combine 2-14 images |
+| `gemini-image` | Generate image from text prompt |
+| `gemini-edit` | Edit existing image with prompt |
+| `gemini-compose` | Combine 2-14 images into one |
+| `avatar-generate` | Generate agent avatar image |
+| `avatar-to-ansi` | Convert avatar to terminal ANSI art |
+| `gemini-lib.sh` | Shared Gemini API helper functions |
 
 **Requires:** `GEMINI_API_KEY` environment variable
 
-### Beads Helper
+---
 
-`bd-epic-child` - Set epic→child dependency correctly
+### Signal Tools (tools/signal/)
 
-**Why it exists:** `bd dep add A B` means "A depends on B" - easy to get backwards!
+JAT signal emission for dashboard state updates.
 
+| Tool | Purpose |
+|------|---------|
+| `jat-signal` | Emit status signals to dashboard |
+| `jat-signal-validate` | Validate signal JSON against schema |
+| `jat-signal-schema.json` | JSON schema for signal payloads |
+
+**Signal types:** `starting`, `working`, `needs_input`, `review`, `completing`, `complete`
+
+**Example:**
 ```bash
-bd-epic-child jat-epic jat-child  # Epic blocked until child completes
+jat-signal working '{"taskId":"jat-abc","taskTitle":"Add feature","approach":"..."}'
 ```
 
-### JAT Completion
+---
 
-`jat-step` - Execute completion step with automatic signal emission
+### Scripts (tools/scripts/)
+
+Installation, setup, and utility scripts.
+
+**Installation:**
+| Script | Purpose |
+|--------|---------|
+| `symlink-tools.sh` | Create symlinks in ~/.local/bin/ |
+| `setup-repos.sh` | Initialize project repositories |
+| `setup-bash-functions.sh` | Generate shell launcher functions |
+| `setup-statusline-and-hooks.sh` | Install Claude Code hooks |
+| `setup-tmux.sh` | Configure tmux for JAT |
+| `setup-global-claude-md.sh` | Setup global CLAUDE.md |
+| `install-agent-mail.sh` | Initialize Agent Mail database |
+| `install-beads.sh` | Install Beads CLI |
+| `install-hooks.sh` | Install Claude Code hooks |
+| `install-whisper.sh` | Install whisper.cpp for voice input |
+
+**JAT Workflow:**
+| Script | Purpose |
+|--------|---------|
+| `jat-step` | Execute completion step with signal emission |
+| `jat-complete-bundle` | Generate structured completion bundle via LLM |
+| `jat-doctor` | Diagnose JAT installation issues |
+| `bd-epic-child` | Set epic→child dependency correctly |
+
+**Agent Management:**
+| Script | Purpose |
+|--------|---------|
+| `get-current-session-id` | Get Claude Code session ID |
+| `get-agents-by-state` | List agents by status |
+| `get-recent-agents` | List recently active agents |
+| `get-agent-task.sh` | Get agent's current task |
+| `check-agent-active` | Check if agent is active |
+| `list-agents-simple` | Simple agent list |
+| `log-agent-activity` | Log agent activity events |
+
+**Utilities:**
+| Script | Purpose |
+|--------|---------|
+| `time-ago` | Format timestamp as "X minutes ago" |
+| `record-gif` | Record terminal session as GIF |
+| `cleanup-jsonl.sh` | Clean up old JSONL files |
+| `cleanup-jsonl-cron.sh` | Cron wrapper for cleanup |
+| `extract-har-timings.sh` | Extract timings from HAR files |
+| `test-statusline.sh` | Test statusline display |
+| `test-themes.sh` | Test dashboard themes |
+| `fix-hook-stdin.sh` | Fix hook stdin issues |
+| `update-signal-hooks.sh` | Update signal hook scripts |
+| `import-bashrc-config.sh` | Import bashrc configuration |
+| `migrate-jomarchy-agent-tools-to-jat.sh` | Migration helper |
+| `migrate-task-images.sh` | Migrate task image paths |
+
+**jat-step usage:**
+```bash
+jat-step <step> --task <id> --title <title> --agent <name> [--type <type>]
+```
 
 | Step | Action | Signal |
 |------|--------|--------|
@@ -104,29 +191,9 @@ bd-epic-child jat-epic jat-child  # Epic blocked until child completes
 | `announcing` | am-send completion | completing (80%) |
 | `complete` | Generate bundle + emit complete signal | complete (100%) |
 
-**Usage:**
-```bash
-jat-step <step> --task <id> --title <title> --agent <name> [--type <type>]
-```
-
-**The `complete` step:**
-- Calls `jat-complete-bundle` with auto-detected review mode
-- Generates structured completion bundle via LLM
-- Emits the final `complete` signal to dashboard
-- Auto-detects completion mode from task notes, session context, and project rules
-
-**Example:**
-```bash
-# Run all completion steps
-jat-step verifying --task jat-abc --title "Add auth" --agent FreeOcean
-jat-step committing --task jat-abc --title "Add auth" --agent FreeOcean --type feature
-jat-step closing --task jat-abc --title "Add auth" --agent FreeOcean
-jat-step releasing --task jat-abc --title "Add auth" --agent FreeOcean
-jat-step announcing --task jat-abc --title "Add auth" --agent FreeOcean
-jat-step complete --task jat-abc --title "Add auth" --agent FreeOcean
-```
-
 **Requires:** `ANTHROPIC_API_KEY` environment variable (for `complete` step)
+
+---
 
 ### Quick Patterns
 
