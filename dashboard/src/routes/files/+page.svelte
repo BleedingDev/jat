@@ -625,7 +625,7 @@
 				<h1 class="page-title">Files</h1>
 
 				<!-- Project Selector Dropdown -->
-				<div class="dropdown dropdown-start">
+				<div class="dropdown dropdown-end">
 					<button class="project-selector" tabindex="0">
 						<!-- Project color dot -->
 						{#if selectedProjectColor}
@@ -642,8 +642,7 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 						</svg>
 					</button>
-					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-					<ul class="dropdown-content menu bg-base-200 rounded-box shadow-xl border border-base-300 w-72 max-h-80 overflow-y-auto z-50 right-0" tabindex="0">
+					<ul tabindex="-1" class="dropdown-content menu bg-base-200 rounded-box shadow-xl border border-base-300 w-72 max-h-80 overflow-y-auto z-50 p-2">
 						{#each projects as project (project.name)}
 							<li>
 								<button

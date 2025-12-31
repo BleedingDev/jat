@@ -10,6 +10,7 @@
  *   /servers  - Servers (project server sessions)
  *   /history  - History (completed task history with streak calendar)
  *   /config   - Config (JAT configuration files editor)
+ *   /projects - Projects (project configuration & management)
  *
  * VIEWS (alternative visualizations):
  *   /graph    - Dependency visualization
@@ -25,7 +26,6 @@
  *   /         - Replaced by /work as default
  *   /tasks    - Redundant with /work (removed)
  *   /agents   - Redundant with /work (removed)
- *   /projects - Renamed to /work
  */
 
 export interface NavItem {
@@ -87,6 +87,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Config',
 			href: '/config',
 			icon: 'settings',
+			category: 'main'
+		},
+		{
+			id: 'projects',
+			label: 'Projects',
+			href: '/projects',
+			icon: 'projects',
 			category: 'main'
 		},
 		// VIEWS: Alternative visualizations
