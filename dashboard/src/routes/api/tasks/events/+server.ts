@@ -3,7 +3,7 @@
  * Watches the beads database file and pushes updates when tasks change
  */
 
-import { watch, type FSWatcher } from 'fs';
+import { watch, type FSWatcher, existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, dirname, basename } from 'path';
 
@@ -117,6 +117,12 @@ async function checkForChanges() {
 function startWatcher() {
 	if (watcher) {
 		console.log('[SSE] Watcher already running');
+		return;
+	}
+
+	// Check if .beads directory exists (jat repo itself doesn't have one)
+	if (!existsSync(BEADS_DIR)) {
+		console.log(`[SSE] Skipping watcher - ${BEADS_DIR} does not exist (normal for jat repo itself)`);
 		return;
 	}
 

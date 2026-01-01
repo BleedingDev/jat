@@ -37,37 +37,107 @@ if ! command -v jq &> /dev/null; then
 fi
 
 if [ -n "$MISSING_DEPS" ]; then
-    echo -e "${RED}ERROR: Missing required dependencies:${NC}$MISSING_DEPS"
+    echo -e "${YELLOW}⚠  Missing required dependencies:${NC}$MISSING_DEPS"
     echo ""
-    echo "Install them first:"
-    echo "  # Arch/Manjaro"
-    echo "  sudo pacman -S$MISSING_DEPS"
-    echo ""
-    echo "  # Debian/Ubuntu"
-    echo "  sudo apt install$MISSING_DEPS"
-    echo ""
-    echo "  # Fedora"
-    echo "  sudo dnf install$MISSING_DEPS"
-    echo ""
-    echo "  # macOS"
-    echo "  brew install$MISSING_DEPS"
-    echo ""
-    exit 1
+
+    # Detect package manager
+    PKG_MANAGER=""
+    INSTALL_CMD=""
+
+    if command -v pacman &> /dev/null; then
+        PKG_MANAGER="pacman"
+        INSTALL_CMD="sudo pacman -S --noconfirm$MISSING_DEPS"
+    elif command -v apt &> /dev/null; then
+        PKG_MANAGER="apt"
+        INSTALL_CMD="sudo apt install -y$MISSING_DEPS"
+    elif command -v dnf &> /dev/null; then
+        PKG_MANAGER="dnf"
+        INSTALL_CMD="sudo dnf install -y$MISSING_DEPS"
+    elif command -v brew &> /dev/null; then
+        PKG_MANAGER="brew"
+        INSTALL_CMD="brew install$MISSING_DEPS"
+    fi
+
+    if [ -n "$PKG_MANAGER" ]; then
+        echo -e "${BLUE}Would you like to install them now with $PKG_MANAGER? [Y/n]${NC}"
+        read -r response
+
+        if [[ "$response" =~ ^([yY][eE][sS]|[yY]| *)$ ]]; then
+            echo -e "${BLUE}Installing dependencies...${NC}"
+            if $INSTALL_CMD; then
+                echo -e "${GREEN}✓ Dependencies installed successfully${NC}"
+                echo ""
+            else
+                echo -e "${RED}ERROR: Failed to install dependencies${NC}"
+                echo "Please install manually and re-run this script"
+                exit 1
+            fi
+        else
+            echo -e "${RED}Installation cancelled. Please install dependencies manually:${NC}"
+            echo "  $INSTALL_CMD"
+            exit 1
+        fi
+    else
+        echo -e "${RED}ERROR: Could not detect package manager${NC}"
+        echo ""
+        echo "Install dependencies manually:"
+        echo "  # Arch/Manjaro: sudo pacman -S$MISSING_DEPS"
+        echo "  # Debian/Ubuntu: sudo apt install$MISSING_DEPS"
+        echo "  # Fedora: sudo dnf install$MISSING_DEPS"
+        echo "  # macOS: brew install$MISSING_DEPS"
+        exit 1
+    fi
 fi
 
 # Determine installation directory
-# Check both old name (jomarchy-agent-tools) and new name (jat)
-if [ -d "$HOME/code/jat" ]; then
+# Priority: JAT_INSTALL_DIR env var > existing installation > XDG standard > ~/code fallback
+
+if [ -n "$JAT_INSTALL_DIR" ]; then
+    # User specified custom location via environment variable
+    INSTALL_DIR="$JAT_INSTALL_DIR"
+    echo -e "${BLUE}Using custom installation directory: $INSTALL_DIR${NC}"
+elif [ -d "$HOME/code/jat" ]; then
+    # Existing installation in ~/code/jat
     INSTALL_DIR="$HOME/code/jat"
-    echo -e "${BLUE}Using local installation: $INSTALL_DIR${NC}"
+    echo -e "${BLUE}Using existing installation: $INSTALL_DIR${NC}"
 elif [ -d "$HOME/code/jomarchy-agent-tools" ]; then
+    # Legacy installation
     INSTALL_DIR="$HOME/code/jomarchy-agent-tools"
-    echo -e "${BLUE}Using local installation: $INSTALL_DIR${NC}"
+    echo -e "${BLUE}Using existing installation: $INSTALL_DIR${NC}"
+elif [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/jat" ]; then
+    # Existing XDG-compliant installation
+    INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+    echo -e "${BLUE}Using existing installation: $INSTALL_DIR${NC}"
 else
-    # Clone from GitHub
-    echo -e "${BLUE}Cloning jat (Jomarchy Agent Tools)...${NC}"
-    INSTALL_DIR="$HOME/code/jat"
-    mkdir -p "$HOME/code"
+    # New installation - ask user for preference
+    echo -e "${BLUE}Where would you like to install JAT?${NC}"
+    echo ""
+    echo "  1) ${HOME}/code/jat (developer-friendly, easy to find)"
+    echo "  2) ${XDG_DATA_HOME:-$HOME/.local/share}/jat (XDG standard)"
+    echo "  3) Custom location"
+    echo ""
+    echo -e "${BLUE}Choose [1-3] (default: 1):${NC} "
+    read -r install_choice
+
+    case "${install_choice:-1}" in
+        1)
+            INSTALL_DIR="$HOME/code/jat"
+            ;;
+        2)
+            INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+            ;;
+        3)
+            echo -e "${BLUE}Enter custom path:${NC} "
+            read -r custom_path
+            INSTALL_DIR="${custom_path/#\~/$HOME}"  # Expand ~ to $HOME
+            ;;
+        *)
+            INSTALL_DIR="$HOME/code/jat"
+            ;;
+    esac
+
+    echo -e "${BLUE}Installing to: $INSTALL_DIR${NC}"
+    mkdir -p "$(dirname "$INSTALL_DIR")"
     git clone https://github.com/joewinke/jat.git "$INSTALL_DIR"
 fi
 

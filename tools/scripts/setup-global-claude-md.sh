@@ -22,7 +22,7 @@ mkdir -p ~/.claude/commands/jat
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Resolve to absolute path (avoids /../ in symlinks)
-COMMANDS_SOURCE="$( cd "$SCRIPT_DIR/../commands/jat" && pwd )"
+COMMANDS_SOURCE="$( cd "$SCRIPT_DIR/../../commands/jat" && pwd )"
 
 # Install agent coordination commands as symlinks (SOT: jat/commands/jat/)
 if [ -d "$COMMANDS_SOURCE" ]; then
