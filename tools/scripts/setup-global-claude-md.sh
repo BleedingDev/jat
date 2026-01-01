@@ -55,19 +55,9 @@ if [ ! -f "$CONFIG_FILE" ]; then
     echo "  → Creating default projects config..."
     mkdir -p "$CONFIG_DIR"
 
-    # Get the JAT install directory (2 levels up from this script)
-    JAT_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
-
     cat > "$CONFIG_FILE" << EOF
 {
-  "projects": {
-    "jat": {
-      "name": "JAT",
-      "path": "$JAT_DIR",
-      "port": 3333,
-      "description": "Jomarchy Agent Tools - Multi-agent coordination dashboard"
-    }
-  },
+  "projects": {},
   "defaults": {
     "terminal": "alacritty",
     "editor": "code",
