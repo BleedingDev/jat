@@ -1,531 +1,399 @@
-# Jomarchy Agent Tools - Quick Start Guide
+# JAT Quick Start Guide
 
-**Get from zero to multi-agent coordination in 10 minutes!**
+> **Get from zero to orchestrating AI agents in 5 minutes**
 
-This guide walks you through your first experience with Agent Mail and Beads, from installation to running your first coordinated multi-agent workflow.
+## The 10X Boost in 5 Steps
 
----
-
-## Prerequisites
-
-- **Operating System**: Linux or macOS
-- **Shell**: bash (version 4.0+)
-- **Tools**: `git`, `sqlite3`, `node` (v18+), `npm`
-- **AI Coding Assistant**: Any tool with bash access (Claude Code, Cline, Cursor, etc.)
-
-### Check Prerequisites
-
-```bash
-# Check bash version
-bash --version  # Should be 4.0+
-
-# Check sqlite3
-sqlite3 --version
-
-# Check Node.js
-node --version  # Should be v18+
-npm --version
-
-# Check git
-git --version
-```
-
-If any are missing, install them first:
-- **Ubuntu/Debian**: `sudo apt-get install bash sqlite3 nodejs npm git`
-- **macOS**: `brew install bash sqlite node git`
+Andrej Karpathy said it best: you could be 10X more powerful with AI agents if you could just string together what's available. JAT is that string.
 
 ---
 
-## Step 1: Install Jomarchy Agent Tools
-
-### One-Line Install
+## Step 1: Install Prerequisites (2 min)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
+# Linux (Arch/Manjaro)
+sudo pacman -S tmux sqlite jq nodejs npm
+
+# Linux (Debian/Ubuntu)
+sudo apt install tmux sqlite3 jq nodejs npm
+
+# macOS
+brew install tmux sqlite jq node
 ```
 
-This installs:
-- **Agent Mail** (11 bash tools for multi-agent coordination)
-- **Beads CLI** (dependency-aware task management)
-- **28 generic bash tools** (browser automation, database queries, etc.)
-- **10 coordination commands** (slash commands for AI assistants)
+**Why these?**
+- `tmux` - Agent sessions run here (dashboard tracks them)
+- `sqlite3` - Agent Mail database (coordination)
+- `jq` - JSON processing (tool outputs)
+- `node/npm` - Dashboard and browser automation
 
-### Manual Install (Alternative)
+---
+
+## Step 2: Install JAT (1 min)
 
 ```bash
-# Clone the repository
-git clone https://github.com/joewinke/jat.git ~/code/jat
 cd ~/code/jat
-
-# Run install script
-bash install.sh
-
-# Verify installation
-which am-register  # Should show ~/.local/bin/am-register
-which bd          # Should show ~/code/beads/bd
+./install.sh
 ```
 
-### Verify Installation
+**This symlinks all tools to `~/.local/bin/`:**
+- `bd-*` - Beads CLI (13 commands)
+- `am-*` - Agent Mail (13 commands)
+- `browser-*` - Browser automation (11 commands)
+- `db-*` - Database tools (4 commands)
+- `jat-*` - JAT signals and launchers
 
+**Reload your shell:**
 ```bash
-# Test Agent Mail
-am-register --help
-
-# Test Beads
-bd --help
-
-# Run full test suite (optional)
-bash test/run-all-tests.sh
+source ~/.bashrc  # or ~/.zshrc on macOS
 ```
 
-**Expected output**: All tools accessible, tests passing.
-
----
-
-## Step 2: Register Your First Agent
-
-Agent Mail needs to know about each AI agent working in your project. This creates an identity in the coordination system.
-
-### From Your AI Coding Assistant
-
-**Inside your AI assistant (Claude Code, Cline, etc.), run:**
-
+**Verify:**
 ```bash
-am-register --name YourAgent --program claude-code --model sonnet-4.5 --task "Learning Agent Mail"
-```
-
-**Parameters:**
-- `--name`: Your agent's unique name (e.g., `Alice`, `BackendExpert`, `PaleStar`)
-- `--program`: Which AI tool you're using (`claude-code`, `cline`, `cursor`, etc.)
-- `--model`: Which model (`sonnet-4.5`, `gpt-4`, etc.)
-- `--task`: (Optional) What this agent is working on
-
-### Verify Registration
-
-```bash
-# Check your identity
-am-whoami --agent YourAgent
-
-# List all registered agents
-am-agents
+am-whoami    # Should show "Not registered" (expected)
+bd --version # Should show version number
 ```
 
 ---
 
-## Step 3: Your First Agent Mail Message
-
-Now let's send a message to yourself (good for learning the flow).
+## Step 3: Initialize a Project (30 sec)
 
 ```bash
-# Send a message
-am-send "Hello from Agent Mail!" \
-  "This is my first message in the coordination system." \
-  --from YourAgent \
-  --to YourAgent \
-  --thread learning
-
-# Check your inbox
-am-inbox YourAgent
-
-# Acknowledge the message
-am-ack 1 --agent YourAgent
+cd ~/code/myproject
+bd init
 ```
 
-**What just happened?**
-- You sent a message to yourself
-- The message is stored in `~/.agent-mail.db`
-- It's organized by thread (`learning`)
-- You acknowledged it (marked as read)
+**Answer the prompts** (or press Enter for defaults):
+- Project name: `myproject`
+- Default priority: `2` (Medium)
+- Task prefix: `mp` (e.g., mp-001, mp-002)
+
+**This creates `.beads/` directory** - git-backed task tracking.
 
 ---
 
-## Step 4: Reserve Files (Prevent Conflicts)
-
-Agent Mail's killer feature: **file reservations**. This prevents multiple agents from editing the same files simultaneously.
+## Step 4: Start the Dashboard (30 sec)
 
 ```bash
-# Reserve files for exclusive editing
-am-reserve "src/**" --agent YourAgent --ttl 3600 --exclusive --reason "learning-001"
-
-# Check active reservations
-am-reservations
-
-# Try to reserve again (will fail - you already have it!)
-am-reserve "src/**" --agent YourAgent --ttl 3600 --exclusive --reason "learning-002"
-
-# Release when done
-am-release "src/**" --agent YourAgent
+jat-dashboard
 ```
 
-**Key concepts:**
-- `--ttl 3600`: Time-to-live in seconds (1 hour)
-- `--exclusive`: Only you can edit these files
-- `--reason`: Why you're reserving (good for auditing)
-- **Automatic conflict detection**: If another agent has the files, you'll get an error
+**This:**
+1. Checks dependencies (npm install if needed)
+2. Starts SvelteKit dev server (port 3333 by default)
+3. Opens browser to http://localhost:3333
+
+**You should see:**
+- Empty Work page (no active sessions yet)
+- Navigation: Tasks, Work, Files, Servers, Agents, Config
 
 ---
 
-## Step 5: Create Your First Beads Task
+## Step 5: Launch Your First Agent (1 min)
 
-Beads is a dependency-aware task management system. Let's create a simple task.
+### Option A: Via Dashboard (Recommended for First Time)
+
+1. Go to **Tasks** page
+2. Click **"Create Task"** button
+3. Fill in:
+   - Title: "Add authentication"
+   - Type: `task`
+   - Priority: `P2` (Medium)
+4. Click **"Create"**
+5. Go to **Work** page
+6. Click **"Start Next"** dropdown → Select your new task
+7. Watch agent spawn in tmux session
+
+### Option B: Via CLI (Faster for Repeat Use)
 
 ```bash
-# Create a task
-bd create "Learn Agent Mail basics" \
-  --type task \
-  --priority 1 \
-  --labels learning,tutorial \
-  --description "Complete the QUICKSTART tutorial"
+# Single agent
+jat-myproject
 
-# List all tasks
-bd list
-
-# Show ready tasks (no blockers)
-bd ready
-
-# Close the task when done
-bd close bd-<ID> --reason "Tutorial completed!"
+# Multiple agents in auto-attack mode
+jat myproject 4 --auto
 ```
 
-**Beads creates local `.beads/` directories** in each project. Your tasks are stored there.
+**What happens:**
+1. Tmux session created: `jat-{AgentName}`
+2. Claude Code starts in session
+3. Agent runs `/jat:start` (picks highest priority task)
+4. Dashboard shows live terminal output
+5. Session state updates in real-time
 
 ---
 
-## Step 6: Multi-Agent Coordination Example
+## You're Now Orchestrating AI Agents! 🎉
 
-Now let's simulate two agents working together. We'll run this from the terminal to see the full flow.
-
-### Scenario: Alice builds an API, Bob builds the frontend
-
-```bash
-# Register two agents
-am-register --name Alice --program claude-code --model sonnet-4.5 --task "Backend API"
-am-register --name Bob --program cursor --model gpt-4 --task "Frontend UI"
-
-# Alice reserves backend files
-am-reserve "api/**" --agent Alice --ttl 7200 --exclusive --reason "task-123"
-
-# Alice announces her work
-am-send "[task-123] Building user API" \
-  "Starting POST /api/users endpoint. ETA: 1 hour." \
-  --from Alice --to Bob --thread task-123 --importance high
-
-# Bob checks his inbox
-am-inbox Bob
-
-# Bob acknowledges Alice's message
-am-ack 1 --agent Bob
-
-# Bob reserves frontend files (no conflict!)
-am-reserve "src/components/**" --agent Bob --ttl 7200 --exclusive --reason "task-123"
-
-# Alice finishes and notifies Bob
-am-send "[task-123] API complete" \
-  "Endpoint ready: POST /api/users accepts {name, email}" \
-  --from Alice --to Bob --thread task-123 --importance high
-
-# Alice releases her files
-am-release "api/**" --agent Alice
-
-# Bob completes integration
-am-send "[task-123] Frontend complete" \
-  "UI integrated with API. All working!" \
-  --from Bob --to Alice --thread task-123
-
-# Bob releases his files
-am-release "src/components/**" --agent Bob
-
-# Search the conversation
-am-search "task-123" --thread task-123
-```
-
-**What you learned:**
-- Agents reserve different file patterns (no conflicts!)
-- Messages organize by thread (task-123)
-- Importance levels (high for blockers)
-- Clean handoff pattern (reserve → work → release → notify)
+**What you have:**
+- ✅ Visual dashboard showing all agent sessions
+- ✅ Task management (create, assign, track)
+- ✅ Live terminal output per agent
+- ✅ Code editor (`/files` page)
+- ✅ Server controls (`/servers` page)
+- ✅ Token usage tracking
 
 ---
 
-## Step 7: Beads + Agent Mail Integration
+## Configure Auto-Proceed Rules (Optional but Recommended)
 
-The power move: use Beads task IDs as Agent Mail thread IDs.
+Go to **Config → Review Rules**:
 
-```bash
-# Create a Beads task
-bd create "Build authentication system" \
-  --type feature \
-  --priority 1 \
-  --labels auth,security \
-  --description "OAuth + JWT authentication"
-# → Returns task ID: bd-456
+**The Review Rules Matrix:**
 
-# Reserve files with task ID in reason
-am-reserve "src/auth/**" --agent YourAgent --ttl 7200 --reason "bd-456"
-
-# Send progress update
-am-send "[bd-456] Starting auth implementation" \
-  "Building OAuth flow first, then JWT tokens" \
-  --from YourAgent --thread bd-456
-
-# Update Beads task
-bd add bd-456 "Completed OAuth flow, starting JWT implementation"
-
-# Complete and close
-am-send "[bd-456] Complete" "All tests passing!" --from YourAgent --thread bd-456
-am-release "src/auth/**" --agent YourAgent
-bd close bd-456 --reason "Authentication system complete"
+```
+              P0        P1        P2        P3        P4
+bug         review    review    review    auto      auto
+feature     review    review    auto      auto      auto
+task        review    auto      auto      auto      auto
+chore       auto      auto      auto      auto      auto
 ```
 
-**The pattern:**
-- Beads task ID (`bd-456`) = Agent Mail thread ID
-- File reservation reason = Beads task ID
-- Easy to trace work across both systems
+**What this means:**
+- **P3-P4 bugs**: Agent auto-completes → spawns next task
+- **P0-P2 bugs**: Agent asks for review before completing
+- Click cells to toggle between auto/review
+
+**Why configure this?**
+- Lets agents work overnight on low-priority items
+- You review high-priority completions
+- Balances autonomy with control
 
 ---
 
-## Common Workflows
+## Configure Automation Rules (Optional)
 
-### Starting Work on a Task
+Go to **Config → Automation → Presets**:
 
-```bash
-# 1. Check ready tasks
-bd ready
+**Install these presets:**
+- ✅ **API Overloaded Recovery** (auto-retry with backoff)
+- ✅ **Rate Limit Recovery** (wait 60s, retry)
+- ✅ **Network Error Recovery** (detect ECONNREFUSED, retry)
+- ✅ **Auto-Continue Prompts** (send Enter on "Continue?" prompts)
 
-# 2. Pick one and reserve files
-am-reserve "relevant/files/**" --agent YourAgent --ttl 3600 --reason "bd-XXX"
-
-# 3. Announce start
-am-send "[bd-XXX] Starting" "Working on..." --from YourAgent --thread bd-XXX
-
-# 4. Do the work...
-
-# 5. Complete
-am-send "[bd-XXX] Complete" "Summary..." --from YourAgent --thread bd-XXX
-am-release "relevant/files/**" --agent YourAgent
-bd close bd-XXX --reason "Done!"
-```
-
-### Handing Off to Another Agent
-
-```bash
-# 1. Send handoff message
-am-send "[bd-XXX] 🤝 HANDOFF" \
-  "Done: [list]. Blocked on: [blocker]. Can you take over?" \
-  --from AgentA --to AgentB --thread bd-XXX --importance high --ack
-
-# 2. Release files
-am-release "files/**" --agent AgentA
-
-# 3. Other agent acknowledges and reserves
-am-ack <msg-id> --agent AgentB
-am-reserve "files/**" --agent AgentB --ttl 3600 --reason "bd-XXX"
-
-# 4. Continue work
-am-send "[bd-XXX] Handoff accepted" "Taking over..." --from AgentB --to AgentA
-```
-
-### Checking for Conflicts
-
-```bash
-# Before starting work, check reservations
-am-reservations
-
-# If conflict detected, coordinate
-am-send "[coordination] File conflict" \
-  "You have src/auth/**. Can we coordinate?" \
-  --from AgentB --to AgentA --thread coordination
-```
+**Why these help:**
+- Agents recover from transient errors automatically
+- You don't babysit stuck sessions
+- 3am rate limit? Handled.
 
 ---
 
-## Troubleshooting
+## Your First Epic Swarm (Multi-Agent Workflow)
 
-### "Error: from_agent not registered"
+### Create an Epic
 
-**Problem**: You didn't register your agent first.
+1. **Tasks page** → Create Task
+2. Type: `epic`
+3. Title: "Add user authentication system"
+4. Description:
+   ```
+   - [ ] Design auth flow
+   - [ ] Add login endpoint
+   - [ ] Add registration endpoint
+   - [ ] Add password reset
+   - [ ] Write tests
+   - [ ] Update documentation
+   ```
+5. Click **Create**
 
-**Solution**:
+### Launch the Swarm
+
+1. Click the Epic's title → Opens detail drawer
+2. Click **"Launch Epic Swarm"** button
+3. Configure:
+   - **Execution mode**: Parallel
+   - **Max concurrent**: 4
+   - **Review threshold**: P0-P1 (only review critical items)
+   - **Auto-spawn blocked**: Yes (wait for dependencies)
+4. Click **"Launch"**
+
+### Watch the Magic
+
+- Dashboard converts each `[ ]` item into a subtask
+- 4 agents spawn simultaneously
+- Each picks a subtask (ordered by priority)
+- As tasks complete, agents auto-proceed to next task
+- Progress bar shows completion
+
+**When to intervene:**
+- Agent shows **"NEEDS INPUT"** badge → click to answer
+- Agent shows **"REVIEW"** badge → check work before completing
+- Error in terminal → automation rules try recovery first
+
+---
+
+## Common First-Time Issues
+
+### "Agent shows offline in dashboard"
+
+**Cause:** Not running in tmux
+
+**Fix:**
 ```bash
-am-register --name YourAgent --program claude-code --model sonnet-4.5
+# Don't run:
+claude "/jat:start"  # ❌ No tmux, dashboard can't track
+
+# Do run:
+jat-myproject        # ✅ Launcher creates tmux session
 ```
 
-### "Error: FILE_RESERVATION_CONFLICT"
+### "Dashboard says 'No projects found'"
 
-**Problem**: Another agent has exclusive lock on those files.
+**Cause:** Haven't run `bd init` in your project
 
-**Solution**:
+**Fix:**
 ```bash
-# Check who has the lock
-am-reservations
-
-# Coordinate with that agent
-am-send "Need files" "Can you release src/**?" --from You --to OtherAgent
-
-# Or work on different files
-am-reserve "different/path/**" --agent YourAgent
+cd ~/code/myproject
+bd init
+# Refresh dashboard
 ```
 
-### "Error: Database locked"
+### "Voice input mic button doesn't work"
 
-**Problem**: SQLite database is locked (rare).
+**Cause:** Whisper not installed
 
-**Solution**:
+**Fix:**
 ```bash
-# Wait a moment and retry
-# Or check for stuck processes
-ps aux | grep sqlite3
+bash ~/code/jat/tools/scripts/install-whisper.sh
 ```
 
-### Installation Issues
+### "Browser automation tools not found"
 
-**Problem**: `am-register: command not found`
+**Cause:** npm dependencies not installed
 
-**Solution**:
+**Fix:**
 ```bash
-# Check installation path
-echo $PATH | grep "~/.local/bin"
-
-# Add to PATH if missing (add to ~/.bashrc)
-export PATH="$HOME/.local/bin:$PATH"
-
-# Reload shell
-source ~/.bashrc
+cd ~/code/jat/tools/browser
+npm install
 ```
 
-### Agent Mail database location
+### "Agents cost too much"
 
-**Default**: `~/.agent-mail.db`
+**Check usage:**
+- Dashboard → Agent card → Shows tokens + cost today/week
+- Adjust review rules to require more human review
+- Set max concurrent lower (fewer agents = less cost)
 
-**Custom location** (for testing):
-```bash
-export AGENT_MAIL_DB="/path/to/custom.db"
-```
-
-**Note**: Custom database paths may require manual schema initialization. For testing, example scripts in `examples/workflows/` automatically initialize test databases. For production, use the default location (`~/.agent-mail.db`).
+**Typical costs:**
+- 100K tokens/day ≈ $0.30/day
+- 1M tokens/day ≈ $3/day
+- 10M tokens/day ≈ $30/day
 
 ---
 
 ## Next Steps
 
-### Learn More
+### Level 1: Single Agent (you just did this ✅)
+- Launch one agent on one task
+- Watch it work in dashboard
+- Review and complete
 
-1. **Read the examples**: `examples/workflows/` directory has 4 real-world coordination patterns
-2. **Read best practices**: `examples/best-practices.md` for patterns and anti-patterns
-3. **Explore tools**: Every `am-*` and `bd` command has `--help`
-4. **Run tests**: `bash test/run-all-tests.sh` to see everything in action
+### Level 2: Auto-Proceed
+- Configure review rules matrix
+- Let agents auto-complete low-priority tasks
+- Wake up to finished backlog
 
-### Advanced Topics
+### Level 3: Epic Swarm
+- Create epic with 10+ subtasks
+- Launch 4-8 agents in parallel
+- Track progress in real-time
 
-- **Multi-project coordination**: Agent Mail works across different repositories
-- **Beads dependencies**: Use `--deps bd-XXX` when creating tasks
-- **Full-text search**: `am-search "keyword"` searches all message history
-- **Browser automation**: 7 browser tools (`browser-*.js`) for web scraping/testing
-- **Database queries**: `db-query` for direct SQLite access from Node.js
+### Level 4: Custom Automation
+- Write custom automation rules (regex patterns)
+- Template variables with capture groups
+- Project-specific error handling
 
-### Example Commands for Exploration
+### Level 5: Multi-Project
+- Initialize multiple projects (`~/code/project1`, `~/code/project2`)
+- Dashboard shows all projects
+- Swarm attack across projects
 
+---
+
+## Key Keyboard Shortcuts
+
+| Shortcut | Action | Context |
+|----------|--------|---------|
+| `Alt+N` | Create new task | Global |
+| `Alt+E` | Open Epic Swarm modal | Global |
+| `Alt+S` | Start next task | Global |
+| `Alt+A` | Attach to session | Hovered session (Work page) |
+| `Alt+K` | Kill session | Hovered session |
+| `Alt+1` to `Alt+9` | Jump to session | Work page |
+| `Cmd+K` | Command palette | Global |
+
+---
+
+## Essential Commands
+
+### Dashboard
 ```bash
-# See all example workflow scripts
-ls examples/workflows/
+jat-dashboard                   # Launch dashboard
+```
 
-# Run the basic collaboration example
-bash examples/workflows/01-basic-collaboration.sh
+### Project Management
+```bash
+jat init                        # Auto-discover ~/code/* projects
+jat add <path>                  # Add project manually
+jat list                        # Show all projects
+```
 
-# Read best practices
-cat examples/best-practices.md
+### Task Management
+```bash
+bd ready                        # Tasks ready to work
+bd create "Title" --priority 1  # Create task (P1 = High)
+bd show <id>                    # View task details
+bd close <id>                   # Close completed task
+bd dep add <task> <blocker>     # Add dependency
+```
 
-# Explore all Agent Mail commands
-ls ~/.local/bin/am-* | xargs -n1 basename
+### Agent Coordination
+```bash
+am-whoami                       # Check your agent identity
+am-agents                       # List all registered agents
+am-inbox <agent> --unread       # Check messages
+am-send "Message" --to <agent>  # Send message
+```
+
+### Slash Commands (in Claude sessions)
+```
+/jat:start          Pick task, reserve files, begin work
+/jat:complete       Verify, commit, close task, end session
+/jat:bead           Convert PRD to structured tasks
+/jat:verify         Run tests, lint, security checks
+/jat:doctor         Diagnose and repair JAT setup
 ```
 
 ---
 
-## Real-World Usage
+## Support & Next Steps
 
-### For Solo Developers
+### Documentation
+- [README.md](README.md) - Overview and philosophy
+- [GETTING_STARTED.md](GETTING_STARTED.md) - Complete tutorial
+- [CLAUDE.md](CLAUDE.md) - Complete developer reference
+- [shared/signals.md](shared/signals.md) - Signal system
+- [shared/automation.md](shared/automation.md) - Automation rules
+- [shared/tools.md](shared/tools.md) - All 40+ tools
 
-- Use Agent Mail for audit trail (all decisions documented)
-- Use Beads for task queue (never forget what to do next)
-- File reservations prevent you from editing files you shouldn't touch yet
-
-### For Agent Swarms
-
-- Multiple AI agents coordinate automatically via Agent Mail
-- No merge conflicts (file reservations prevent simultaneous edits)
-- Clear communication (message threading, search history)
-- Dependency management (Beads ensures correct task order)
-
-### For Teams
-
-- Human + AI agents in the same system
-- Clear audit trail for compliance
-- Prevents race conditions on shared files
-- Distributed work across projects
+### Having Issues?
+- Check [GitHub Issues](https://github.com/yourusername/jat/issues)
+- Read troubleshooting in [CLAUDE.md](CLAUDE.md)
+- Join community discussions
 
 ---
 
-## Getting Help
+## The Bottom Line
 
-- **Tool help**: Every command has `--help` (e.g., `am-send --help`)
-- **Examples**: See `examples/workflows/` for real coordination patterns
-- **Issues**: Open a GitHub issue for bugs or questions
-- **Documentation**: See main `README.md` for complete reference
+Karpathy said programmers could be **10X more powerful** if they could just string together what's available.
 
----
+**You just strung it together.**
 
-## Summary
+- ✅ Agents orchestrated
+- ✅ Dashboard running
+- ✅ Tasks tracked
+- ✅ Automation configured
 
-You've learned:
-- ✅ How to install Jomarchy Agent Tools
-- ✅ How to register agents in Agent Mail
-- ✅ How to send messages and coordinate
-- ✅ How to reserve files to prevent conflicts
-- ✅ How to create and manage Beads tasks
-- ✅ How to integrate Beads + Agent Mail
-- ✅ Common coordination patterns
+**You're ready to claim the 10X boost. Happy orchestrating! 🚀**
 
-**Next**: Try the example workflows in `examples/workflows/` to see multi-agent coordination in action!
-
----
-
-## Quick Reference
-
-### Agent Mail Commands
-
-| Command | Purpose |
-|---------|---------|
-| `am-register` | Register agent identity |
-| `am-whoami` | Check your identity |
-| `am-agents` | List all agents |
-| `am-send` | Send message |
-| `am-inbox` | Check inbox |
-| `am-ack` | Acknowledge message |
-| `am-reply` | Reply to message |
-| `am-search` | Search messages |
-| `am-reserve` | Reserve files |
-| `am-release` | Release files |
-| `am-reservations` | List active reservations |
-
-### Beads Commands
-
-| Command | Purpose |
-|---------|---------|
-| `bd create` | Create new task |
-| `bd list` | List all tasks |
-| `bd ready` | Show ready tasks (no blockers) |
-| `bd show` | Show task details |
-| `bd add` | Add comment to task |
-| `bd close` | Close task |
-| `bd --help` | Full command reference |
-
-### File Locations
-
-- **Agent Mail DB**: `~/.agent-mail.db`
-- **Beads DBs**: `~/code/PROJECT/.beads/beads.db` (per project)
-- **Tools**: `~/.local/bin/`
-- **Slash Commands**: `~/.claude/commands/`
-
----
-
-**Happy coordinating! 🚀**
+[Full Docs](GETTING_STARTED.md) | [README](README.md) | [Issues](https://github.com/yourusername/jat/issues)

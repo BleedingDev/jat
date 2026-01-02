@@ -1,15 +1,70 @@
-# JAT - Agent Management for AI Coding Assistants
+# JAT - Jomarchy Agent Tools
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Dashboard](https://img.shields.io/badge/Dashboard-SvelteKit-red)](./dashboard/)
-[![Tools](https://img.shields.io/badge/Tools-28+-blue)](#tools)
-[![Commands](https://img.shields.io/badge/Commands-5-purple)](#commands)
+> **The orchestration layer for the AI coding revolution**
 
-**Manage 20+ AI agents across all your projects from one dashboard.**
+## The Problem
 
-Without JAT, you're managing 1-2 agents in separate terminals. With JAT, you see every agent, every task, every project in one interface. Organize your entire backlog, spawn agents on demand, and watch them coordinate automatically.
+As [Andrej Karpathy put it](https://x.com/karpathy/status/2004607146781278521):
 
-<!-- PLACEHOLDER: Demo video coming - see assets/RECORDING-SCRIPT.md -->
+> "I've never felt this much behind as a programmer. The profession is being dramatically refactored... There's a new programmable layer of abstraction to master involving agents, subagents, their prompts, contexts, memory, modes, permissions, tools, plugins, skills, hooks, MCP, LSP, slash commands, workflows, IDE integrations... **some powerful alien tool was handed around except it comes with no manual**."
+
+**You could be 10X more powerful with AI agents. But how do you actually orchestrate them?**
+
+Without proper tooling:
+- You manually spawn agents in separate tmux sessions
+- You lose track of which agents are working on what
+- You can't see when agents get stuck or need input
+- You don't know how much they're costing you
+- You have no systematic way to handle errors
+- You switch between 5 different tools just to check status
+
+**JAT is the manual for the alien tool.**
+
+---
+
+## What is JAT?
+
+JAT is an **Agent Development Environment** - a complete IDE for orchestrating AI coding agents at scale.
+
+Think VS Code, but instead of helping *you* write code, it helps you orchestrate *agents* writing code.
+
+### Core Features
+
+**🎯 Agent Orchestration**
+- Visual dashboard showing all active sessions in real-time
+- One-click Epic Swarm: launch 4+ agents on parallel tasks
+- Session state tracking (working, needs-input, review, completed)
+- Smart question UI: agents' questions become clickable buttons
+
+**🤖 Intelligent Automation**
+- Pattern-based automation rules (regex → actions)
+- Auto-proceed thresholds (P0-P3 bugs auto, P4 review)
+- Error recovery presets (rate limits, API overload, network errors)
+- Template variables with regex capture groups
+
+**📋 Task Management**
+- Beads integration: git-backed issue tracking
+- Epic workflows with automatic task spawning
+- Dependency tracking and visualization
+- Review rules matrix (task-type × priority)
+
+**💻 Full IDE Integration**
+- `/files` - Monaco code editor with syntax highlighting
+- `/work` - Live agent sessions with terminal output
+- `/servers` - Dev server management (npm, browser)
+- `/agents` - Agent grid with Kanban board view
+
+**📊 Visibility & Control**
+- Real-time token usage and cost tracking per agent
+- Session timeline and activity feeds
+- Signal-based state synchronization
+- Keyboard shortcuts and command palette
+
+**🔧 Developer Tools**
+- 40+ bash/JavaScript tools (`bd-*`, `am-*`, `browser-*`)
+- Agent Mail: identity and coordination system
+- Browser automation (Playwright integration)
+- Database tools and monitoring
 
 ---
 
@@ -17,87 +72,199 @@ Without JAT, you're managing 1-2 agents in separate terminals. With JAT, you see
 
 ```bash
 # Install
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
+git clone https://github.com/yourusername/jat
+cd jat
+./install.sh
 
-# Reload shell (use ~/.zshrc on macOS, ~/.bashrc on Linux)
-source ~/.zshrc     # macOS (zsh)
-# or
-source ~/.bashrc    # Linux (bash)
+# Reload shell
+source ~/.bashrc  # or ~/.zshrc on macOS
 
-# Launch dashboard
+# Initialize a project
+cd ~/code/myproject
+bd init
+
+# Start the dashboard
 jat-dashboard
 
-# Dashboard opens at http://localhost:5174
-# Add projects from the UI, spawn agents, watch them work
+# Launch agents (via browser or CLI)
+jat myproject 4 --auto  # 4 agents in auto-attack mode
 ```
 
-**Want to see it in action first?**
-```bash
-jat demo                        # Watch 3 agents coordinate on a sample project
-```
-
-**First time?** See [GETTING_STARTED.md](./GETTING_STARTED.md) for a complete walkthrough.
+**First time?** See [QUICKSTART.md](./QUICKSTART.md) for a 5-minute walkthrough.
 
 ---
 
-## What You Get
+## The "New Programmable Layer" - JAT's Answer
 
-### Dashboard
+Karpathy's checklist of things to master:
 
-Your command center for all agents across all projects.
+| Concept | How JAT Handles It |
+|---------|-------------------|
+| **agents, subagents** | Visual dashboard with real-time session cards |
+| **prompts, contexts** | Command templates with variables, CLAUDE.md |
+| **memory** | Beads history, session files, signals timeline |
+| **modes** | Session states (working/review/completing) |
+| **permissions** | Configurable via `~/.config/jat/projects.json` |
+| **tools** | 40+ integrated bash/JS tools, extensible |
+| **plugins** | Any bash script in `tools/` directory |
+| **skills** | Templates + automation rules library |
+| **hooks** | Pre/PostToolUse hooks documented in settings |
+| **MCP** | Compatible - agents can use MCP servers |
+| **LSP** | Monaco editor with language services |
+| **slash commands** | Command palette + templates UI |
+| **workflows** | Epic Swarm + automation rules + signals |
+| **IDE integrations** | **JAT IS the IDE** - `/files`, `/work`, `/servers` |
 
-<!-- PLACEHOLDER: Dashboard screenshot coming - see assets/RECORDING-SCRIPT.md -->
+---
 
-| Route | What It Does |
-|-------|--------------|
-| `/work` | **The main view.** Active sessions with live terminal output + task backlog. Spawn agents, click to answer questions, watch work happen. |
-| `/files` | **Built-in code editor.** Browse project files, multi-tab editing with syntax highlighting, create/rename/delete files. |
-| `/kanban` | Visual task board with drag-and-drop organization |
-| `/agents` | Agent registry, file locks, coordination status |
-| `/automation` | Rules for error recovery, prompt responses, stall detection |
-| `/config` | Edit slash commands, configure hooks, keyboard shortcuts, MCP servers |
+## Architecture
 
-**Why this matters:**
-- **Scale from 1-2 to 20+ agents** - See all of them at once, not in separate terminals
-- **Unified task backlog** - Every project's `.beads/` in one view
-- **Clickable question UI** - No more typing "1" or "2" in terminals
-- **Edit code without leaving** - Built-in file browser with multi-tab editor
-- **Full configuration UI** - Edit commands, hooks, and actions without touching JSON files
-- **Real-time signals** - Know instantly when an agent needs you
-- Terminal output with ANSI rendering, token tracking, 32 themes, keyboard shortcuts
-
-### Agent Coordination
-
-Run multiple agents without conflicts:
-
-```bash
-jat my-project 4                # Launch 4 agents
+```
+JAT Agent IDE
+├── Dashboard (SvelteKit)
+│   ├── /work      → Agent sessions (live terminals)
+│   ├── /files     → Code editor (Monaco)
+│   ├── /servers   → Dev server controls
+│   ├── /agents    → Agent grid & Kanban
+│   ├── /tasks     → Beads task management
+│   └── /config    → Automation rules & settings
+│
+├── Tools (bash/JS)
+│   ├── bd-*       → Beads CLI (task operations)
+│   ├── am-*       → Agent Mail (coordination)
+│   ├── browser-*  → Browser automation
+│   └── db-*       → Database tools
+│
+├── Signals (state sync)
+│   ├── jat-signal → Emit state changes
+│   └── SSE server → Real-time updates
+│
+└── Workflows
+    ├── /jat:start    → Register agent, pick task
+    ├── /jat:complete → Signal completion, sync beads
+    └── Epic Swarm    → Parallel task execution
 ```
 
-Each agent:
-- Gets assigned different tasks (no duplicates)
-- Reserves files (no collisions)
-- Messages other agents (async coordination)
-- Reports status to dashboard (real-time)
+---
 
-### Task Management
+## Philosophy: Human-Defined Rules, Agent Execution
 
-Organize all your work across all your projects:
+JAT follows a **declarative orchestration** model:
 
-```bash
-bd ready                        # Show tasks ready to work
-bd create "Add auth" --priority 1
-bd dep add auth-ui auth-api     # UI depends on API
+**You don't code the orchestration - you configure it:**
+
+```typescript
+// Automation Rule Example
+{
+  name: "Auto-retry on rate limit",
+  patterns: [{ mode: "regex", value: "rate limit|429|too many requests" }],
+  actions: [
+    { type: "send_keys", value: "C-c", delayMs: 1000 },
+    { type: "send_text", value: "y" }
+  ],
+  cooldownSeconds: 60
+}
 ```
 
-**The to-do system that scales:**
-- Every project has a `.beads/` directory with its task database
-- Dashboard aggregates all of them into one unified backlog
-- Dependencies prevent agents from starting blocked work
-- Priorities ensure critical tasks get picked first
-- Tasks sync via git - commit your backlog with your code
+**You define thresholds, not workflows:**
 
-### Slash Commands
+```bash
+# P0-P2 bugs auto-proceed, P3-P4 require review
+bd-review-rules --type bug --max-auto 2
+```
+
+**You see everything, control everything:**
+
+The dashboard shows all agents, their states, their costs, their outputs. When you need to intervene, you can - but most of the time, your rules handle it.
+
+---
+
+## Why JAT vs Manual Orchestration?
+
+**Without JAT:**
+```bash
+# Terminal 1
+tmux new -s agent1 && claude
+
+# Terminal 2
+tmux new -s agent2 && claude
+
+# Terminal 3
+tmux attach -t agent1  # Read scrollback manually
+# Is it stuck? How much has it cost? ¯\_(ツ)_/¯
+
+# Terminal 4
+npm run dev  # Separate terminal for server
+
+# Terminal 5
+code .  # VS Code for editing
+
+# Your browser
+# http://localhost:3000  # Check if it works
+```
+
+**With JAT:**
+```bash
+jat-dashboard  # One command
+
+# Browser shows:
+# - 4 agents working (live terminals)
+# - All tasks with status and priorities
+# - Token usage: $2.47 today
+# - Server: running on port 3000
+# - File editor built-in
+```
+
+**One UI. Full visibility. Complete control.**
+
+---
+
+## Use Cases
+
+**Solo Developer:**
+- Launch 4 agents on your backlog
+- Let them work overnight
+- Wake up to completed tasks + review queue
+
+**Team Lead:**
+- Epic Swarm: 20 subtasks → 8 agents → 2 hours
+- Dashboard tracks progress in real-time
+- Auto-proceed on low-priority items
+
+**Consultant:**
+- Browser automation for client sites
+- Database tools for migrations
+- Agent coordination across multiple projects
+
+---
+
+## Example: Epic Swarm Workflow
+
+Create an epic with subtasks:
+
+```bash
+bd create "User Authentication System" --type epic
+# Add checkboxes in description:
+# - [ ] Design auth flow
+# - [ ] Add login endpoint
+# - [ ] Add registration endpoint
+# - [ ] Add password reset
+# - [ ] Write tests
+# - [ ] Update documentation
+```
+
+Launch the swarm from dashboard:
+1. Click epic → "Launch Epic Swarm"
+2. Configure: 4 agents, parallel mode, review P0-P1 only
+3. Watch agents spawn and work simultaneously
+4. Progress bar shows completion in real-time
+5. Low-priority tasks auto-complete, high-priority ones wait for review
+
+**Zero manual coordination. Just results.**
+
+---
+
+## Slash Commands
 
 | Command | What It Does |
 |---------|--------------|
@@ -107,15 +274,22 @@ bd dep add auth-ui auth-api     # UI depends on API
 | `/jat:verify` | Run tests, lint, security checks |
 | `/jat:doctor` | Diagnose and repair JAT setup |
 
-### 28+ Bash Tools
+---
 
-No MCP servers. Just bash scripts that work everywhere:
+## Tools Reference
+
+**40+ bash/JavaScript tools included:**
 
 ```bash
 # Agent coordination
 am-inbox Agent1 --unread        # Check messages
 am-reserve "src/**" --ttl 3600  # Lock files
 am-send "Done with API" --to Agent2
+
+# Task management
+bd ready                        # Tasks ready to work
+bd create "Title" --priority 1  # Create task
+bd dep add task-a task-b        # Add dependency
 
 # Database
 db-query "SELECT * FROM users LIMIT 5"
@@ -126,121 +300,50 @@ browser-screenshot.js
 browser-eval.js 'document.title'
 ```
 
----
-
-## The Swarm Model
-
-**One agent = one session = one task.** But you can run as many agents as you want.
-
-```bash
-# From dashboard: click "Spawn Agent" on any project
-# Or from terminal:
-jat my-project 4 --auto         # Launch 4 agents that auto-pick tasks
-```
-
-Each agent:
-1. Picks the highest priority ready task
-2. Works on it
-3. Completes and closes the session
-4. Dashboard spawns the next agent
-
-**Why this scales to 20+ agents:**
-- **File reservations** prevent edit conflicts
-- **Dependencies** control task ordering
-- **Agent Mail** enables async communication
-- **Dashboard** shows all agents across all projects in one view
-
-You're not juggling terminal windows. You're watching a dashboard.
-
----
-
-## Example: Feature Development
-
-You have a feature broken into tasks:
-
-```
-auth-api (P0)     ← Foundation, no dependencies
-auth-db (P0)      ← Foundation, no dependencies
-auth-ui (P1)      ← Depends on auth-api
-auth-tests (P1)   ← Depends on auth-api, auth-db
-```
-
-Launch 4 agents:
-
-```bash
-jat myapp 4 --auto
-```
-
-What happens:
-1. **Agent 1** picks `auth-api`, reserves `src/routes/api/**`
-2. **Agent 2** picks `auth-db`, reserves `migrations/**`
-3. **Agent 3** tries `auth-ui` → blocked (waiting on auth-api)
-4. **Agent 3** picks something else or waits
-5. **Agent 1** completes → `auth-ui` unblocks → Agent 3 starts it
-
-**Zero coordination overhead.** Dependencies resolve automatically.
-
----
-
-## CLI Reference
-
-```bash
-# Dashboard
-jat-dashboard                   # Launch standalone
-
-# Full environment
-jat <project>                   # VS Code + Claude + dashboard + dev server
-jat <project> 4                 # Launch 4 Claude sessions
-jat <project> --auto            # Agents auto-pick tasks
-
-# Project management
-jat init                        # Auto-discover ~/code/* projects
-jat add <path>                  # Add project
-jat list                        # Show projects
-jat config                      # Show configuration
-
-# Task management
-bd ready                        # Tasks ready to work
-bd create "Title" --priority 1  # Create task
-bd show <id>                    # View task
-bd close <id>                   # Close task
-bd dep add <task> <blocker>     # Add dependency
-```
+See [shared/tools.md](./shared/tools.md) for complete reference.
 
 ---
 
 ## Installation
 
+### Prerequisites
+
 ```bash
-# Run the installer
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
+# Linux (Arch/Manjaro)
+sudo pacman -S tmux sqlite jq nodejs npm
 
-# Reload your shell config
-source ~/.zshrc     # macOS (default: zsh)
-# or
-source ~/.bashrc    # Linux (default: bash)
+# Linux (Debian/Ubuntu)
+sudo apt install tmux sqlite3 jq nodejs npm
 
-# Start the dashboard
-jat-dashboard
+# macOS
+brew install tmux sqlite jq node
 ```
 
-**Installs:**
+### Install JAT
+
+```bash
+cd ~/code/jat
+./install.sh
+```
+
+**This installs:**
 - Dashboard (SvelteKit)
 - Agent Mail (11 bash tools)
-- Beads CLI
-- 28+ generic tools
-- 5 slash commands
+- Beads CLI integration
+- 40+ tools (`bd-*`, `am-*`, `browser-*`, `db-*`)
+- Slash commands (`/jat:start`, `/jat:complete`, etc.)
 - Global statusline
 
-**Requirements:** Linux/macOS, bash/zsh, curl, sqlite3, jq, git, tmux
+**Reload your shell:**
+```bash
+source ~/.bashrc  # or ~/.zshrc on macOS
+```
 
-> **macOS users**: The installer auto-detects zsh (macOS default) vs bash and updates the correct config file.
->
-> See [INSTALL.md](./INSTALL.md) for troubleshooting and detailed installation instructions.
+See [INSTALL.md](./INSTALL.md) for troubleshooting.
 
 ---
 
-## Project Configuration
+## Configuration
 
 `~/.config/jat/projects.json`:
 
@@ -256,9 +359,16 @@ jat-dashboard
   },
   "defaults": {
     "terminal": "alacritty",
-    "editor": "code"
+    "editor": "code",
+    "max_concurrent_agents": 8,
+    "auto_proceed_delay": 2
   }
 }
+```
+
+**Auto-discovered projects:**
+```bash
+jat init  # Scans ~/code/* for git repos with .beads/
 ```
 
 ---
@@ -267,10 +377,13 @@ jat-dashboard
 
 | Doc | What |
 |-----|------|
-| [GETTING_STARTED.md](./GETTING_STARTED.md) | Full walkthrough |
-| [QUICKSTART.md](./QUICKSTART.md) | Quick reference guide |
-| [COMMANDS.md](./COMMANDS.md) | All slash commands |
-| [shared/tools.md](./shared/tools.md) | All 28+ tools |
+| [QUICKSTART.md](./QUICKSTART.md) | 5-minute tutorial |
+| [GETTING_STARTED.md](./GETTING_STARTED.md) | Complete walkthrough |
+| [CLAUDE.md](./CLAUDE.md) | Developer reference |
+| [shared/signals.md](./shared/signals.md) | Signal system |
+| [shared/automation.md](./shared/automation.md) | Automation rules |
+| [shared/tools.md](./shared/tools.md) | All 40+ tools |
+| [COMMANDS.md](./COMMANDS.md) | Slash commands |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution guide |
 
 ---
@@ -312,13 +425,11 @@ jat-dashboard
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Why tmux?** It's already installed everywhere, gives us named sessions, and agents don't need to know about the dashboard - they just see a terminal.
-
-**The tmux integration is key:**
-- Every agent runs in a tmux session named `jat-{AgentName}`
-- Dashboard captures terminal output and signals from tmux
-- When you click a button in the dashboard, it sends keystrokes via `tmux send-keys`
-- The agent has no idea the dashboard exists - it just sees terminal input
+**Why tmux?**
+- Already installed everywhere
+- Named sessions (easy to target)
+- Agents don't need to know about the dashboard
+- Dashboard sends input via `tmux send-keys`
 
 ---
 
@@ -330,11 +441,17 @@ Any CLI agent with bash access: Claude Code, Aider, Cline, Codex, Continue.dev, 
 **What if two agents edit the same file?**
 File reservations prevent it. Second agent gets `FILE_RESERVATION_CONFLICT` and picks different work.
 
-**Can I use just the tools?**
-Yes. All 28+ tools work standalone without the dashboard or coordination layer.
+**Can I use just the tools without the dashboard?**
+Yes. All 40+ tools work standalone as bash scripts.
 
 **Do I need to run a server?**
 Only the dashboard (SvelteKit dev server). Everything else is bash + SQLite.
+
+**How much does it cost to run agents?**
+Dashboard shows real-time token usage per agent. Typical: 100K-1M tokens/day ≈ $0.30-$3/day.
+
+**Can agents work on multiple projects?**
+Yes. Dashboard shows all projects. Agents coordinate via Agent Mail across projects.
 
 ---
 
@@ -343,23 +460,38 @@ Only the dashboard (SvelteKit dev server). Everything else is bash + SQLite.
 - **Agent Mail:** [@Dicklesworthstone](https://github.com/Dicklesworthstone)
 - **Beads:** [@steveyegge](https://github.com/steveyegge)
 - **Inspiration:** [Mario Zechner's "What if you don't need MCP?"](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/)
+- **Problem framing:** [@karpathy](https://x.com/karpathy/status/2004607146781278521)
 
 ---
 
-## Related
+## Related Projects
 
-- [Beads](https://github.com/steveyegge/beads) - Task management CLI
+- [Beads](https://github.com/steveyegge/beads) - Git-backed task management
+- [Gas Town](https://github.com/steveyegge/gastown) - Multi-agent workspace manager (CLI-based alternative)
 - [Jomarchy](https://github.com/joewinke/jomarchy) - Linux configuration system
-- [Sidecar Kit](https://github.com/joewinke/sidecar-kit) - Build your own agent dashboard (the pattern JAT is built on)
+- [Sidecar Kit](https://github.com/joewinke/sidecar-kit) - Build your own agent dashboard
 
 ---
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE)
 
 ---
 
-**Go from 1-2 agents to 20+. Zero conflicts. One dashboard.**
+## The Bottom Line
 
-[Install](#installation) | [Docs](./GETTING_STARTED.md) | [Issues](https://github.com/joewinke/jat/issues)
+Karpathy said:
+> "I could be 10X more powerful if I just properly string together what has become available"
+
+**JAT is the string.**
+
+You don't need to figure out how to hold the alien tool. JAT gives you:
+- The orchestration layer
+- The visibility you need
+- The control you want
+- The manual that didn't exist
+
+**Claim the 10X boost. Get JAT.**
+
+[Install](#installation) | [Quickstart](./QUICKSTART.md) | [Docs](./GETTING_STARTED.md) | [Issues](https://github.com/yourusername/jat/issues)
