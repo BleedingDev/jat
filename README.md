@@ -31,7 +31,8 @@ Think VS Code, but instead of helping *you* write code, it helps you orchestrate
 ### Core Features
 
 **🎯 Agent Orchestration**
-- Visual dashboard showing all active sessions in real-time
+- **Cross-project dashboard**: See all agents across all projects in one UI
+- Visual real-time tracking: watch 20+ agents working simultaneously
 - One-click Epic Swarm: launch 4+ agents on parallel tasks
 - Session state tracking (working, needs-input, review, completed)
 - Smart question UI: agents' questions become clickable buttons
@@ -231,10 +232,16 @@ jat-dashboard  # One command
 - Dashboard tracks progress in real-time
 - Auto-proceed on low-priority items
 
+**Cross-Project Feature:**
+- One feature touches API, UI, and docs
+- Launch 3 agents (one per project)
+- Watch them work simultaneously in one dashboard
+- No switching terminals, no juggling windows
+
 **Consultant:**
 - Browser automation for client sites
 - Database tools for migrations
-- Agent coordination across multiple projects
+- Multi-client orchestration from single dashboard
 
 ---
 
