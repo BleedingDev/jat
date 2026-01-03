@@ -9,6 +9,33 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Check if running from within a JAT directory
+CURRENT_DIR="$(pwd)"
+JAT_DIRS=(
+    "$HOME/.local/share/jat"
+    "$HOME/code/jat"
+    "$HOME/code/jomarchy-agent-tools"
+)
+
+for jat_dir in "${JAT_DIRS[@]}"; do
+    # Expand ~ to actual home directory and normalize paths
+    jat_dir_expanded="${jat_dir/#\~/$HOME}"
+    if [[ "$CURRENT_DIR" == "$jat_dir_expanded"* ]]; then
+        echo -e "${RED}ERROR: You are currently inside a JAT directory that will be removed!${NC}"
+        echo ""
+        echo -e "${YELLOW}Current directory: ${CURRENT_DIR}${NC}"
+        echo -e "${YELLOW}JAT directory: ${jat_dir_expanded}${NC}"
+        echo ""
+        echo -e "${RED}This will cause incomplete removal because the shell cannot delete its own working directory.${NC}"
+        echo ""
+        echo -e "${GREEN}Solution: Change to a different directory first${NC}"
+        echo "  cd ~"
+        echo "  jat-uninstall"
+        echo ""
+        exit 1
+    fi
+done
+
 echo -e "${BLUE}JAT Complete Uninstall${NC}"
 echo ""
 echo -e "${YELLOW}This will remove:${NC}"
