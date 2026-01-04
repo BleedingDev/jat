@@ -50,6 +50,14 @@
 	} from "$lib/stores/spawningTasks";
 	import { pickNextTask, type NextTaskResult } from "$lib/utils/pickNextTask";
 	import {
+		SORT_OPTIONS,
+		initSort,
+		handleSortClick,
+		getSortBy,
+		getSortDir,
+		type SortOption,
+	} from "$lib/stores/workSort.svelte.js";
+	import {
 		AGENT_SORT_OPTIONS,
 		initAgentSort,
 		handleAgentSortClick,
@@ -74,18 +82,30 @@
 
 	// Initialize sort stores on mount
 	onMount(() => {
+		initSort();
 		initAgentSort();
 		initServerSort();
 	});
 
 	// Check which page we're on for showing appropriate sort dropdown
+	const isWorkPage = $derived($page.url.pathname === "/work");
 	const isAgentsPage = $derived($page.url.pathname === "/agents");
 	const isServersPage = $derived($page.url.pathname === "/servers");
 
-	// Sort dropdown state (shared between agent and server pages)
+	// Sort dropdown state (shared between work and agent pages)
 	let showSortDropdown = $state(false);
 	let sortHovered = $state(false);
 	let sortDropdownTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	// Get current sort state reactively (work page)
+	const currentSort = $derived(getSortBy());
+	const currentDir = $derived(getSortDir());
+	const currentSortLabel = $derived(
+		SORT_OPTIONS.find((o) => o.value === currentSort)?.label ?? "Sort",
+	);
+	const currentSortIcon = $derived(
+		SORT_OPTIONS.find((o) => o.value === currentSort)?.icon ?? "🔔",
+	);
 
 	// Get current sort state reactively (agents page)
 	const currentAgentSort = $derived(getAgentSortBy());
@@ -126,6 +146,10 @@
 		if (sortDropdownTimeout) clearTimeout(sortDropdownTimeout);
 	}
 
+	function onSortSelect(value: SortOption) {
+		handleSortClick(value);
+		showSortDropdown = false;
+	}
 
 	function onAgentSortSelect(value: AgentSortOption) {
 		handleAgentSortClick(value);
@@ -138,9 +162,137 @@
 	}
 
 	// Global action loading states
+	let newSessionLoading = $state(false);
 	let swarmLoading = $state(false);
 
+	// New Session - spawn a planning session in selected project
+	async function handleNewSession(projectName: string) {
+		newSessionLoading = true;
+		showSessionDropdown = false;
+		try {
+			const projectPath = `/home/jw/code/${projectName}`;
+			const response = await fetch("/api/work/spawn", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					attach: true,
+					project: projectPath,
+				}),
+			});
+			const data = await response.json();
+			if (!response.ok) {
+				throw new Error(data.message || "Failed to spawn session");
+			}
+			console.log("New session in", projectName, ":", data);
+		} catch (error) {
+			console.error("New session failed:", error);
+			alert(error instanceof Error ? error.message : "Failed to spawn session");
+		} finally {
+			newSessionLoading = false;
+		}
+	}
 
+	// Swarm - spawn one agent per ready task up to MAX_SESSIONS limit
+	async function handleSwarm() {
+		swarmLoading = true;
+		startBulkSpawn(); // Signal bulk spawn started for TaskTable animations
+		try {
+			// Step 1: Get current active sessions to calculate available slots
+			const workResponse = await fetch("/api/work");
+			const workData = await workResponse.json();
+			const activeSessionCount = workData.count || 0;
+			const currentMaxSessions = getMaxSessions(); // Get current preference value
+			const availableSlots = Math.max(
+				0,
+				currentMaxSessions - activeSessionCount,
+			);
+
+			if (availableSlots === 0) {
+				throw new Error(
+					`All ${currentMaxSessions} session slots are in use. Close some sessions first.`,
+				);
+			}
+
+			// Step 2: Get ready tasks
+			const readyResponse = await fetch("/api/tasks/ready");
+			const readyData = await readyResponse.json();
+
+			if (!readyResponse.ok || !readyData.tasks?.length) {
+				throw new Error("No ready tasks available");
+			}
+
+			// Limit tasks to available slots
+			const tasksToSpawn = readyData.tasks.slice(0, availableSlots);
+			const skippedCount = readyData.tasks.length - tasksToSpawn.length;
+			const results = [];
+
+			// Step 3: Spawn an agent for each ready task (up to limit)
+			for (let i = 0; i < tasksToSpawn.length; i++) {
+				const task = tasksToSpawn[i];
+				startSpawning(task.id); // Signal this task is spawning for animation
+				try {
+					const response = await fetch("/api/work/spawn", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ taskId: task.id }),
+					});
+					const data = await response.json();
+
+					if (!response.ok) {
+						results.push({
+							taskId: task.id,
+							success: false,
+							error: data.message || "Failed to spawn",
+						});
+						stopSpawning(task.id); // Clear animation on failure
+					} else {
+						results.push({
+							taskId: task.id,
+							success: true,
+							agentName: data.session?.agentName,
+						});
+						// Keep spawning animation until TaskTable refreshes and sees the new status
+						setTimeout(() => stopSpawning(task.id), 2000);
+					}
+				} catch (err) {
+					results.push({
+						taskId: task.id,
+						success: false,
+						error: err instanceof Error ? err.message : "Unknown error",
+					});
+					stopSpawning(task.id); // Clear animation on error
+				}
+
+				// Stagger between spawns (except last one)
+				if (i < tasksToSpawn.length - 1) {
+					await new Promise((resolve) => setTimeout(resolve, SPAWN_STAGGER_MS));
+				}
+			}
+
+			const successCount = results.filter((r) => r.success).length;
+			console.log(
+				`Swarm complete: ${successCount}/${tasksToSpawn.length} agents spawned`,
+				results,
+			);
+
+			if (successCount === 0) {
+				throw new Error("Failed to spawn any agents");
+			}
+
+			// Show info if some tasks were skipped due to limit
+			if (skippedCount > 0) {
+				console.log(
+					`Note: ${skippedCount} tasks skipped due to max sessions limit (${currentMaxSessions})`,
+				);
+			}
+		} catch (error) {
+			console.error("Swarm failed:", error);
+			alert(error instanceof Error ? error.message : "Failed to spawn agents");
+		} finally {
+			swarmLoading = false;
+			endBulkSpawn(); // Signal bulk spawn ended
+		}
+	}
 
 	interface DataPoint {
 		timestamp: string;
@@ -242,6 +394,9 @@
 		reviewRules = [],
 	}: Props = $props();
 
+	// Session dropdown state
+	let showSessionDropdown = $state(false);
+	let sessionDropdownTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Swarm dropdown state
 	let showSwarmDropdown = $state(false);
@@ -435,6 +590,21 @@
 		Math.min(readyTaskCount, availableSlots),
 	);
 
+	// Handle dropdown show/hide with delay
+	function showDropdown() {
+		if (sessionDropdownTimeout) clearTimeout(sessionDropdownTimeout);
+		showSessionDropdown = true;
+	}
+
+	function hideDropdownDelayed() {
+		sessionDropdownTimeout = setTimeout(() => {
+			showSessionDropdown = false;
+		}, 150);
+	}
+
+	function keepDropdownOpen() {
+		if (sessionDropdownTimeout) clearTimeout(sessionDropdownTimeout);
+	}
 
 	// Handle task dropdown show/hide with delay
 	function showTaskDropdownMenu() {
@@ -710,21 +880,22 @@
 		return tasks;
 	});
 
-	// Get priority badge color
+	// Get priority badge color using theme variables
 	function getPriorityColor(priority: number): string {
 		switch (priority) {
 			case 0:
-				return "oklch(0.65 0.25 25)"; // P0 - red
+				return "var(--color-error)"; // P0 - red
 			case 1:
-				return "oklch(0.75 0.20 60)"; // P1 - orange
+				return "var(--color-warning)"; // P1 - orange
 			case 2:
-				return "oklch(0.70 0.15 200)"; // P2 - blue
+				return "var(--color-info)"; // P2 - blue
 			default:
-				return "oklch(0.55 0.02 250)"; // P3+ - gray
+				return "var(--color-base-content)"; // P3+ - gray
 		}
 	}
 
 	// Button hover states
+	let sessionHovered = $state(false);
 	let taskHovered = $state(false);
 	let swarmHovered = $state(false);
 </script>
@@ -733,36 +904,16 @@
 <nav
 	class="w-full h-12 flex items-center relative"
 	style="
-		background: linear-gradient(180deg, oklch(0.25 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
-		border-bottom: 1px solid oklch(0.35 0.02 250);
+		background: linear-gradient(180deg, var(--color-base-200) 0%, var(--color-base-300) 100%);
+		border-bottom: 1px solid var(--color-base-content);
+		border-bottom-opacity: 0.2;
 	"
 >
-	<!-- Mobile hamburger menu (visible on small screens) -->
-	<label
-		for="main-drawer"
-		aria-label="open menu"
-		class="lg:hidden flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105"
-		style="background: oklch(0.30 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
-	>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke-width="2"
-			stroke="currentColor"
-			class="w-4 h-4"
-			style="color: oklch(0.70 0.18 240);"
-		>
-			<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-		</svg>
-	</label>
-
-	<!-- Sidebar toggle (industrial - visible on large screens) -->
+	<!-- Sidebar toggle (industrial) -->
 	<button
 		onclick={toggleSidebar}
 		aria-label={$isSidebarCollapsed ? "expand sidebar" : "collapse sidebar"}
-		class="hidden lg:flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105"
-		style="background: oklch(0.30 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
+		class="flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105 bg-base-200 border border-base-content/20 text-primary"
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
@@ -773,7 +924,6 @@
 			fill="none"
 			stroke="currentColor"
 			class="w-4 h-4 transition-transform {$isSidebarCollapsed ? 'rotate-180' : ''}"
-			style="color: oklch(0.70 0.18 240);"
 		>
 			<path
 				d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"
@@ -793,23 +943,11 @@
 			onmouseleave={hideTaskDropdownDelayed}
 		>
 			<button
-				class="flex items-center gap-1 py-1.5 rounded font-mono text-[10px] leading-none tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden"
+				class="flex items-center gap-1 py-1.5 rounded font-mono text-[10px] leading-none tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden btn btn-sm btn-success btn-outline"
+				class:btn-active={taskHovered || showTaskDropdown}
 				style="
-					background: {taskHovered || showTaskDropdown
-					? 'linear-gradient(135deg, oklch(0.75 0.22 145 / 0.35) 0%, oklch(0.75 0.22 145 / 0.2) 100%)'
-					: 'linear-gradient(135deg, oklch(0.75 0.20 145 / 0.2) 0%, oklch(0.75 0.20 145 / 0.1) 100%)'};
-					border: 1px solid {taskHovered || showTaskDropdown
-					? 'oklch(0.80 0.22 145 / 0.6)'
-					: 'oklch(0.75 0.20 145 / 0.4)'};
-					color: {taskHovered || showTaskDropdown
-					? 'oklch(0.90 0.20 145)'
-					: 'oklch(0.80 0.18 145)'};
-					text-shadow: 0 0 10px oklch(0.75 0.20 145 / 0.5);
 					padding-left: {taskHovered || showTaskDropdown ? '10px' : '8px'};
 					padding-right: {taskHovered || showTaskDropdown ? '10px' : '8px'};
-					box-shadow: {taskHovered || showTaskDropdown
-					? '0 0 20px oklch(0.75 0.22 145 / 0.4)'
-					: 'none'};
 					transform: {taskHovered || showTaskDropdown ? 'scale(1.05)' : 'scale(1)'};
 				"
 				title="Create new task - pick a project"
@@ -853,21 +991,15 @@
 			{#if showTaskDropdown}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="absolute top-full left-0 mt-1 min-w-[180px] rounded-lg shadow-xl z-50 overflow-hidden"
-					style="
-						background: linear-gradient(180deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.02 250) 100%);
-						border: 1px solid oklch(0.40 0.03 250);
-					"
+					class="absolute top-full left-0 mt-1 min-w-[180px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
 					onmouseenter={keepTaskDropdownOpen}
 					onmouseleave={hideTaskDropdownDelayed}
 				>
 					<div
-						class="px-3 py-2 border-b"
-						style="border-color: oklch(0.30 0.02 250);"
+						class="px-3 py-2 border-b border-base-content/10"
 					>
 						<span
-							class="text-[9px] font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
+							class="text-[9px] font-mono uppercase tracking-wider text-base-content/60"
 						>
 							Select Project
 						</span>
@@ -875,26 +1007,19 @@
 					<div class="py-1 max-h-[240px] overflow-y-auto">
 						{#if actualProjects.length === 0}
 							<div
-								class="px-3 py-2 text-xs"
-								style="color: oklch(0.50 0.02 250);"
+								class="px-3 py-2 text-xs text-base-content/50"
 							>
 								No projects found
 							</div>
 						{:else}
 							{#each actualProjects as project}
 								<button
-									class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors"
-									style="color: oklch(0.80 0.02 250);"
-									onmouseenter={(e) =>
-										(e.currentTarget.style.background = "oklch(0.30 0.03 250)")}
-									onmouseleave={(e) =>
-										(e.currentTarget.style.background = "transparent")}
+									class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors text-base-content hover:bg-base-300"
 									onclick={() => handleNewTask(project)}
 								>
 									<span
-										class="w-2 h-2 rounded-full flex-shrink-0"
-										style="background: {projectColors[project] ||
-											'oklch(0.60 0.15 145)'};"
+										class="w-2 h-2 rounded-full flex-shrink-0 {projectColors[project] ? '' : 'bg-success opacity-60'}"
+										style="{projectColors[project] ? `background: ${projectColors[project]}` : ''}"
 									></span>
 									<span class="flex-1">{project}</span>
 								</button>
@@ -902,14 +1027,9 @@
 						{/if}
 					</div>
 					<!-- Add Project Button -->
-					<div class="border-t" style="border-color: oklch(0.30 0.02 250);">
+					<div class="border-t border-base-content/10">
 						<button
-							class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors"
-							style="color: oklch(0.70 0.18 145);"
-							onmouseenter={(e) =>
-								(e.currentTarget.style.background = "oklch(0.28 0.02 250)")}
-							onmouseleave={(e) =>
-								(e.currentTarget.style.background = "transparent")}
+							class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors text-success hover:bg-base-300"
 							onclick={() => {
 								showTaskDropdown = false;
 								openProjectDrawer();
@@ -945,20 +1065,11 @@
 				onmouseleave={hideSwarmMenuDelayed}
 			>
 				<button
-					class="flex items-center gap-1 py-1.5 rounded font-mono text-[10px] leading-none tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden"
+					class="flex items-center gap-1 py-1.5 rounded font-mono text-[10px] leading-none tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden btn btn-sm btn-primary"
+					class:btn-active={swarmHovered || showSwarmDropdown}
 					style="
-						background: {swarmHovered || showSwarmDropdown
-						? 'linear-gradient(135deg, oklch(0.50 0.20 145) 0%, oklch(0.40 0.18 160) 100%)'
-						: 'linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.35 0.16 160) 100%)'};
-						border: 1px solid {swarmHovered || showSwarmDropdown
-						? 'oklch(0.55 0.20 145)'
-						: 'oklch(0.50 0.18 145)'};
-						color: oklch(0.98 0.02 145);
 						padding-left: {swarmHovered || showSwarmDropdown ? '10px' : '8px'};
 						padding-right: {swarmHovered || showSwarmDropdown ? '10px' : '8px'};
-						box-shadow: {swarmHovered || showSwarmDropdown
-						? '0 0 20px oklch(0.50 0.20 145 / 0.4)'
-						: '0 0 10px oklch(0.45 0.18 145 / 0.2)'};
 						transform: {swarmHovered || showSwarmDropdown ? 'scale(1.05)' : 'scale(1)'};
 					"
 					title={readyTaskCount > 0
@@ -989,8 +1100,7 @@
 							<span class="whitespace-nowrap pt-0.75">Start</span>
 							{#if readyTaskCount > 0}
 								<span
-									class="px-1.5 py-0.5 rounded text-[9px] font-bold"
-									style="background: oklch(0.55 0.22 145); color: oklch(0.98 0.02 145);"
+									class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-success text-success-content"
 									>{readyTaskCount}</span
 								>
 							{/if}
@@ -1013,8 +1123,7 @@
 							<span class="whitespace-nowrap pt-0.75">Start</span>
 							{#if readyTaskCount > 0}
 								<span
-									class="px-1.5 py-0.5 rounded text-[9px] font-bold"
-									style="background: oklch(0.55 0.22 145); color: oklch(0.98 0.02 145);"
+									class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-success text-success-content"
 									>{readyTaskCount}</span
 								>
 							{/if}
@@ -1035,8 +1144,7 @@
 					>
 						<!-- Project Tabs Header -->
 						<div
-							class="px-1 py-1 flex items-center gap-1 overflow-x-auto"
-							style="background: oklch(0.15 0.02 250); border-bottom: 1px solid oklch(0.25 0.02 250);"
+							class="px-1 py-1 flex items-center gap-1 overflow-x-auto bg-base-300 border-b border-base-content/25"
 						>
 							<!-- All Projects Tab -->
 							<button
@@ -1058,9 +1166,8 @@
 									onclick={() => (selectedProjectTab = project)}
 								>
 									<span
-										class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-										style="background: {projectColors[project] ||
-											'oklch(0.60 0.15 250)'};"
+										class="w-1.5 h-1.5 rounded-full flex-shrink-0 {projectColors[project] ? '' : 'bg-info opacity-60'}"
+										style="{projectColors[project] ? `background: ${projectColors[project]}` : ''}"
 									></span>
 									<span
 										class="text-[9px] font-mono uppercase truncate max-w-[60px]"
@@ -1073,8 +1180,7 @@
 
 						{#if readyTaskCount === 0}
 							<div
-								class="px-3 py-4 text-center text-xs"
-								style="color: oklch(0.50 0.02 250);"
+								class="px-3 py-4 text-center text-xs text-base-content/50"
 							>
 								No tasks ready to spawn
 							</div>
@@ -1086,9 +1192,8 @@
 									{#if selectedProjectTab === null}
 										<div class="swarm-project-header">
 											<span
-												class="w-2 h-2 rounded-full flex-shrink-0"
-												style="background: {projectColors[project] ||
-													'oklch(0.60 0.15 250)'};"
+												class="w-2 h-2 rounded-full flex-shrink-0 {projectColors[project] ? '' : 'bg-info opacity-60'}"
+												style="{projectColors[project] ? `background: ${projectColors[project]}` : ''}"
 											></span>
 											<span class="swarm-project-label">{project}</span>
 											<span class="swarm-project-count">{tasks.length}</span>
@@ -1102,7 +1207,7 @@
 											class="swarm-task-row"
 											class:keyboard-focused={isFocused}
 											data-task-index={taskFlatIndex}
-											style={isFocused ? 'background: oklch(0.40 0.15 200 / 0.3); outline: 2px solid oklch(0.60 0.18 200);' : ''}
+											style={isFocused ? 'background: color-mix(in oklch, var(--color-info) 30%, transparent); outline: 2px solid var(--color-info);' : ''}
 										>
 											<div
 												class="flex items-start justify-between gap-2 w-full"
@@ -1110,24 +1215,21 @@
 												<div class="flex-1 min-w-0 text-left">
 													<div class="flex items-center gap-1.5">
 														<span
-															class="px-1 py-0.5 rounded text-[9px] font-bold"
+															class="px-1 py-0.5 rounded text-[9px] font-bold text-white"
 															style="background: {getPriorityColor(
 																task.priority,
-															)}; color: oklch(0.98 0.02 60);"
+															)}"
 															>P{task.priority}</span
 														>
 														<span
-															class="text-[10px] font-mono"
-															style="color: {projectColors[
-																task.project || ''
-															] || 'oklch(0.55 0.10 200)'};"
+															class="text-[10px] font-mono {projectColors[task.project || ''] ? '' : 'text-info opacity-55'}"
+															style="{projectColors[task.project || ''] ? `color: ${projectColors[task.project || '']}` : ''}"
 														>
 															{task.id}
 														</span>
 													</div>
 													<div
-														class="text-xs font-mono truncate mt-0.5"
-														style="color: oklch(0.85 0.02 250);"
+														class="text-xs font-mono truncate mt-0.5 text-base-content/85"
 													>
 														{task.title || task.id}
 													</div>
@@ -1148,8 +1250,7 @@
 															viewBox="0 0 24 24"
 															stroke-width="1.5"
 															stroke="currentColor"
-															class="w-3.5 h-3.5 opacity-50 hover:opacity-100"
-															style="color: oklch(0.70 0.15 240);"
+															class="w-3.5 h-3.5 opacity-50 hover:opacity-100 text-info"
 														>
 															<path
 																stroke-linecap="round"
@@ -1168,13 +1269,11 @@
 													>
 														{#if spawningTaskId === task.id}
 															<span
-																class="loading loading-spinner loading-xs"
-																style="color: oklch(0.70 0.18 145);"
+																class="loading loading-spinner loading-xs text-success"
 															></span>
 														{:else}
 															<svg
-																class="w-4 h-4 opacity-50 hover:opacity-100"
-																style="color: oklch(0.70 0.18 145);"
+																class="w-4 h-4 opacity-50 hover:opacity-100 text-success"
 																fill="none"
 																viewBox="0 0 24 24"
 																stroke="currentColor"
@@ -1210,6 +1309,86 @@
 		/>
 	</div>
 
+	<!-- Sort Dropdown (on /work or /tasks page) -->
+	{#if isWorkPage}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="relative flex-none"
+			onmouseenter={showSortMenu}
+			onmouseleave={hideSortMenuDelayed}
+		>
+			<button
+				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden btn btn-sm btn-ghost"
+				class:btn-active={sortHovered || showSortDropdown}
+				style="
+					padding-left: 8px;
+					padding-right: 8px;
+				"
+				title="Sort work sessions"
+				onmouseenter={() => (sortHovered = true)}
+				onmouseleave={() => (sortHovered = false)}
+			>
+				<span class="text-xs">{currentSortIcon}</span>
+				<span class="hidden sm:inline">{currentSortLabel}</span>
+				<span class="text-[9px] opacity-70"
+					>{currentDir === "asc" ? "▲" : "▼"}</span
+				>
+				<svg
+					class="w-2.5 h-2.5 ml-0.5 transition-transform {showSortDropdown
+						? 'rotate-180'
+						: ''}"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+					/>
+				</svg>
+			</button>
+
+			<!-- Sort Dropdown Menu -->
+			{#if showSortDropdown}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
+					onmouseenter={keepSortMenuOpen}
+					onmouseleave={hideSortMenuDelayed}
+				>
+					<div
+						class="px-3 py-2 border-b border-base-content/10"
+					>
+						<span
+							class="text-[9px] font-mono uppercase tracking-wider text-base-content/60"
+						>
+							Sort Sessions
+						</span>
+					</div>
+					<div class="py-1">
+						{#each SORT_OPTIONS as opt (opt.value)}
+							<button
+								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
+								class:text-primary={currentSort === opt.value}
+								class:bg-base-300={currentSort === opt.value}
+								onclick={() => onSortSelect(opt.value)}
+							>
+								<span class="text-sm">{opt.icon}</span>
+								<span class="flex-1">{opt.label}</span>
+								{#if currentSort === opt.value}
+									<span class="text-[10px] opacity-70"
+										>{currentDir === "asc" ? "▲" : "▼"}</span
+									>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Agent Sort Dropdown (on /agents page) -->
 	{#if isAgentsPage}
@@ -1220,15 +1399,9 @@
 			onmouseleave={hideSortMenuDelayed}
 		>
 			<button
-				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden"
+				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden btn btn-sm btn-ghost"
+				class:btn-active={sortHovered || showSortDropdown}
 				style="
-					background: {sortHovered || showSortDropdown
-					? 'oklch(0.35 0.03 250)'
-					: 'oklch(0.30 0.02 250)'};
-					border: 1px solid {sortHovered || showSortDropdown
-					? 'oklch(0.50 0.03 250)'
-					: 'oklch(0.40 0.02 250)'};
-					color: oklch(0.80 0.02 250);
 					padding-left: 8px;
 					padding-right: 8px;
 				"
@@ -1262,21 +1435,15 @@
 			{#if showSortDropdown}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden"
-					style="
-						background: linear-gradient(180deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.02 250) 100%);
-						border: 1px solid oklch(0.40 0.03 250);
-					"
+					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
 					onmouseenter={keepSortMenuOpen}
 					onmouseleave={hideSortMenuDelayed}
 				>
 					<div
-						class="px-3 py-2 border-b"
-						style="border-color: oklch(0.30 0.02 250);"
+						class="px-3 py-2 border-b border-base-content/10"
 					>
 						<span
-							class="text-[9px] font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
+							class="text-[9px] font-mono uppercase tracking-wider text-base-content/60"
 						>
 							Sort Agents
 						</span>
@@ -1284,21 +1451,9 @@
 					<div class="py-1">
 						{#each AGENT_SORT_OPTIONS as opt (opt.value)}
 							<button
-								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors"
-								style="color: {currentAgentSort === opt.value
-									? 'oklch(0.90 0.15 250)'
-									: 'oklch(0.75 0.02 250)'}; background: {currentAgentSort ===
-								opt.value
-									? 'oklch(0.30 0.05 250)'
-									: 'transparent'};"
-								onmouseenter={(e) => {
-									if (currentAgentSort !== opt.value)
-										e.currentTarget.style.background = "oklch(0.28 0.02 250)";
-								}}
-								onmouseleave={(e) => {
-									if (currentAgentSort !== opt.value)
-										e.currentTarget.style.background = "transparent";
-								}}
+								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
+								class:text-primary={currentAgentSort === opt.value}
+								class:bg-base-300={currentAgentSort === opt.value}
 								onclick={() => onAgentSortSelect(opt.value)}
 							>
 								<span class="text-sm">{opt.icon}</span>
@@ -1325,15 +1480,9 @@
 			onmouseleave={hideSortMenuDelayed}
 		>
 			<button
-				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden"
+				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden btn btn-sm btn-ghost"
+				class:btn-active={sortHovered || showSortDropdown}
 				style="
-					background: {sortHovered || showSortDropdown
-					? 'oklch(0.35 0.03 250)'
-					: 'oklch(0.30 0.02 250)'};
-					border: 1px solid {sortHovered || showSortDropdown
-					? 'oklch(0.50 0.03 250)'
-					: 'oklch(0.40 0.02 250)'};
-					color: oklch(0.80 0.02 250);
 					padding-left: 8px;
 					padding-right: 8px;
 				"
@@ -1367,21 +1516,15 @@
 			{#if showSortDropdown}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden"
-					style="
-						background: linear-gradient(180deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.02 250) 100%);
-						border: 1px solid oklch(0.40 0.03 250);
-					"
+					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
 					onmouseenter={keepSortMenuOpen}
 					onmouseleave={hideSortMenuDelayed}
 				>
 					<div
-						class="px-3 py-2 border-b"
-						style="border-color: oklch(0.30 0.02 250);"
+						class="px-3 py-2 border-b border-base-content/10"
 					>
 						<span
-							class="text-[9px] font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
+							class="text-[9px] font-mono uppercase tracking-wider text-base-content/60"
 						>
 							Sort Servers
 						</span>
@@ -1389,21 +1532,9 @@
 					<div class="py-1">
 						{#each SERVER_SORT_OPTIONS as opt (opt.value)}
 							<button
-								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors"
-								style="color: {currentServerSort === opt.value
-									? 'oklch(0.90 0.15 250)'
-									: 'oklch(0.75 0.02 250)'}; background: {currentServerSort ===
-								opt.value
-									? 'oklch(0.30 0.05 250)'
-									: 'transparent'};"
-								onmouseenter={(e) => {
-									if (currentServerSort !== opt.value)
-										e.currentTarget.style.background = "oklch(0.28 0.02 250)";
-								}}
-								onmouseleave={(e) => {
-									if (currentServerSort !== opt.value)
-										e.currentTarget.style.background = "transparent";
-								}}
+								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
+								class:text-primary={currentServerSort === opt.value}
+								class:bg-base-300={currentServerSort === opt.value}
 								onclick={() => onServerSortSelect(opt.value)}
 							>
 								<span class="text-sm">{opt.icon}</span>
@@ -1428,8 +1559,7 @@
 
 	<!-- Vertical separator -->
 	<div
-		class="w-px h-6 mx-3"
-		style="background: linear-gradient(180deg, transparent, oklch(0.45 0.02 250), transparent);"
+		class="w-px h-6 mx-3 bg-gradient-to-b from-transparent via-base-content/45 to-transparent"
 	></div>
 
 	<!-- Right side: Sparkline + Stats + User Profile (Industrial) -->
@@ -1550,8 +1680,9 @@
 		border-radius: 0.5rem;
 		box-shadow: 0 10px 40px oklch(0 0 0 / 0.4);
 		overflow: hidden;
-		background: oklch(0.18 0.02 250);
-		border: 1px solid oklch(0.35 0.02 250);
+		background: var(--color-base-200);
+		border: 1px solid var(--color-base-content);
+		border-opacity: 0.2;
 		animation: swarm-dropdown-slide 0.2s ease-out;
 		transform-origin: top left;
 	}
@@ -1573,8 +1704,8 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.375rem 0.75rem;
-		background: oklch(0.14 0.02 250);
-		border-bottom: 1px solid oklch(0.25 0.01 250);
+		background: var(--color-base-300);
+		border-bottom: 1px solid color-mix(in oklch, var(--color-base-content) 25%, transparent);
 		position: sticky;
 		top: 0;
 		z-index: 1;
@@ -1583,7 +1714,7 @@
 	.swarm-project-label {
 		font-size: 0.65rem;
 		font-weight: 600;
-		color: oklch(0.7 0.1 30);
+		color: var(--color-warning);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		font-family: ui-monospace, monospace;
@@ -1592,9 +1723,10 @@
 
 	.swarm-project-count {
 		font-size: 0.6rem;
-		color: oklch(0.5 0.02 250);
+		color: var(--color-base-content);
+		opacity: 0.5;
 		padding: 0.125rem 0.375rem;
-		background: oklch(0.22 0.02 250);
+		background: var(--color-base-200);
 		border-radius: 8px;
 	}
 
@@ -1604,10 +1736,11 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.25rem 0.5rem;
-		background: oklch(0.2 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
+		background: var(--color-base-200);
+		border: 1px solid color-mix(in oklch, var(--color-base-content) 28%, transparent);
 		border-radius: 0.25rem;
-		color: oklch(0.6 0.02 250);
+		color: var(--color-base-content);
+		opacity: 0.6;
 		cursor: pointer;
 		transition: all 0.15s ease;
 		white-space: nowrap;
@@ -1615,33 +1748,36 @@
 	}
 
 	.project-tab:hover {
-		background: oklch(0.25 0.02 250);
-		border-color: oklch(0.35 0.02 250);
-		color: oklch(0.75 0.02 250);
+		background: var(--color-base-300);
+		border-color: color-mix(in oklch, var(--color-base-content) 35%, transparent);
+		opacity: 0.75;
 	}
 
 	.project-tab-active {
-		background: oklch(0.3 0.1 145);
-		border-color: oklch(0.5 0.15 145);
-		color: oklch(0.9 0.05 145);
+		background: var(--color-success);
+		border-color: var(--color-success);
+		color: var(--color-success-content);
+		opacity: 1;
 	}
 
 	.project-tab-active:hover {
-		background: oklch(0.35 0.12 145);
-		border-color: oklch(0.55 0.15 145);
+		background: color-mix(in oklch, var(--color-success) 85%, var(--color-base-100));
+		border-color: var(--color-success);
 	}
 
 	.project-tab-count {
 		font-size: 0.55rem;
 		padding: 0 0.25rem;
-		background: oklch(0.15 0.02 250);
+		background: var(--color-base-100);
 		border-radius: 4px;
-		color: oklch(0.55 0.02 250);
+		color: var(--color-base-content);
+		opacity: 0.55;
 	}
 
 	.project-tab-active .project-tab-count {
-		background: oklch(0.2 0.08 145);
-		color: oklch(0.85 0.08 145);
+		background: color-mix(in oklch, var(--color-success-content) 20%, transparent);
+		color: var(--color-success-content);
+		opacity: 0.85;
 	}
 
 	/* Task row in dropdown */
@@ -1651,7 +1787,7 @@
 		padding: 0.5rem 0.75rem;
 		background: transparent;
 		border: none;
-		border-bottom: 1px solid oklch(0.25 0.01 250);
+		border-bottom: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
 		cursor: pointer;
 		transition: background 0.15s ease;
 	}
@@ -1661,7 +1797,7 @@
 	}
 
 	.swarm-task-row:hover:not(:disabled) {
-		background: oklch(0.25 0.02 250);
+		background: var(--color-base-300);
 	}
 
 	.swarm-task-row:disabled {
@@ -1679,7 +1815,8 @@
 		background: transparent;
 		border: none;
 		border-radius: 0.375rem;
-		color: oklch(0.8 0.02 250);
+		color: var(--color-base-content);
+		opacity: 0.8;
 		font-size: 0.75rem;
 		font-family: ui-monospace, monospace;
 		cursor: pointer;
@@ -1688,8 +1825,8 @@
 	}
 
 	.swarm-menu-item:hover:not(:disabled) {
-		background: oklch(0.28 0.03 250);
-		color: oklch(0.9 0.02 250);
+		background: var(--color-base-300);
+		opacity: 0.9;
 	}
 
 	.swarm-menu-item:disabled {
@@ -1698,11 +1835,12 @@
 	}
 
 	.swarm-menu-item svg {
-		color: oklch(0.65 0.15 145);
+		color: var(--color-success);
 		flex-shrink: 0;
 	}
 
 	.swarm-menu-item:hover:not(:disabled) svg {
-		color: oklch(0.75 0.18 145);
+		color: var(--color-success);
+		opacity: 1;
 	}
 </style>
