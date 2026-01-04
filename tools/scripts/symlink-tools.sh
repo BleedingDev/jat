@@ -123,35 +123,23 @@ if [ -d "$MEDIA_DIR" ]; then
     symlink_tools "$MEDIA_DIR"
 fi
 
+# Clean up legacy symlinks if they exist
 echo ""
-echo -e "${BLUE}Setting up dashboard launcher...${NC}"
+echo -e "${BLUE}Cleaning up legacy symlinks...${NC}"
 echo ""
 
-# Symlink dashboard launcher script
-LAUNCHER_SOURCE="$PROJECT_ROOT/jat-dashboard"
-LAUNCHER_TARGET="$HOME/.local/bin/jat-dashboard"
-
-if [ -f "$LAUNCHER_SOURCE" ]; then
-    if [ -L "$LAUNCHER_TARGET" ]; then
-        CURRENT_TARGET=$(readlink "$LAUNCHER_TARGET")
-        if [ "$CURRENT_TARGET" = "$LAUNCHER_SOURCE" ]; then
-            echo -e "  ${GREEN}✓${NC} jat-dashboard (already linked)"
-        else
-            echo -e "  ${YELLOW}↻${NC} jat-dashboard (updating link)"
-            rm "$LAUNCHER_TARGET"
-            ln -s "$LAUNCHER_SOURCE" "$LAUNCHER_TARGET"
-        fi
-    else
-        echo -e "  ${GREEN}+${NC} jat-dashboard (linked)"
-        ln -s "$LAUNCHER_SOURCE" "$LAUNCHER_TARGET"
-    fi
+# Remove old jat-dashboard symlink if it exists
+LEGACY_JAT_DASHBOARD="$HOME/.local/bin/jat-dashboard"
+if [ -L "$LEGACY_JAT_DASHBOARD" ]; then
+    echo -e "  ${YELLOW}✗${NC} jat-dashboard (removing legacy symlink)"
+    rm "$LEGACY_JAT_DASHBOARD"
 fi
 
-# Clean up legacy bd-dashboard symlink if it exists
-LEGACY_TARGET="$HOME/.local/bin/bd-dashboard"
-if [ -L "$LEGACY_TARGET" ]; then
+# Remove old bd-dashboard symlink if it exists
+LEGACY_BD_DASHBOARD="$HOME/.local/bin/bd-dashboard"
+if [ -L "$LEGACY_BD_DASHBOARD" ]; then
     echo -e "  ${YELLOW}✗${NC} bd-dashboard (removing legacy symlink)"
-    rm "$LEGACY_TARGET"
+    rm "$LEGACY_BD_DASHBOARD"
 fi
 
 echo ""
@@ -263,5 +251,5 @@ echo "    • Browser (11): browser-start.js, browser-nav.js, browser-eval.js, .
 echo "    • Signal (2): jat-signal, jat-signal-validate"
 echo "    • Media (4+): gemini-image, gemini-edit, gemini-compose, avatar-generate"
 echo "    • Additional (15): db-*, bd-*, monitoring tools"
-echo "    • JAT CLI: jat <project> - Launch full dev environment"
+echo "    • JAT CLI: jat - Launch dashboard"
 echo ""

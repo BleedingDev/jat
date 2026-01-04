@@ -1,3 +1,5 @@
+Real-time visitor tracking
+
 Add real-time visitor tracking to the analytics dashboard:
 
 - WebSocket connection for live updates

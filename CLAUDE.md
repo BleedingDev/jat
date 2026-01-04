@@ -218,7 +218,7 @@ bd init
 # Answer prompts (or press Y for defaults)
 
 # Option 2: From the dashboard
-jat-dashboard        # Start the dashboard
+jat        # Start the dashboard
 # Go to Tasks page → click "Add Project"
 ```
 
@@ -408,7 +408,7 @@ This contains critical information about:
 
 **Launcher Script (Recommended):**
 ```bash
-jat-dashboard       # Checks dependencies, starts server, opens browser
+jat       # Checks dependencies, starts server, opens browser
 ```
 
 **Manual Commands:**

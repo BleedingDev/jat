@@ -1,3 +1,5 @@
+Add comment system
+
 Add a comment system to the blog with these requirements:
 
 - Comment model with fields: author, email, content, postId, approved, createdAt

@@ -1,3 +1,5 @@
+Discount Code System
+
 Implement a discount code system for the shop:
 
 - Discount code model: code, type (percentage/fixed), value, usageLimit, usedCount, expiresAt

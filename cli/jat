@@ -808,67 +808,35 @@ list_all() {
 show_help() {
     cat << 'EOF'
 
-JAT CLI - Launch complete dev environments
+JAT - AI Agent Task Dashboard
 
 USAGE:
-    jat <project>              Launch full environment (VS Code + Claude + npm + browser + dashboard)
-    jat <project> [N]          Launch with N Claude Code sessions (default: 1)
-    jat <project> [N] --auto   Launch N agents that auto-attack the backlog
-    jat <project> --claude     Launch only Claude Code
-    jat <project> --code       Launch only VS Code
-    jat <project> --npm        Launch only dev server
-    jat <project> --browser    Open browser to dev server
-    jat <project> --dashboard  Launch only JAT dashboard
+    jat                    Launch the dashboard
+    jat demo               Launch demo environment
+    jat list               Show all projects
+    jat init               Auto-detect projects in ~/code
 
-COMMANDS:
-    jat list                   Show all configured projects
-    jat init                   Auto-detect projects in ~/code
-    jat add <path> [name]      Add a project from any path
-    jat remove <name>          Remove a project from config
-    jat resume <session-id>    Resume a previous Claude Code session
-    jat resume --list          List recent sessions available to resume
-    jat demo                   Launch demo dashboard (initializes if needed)
-    jat demo init              Set up demo environment with sample projects
-    jat demo reset             Reset demo to clean state (for video retakes)
-    jat config [project]       Show config (all or specific project)
-    jat edit                   Edit config file
-    jat colors                 Recolor all Hyprland windows
-    jat cleanup [--dry-run]    Delete stale agent session files
-    jat hooks [path]           Install git hooks to repo (default: current dir)
+QUICK START:
+    jat init               Auto-detect and add projects
+    jat                    Launch dashboard to manage agents
 
-OPTIONS:
-    N               Number of Claude Code sessions to launch (1-10)
-    --auto          Auto-attack mode: each agent picks highest priority task automatically
-    --no-agent      Skip /agent:start prompt (raw Claude without auto-registration)
-    --no-dashboard  Skip JAT dashboard (launch project only)
-    -c, --code      Launch VS Code only
-    -l, --claude    Launch Claude Code only
-    -n, --npm       Launch npm dev server only
-    -b, --browser   Open browser only
-    -d, --dashboard Launch JAT dashboard only
-    -a, --all       Launch everything (default, includes dashboard)
+PROJECT MANAGEMENT:
+    init                   Auto-detect projects in ~/code
+    add <path> [name]      Add a project
+    remove <name>          Remove project
+    list                   Show all projects with status
 
-EXAMPLES:
-    jat chimaro                # Full environment (1 Claude session + dashboard)
-    jat chimaro 4              # Full environment with 4 Claude sessions
-    jat chimaro 4 --auto       # Launch 4 agents that auto-attack the backlog!
-    jat chimaro 4 --claude     # Only 4 Claude sessions (no VS Code/npm)
-    jat chimaro --no-agent     # Claude without /agent:start auto-registration
-    jat chimaro --no-dashboard # Full environment without dashboard
-    jat chimaro --dashboard    # Launch only the JAT dashboard
-    jat jat --code --npm       # VS Code + dev server
-    jat init                   # Scan ~/code for projects
-    jat add ~/projects/my-app  # Add project from custom path
-    jat add . webapp           # Add current dir with custom name
-    jat remove old-project     # Remove project from config
-    jat resume --list          # Show recent sessions to resume
-    jat resume 4a5001aa        # Resume session with ID starting with 4a5001aa
-    jat demo                   # Launch demo dashboard
-    jat demo init              # Set up demo projects and tasks
-    jat demo reset             # Reset demo for video retakes
+DEMO MODE:
+    demo                   Launch demo with sample projects
+    demo setup             Fresh setup (cleans & recreates)
+    demo on/off            Toggle demo visibility
 
-CONFIG:
-    ~/.config/jat/projects.json
+ADVANCED:
+    resume <id>            Resume a Claude session
+    cleanup                Remove stale agents
+    config                 Show configuration
+
+CONFIG: ~/.config/jat/projects.json
 
 EOF
 }
@@ -1456,59 +1424,95 @@ list_sessions() {
 
 demo_cmd() {
     local subcmd="${1:-}"
-    local demo_script="$HOME/code/jat/demo/setup.sh"
-    local demo_dir="/tmp/jat-demo"
 
     case "$subcmd" in
-        init|setup)
-            # Initialize demo environment
-            bash "$demo_script" init
+        setup)
+            # Always do a clean setup (remove old, create new)
+            echo -e "${BLUE}Setting up fresh demo environment...${NC}"
+            echo ""
+
+            # First clean any existing demo projects
+            if command -v jat-demo &>/dev/null; then
+                # Clean silently (no confirmation prompt)
+                echo "y" | jat-demo clean >/dev/null 2>&1
+                # Now set up fresh
+                jat-demo setup
+            else
+                echo -e "${RED}jat-demo tool not found${NC}"
+                return 1
+            fi
             ;;
-        reset|clean)
-            # Reset demo environment
-            bash "$demo_script" reset
+        on|show)
+            # Show only demo projects
+            if command -v jat-demo &>/dev/null; then
+                jat-demo on
+            else
+                echo -e "${RED}jat-demo tool not found${NC}"
+                return 1
+            fi
             ;;
-        --help|-h)
+        off|hide)
+            # Hide demo projects, show regular projects
+            if command -v jat-demo &>/dev/null; then
+                jat-demo off
+            else
+                echo -e "${RED}jat-demo tool not found${NC}"
+                return 1
+            fi
+            ;;
+        --help|-h|help)
             echo ""
             echo -e "${BOLD}JAT Demo Environment${NC}"
             echo ""
-            echo "Set up an isolated demo environment with sample projects and tasks."
-            echo "Perfect for video demos, presentations, and testing JAT features."
+            echo "Demo projects for presentations and testing."
             echo ""
             echo -e "${DIM}Usage:${NC}"
-            echo "  jat demo           Launch demo dashboard (init if needed)"
-            echo "  jat demo init      Set up demo environment"
-            echo "  jat demo reset     Reset demo to clean state"
+            echo "  jat demo           Launch demo dashboard"
+            echo "  jat demo setup     Fresh setup (removes old, creates new)"
+            echo "  jat demo on        Show only demo projects"
+            echo "  jat demo off       Hide demo projects"
             echo ""
             echo -e "${DIM}Demo projects:${NC}"
-            echo "  acme-saas    - SaaS platform with auth epic + 7 tasks"
-            echo "  pixel-art    - Pixel art editor with 5 tasks"
-            echo ""
-            echo -e "${DIM}Demo directory:${NC} /tmp/jat-demo"
+            echo "  jat-demo-blog      - Blog platform (red/pink)"
+            echo "  jat-demo-shop      - E-commerce store (green)"
+            echo "  jat-demo-dashboard - Analytics dashboard (blue)"
             echo ""
             ;;
         "")
-            # Default: launch demo dashboard (init if needed)
-            if [[ ! -d "$demo_dir" ]]; then
-                echo -e "${YELLOW}Demo not initialized. Running setup...${NC}"
-                echo ""
-                bash "$demo_script" init
-            fi
-
-            # Launch dashboard for demo
+            # Default: setup if needed, then launch dashboard
             echo ""
             echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
             echo -e "${BOLD}║              ${CYAN}🎬 JAT Demo Mode${NC}${BOLD}                                ║${NC}"
             echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
             echo ""
+
+            # Check if demo projects exist
+            local demo_exists=false
+            if jq -e '.projects."jat-demo-blog"' "$CONFIG_FILE" >/dev/null 2>&1; then
+                demo_exists=true
+            fi
+
+            if [[ "$demo_exists" == "false" ]]; then
+                echo -e "${YELLOW}Demo projects not found. Setting up...${NC}"
+                echo ""
+                jat-demo setup
+                echo ""
+            fi
+
+            # Make demo projects visible
+            echo -e "${BLUE}Showing demo projects...${NC}"
+            jat-demo on
+            echo ""
+
             echo "Demo projects:"
-            echo -e "  ${CYAN}acme-saas${NC}  - jat acme-saas"
-            echo -e "  ${CYAN}pixel-art${NC}  - jat pixel-art"
+            echo -e "  ${CYAN}jat-demo-blog${NC}      - Blog platform"
+            echo -e "  ${CYAN}jat-demo-shop${NC}      - E-commerce store"
+            echo -e "  ${CYAN}jat-demo-dashboard${NC} - Analytics dashboard"
             echo ""
             echo -e "${DIM}Launching dashboard...${NC}"
             echo ""
 
-            # Launch dashboard only (no project-specific env)
+            # Launch dashboard
             launch_dashboard "DEMO"
             ;;
         *)
@@ -1527,7 +1531,13 @@ main() {
     ensure_config
 
     if [[ $# -eq 0 ]]; then
-        show_help
+        # No arguments - launch dashboard
+        echo ""
+        echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${BOLD}║              ${CYAN}🚀 JAT Dashboard${NC}${BOLD}                                 ║${NC}"
+        echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        launch_dashboard "JAT"
         exit 0
     fi
 
@@ -1550,14 +1560,8 @@ main() {
         edit)
             edit_config
             ;;
-        colors)
-            apply_all_colors
-            ;;
         cleanup)
             cleanup_agents "$@"
-            ;;
-        hooks)
-            install_hooks "$@"
             ;;
         add)
             add_project "$@"
@@ -1571,9 +1575,27 @@ main() {
         demo)
             demo_cmd "$@"
             ;;
+        # Hidden/advanced commands (kept for backwards compatibility)
+        colors)
+            apply_all_colors
+            ;;
+        hooks)
+            install_hooks "$@"
+            ;;
         *)
-            # Assume it's a project name
-            launch_project "$cmd" "$@"
+            # Check if it's a known project (backwards compatibility)
+            local config
+            config=$(get_project_config "$cmd")
+            if [[ -n "$config" ]]; then
+                echo -e "${YELLOW}Note: Direct project launching is deprecated.${NC}"
+                echo -e "${YELLOW}Please use the dashboard to manage agents.${NC}"
+                echo ""
+                launch_project "$cmd" "$@"
+            else
+                echo -e "${RED}Unknown command: $cmd${NC}"
+                echo "Run 'jat --help' for usage"
+                exit 1
+            fi
             ;;
     esac
 }
