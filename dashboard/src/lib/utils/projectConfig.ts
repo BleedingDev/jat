@@ -179,14 +179,12 @@ function expandPath(path: string): string {
 function loadConfigFile(): RawProjectConfig | null {
 	try {
 		if (!existsSync(CONFIG_PATH)) {
-			console.warn(`[projectConfig] Config file not found: ${CONFIG_PATH}`);
 			return null;
 		}
 
 		const content = readFileSync(CONFIG_PATH, 'utf-8');
 		return JSON.parse(content) as RawProjectConfig;
 	} catch (error) {
-		console.error(`[projectConfig] Failed to load config:`, error);
 		return null;
 	}
 }

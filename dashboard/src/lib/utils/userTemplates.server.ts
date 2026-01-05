@@ -179,7 +179,6 @@ export function getUserTemplateIds(): string[] {
 			.filter((entry) => entry.isFile() && entry.name.endsWith(TEMPLATE_EXTENSION))
 			.map((entry) => basename(entry.name, TEMPLATE_EXTENSION));
 	} catch (error) {
-		console.error('[userTemplates] Failed to list templates:', error);
 		return [];
 	}
 }
@@ -198,7 +197,6 @@ export function getUserTemplateSync(id: string): UserTemplate | null {
 		const content = readFileSync(path, 'utf-8');
 		return parseTemplateFile(content, id);
 	} catch (error) {
-		console.error(`[userTemplates] Failed to read template ${id}:`, error);
 		return null;
 	}
 }
@@ -216,7 +214,6 @@ export async function getUserTemplate(id: string): Promise<UserTemplate | null> 
 		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
 			return null;
 		}
-		console.error(`[userTemplates] Failed to read template ${id}:`, error);
 		return null;
 	}
 }

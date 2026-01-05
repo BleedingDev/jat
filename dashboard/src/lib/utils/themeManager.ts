@@ -67,7 +67,6 @@ export function getTheme(): string {
 export function setTheme(theme: string) {
 	// Validate theme is available
 	if (!AVAILABLE_THEMES.includes(theme as Theme)) {
-		console.warn(`Invalid theme "${theme}", falling back to default`);
 		theme = DEFAULT_THEME;
 	}
 

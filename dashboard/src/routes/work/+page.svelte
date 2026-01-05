@@ -970,7 +970,6 @@
 			const data = await response.json();
 
 			if (data.error) {
-				console.error('API error:', data.error);
 				return;
 			}
 
@@ -979,7 +978,6 @@
 			tasks = data.tasks || [];
 			allTasks = data.tasks || [];
 		} catch (error) {
-			console.error('Failed to fetch task data:', error);
 		} finally {
 			isInitialLoad = false;
 		}
@@ -1019,9 +1017,11 @@
 	async function handleAttachTerminal(sessionName: string) {
 		try {
 			const response = await fetch(`/api/work/${sessionName}/attach`, { method: 'POST' });
-			if (!response.ok) console.error('Failed to attach terminal:', await response.text());
+			if (!response.ok) {
+				// Silently fail - user will notice terminal didn't open
+			}
 		} catch (error) {
-			console.error('Failed to attach terminal:', error);
+			// Silently fail
 		}
 	}
 
@@ -1319,7 +1319,6 @@
 			// Extract project names from the config
 			configProjects = (data.projects || []).map((p: { name: string }) => p.name);
 		} catch (error) {
-			console.error('Failed to fetch config projects:', error);
 			configProjects = [];
 		}
 	}
@@ -1334,7 +1333,6 @@
 				configTaskHeight = data.defaults.projects_task_height || 400;
 			}
 		} catch (error) {
-			console.error('Failed to fetch config defaults:', error);
 			// Keep the defaults on error
 		}
 	}
@@ -1360,7 +1358,7 @@
 				customProjectOrder = customProjectOrder.filter(p => p !== project);
 				saveProjectOrder(customProjectOrder);
 			} else {
-				console.error('Failed to hide project:', await response.text());
+				// Failed to hide project - error will be visible in modal
 			}
 		} catch (error) {
 			console.error('Failed to hide project:', error);
