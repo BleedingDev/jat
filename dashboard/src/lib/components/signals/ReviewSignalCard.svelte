@@ -197,7 +197,7 @@
 
 	// Collect all unique links for "Open All" button
 	const allLinks = $derived.by(() => {
-		const links: { type: 'vscode' | 'diff' | 'localhost'; url: string; label: string }[] = [];
+		const links: { type: 'editor' | 'diff' | 'localhost'; url: string; label: string }[] = [];
 		const seenUrls = new Set<string>();
 
 		// Add file and diff links for each modified file
@@ -206,9 +206,9 @@
 				const fileLinks = getFileLinksForFile(file);
 
 				// File editor link
-				if (!seenUrls.has(fileLinks.vscodeUrl)) {
-					links.push({ type: 'editor', url: fileLinks.vscodeUrl, label: file.path });
-					seenUrls.add(fileLinks.vscodeUrl);
+				if (!seenUrls.has(fileLinks.editorUrl)) {
+					links.push({ type: 'editor', url: fileLinks.editorUrl, label: file.path });
+					seenUrls.add(fileLinks.editorUrl);
 				}
 
 				// Localhost link (if route file or explicit route)

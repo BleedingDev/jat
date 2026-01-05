@@ -154,7 +154,7 @@ export function generateDiffUrl(filePath: string, options: DiffLinkOptions = {})
 }
 
 /**
- * Generate a shell command for git diff (fallback for non-VS Code users)
+ * Generate a shell command for git diff (fallback for terminal users)
  *
  * Returns a copy-pasteable command for the terminal.
  *
@@ -613,7 +613,7 @@ export function generateFilesPageUrl(filePath: string, projectName: string): str
  * Open a file in the JAT Files page (/files) in the current tab
  *
  * This is the preferred way to open files within the JAT dashboard,
- * as it keeps the user in the dashboard instead of switching to VS Code.
+ * as it keeps the user in the integrated file editor.
  *
  * @param filePath - File path relative to project root
  * @param projectName - Project name (e.g., 'jat', 'chimaro')
