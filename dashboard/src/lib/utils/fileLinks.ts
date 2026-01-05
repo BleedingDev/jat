@@ -178,7 +178,7 @@ export function generateGitDiffCommand(filePath: string, ref?: string): string {
  * Open a file in the JAT dashboard file editor
  *
  * Navigates to the /files route with the file path.
- * Opens in the same window to provide a seamless editing experience.
+ * Opens in a new browser tab to preserve the current context.
  *
  * @param filePath - Path to the file (relative or absolute)
  * @param options - Optional line/column to scroll to
@@ -186,8 +186,8 @@ export function generateGitDiffCommand(filePath: string, ref?: string): string {
 export function openInVSCode(filePath: string, options: FileLinkOptions = {}): void {
 	const url = generateJatFileUrl(filePath, options);
 
-	// Navigate to the JAT files page (same window for seamless experience)
-	window.location.href = url;
+	// Open in new tab to preserve current context
+	window.open(url, '_blank');
 }
 
 /**
@@ -203,11 +203,11 @@ export function openInJatEditor(filePath: string, options: FileLinkOptions = {})
  * Open a diff view in the JAT dashboard file editor
  *
  * Navigates to the /files route with diff mode enabled.
- * Opens in the same window for seamless experience.
+ * Opens in a new browser tab to preserve the current context.
  */
 export function openDiffInVSCode(filePath: string, options: DiffLinkOptions = {}): void {
 	const url = generateDiffUrl(filePath, options);
-	window.location.href = url;
+	window.open(url, '_blank');
 }
 
 /**
@@ -552,9 +552,7 @@ export function getAllFileLinks(
 /**
  * Open all links for a file
  *
- * Opens the file in JAT editor (in same window), and optionally localhost in new tab.
- * Note: Since JAT editor links navigate in the same window, only the last one will be active.
- * Use openInJatEditor for single file opens.
+ * Opens the file in JAT editor and optionally localhost, each in a new tab.
  *
  * @param filePath - File path relative to project root
  * @param projectName - Project name for localhost URL
@@ -572,16 +570,16 @@ export function openAllFileLinks(
 ): void {
 	const links = getAllFileLinks(filePath, projectName, { localhostRoute: options.localhostRoute });
 
-	// Open localhost in new tab first (since JAT navigation will leave current page)
+	// Open localhost in new tab
 	if (options.openLocalhost && links.localhostUrl) {
 		window.open(links.localhostUrl, '_blank');
 	}
 
-	// Navigate to JAT file editor (this will leave the current page)
+	// Open JAT file editor in new tab
 	if (options.openEditor) {
-		window.location.href = links.editorUrl;
+		window.open(links.editorUrl, '_blank');
 	} else if (options.openDiff) {
-		window.location.href = links.diffUrl;
+		window.open(links.diffUrl, '_blank');
 	}
 }
 
@@ -610,10 +608,10 @@ export function generateFilesPageUrl(filePath: string, projectName: string): str
 }
 
 /**
- * Open a file in the JAT Files page (/files) in the current tab
+ * Open a file in the JAT Files page (/files) in a new tab
  *
  * This is the preferred way to open files within the JAT dashboard,
- * as it keeps the user in the integrated file editor.
+ * as it keeps the user in the integrated file editor while preserving context.
  *
  * @param filePath - File path relative to project root
  * @param projectName - Project name (e.g., 'jat', 'chimaro')
@@ -621,11 +619,11 @@ export function generateFilesPageUrl(filePath: string, projectName: string): str
  * @example
  * ```typescript
  * openInFilesPage('src/lib/auth.ts', 'jat');
- * // Navigates to /files?project=jat&file=src/lib/auth.ts
+ * // Opens /files?project=jat&file=src/lib/auth.ts in new tab
  * ```
  */
 export function openInFilesPage(filePath: string, projectName: string): void {
 	const url = generateFilesPageUrl(filePath, projectName);
-	// Navigate in the same tab to keep user in the dashboard
-	window.location.href = url;
+	// Open in new tab to preserve current context
+	window.open(url, '_blank');
 }
