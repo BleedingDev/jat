@@ -8,11 +8,11 @@
  *   /work     - Work (default route, multi-project sessions view)
  *   /files    - Files (project file browser)
  *   /servers  - Servers (project server sessions)
- *   /history  - History (completed task history with streak calendar)
  *   /config   - Config (JAT configuration files editor)
  *   /projects - Projects (project configuration & management)
  *
  * VIEWS (alternative visualizations):
+ *   /history  - History (completed task history with streak calendar)
  *   /graph    - Dependency visualization
  *   /timeline - Historical view
  *   /kanban   - Agent kanban (sessions grouped by activity state)
@@ -76,13 +76,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		{
-			id: 'history',
-			label: 'History',
-			href: '/history',
-			icon: 'history',
-			category: 'main'
-		},
-		{
 			id: 'config',
 			label: 'Config',
 			href: '/config',
@@ -97,6 +90,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		// VIEWS: Alternative visualizations
+		{
+			id: 'history',
+			label: 'History',
+			href: '/history',
+			icon: 'history',
+			category: 'views'
+		},
 		{
 			id: 'graph',
 			label: 'Graph',

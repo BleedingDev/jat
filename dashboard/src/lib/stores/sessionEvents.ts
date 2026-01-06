@@ -35,6 +35,11 @@ interface ScheduledAutoKill {
 }
 const scheduledAutoKills = new Map<string, ScheduledAutoKill>();
 
+// Track sessions that have received their initial data load
+// Automation should only run on INCREMENTAL updates, not the initial buffer load
+// This prevents toast floods when users first open /work and all sessions fire rules
+const initializedSessions = new Set<string>();
+
 // Store for auto-kill countdown state (sessionName -> seconds remaining)
 export const autoKillCountdowns = writable<Map<string, number>>(new Map());
 
@@ -387,13 +392,16 @@ function handleSessionOutput(data: SessionEvent): void {
 
 		// AUTOMATION: Process delta output for pattern matching
 		// Use the delta (new lines) for matching, not the full buffer
-		processSessionOutput(
-			sessionName,
-			output,
-			agentName || currentSession.agentName
-		).catch(err => {
-			console.error('[SessionEvents] Automation engine error:', err);
-		});
+		// IMPORTANT: Only run automation after the initial load to prevent toast floods
+		if (initializedSessions.has(sessionName)) {
+			processSessionOutput(
+				sessionName,
+				output,
+				agentName || currentSession.agentName
+			).catch(err => {
+				console.error('[SessionEvents] Automation engine error:', err);
+			});
+		}
 
 		return;
 	}
@@ -413,6 +421,16 @@ function handleSessionOutput(data: SessionEvent): void {
 	workSessionsState.sessions[sessionIndex].output = output;
 	if (lineCount !== undefined) {
 		workSessionsState.sessions[sessionIndex].lineCount = lineCount;
+	}
+
+	// Mark session as initialized after first full buffer update
+	// This allows subsequent updates to run automation
+	const wasInitialized = initializedSessions.has(sessionName);
+	if (!wasInitialized) {
+		initializedSessions.add(sessionName);
+		// Skip automation on initial load to prevent toast floods
+		// Users opening /work page don't want notifications for pre-existing states
+		return;
 	}
 
 	// AUTOMATION: Process new output for pattern matching
@@ -624,6 +642,9 @@ function handleSessionDestroyed(data: SessionEvent): void {
 
 	// Clear automation trigger records for this session
 	clearSessionTriggers(sessionName);
+
+	// Clear initialized flag so if session recreates, it starts fresh
+	initializedSessions.delete(sessionName);
 
 	// Find the session and mark it as exiting (triggers CSS animation)
 	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
@@ -866,6 +887,9 @@ export function disconnectSessionEvents(): void {
 		eventSource.close();
 		eventSource = null;
 	}
+
+	// Clear initialized sessions so a fresh connection acts like a new page load
+	initializedSessions.clear();
 
 	sessionEventsConnected.set(false);
 	reconnectAttempts = 0;

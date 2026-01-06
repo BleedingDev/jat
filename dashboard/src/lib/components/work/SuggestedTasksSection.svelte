@@ -615,8 +615,13 @@
 									</label>
 									<textarea
 										value={effectiveDescription}
-										oninput={(e) => updateDescription(taskKey, e.currentTarget.value)}
-										class="w-full text-[11px] p-2 rounded resize-none bg-base-300 text-base-content border border-base-content/20 min-h-[50px]"
+										oninput={(e) => {
+										const textarea = e.currentTarget;
+										textarea.style.height = 'auto';
+										textarea.style.height = textarea.scrollHeight + 'px';
+										updateDescription(taskKey, textarea.value);
+									}}
+										class="w-full text-[11px] p-2 rounded resize-none overflow-hidden bg-base-300 text-base-content border border-base-content/20 min-h-[50px]"
 										placeholder="Task description..."
 									></textarea>
 								</div>
