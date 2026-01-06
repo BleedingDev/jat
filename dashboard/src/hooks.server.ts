@@ -255,10 +255,13 @@ export const handle = async ({ event, resolve }) => {
 	});
 
 	// Check if we should log this request based on sampling
-	const shouldSample = Math.random() < getSamplingRate(event.url.pathname);
+	// In dev mode, still apply sampling for high-frequency endpoints to reduce log spam
+	const samplingRate = getSamplingRate(event.url.pathname);
+	const isHighFrequencyEndpoint = samplingRate < 1.0;
+	const shouldSample = Math.random() < samplingRate;
 
-	// Log request start (if sampled or in dev mode)
-	if (dev || shouldSample) {
+	// Log request start (apply sampling even in dev mode for high-frequency endpoints)
+	if (shouldSample || (dev && !isHighFrequencyEndpoint)) {
 		event.locals.logger.info({
 			userAgent: event.request.headers.get('user-agent'),
 			referer: event.request.headers.get('referer'),
@@ -273,8 +276,10 @@ export const handle = async ({ event, resolve }) => {
 		// Calculate duration
 		const duration = Date.now() - startTime;
 
-		// Log request completion (if sampled or in dev mode)
-		if (dev || shouldSample) {
+		// Log request completion (apply sampling even in dev mode for high-frequency endpoints)
+		// Always log errors (4xx/5xx) and slow requests (>1000ms) regardless of sampling
+		const isErrorOrSlow = response.status >= 400 || duration > 1000;
+		if (shouldSample || (dev && !isHighFrequencyEndpoint) || isErrorOrSlow) {
 			const level = response.status >= 500 ? 'error' :
 			              response.status >= 400 ? 'warn' :
 			              duration > 1000 ? 'warn' : 'info';

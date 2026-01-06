@@ -1595,6 +1595,20 @@
 	let spawningSingle = $state<string | null>(null); // Task ID being spawned, or null
 	let spawningBulk = $state(false); // True when bulk spawn is in progress
 
+	// Bulk epic linking state
+	interface BulkEpic {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+		dependency_count?: number;
+	}
+	let bulkEpics = $state<BulkEpic[]>([]);
+	let bulkEpicsLoading = $state(false);
+	let bulkEpicsError = $state<string | null>(null);
+	let bulkEpicSearchQuery = $state('');
+	let bulkLinkingEpicId = $state<string | null>(null);
+
 	// Task files state - tracks files attached to tasks (images, PDFs, text, etc.)
 	let taskFiles = $state<Map<string, TaskFile[]>>(new Map());
 	let uploadingFile = $state<string | null>(null); // Task ID currently uploading file
@@ -1864,6 +1878,101 @@
 				}
 			}
 		});
+	}
+
+	// ========== Bulk Epic Linking ==========
+
+	/**
+	 * Fetch available epics for bulk linking based on selected tasks
+	 * Determines project from first selected task and fetches epics for that project
+	 */
+	async function fetchBulkEpics() {
+		if (selectedTasks.size === 0) return;
+
+		// Get project from first selected task
+		const firstTaskId = Array.from(selectedTasks)[0];
+		const projectName = firstTaskId.split('-')[0];
+		if (!projectName) return;
+
+		bulkEpicsLoading = true;
+		bulkEpicsError = null;
+		try {
+			const response = await fetch(`/api/epics?project=${projectName}`);
+			if (!response.ok) throw new Error('Failed to fetch epics');
+			const data = await response.json();
+			bulkEpics = data.epics || [];
+		} catch (err) {
+			bulkEpicsError = err instanceof Error ? err.message : 'Failed to load epics';
+		} finally {
+			bulkEpicsLoading = false;
+		}
+	}
+
+	/**
+	 * Filter epics based on search query
+	 */
+	function filterBulkEpics(query: string): BulkEpic[] {
+		if (!query.trim()) return bulkEpics;
+		const q = query.toLowerCase();
+		return bulkEpics.filter(epic =>
+			epic.id.toLowerCase().includes(q) ||
+			epic.title.toLowerCase().includes(q)
+		);
+	}
+
+	const filteredBulkEpics = $derived(filterBulkEpics(bulkEpicSearchQuery));
+
+	/**
+	 * Link all selected tasks to an epic
+	 * Calls POST /api/tasks/{id}/epic for each selected task
+	 */
+	async function handleBulkAddToEpic(epicId: string) {
+		if (bulkLinkingEpicId || selectedTasks.size === 0) return;
+
+		bulkLinkingEpicId = epicId;
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		const taskIds = Array.from(selectedTasks);
+		let successCount = 0;
+		const errors: string[] = [];
+
+		for (const taskId of taskIds) {
+			try {
+				const response = await fetch(`/api/tasks/${taskId}/epic`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ epicId })
+				});
+
+				if (!response.ok) {
+					const data = await response.json();
+					errors.push(`${taskId}: ${data.error || 'Failed to link'}`);
+				} else {
+					successCount++;
+				}
+			} catch (err) {
+				errors.push(`${taskId}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+			}
+		}
+
+		bulkLinkingEpicId = null;
+		bulkActionLoading = false;
+
+		if (successCount > 0) {
+			successToast(`Linked ${successCount} task(s) to epic ${epicId}`);
+			clearSelection();
+			// Trigger parent refresh
+			if (onTasksChanged) onTasksChanged();
+		}
+
+		if (errors.length > 0) {
+			bulkActionError = errors.join('; ');
+		}
+
+		// Reset epic state
+		bulkEpics = [];
+		bulkEpicSearchQuery = '';
 	}
 
 	// ========== Task Image Handling ==========
@@ -2567,6 +2676,98 @@
 								</svg>
 								Add Label
 							</button></li>
+							<li>
+								<details ontoggle={(e) => { if ((e.target as HTMLDetailsElement).open && bulkEpics.length === 0) fetchBulkEpics(); }}>
+									<summary class="gap-2">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<!-- Mountain/Epic icon -->
+											<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+										</svg>
+										Add to Epic
+									</summary>
+									<ul class="bg-base-100 rounded-box max-h-60 overflow-y-auto w-64">
+										{#if bulkEpicsLoading}
+											<li class="px-3 py-2 text-center text-xs text-base-content/50">
+												<span class="loading loading-spinner loading-xs"></span>
+												<span class="ml-1">Loading epics...</span>
+											</li>
+										{:else if bulkEpicsError}
+											<li class="px-3 py-2 text-center text-xs text-error">
+												{bulkEpicsError}
+												<button class="btn btn-xs btn-ghost ml-1" onclick={fetchBulkEpics}>Retry</button>
+											</li>
+										{:else if bulkEpics.length === 0}
+											<li class="px-3 py-2 text-center text-xs text-base-content/50">
+												No epics in this project
+											</li>
+										{:else}
+											<!-- Search input when many epics -->
+											{#if bulkEpics.length > 3}
+												<li class="px-2 py-1.5 border-b border-base-content/10 sticky top-0 bg-base-100 z-10">
+													<div class="relative flex items-center gap-1.5">
+														<svg class="w-3 h-3 flex-shrink-0 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+														</svg>
+														<input
+															type="text"
+															placeholder="Filter epics..."
+															class="w-full bg-transparent text-xs focus:outline-none"
+															bind:value={bulkEpicSearchQuery}
+															onclick={(e) => e.stopPropagation()}
+														/>
+														{#if bulkEpicSearchQuery}
+															<button
+																class="text-base-content/40 hover:text-base-content/70"
+																onclick={(e) => { e.stopPropagation(); bulkEpicSearchQuery = ''; }}
+															>
+																<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+																	<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+																</svg>
+															</button>
+														{/if}
+													</div>
+												</li>
+											{/if}
+											{#if filteredBulkEpics.length === 0}
+												<li class="px-3 py-2 text-center text-xs text-base-content/50">
+													No epics match "{bulkEpicSearchQuery}"
+												</li>
+											{:else}
+												{#each filteredBulkEpics as epic (epic.id)}
+													{@const isClosed = epic.status === 'closed'}
+													<li>
+														<button
+															onclick={() => handleBulkAddToEpic(epic.id)}
+															class="flex items-center gap-2 text-xs {isClosed ? 'opacity-60' : ''}"
+															disabled={bulkLinkingEpicId !== null}
+														>
+															{#if bulkLinkingEpicId === epic.id}
+																<span class="loading loading-spinner loading-xs flex-shrink-0"></span>
+															{:else}
+																<span class="text-xs flex-shrink-0">{isClosed ? '📦' : '🏔️'}</span>
+															{/if}
+															<div class="flex flex-col items-start min-w-0 flex-1">
+																<div class="flex items-center gap-1">
+																	<span class="font-mono text-xs text-secondary">{epic.id}</span>
+																	{#if isClosed}
+																		<span class="text-[8px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 uppercase">closed</span>
+																	{/if}
+																</div>
+																<span class="truncate w-full text-left">{epic.title}</span>
+															</div>
+															{#if epic.dependency_count !== undefined}
+																<span class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 flex-shrink-0">
+																	{epic.dependency_count}
+																</span>
+															{/if}
+														</button>
+													</li>
+												{/each}
+											{/if}
+										{/if}
+									</ul>
+								</details>
+							</li>
 							<div class="divider my-1"></div>
 							<li><button onclick={handleBulkDelete} class="gap-2 text-error hover:bg-error/10">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">

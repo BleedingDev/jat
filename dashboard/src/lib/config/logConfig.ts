@@ -387,10 +387,11 @@ export const PRODUCTION_CONFIG = {
    */
   sampling: {
     // High-frequency endpoints - sample aggressively
+    // Note: Uses prefix matching, so /api/sessions matches /api/sessions/*/signal too
     '/api/signals': 0.01,          // 1% of signal logs
     '/api/work/poll': 0.05,        // 5% of polling logs
     '/api/agents/status': 0.1,     // 10% of status checks
-    '/api/sessions/output': 0.05,  // 5% of session output
+    '/api/sessions': 0.01,         // 1% of all session endpoints (signal, activity, output)
 
     // Medium-frequency endpoints
     '/api/agents': 0.25,           // 25% of agent operations
@@ -597,9 +598,24 @@ export function shouldLog(
 
 /**
  * Helper function to get sampling rate for an endpoint
+ * Uses prefix matching for dynamic path segments (e.g., /api/sessions/[name]/signal)
  */
 export function getSamplingRate(endpoint: string): number {
-  return PRODUCTION_CONFIG.sampling[endpoint as keyof typeof PRODUCTION_CONFIG.sampling] ?? 1.0;
+  const sampling = PRODUCTION_CONFIG.sampling;
+
+  // Check for exact match first
+  if (endpoint in sampling) {
+    return sampling[endpoint as keyof typeof sampling];
+  }
+
+  // Check for prefix matches (handles dynamic segments like /api/sessions/[name]/signal)
+  for (const [pattern, rate] of Object.entries(sampling)) {
+    if (endpoint.startsWith(pattern)) {
+      return rate;
+    }
+  }
+
+  return 1.0;
 }
 
 /**
