@@ -4,7 +4,13 @@
  * GET /api/files/git/diff?project=<name>&path=<file>
  * Returns diff for a specific file or all changes if no path specified.
  *
- * When path is specified, also returns original (HEAD) and modified (working tree)
+ * Query parameters:
+ * - project: Project name (required)
+ * - path: Specific file path (optional - if omitted, returns all changes)
+ * - staged: 'true' for staged changes (optional)
+ * - baseline: Git ref to compare against (optional - e.g., commit SHA, branch name)
+ *
+ * When path is specified, also returns original (baseline/HEAD) and modified (working tree)
  * content for use with Monaco diff editor.
  */
 import { json, error } from '@sveltejs/kit';
@@ -17,6 +23,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	const projectName = url.searchParams.get('project');
 	const filePath = url.searchParams.get('path');
 	const staged = url.searchParams.get('staged') === 'true';
+	const baseline = url.searchParams.get('baseline'); // New: baseline commit for comparison
 
 	const result = await getGitForProject(projectName);
 	if ('error' in result) {
@@ -28,7 +35,13 @@ export const GET: RequestHandler = async ({ url }) => {
 	try {
 		let diff: string;
 
-		if (staged) {
+		if (baseline) {
+			// Compare against baseline commit (for review diffs)
+			// This shows all changes from baseline to current working tree
+			diff = filePath
+				? await git.diff([baseline, '--', filePath])
+				: await git.diff([baseline]);
+		} else if (staged) {
 			// Staged changes (--cached)
 			diff = filePath ? await git.diff(['--cached', '--', filePath]) : await git.diff(['--cached']);
 		} else {
@@ -46,8 +59,23 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		if (filePath) {
 			try {
-				// Get the original content from HEAD (or staged area if staged=true)
-				if (staged) {
+				if (baseline) {
+					// For baseline diff: original is baseline commit, modified is working tree
+					try {
+						original = await git.show([`${baseline}:${filePath}`]);
+					} catch {
+						// New file since baseline - no original
+						original = '';
+					}
+					// Read current working tree content
+					const fullPath = join(projectPath, filePath);
+					try {
+						modified = await readFile(fullPath, 'utf-8');
+					} catch {
+						// Deleted file - no modified content
+						modified = '';
+					}
+				} else if (staged) {
 					// For staged diff: original is HEAD, modified is staged content
 					original = await git.show([`HEAD:${filePath}`]);
 					modified = await git.show([`:${filePath}`]); // Index/staged content
@@ -85,6 +113,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			projectPath,
 			path: filePath || null,
 			staged,
+			baseline: baseline || null, // Include baseline ref if provided
 			raw: diff,
 			files,
 			// Include original and modified content for Monaco diff editor
