@@ -162,7 +162,7 @@
 			const response = await fetch('/api/projects', {
 				method: 'DELETE',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ name: project.name })
+				body: JSON.stringify({ project: project.name })
 			});
 
 			if (!response.ok) throw new Error('Failed to remove project');
@@ -582,6 +582,30 @@
 								{saveError}
 							</div>
 						{/if}
+
+						<!-- Danger Zone -->
+						<div class="mt-8 pt-6 border-t border-error/20">
+							<h3 class="text-xs font-semibold font-mono uppercase tracking-wider text-error/70 mb-3">
+								Danger Zone
+							</h3>
+							<div class="flex flex-col gap-2">
+								<button
+									class="btn btn-outline btn-error btn-sm font-mono uppercase tracking-wider"
+									onclick={() => {
+										confirmAction = { type: 'remove', project: editingProject! };
+										closeEditDrawer();
+									}}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+										<path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+									</svg>
+									Remove from JAT
+								</button>
+								<p class="text-xs text-base-content/50">
+									This removes the project from JAT configuration only. Your project files will not be deleted.
+								</p>
+							</div>
+						</div>
 					</div>
 				</div>
 
