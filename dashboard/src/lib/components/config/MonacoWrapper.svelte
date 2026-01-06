@@ -168,15 +168,37 @@
 		editor?.layout();
 	}
 
-	// Expose scroll to line method
+	// Track decoration IDs for cleanup
+	let highlightDecorations: string[] = [];
+
+	// Expose scroll to line method with highlight animation
 	export function scrollToLine(lineNumber: number) {
-		if (editor) {
+		if (editor && monaco) {
 			// Reveal the line in the center of the editor
 			editor.revealLineInCenter(lineNumber);
 			// Also set the cursor to that line
 			editor.setPosition({ lineNumber, column: 1 });
 			// Focus the editor
 			editor.focus();
+
+			// Add temporary highlight decoration
+			highlightDecorations = editor.deltaDecorations(highlightDecorations, [
+				{
+					range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+					options: {
+						isWholeLine: true,
+						className: 'search-result-highlight',
+						glyphMarginClassName: 'search-result-glyph'
+					}
+				}
+			]);
+
+			// Remove highlight after animation completes (2 seconds)
+			setTimeout(() => {
+				if (editor) {
+					highlightDecorations = editor.deltaDecorations(highlightDecorations, []);
+				}
+			}, 2000);
 		}
 	}
 </script>
@@ -212,5 +234,58 @@
 	.monaco-wrapper :global(.monaco-editor) {
 		position: absolute !important;
 		inset: 0;
+	}
+
+	/* Search result highlight animation - pulse/flash effect */
+	.monaco-wrapper :global(.search-result-highlight) {
+		background-color: oklch(0.65 0.18 85 / 0.4) !important;
+		animation: search-highlight-pulse 2s ease-out forwards;
+	}
+
+	/* Glyph margin indicator */
+	.monaco-wrapper :global(.search-result-glyph) {
+		background: oklch(0.75 0.18 85);
+		width: 4px !important;
+		margin-left: 2px;
+		border-radius: 2px;
+		animation: search-glyph-fade 2s ease-out forwards;
+	}
+
+	@keyframes search-highlight-pulse {
+		0% {
+			background-color: oklch(0.70 0.20 85 / 0.6);
+			box-shadow: inset 0 0 20px oklch(0.75 0.18 85 / 0.5);
+		}
+		15% {
+			background-color: oklch(0.65 0.18 85 / 0.5);
+			box-shadow: inset 0 0 15px oklch(0.75 0.18 85 / 0.4);
+		}
+		30% {
+			background-color: oklch(0.70 0.20 85 / 0.55);
+			box-shadow: inset 0 0 20px oklch(0.75 0.18 85 / 0.45);
+		}
+		50% {
+			background-color: oklch(0.65 0.18 85 / 0.4);
+			box-shadow: inset 0 0 12px oklch(0.75 0.18 85 / 0.3);
+		}
+		100% {
+			background-color: oklch(0.65 0.18 85 / 0);
+			box-shadow: inset 0 0 0px oklch(0.75 0.18 85 / 0);
+		}
+	}
+
+	@keyframes search-glyph-fade {
+		0% {
+			opacity: 1;
+			box-shadow: 0 0 8px oklch(0.75 0.18 85 / 0.8);
+		}
+		50% {
+			opacity: 0.8;
+			box-shadow: 0 0 4px oklch(0.75 0.18 85 / 0.4);
+		}
+		100% {
+			opacity: 0;
+			box-shadow: none;
+		}
 	}
 </style>
