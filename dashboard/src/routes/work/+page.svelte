@@ -1321,16 +1321,7 @@
 					toggleSectionCollapse(focusedProject, 'tasks');
 				}
 				break;
-			case 'Escape': // Collapse all projects
-				e.preventDefault();
-				const newState = new Map(projectCollapseState);
-				for (const project of sortedProjects) {
-					newState.set(project, true);
-					saveProjectCollapse(project, true);
-				}
-				projectCollapseState = newState;
-				break;
-		}
+			}
 	}
 
 	function scrollToFocusedProject() {
