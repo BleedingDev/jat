@@ -164,7 +164,7 @@
 				<button
 					class="close-btn"
 					onclick={(e) => handleCloseClick(e, file.path)}
-					title={file.dirty ? 'Close (has unsaved changes)' : 'Close'}
+					title={file.dirty ? 'Close (has unsaved changes) • Alt+W' : 'Close (Alt+W)'}
 					aria-label="Close tab"
 				>
 					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

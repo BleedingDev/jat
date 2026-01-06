@@ -14,8 +14,21 @@ import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getProjectPath } from '$lib/server/projectPaths.js';
 
 const execAsync = promisify(exec);
+
+/**
+ * Extract project name from a task ID
+ * @param {string} taskId - Task ID like "steelbridge-xx5" or "jat-abc"
+ * @returns {string|null} Project name like "steelbridge" or null if invalid
+ */
+function getProjectFromTaskId(taskId) {
+	if (!taskId || typeof taskId !== 'string') return null;
+	const dashIndex = taskId.indexOf('-');
+	if (dashIndex === -1 || dashIndex === 0) return null;
+	return taskId.substring(0, dashIndex);
+}
 
 // Path to store task image mappings
 const getImageStorePath = () => {
@@ -89,7 +102,20 @@ async function saveTaskImages(images) {
  */
 async function syncNotesToTask(taskId, taskImages) {
 	try {
-		const projectPath = process.cwd().replace('/dashboard', '');
+		// Extract project from task ID and resolve correct project path
+		const projectName = getProjectFromTaskId(taskId);
+		if (!projectName) {
+			console.warn(`[image-sync] Cannot determine project from task ID: ${taskId}`);
+			return;
+		}
+
+		const projectInfo = await getProjectPath(projectName);
+		if (!projectInfo.exists) {
+			console.warn(`[image-sync] Project path does not exist for ${projectName}: ${projectInfo.path}`);
+			return;
+		}
+
+		const projectPath = projectInfo.path;
 
 		if (!taskImages || taskImages.length === 0) {
 			// Clear notes if no images
@@ -110,9 +136,9 @@ async function syncNotesToTask(taskId, taskImages) {
 		const command = `cd "${projectPath}" && bd update ${taskId} --notes "${escapedNotes}"`;
 
 		await execAsync(command);
-		console.log(`Synced ${taskImages.length} image(s) to task ${taskId} notes`);
+		console.log(`[image-sync] Synced ${taskImages.length} image(s) to task ${taskId} notes (project: ${projectName})`);
 	} catch (err) {
-		console.error('Failed to sync notes to task:', err);
+		console.error('[image-sync] Failed to sync notes to task:', err);
 		// Don't throw - image storage succeeded, notes sync is secondary
 	}
 }

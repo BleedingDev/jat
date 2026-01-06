@@ -122,6 +122,11 @@
 	const projects = $derived(['All Projects', ...configProjects]);
 	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
 
+	// Debug: log when configProjects changes
+	$effect(() => {
+		console.log('[Layout] configProjects:', configProjects.length, 'projects:', projects.length);
+	});
+
 	// Sync selected project from URL parameter
 	$effect(() => {
 		const params = new URLSearchParams($page.url.searchParams);

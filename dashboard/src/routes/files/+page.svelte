@@ -117,8 +117,8 @@
 	// Fetch visible projects
 	async function fetchProjects() {
 		try {
-			// Fetch with stats=true to get agent-activity-based sorting
-			const response = await fetch('/api/projects?visible=true&stats=true');
+			// Fetch without stats - we only need project names for the dropdown
+			const response = await fetch('/api/projects?visible=true');
 			const data = await response.json();
 
 			if (!response.ok) {

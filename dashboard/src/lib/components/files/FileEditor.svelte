@@ -55,6 +55,13 @@
 	// Confirmation dialog state
 	let confirmClose = $state<{ path: string; filename: string } | null>(null);
 
+	// Help modal state
+	let showHelpModal = $state(false);
+
+	function toggleHelp() {
+		showHelpModal = !showHelpModal;
+	}
+
 	// Get the currently active file
 	const activeFile = $derived(openFiles.find((f) => f.path === activeFilePath) || null);
 
@@ -178,6 +185,23 @@
 
 	// Handle keyboard shortcuts
 	function handleKeyDown(e: KeyboardEvent) {
+		// Escape to close help modal
+		if (e.key === 'Escape' && showHelpModal) {
+			e.preventDefault();
+			showHelpModal = false;
+			return;
+		}
+
+		// ? to open help (when not typing in an input)
+		if (e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+			const target = e.target as HTMLElement;
+			if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+				e.preventDefault();
+				showHelpModal = true;
+				return;
+			}
+		}
+
 		// Alt+S to save (Alt instead of Ctrl to avoid browser conflict)
 		if (e.altKey && e.key === 's') {
 			e.preventDefault();
@@ -260,6 +284,16 @@
 				onTabMiddleClick={handleTabMiddleClick}
 				{onTabReorder}
 			/>
+			<!-- Help Button -->
+			<button
+				class="help-btn"
+				onclick={toggleHelp}
+				title="Keyboard shortcuts (?)"
+			>
+				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				</svg>
+			</button>
 			<!-- Save Button -->
 			<button
 				class="save-btn"
@@ -267,7 +301,7 @@
 				class:has-changes={activeFile?.dirty && !isActiveSaving}
 				disabled={!activeFile?.dirty || isActiveSaving}
 				onclick={handleSaveClick}
-				title={isActiveSaving ? 'Saving...' : activeFile?.dirty ? 'Save (Alt+S)' : 'No changes to save'}
+				title={isActiveSaving ? 'Saving...' : activeFile?.dirty ? 'Save (Ctrl+S)' : 'No changes to save'}
 			>
 				{#if isActiveSaving}
 					<span class="save-spinner"></span>
@@ -327,7 +361,7 @@
 			<p class="text-base-content/35 mt-1 text-sm">Select a file from the explorer to start editing</p>
 			<div class="shortcuts mt-4 text-xs text-base-content/30">
 				<div class="shortcut">
-					<kbd class="kbd kbd-xs">Alt</kbd>
+					<kbd class="kbd kbd-xs">Ctrl</kbd>
 					<span>+</span>
 					<kbd class="kbd kbd-xs">S</kbd>
 					<span class="ml-2">Save</span>
@@ -341,14 +375,12 @@
 				<div class="shortcut mt-1">
 					<kbd class="kbd kbd-xs">Alt</kbd>
 					<span>+</span>
-					<kbd class="kbd kbd-xs">]</kbd>
-					<span class="ml-2">Next Tab</span>
-				</div>
-				<div class="shortcut mt-1">
-					<kbd class="kbd kbd-xs">Alt</kbd>
-					<span>+</span>
 					<kbd class="kbd kbd-xs">P</kbd>
 					<span class="ml-2">Quick Open</span>
+				</div>
+				<div class="shortcut mt-1">
+					<kbd class="kbd kbd-xs">?</kbd>
+					<span class="ml-2">Show All Shortcuts</span>
 				</div>
 			</div>
 		</div>
@@ -384,6 +416,119 @@
 	</div>
 {/if}
 
+<!-- Help Guide Modal -->
+{#if showHelpModal}
+	<div class="modal modal-open">
+		<div class="modal-box max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+			<!-- Header -->
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-xl font-bold">Keyboard Shortcuts</h3>
+				<button
+					class="btn btn-sm btn-circle btn-ghost"
+					onclick={toggleHelp}
+					aria-label="Close help"
+				>
+					✕
+				</button>
+			</div>
+
+			<!-- Content -->
+			<div class="overflow-y-auto flex-1 space-y-6">
+				<!-- File Operations -->
+				<div>
+					<h4 class="text-sm font-semibold text-base-content/70 uppercase tracking-wide mb-3">File Operations</h4>
+					<div class="space-y-2">
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Save current file</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Ctrl</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">S</kbd>
+							</div>
+						</div>
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Quick file finder</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Alt</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">P</kbd>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Tab Navigation -->
+				<div>
+					<h4 class="text-sm font-semibold text-base-content/70 uppercase tracking-wide mb-3">Tab Navigation</h4>
+					<div class="space-y-2">
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Close current tab</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Alt</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">W</kbd>
+							</div>
+						</div>
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Next tab</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Alt</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">]</kbd>
+							</div>
+						</div>
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Previous tab</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Alt</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">[</kbd>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- General -->
+				<div>
+					<h4 class="text-sm font-semibold text-base-content/70 uppercase tracking-wide mb-3">General</h4>
+					<div class="space-y-2">
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Show this help</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">?</kbd>
+							</div>
+						</div>
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Close help / Cancel</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Esc</kbd>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Tips -->
+				<div class="mt-4 p-3 rounded-lg bg-info/10 border border-info/20">
+					<div class="flex gap-2">
+						<svg class="w-5 h-5 text-info shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+						<div class="text-sm text-base-content/70">
+							<strong class="text-base-content/90">Tip:</strong> Middle-click on a tab to close it quickly. Drag tabs to reorder them.
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Footer -->
+			<div class="modal-action mt-4">
+				<button class="btn btn-sm" onclick={toggleHelp}>Close</button>
+			</div>
+		</div>
+		<div class="modal-backdrop bg-black/50" onclick={toggleHelp}></div>
+	</div>
+{/if}
+
 <style>
 	.file-editor {
 		display: flex;
@@ -399,6 +544,24 @@
 		align-items: stretch;
 		background: oklch(0.16 0.01 250);
 		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.help-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.5rem;
+		background: oklch(0.18 0.01 250);
+		border: none;
+		border-left: 1px solid oklch(0.22 0.02 250);
+		color: oklch(0.45 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.help-btn:hover {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.70 0.02 250);
 	}
 
 	.save-btn {
