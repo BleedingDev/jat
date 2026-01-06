@@ -11,10 +11,11 @@
 	 */
 	import { onMount } from 'svelte';
 	import BranchSwitcherModal from './BranchSwitcherModal.svelte';
+	import { openDiffPreviewDrawer } from '$lib/stores/drawerStore';
 
 	interface Props {
 		project: string;
-		onFileClick?: (path: string) => void;
+		onFileClick?: (path: string, isStaged: boolean) => void;
 	}
 
 	interface Commit {
@@ -296,11 +297,16 @@
 	}
 
 	/**
-	 * Handle file click - trigger diff view or selection
+	 * Handle file click - open diff preview drawer
+	 * @param filePath - Path to the file (relative to project root)
+	 * @param isStaged - Whether this is a staged file (true) or unstaged change (false)
 	 */
-	function handleFileClick(filePath: string) {
+	function handleFileClick(filePath: string, isStaged: boolean) {
+		// Open the diff preview drawer directly
+		openDiffPreviewDrawer(filePath, project, isStaged);
+		// Also call the callback if provided (for custom handling)
 		if (onFileClick) {
-			onFileClick(filePath);
+			onFileClick(filePath, isStaged);
 		}
 	}
 
@@ -653,7 +659,7 @@
 									</span>
 									<button
 										class="file-name-btn"
-										onclick={() => handleFileClick(file)}
+										onclick={() => handleFileClick(file, true)}
 										title={file}
 									>
 										<span class="file-name">{fileName}</span>
@@ -739,7 +745,7 @@
 									</span>
 									<button
 										class="file-name-btn"
-										onclick={() => handleFileClick(file)}
+										onclick={() => handleFileClick(file, false)}
 										title={file}
 									>
 										<span class="file-name">{fileName}</span>
@@ -776,7 +782,7 @@
 									</span>
 									<button
 										class="file-name-btn"
-										onclick={() => handleFileClick(file)}
+										onclick={() => handleFileClick(file, false)}
 										title={file}
 									>
 										<span class="file-name">{fileName}</span>
@@ -813,7 +819,7 @@
 									</span>
 									<button
 										class="file-name-btn"
-										onclick={() => handleFileClick(file)}
+										onclick={() => handleFileClick(file, false)}
 										title={file}
 									>
 										<span class="file-name">{fileName}</span>
@@ -850,7 +856,7 @@
 									</span>
 									<button
 										class="file-name-btn"
-										onclick={() => handleFileClick(file)}
+										onclick={() => handleFileClick(file, false)}
 										title={file}
 									>
 										<span class="file-name">{fileName}</span>

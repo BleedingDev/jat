@@ -3,10 +3,15 @@
  *
  * GET /api/files/git/diff?project=<name>&path=<file>
  * Returns diff for a specific file or all changes if no path specified.
+ *
+ * When path is specified, also returns original (HEAD) and modified (working tree)
+ * content for use with Monaco diff editor.
  */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getGitForProject, formatGitError } from '$lib/server/git.js';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 export const GET: RequestHandler = async ({ url }) => {
 	const projectName = url.searchParams.get('project');
@@ -34,13 +39,57 @@ export const GET: RequestHandler = async ({ url }) => {
 		// Parse diff into structured format
 		const files = parseDiff(diff);
 
+		// If a specific file path is requested, also fetch original and modified content
+		// for Monaco diff editor
+		let original: string | null = null;
+		let modified: string | null = null;
+
+		if (filePath) {
+			try {
+				// Get the original content from HEAD (or staged area if staged=true)
+				if (staged) {
+					// For staged diff: original is HEAD, modified is staged content
+					original = await git.show([`HEAD:${filePath}`]);
+					modified = await git.show([`:${filePath}`]); // Index/staged content
+				} else {
+					// For unstaged diff: original is HEAD (or staged if exists), modified is working tree
+					try {
+						// Try to get from staged area first
+						original = await git.show([`:${filePath}`]);
+					} catch {
+						// Fall back to HEAD if not staged
+						try {
+							original = await git.show([`HEAD:${filePath}`]);
+						} catch {
+							// New file - no original
+							original = '';
+						}
+					}
+					// Read current working tree content
+					const fullPath = join(projectPath, filePath);
+					try {
+						modified = await readFile(fullPath, 'utf-8');
+					} catch {
+						// Deleted file - no modified content
+						modified = '';
+					}
+				}
+			} catch (err) {
+				// If we can't get content, that's okay - the raw diff is still useful
+				console.warn(`Could not fetch file contents for diff: ${err}`);
+			}
+		}
+
 		return json({
 			project: projectName,
 			projectPath,
 			path: filePath || null,
 			staged,
 			raw: diff,
-			files
+			files,
+			// Include original and modified content for Monaco diff editor
+			original,
+			modified
 		});
 	} catch (err) {
 		const gitError = formatGitError(err as Error);

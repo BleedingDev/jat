@@ -14,6 +14,7 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import FilePreviewDrawer from '$lib/components/files/FilePreviewDrawer.svelte';
+	import DiffPreviewDrawer from '$lib/components/files/DiffPreviewDrawer.svelte';
 	import TerminalDrawer from '$lib/components/TerminalDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';

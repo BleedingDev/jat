@@ -170,3 +170,27 @@ export function closeTerminalDrawer() {
 export function toggleTerminalDrawer() {
 	isTerminalDrawerOpen.update(v => !v);
 }
+
+// Diff preview drawer state (for viewing git diffs with Monaco diff editor)
+export const isDiffPreviewDrawerOpen = writable(false);
+export const diffPreviewDrawerPath = writable<string>('');
+export const diffPreviewDrawerProject = writable<string>('');
+export const diffPreviewDrawerIsStaged = writable(false);
+
+/**
+ * Open the diff preview drawer for a specific file
+ * @param filePath - Path to the file (relative to project root)
+ * @param projectName - Project name (e.g., 'jat', 'chimaro')
+ * @param isStaged - Whether to show staged diff (true) or unstaged diff (false)
+ */
+export function openDiffPreviewDrawer(filePath: string, projectName: string, isStaged: boolean = false) {
+	diffPreviewDrawerPath.set(filePath);
+	diffPreviewDrawerProject.set(projectName);
+	diffPreviewDrawerIsStaged.set(isStaged);
+	isDiffPreviewDrawerOpen.set(true);
+}
+
+export function closeDiffPreviewDrawer() {
+	isDiffPreviewDrawerOpen.set(false);
+	// Don't clear path/project immediately to allow for smooth close animation
+}
