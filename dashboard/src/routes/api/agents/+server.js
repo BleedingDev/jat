@@ -32,6 +32,7 @@ import { getAllAgentUsageAsync, getHourlyUsageAsync, getAgentHourlyUsageAsync, g
 import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { trackApiPerformance } from '$lib/utils/performance';
 
 const execAsync = promisify(exec);
 
@@ -178,7 +179,12 @@ function filterActivitiesByDateRange(activities, from, to) {
 }
 
 /** @type {import('./$types').RequestHandler} */
-export async function GET({ url }) {
+export async function GET({ url, locals }) {
+	const perf = trackApiPerformance('/api/agents', {
+		full: url.searchParams.get('full'),
+		usage: url.searchParams.get('usage')
+	});
+
 	// Check if full orchestration data requested
 	const fullData = url.searchParams.get('full') === 'true' ||
 	                 url.searchParams.get('orchestration') === 'true';
@@ -188,9 +194,17 @@ export async function GET({ url }) {
 		try {
 			const projectFilter = url.searchParams.get('project') ?? undefined;
 			const agents = getAgents(projectFilter);
+
+			locals.logger?.debug({
+				agentCount: agents.length,
+				projectFilter
+			}, 'Simple agent list fetched');
+
+			perf.end({ agentCount: agents.length, mode: 'simple' });
 			return json({ agents });
 		} catch (error) {
-			console.error('Error fetching agents:', error);
+			locals.logger?.error({ error }, 'Failed to fetch simple agent list');
+			perf.end({ error: error.message, mode: 'simple' });
 			return json({ error: 'Failed to fetch agents', agents: [] }, { status: 500 });
 		}
 	}
@@ -222,9 +236,20 @@ export async function GET({ url }) {
 	if (!forceFresh) {
 		const cached = apiCache.get(key);
 		if (cached) {
+			locals.logger?.debug({ key }, 'Returning cached agent data');
+			perf.end({ agentCount: cached.agents?.length || 0, mode: 'full', cached: true });
 			return json(cached);
 		}
 	}
+
+	locals.logger?.info({
+		projectFilter,
+		agentFilter,
+		includeUsage,
+		includeHourly,
+		includeActivities,
+		rangeParam
+	}, 'Fetching full agent orchestration data');
 
 	try {
 		// Parse date range parameters
@@ -274,6 +299,9 @@ export async function GET({ url }) {
 		const agentContextPercent = new Map();
 
 		if (includeUsage) {
+			locals.logger?.debug('Fetching token usage data...');
+			const usageStart = Date.now();
+
 			// Fetch aggregated usage data
 			[usageToday, usageWeek] = await Promise.all([
 				getAllAgentUsageAsync('today', projectPath),
@@ -293,10 +321,15 @@ export async function GET({ url }) {
 						agentSparklineData.set(agent.name, sparkline);
 						agentContextPercent.set(agent.name, contextPct);
 					} catch (err) {
-						// Silently ignore errors for individual agents
+						locals.logger?.debug({ agent: agent.name, error: err }, 'Failed to fetch agent usage data');
 					}
 				})
 			);
+
+			locals.logger?.info({
+				duration: Date.now() - usageStart,
+				agentCount: agentsWithActiveSessions.length
+			}, 'Token usage data fetched');
 		}
 
 		// Optionally fetch hourly token usage data (raw data for sparklines, using worker threads)
@@ -538,12 +571,32 @@ export async function GET({ url }) {
 		// Cache the response
 		apiCache.set(key, responseData, ttl);
 
+		locals.logger?.info({
+			agentCount: filteredAgentStats.length,
+			taskCount: tasks.length,
+			reservationCount: reservations.length,
+			cached: false
+		}, 'Full agent orchestration data fetched successfully');
+
+		perf.end({
+			agentCount: filteredAgentStats.length,
+			taskCount: tasks.length,
+			mode: 'full',
+			cached: false,
+			includeUsage
+		});
+
 		return json(responseData);
 	} catch (error) {
-		console.error('Error fetching agent data:', error);
 		const errorMsg = error instanceof Error ? error.message : String(error);
 		const errorStack = error instanceof Error ? error.stack : undefined;
-		console.error('Error stack:', errorStack);
+
+		locals.logger?.error({
+			error: errorMsg,
+			stack: errorStack
+		}, 'Failed to fetch full agent orchestration data');
+
+		perf.end({ error: errorMsg, mode: 'full' });
 
 		return json({
 			error: 'Failed to fetch agent data',
@@ -570,9 +623,16 @@ export async function GET({ url }) {
 }
 
 /** @type {import('./$types').RequestHandler} */
-export async function POST({ request }) {
+export async function POST({ request, locals }) {
+	const perf = trackApiPerformance('/api/agents (POST)');
+
 	try {
 		const { taskId, agentName } = await request.json();
+
+		locals.logger?.info({
+			taskId,
+			agentName
+		}, 'Assigning task to agent');
 
 		// Validate input
 		if (!taskId || !agentName) {
@@ -621,20 +681,40 @@ export async function POST({ request }) {
 			const { stdout: updatedTaskJson } = await execAsync(`bd show "${taskId}" --json`);
 			const updatedTask = JSON.parse(updatedTaskJson);
 
+			locals.logger?.info({
+				taskId,
+				agentName,
+				taskTitle: updatedTask[0]?.title
+			}, 'Task successfully assigned to agent');
+
+			perf.end({ success: true, taskId, agentName });
+
 			return json({
 				success: true,
 				message: `Task ${taskId} assigned to ${agentName}`,
 				task: updatedTask[0]
 			});
 		} catch (err) {
-			console.error('Failed to assign task:', err);
+			locals.logger?.error({
+				error: err,
+				taskId,
+				agentName
+			}, 'Failed to assign task via bd CLI');
+
+			perf.end({ error: err instanceof Error ? err.message : 'Unknown error' });
+
 			return json({
 				error: 'Failed to assign task',
 				message: err instanceof Error ? err.message : 'Unknown error occurred'
 			}, { status: 500 });
 		}
 	} catch (err) {
-		console.error('Error in POST /api/agents:', err);
+		locals.logger?.error({
+			error: err
+		}, 'Failed to parse request body in POST /api/agents');
+
+		perf.end({ error: err instanceof Error ? err.message : 'Invalid request' });
+
 		return json({
 			error: 'Invalid request',
 			message: err instanceof Error ? err.message : 'Failed to parse request body'

@@ -43,6 +43,10 @@
 	import { SORT_OPTIONS, getSortBy, getSortDir, handleSortClick, initSort, workSortState, type SortOption } from '$lib/stores/workSort.svelte';
 	import { maximizeSessionPanel } from '$lib/stores/hoveredSession';
 	import { getSessionMaximizeHeight } from '$lib/stores/preferences.svelte';
+	import { createNamespacedLogger } from '$lib/utils/browserLogger';
+
+	// Initialize logger for this page
+	const logger = createNamespacedLogger('ui:work', { component: 'WorkPage' });
 
 	// Types (aligned with api.types.Task for TaskTable compatibility)
 	interface Task {
@@ -1361,7 +1365,7 @@
 				// Failed to hide project - error will be visible in modal
 			}
 		} catch (error) {
-			console.error('Failed to hide project:', error);
+			logger.error('Failed to hide project:', error);
 		} finally {
 			isHiding = false;
 			projectToHide = null;
@@ -1384,9 +1388,9 @@
 		setTimeout(() => fetchSessionUsage(), 30000);
 
 		// Subscribe to maximizeSessionPanel for click-to-center behavior
-		console.log('[projects/+page] Setting up maximizeSessionPanel subscription');
+		logger.info('Setting up maximizeSessionPanel subscription');
 		unsubscribeMaximize = maximizeSessionPanel.subscribe(async (sessionName) => {
-			console.log('[projects/+page] maximizeSessionPanel subscription fired:', sessionName);
+			logger.debug('maximizeSessionPanel subscription fired', { sessionName });
 			if (sessionName) {
 				// Find which project contains this session
 				let targetProject: string | null = null;
@@ -1397,12 +1401,12 @@
 					}
 				}
 
-				console.log('[projects/+page] Found project for session:', targetProject);
+				logger.debug('Found project for session', { targetProject, sessionName });
 				if (targetProject) {
 					// Expand the project if collapsed
 					const isProjectCollapsed = projectCollapseState.get(targetProject) ?? false;
 					if (isProjectCollapsed) {
-						console.log('[projects/+page] Expanding collapsed project:', targetProject);
+						logger.info('Expanding collapsed project', { project: targetProject });
 						const newState = new Map(projectCollapseState);
 						newState.set(targetProject, false);
 						projectCollapseState = newState;
@@ -1412,18 +1416,18 @@
 					// Expand the sessions section if collapsed
 					const sessionState = getSectionState(targetProject, 'sessions');
 					if (sessionState.collapsed) {
-						console.log('[projects/+page] Expanding collapsed sessions section');
+						logger.info('Expanding collapsed sessions section', { project: targetProject });
 						updateSectionState(targetProject, 'sessions', { collapsed: false });
 					}
 
 					// ALWAYS maximize sessions section height when clicking (uses user preference as % of viewport)
 					const heightPercent = getSessionMaximizeHeight();
 					const maximizeHeight = Math.round(window.innerHeight * (heightPercent / 100));
-					console.log('[projects/+page] Setting session height to:', maximizeHeight, `(${heightPercent}% of viewport)`);
+					logger.debug('Setting session height', { height: maximizeHeight, heightPercent, project: targetProject });
 					updateSectionState(targetProject, 'sessions', { height: maximizeHeight });
 
 					await tick();
-					console.log('[projects/+page] Panel maximized for project:', targetProject);
+					logger.debug('Panel maximized for project', { project: targetProject });
 				}
 			}
 		});

@@ -8,12 +8,18 @@
  * - Cleans up orphaned .claude/sessions/agent-*.txt files (where Claude session no longer exists)
  * - Runs token usage aggregation on startup
  * - Schedules periodic aggregation every 5 minutes
+ * - Request context logging with unique request IDs
+ * - Performance tracking for all API requests
  */
 
 import { runAggregation } from '$lib/server/tokenUsageDb';
 import { readdirSync, unlinkSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { randomUUID } from 'crypto';
+import logger from '$lib/utils/logger';
+import { shouldLog, getSamplingRate } from '$lib/config/logConfig';
+import { dev } from '$app/environment';
 
 // Track aggregation interval
 let aggregationInterval: ReturnType<typeof setInterval> | null = null;
@@ -233,7 +239,67 @@ async function initializeStartupTasks() {
 // Initialize startup tasks when the server starts
 initializeStartupTasks();
 
-// Export empty handle function (required by SvelteKit)
+// Export handle function with request context logging
 export const handle = async ({ event, resolve }) => {
-	return resolve(event);
+	// Generate unique request ID for tracing
+	const requestId = randomUUID();
+	const startTime = Date.now();
+
+	// Add request ID and logger to event.locals for use in endpoints
+	event.locals.requestId = requestId;
+	event.locals.logger = logger.child({
+		requestId,
+		path: event.url.pathname,
+		method: event.request.method,
+		query: event.url.search
+	});
+
+	// Check if we should log this request based on sampling
+	const shouldSample = Math.random() < getSamplingRate(event.url.pathname);
+
+	// Log request start (if sampled or in dev mode)
+	if (dev || shouldSample) {
+		event.locals.logger.info({
+			userAgent: event.request.headers.get('user-agent'),
+			referer: event.request.headers.get('referer'),
+			ip: event.getClientAddress()
+		}, `Request started: ${event.request.method} ${event.url.pathname}`);
+	}
+
+	try {
+		// Process the request
+		const response = await resolve(event);
+
+		// Calculate duration
+		const duration = Date.now() - startTime;
+
+		// Log request completion (if sampled or in dev mode)
+		if (dev || shouldSample) {
+			const level = response.status >= 500 ? 'error' :
+			              response.status >= 400 ? 'warn' :
+			              duration > 1000 ? 'warn' : 'info';
+
+			event.locals.logger[level]({
+				status: response.status,
+				duration,
+				contentType: response.headers.get('content-type')
+			}, `Request completed: ${event.request.method} ${event.url.pathname}`);
+		}
+
+		// Add request ID to response headers for client correlation
+		response.headers.append('x-request-id', requestId);
+
+		return response;
+	} catch (error) {
+		// Log request error
+		const duration = Date.now() - startTime;
+
+		event.locals.logger.error({
+			error,
+			duration,
+			stack: error instanceof Error ? error.stack : undefined
+		}, `Request failed: ${event.request.method} ${event.url.pathname}`);
+
+		throw error;
+	}
 };
