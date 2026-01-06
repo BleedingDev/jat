@@ -917,26 +917,74 @@
 				<table class="w-full">
 					<thead>
 						<tr class="bg-base-200 border-b border-base-content/20">
-							<th class="text-base-content/60 px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
-								Project
+							<th
+								class="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'name' ? 'text-primary' : 'text-base-content/60'}"
+								onclick={() => handleColumnSort('name')}
+							>
+								<span class="flex items-center gap-1">
+									Project
+									{#if sortColumn === 'name'}
+										<span class="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+									{/if}
+								</span>
 							</th>
 							<th class="text-base-content/60 px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider">
 								Color
 							</th>
-							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
-								Port
+							<th
+								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'port' ? 'text-primary' : 'text-base-content/60'}"
+								onclick={() => handleColumnSort('port')}
+							>
+								<span class="flex items-center gap-1">
+									Port
+									{#if sortColumn === 'port'}
+										<span class="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+									{/if}
+								</span>
 							</th>
-							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
-								Server
+							<th
+								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'status' ? 'text-primary' : 'text-base-content/60'}"
+								onclick={() => handleColumnSort('status')}
+							>
+								<span class="flex items-center gap-1">
+									Server
+									{#if sortColumn === 'status'}
+										<span class="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+									{/if}
+								</span>
 							</th>
-							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
-								Last
+							<th
+								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'activity' ? 'text-primary' : 'text-base-content/60'}"
+								onclick={() => handleColumnSort('activity')}
+							>
+								<span class="flex items-center gap-1">
+									Last
+									{#if sortColumn === 'activity'}
+										<span class="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+									{/if}
+								</span>
 							</th>
-							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
-								Tasks
+							<th
+								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'tasks' ? 'text-primary' : 'text-base-content/60'}"
+								onclick={() => handleColumnSort('tasks')}
+							>
+								<span class="flex items-center gap-1">
+									Tasks
+									{#if sortColumn === 'tasks'}
+										<span class="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+									{/if}
+								</span>
 							</th>
-							<th class="text-base-content/60 px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider">
-								Agents
+							<th
+								class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider cursor-pointer hover:bg-base-300 transition-colors select-none {sortColumn === 'agents' ? 'text-primary' : 'text-base-content/60'}"
+								onclick={() => handleColumnSort('agents')}
+							>
+								<span class="flex items-center gap-1">
+									Agents
+									{#if sortColumn === 'agents'}
+										<span class="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+									{/if}
+								</span>
 							</th>
 							<th class="text-base-content/60 px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider min-w-[180px]">
 								Desc
