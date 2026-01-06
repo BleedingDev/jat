@@ -157,18 +157,28 @@
 			// Load Monaco
 			monaco = await loader.init();
 
+			// Create URIs for the models
+			const originalUri = monaco.Uri.parse(`original://${filePath}`);
+			const modifiedUri = monaco.Uri.parse(`modified://${filePath}`);
+
+			// Dispose existing models if they exist (prevents "already exists" error)
+			const existingOriginal = monaco.editor.getModel(originalUri);
+			const existingModified = monaco.editor.getModel(modifiedUri);
+			if (existingOriginal) existingOriginal.dispose();
+			if (existingModified) existingModified.dispose();
+
 			// Create original model
 			const originalModel = monaco.editor.createModel(
 				originalContent,
 				language(),
-				monaco.Uri.parse(`original://${filePath}`)
+				originalUri
 			);
 
 			// Create modified model
 			const modifiedModel = monaco.editor.createModel(
 				modifiedContent,
 				language(),
-				monaco.Uri.parse(`modified://${filePath}`)
+				modifiedUri
 			);
 
 			// Create diff editor
@@ -299,7 +309,15 @@
 	onDestroy(() => {
 		themeObserver?.disconnect();
 		resizeObserver?.disconnect();
-		diffEditor?.dispose();
+		// Dispose models before editor to prevent orphaned models
+		if (diffEditor) {
+			const model = diffEditor.getModel();
+			if (model) {
+				model.original?.dispose();
+				model.modified?.dispose();
+			}
+			diffEditor.dispose();
+		}
 		diffEditor = null;
 		monaco = null;
 	});
