@@ -30,6 +30,7 @@
 		desc: stage.desc,
 		color: stage.colors.primary,
 		bgClass: stage.bgGradient,
+		cssGradient: stage.cssGradient,
 		icon: stage.icon
 	}));
 
@@ -215,7 +216,7 @@
 				style="box-shadow: 0 0 30px {currentStepData.color}40;"
 			>
 				<!-- Card header -->
-				<div class="bg-gradient-to-r {currentStepData.bgClass} p-4">
+				<div class="p-4" style="background: {currentStepData.cssGradient};">
 					<div class="flex items-center justify-between mb-1">
 						<span class="text-xs font-mono text-white/70">Step {currentStepData.num}</span>
 						<span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/20 text-white">

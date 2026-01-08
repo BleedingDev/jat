@@ -27,6 +27,7 @@
 		desc: stage.desc,
 		color: stage.colors.primary,
 		bgClass: stage.bgGradient,
+		cssGradient: stage.cssGradient,
 		icon: stage.icon
 	}));
 
@@ -503,7 +504,7 @@
 				class="rounded-xl overflow-hidden shadow-2xl border border-gray-700"
 				style="box-shadow: 0 0 35px {currentStepData.color}50, 0 0 60px {currentStepData.color}20;"
 			>
-				<div class="bg-gradient-to-r {currentStepData.bgClass} p-3">
+				<div class="p-3" style="background: {currentStepData.cssGradient};">
 					<div class="flex items-center justify-between mb-1">
 						<span class="text-xs font-mono text-white/70">Step {currentStepData.num}</span>
 						<span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/20 text-white">
