@@ -13,11 +13,11 @@
 <nav
 	class="fixed top-0 left-0 right-0 z-50 transition-all duration-300 {scrolled ? 'nav-scrolled' : ''}"
 >
-	<div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+	<div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between font-mono">
 		<Logo />
 
 		<!-- Nav links -->
-		<div class="hidden md:flex items-center gap-8">
+		<div class="hidden md:flex items-center gap-8 ">
 			<a
 				href="#features"
 				class="text-sm text-gray-400 hover:text-white transition-colors font-medium"
