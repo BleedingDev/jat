@@ -143,10 +143,10 @@
 
 	<!-- Content -->
 	<div class="relative z-10">
-		<!-- Header: Icon + Title (stacked on mobile, inline on md+) -->
-		<div class="flex flex-col md:flex-row md:items-start gap-3 md:gap-4 mb-4 md:mb-5">
+		<!-- Header: Icon + Title inline -->
+		<div class="flex items-start gap-4 mb-5">
 			<!-- Icon with geometric container -->
-			<div class="w-12 h-12 md:w-16 md:h-16 rounded-xl bg-gradient-to-br {gradient} p-[1px] shrink-0 group-hover:scale-110 transition-transform duration-300">
+			<div class="w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br {gradient} p-[1px] shrink-0 group-hover:scale-110 transition-transform duration-300">
 				<div class="w-full h-full rounded-[10px] bg-gray-900 flex items-center justify-center relative overflow-hidden">
 					<!-- Geometric pattern overlay -->
 					<div class="absolute inset-0 opacity-20">
@@ -159,21 +159,21 @@
 					</div>
 
 					{#if icon === 'kanban'}
-						<svg class="w-6 h-6 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-7 h-7 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
 						</svg>
 					{:else if icon === 'robots'}
-						<svg class="w-6 h-6 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-7 h-7 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
 							<circle cx="8" cy="9" r="1.5" fill="currentColor"/>
 							<circle cx="16" cy="9" r="1.5" fill="currentColor"/>
 						</svg>
 					{:else if icon === 'code'}
-						<svg class="w-6 h-6 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-7 h-7 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
 						</svg>
 					{:else if icon === 'team'}
-						<svg class="w-6 h-6 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-7 h-7 md:w-8 md:h-8 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
 						</svg>
 					{/if}
@@ -181,8 +181,8 @@
 			</div>
 
 			<div>
-				<h3 class="text-sm md:text-xl font-bold text-white mb-0.5 md:mb-1 group-hover:text-blue-100 transition-colors duration-300">{title}</h3>
-				<p class="text-xs md:text-base text-gray-500">{description}</p>
+				<h3 class="text-lg md:text-xl font-bold text-white mb-1 group-hover:text-blue-100 transition-colors duration-300">{title}</h3>
+				<p class="text-sm md:text-base text-gray-500">{description}</p>
 			</div>
 		</div>
 
