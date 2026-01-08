@@ -525,7 +525,7 @@ Next ready tasks:
 
 		<h1 class="text-5xl md:text-7xl font-bold text-white mb-6">
 			The World's First
-			<span class="block bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-secondary)] to-cyan-400 bg-clip-text text-transparent">
+			<span class="pb-2 block bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-secondary)] to-cyan-400 bg-clip-text text-transparent">
 				Agentic IDE.
 			</span>
 		</h1>
