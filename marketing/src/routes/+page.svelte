@@ -711,11 +711,13 @@ Next ready tasks:
 			<div class="absolute -top-6 -left-4 text-6xl text-[var(--color-primary)]/20 font-serif">"</div>
 			<blockquote class="text-lg md:text-xl text-gray-300 leading-relaxed pl-8 border-l-2 border-[var(--color-primary)]/30">
 				<p class="mb-4">
+					<span class="shimmer-text-slow">
 					Clearly some powerful <span class="font-semibold">alien tool</span> was handed around except it comes with no manual and everyone has to figure out how to hold it and operate it...
 
 					<span class="text-gray-500 italic">
 					agents, subagents, prompts, contexts, memory, modes, permissions, tools, plugins, skills, hooks, MCP, workflows...
 					</span>
+				</span>
 				</p>
 			</blockquote>
 			<cite class="block mt-4 pl-8 text-sm text-gray-500">
@@ -782,7 +784,9 @@ Next ready tasks:
 
 		<div class="text-center mt-12">
 			<p class="text-gray-500">
-				The alien tool came with no manual. <span class="text-white">So we wrote one.</span>
+				<span class="shimmer-text-fast">
+					The alien tool came with no manual. <span class="text-white">So we wrote one.</span>
+				</span>
 			</p>
 		</div>
 	</div>

@@ -169,7 +169,7 @@
 			<div class="gradient-border p-1 max-w-2xl mx-auto mb-8">
 				<div class="code-block flex items-center justify-between p-4 gap-4">
 					<code class="text-sm text-gray-300 font-mono truncate flex-1">
-						{installCommand}
+						<span class="shimmer-text-fast">{installCommand}</span>
 					</code>
 					<button
 						onclick={copyCommand}
