@@ -625,11 +625,11 @@ Next ready tasks:
 						<div class="absolute inset-0 rounded-2xl bg-gradient-to-br {card.color} opacity-0 group-hover:opacity-20 transition-opacity blur-xl"></div>
 
 						<div class="relative z-10">
-							<div class="flex items-start gap-4">
-								<div class="w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br {card.color} p-0.5 shrink-0">
+							<div class="flex flex-col md:flex-row md:items-start gap-3 md:gap-4">
+								<div class="w-12 h-12 md:w-16 md:h-16 rounded-xl bg-gradient-to-br {card.color} p-0.5 shrink-0">
 									<div class="w-full h-full rounded-[10px] bg-gray-900 flex items-center justify-center">
 										{#if card.icon === 'swarm'}
-											<svg class="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-6 h-6 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<circle cx="6" cy="6" r="2" stroke-width="2"/>
 												<circle cx="18" cy="6" r="2" stroke-width="2"/>
 												<circle cx="6" cy="18" r="2" stroke-width="2"/>
@@ -638,25 +638,25 @@ Next ready tasks:
 												<path stroke-linecap="round" stroke-width="1.5" d="M8 8l2.5 2.5M16 8l-2.5 2.5M8 16l2.5-2.5M16 16l-2.5-2.5"/>
 											</svg>
 										{:else if card.icon === 'question'}
-											<svg class="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-6 h-6 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 											</svg>
 										{:else if card.icon === 'tree'}
-											<svg class="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-6 h-6 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h10M4 18h6"/>
 												<circle cx="18" cy="14" r="2" stroke-width="2"/>
 												<circle cx="14" cy="18" r="2" stroke-width="2"/>
 											</svg>
 										{:else if card.icon === 'auto'}
-											<svg class="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-6 h-6 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
 											</svg>
 										{:else if card.icon === 'editor'}
-											<svg class="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-6 h-6 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
 											</svg>
 										{:else if card.icon === 'git'}
-											<svg class="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<svg class="w-6 h-6 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<circle cx="12" cy="6" r="3" stroke-width="2"/>
 												<circle cx="6" cy="18" r="3" stroke-width="2"/>
 												<circle cx="18" cy="18" r="3" stroke-width="2"/>
@@ -666,8 +666,8 @@ Next ready tasks:
 									</div>
 								</div>
 								<div>
-									<h3 class="text-base md:text-xl font-bold text-white mb-1">{card.title}</h3>
-									<p class="text-sm md:text-base text-gray-400">{card.desc}</p>
+									<h3 class="text-sm md:text-xl font-bold text-white mb-0.5 md:mb-1">{card.title}</h3>
+									<p class="text-xs md:text-base text-gray-400">{card.desc}</p>
 								</div>
 							</div>
 						</div>
@@ -786,11 +786,13 @@ Next ready tasks:
 		</div>
 
 		<div class="text-center mt-12">
-			<p class="text-gray-500">
+			<div class="text-gray-500">
 				<span class="shimmer-text-fast !text-gray-500">
-					The alien tool came with no manual. <span class="text-white">So we wrote one.</span>
+					The alien tool came with no manual. 
+					<br>
+					<div class="text-white mt-6">So I wrote one.</div>
 				</span>
-			</p>
+			</div>
 		</div>
 	</div>
 </section>
