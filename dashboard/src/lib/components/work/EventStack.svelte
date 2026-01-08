@@ -1149,9 +1149,21 @@
 											<div class="space-y-1.5">
 												{#each bundle.humanActions as action}
 													<div class="p-2 rounded bg-warning/10 border border-warning/30">
-														<div class="font-medium text-xs text-warning">{action.title}</div>
+														{#if action.title}
+															<div class="font-medium text-xs text-warning">{action.title}</div>
+														{/if}
 														{#if action.description}
 															<div class="text-[10px] mt-1 whitespace-pre-wrap text-warning/70">{action.description}</div>
+														{/if}
+														{#if action.items && action.items.length > 0}
+															<ul class="mt-1 space-y-0.5">
+																{#each action.items as item}
+																	<li class="flex items-start gap-1.5 text-[10px] text-warning/80">
+																		<span class="mt-0.5">☐</span>
+																		<span class="whitespace-pre-wrap">{item}</span>
+																	</li>
+																{/each}
+															</ul>
 														{/if}
 													</div>
 												{/each}
@@ -1611,11 +1623,23 @@
 													<div class="space-y-1.5">
 														{#each bundle.humanActions as action}
 															<div class="p-2 rounded" style="background: oklch(0.18 0.04 30); border: 1px solid oklch(0.30 0.06 30);">
-																<div class="font-medium text-xs" style="color: oklch(0.80 0.10 30);">{action.title}</div>
+																{#if action.title}
+																	<div class="font-medium text-xs" style="color: oklch(0.80 0.10 30);">{action.title}</div>
+																{/if}
 																{#if action.description}
 																	<div class="text-[10px] mt-1 whitespace-pre-wrap" style="color: oklch(0.65 0.05 30);">
 																		{action.description}
 																	</div>
+																{/if}
+																{#if action.items && action.items.length > 0}
+																	<ul class="mt-1 space-y-0.5">
+																		{#each action.items as item}
+																			<li class="flex items-start gap-1.5 text-[10px]" style="color: oklch(0.70 0.08 30);">
+																				<span class="mt-0.5">☐</span>
+																				<span class="whitespace-pre-wrap">{item}</span>
+																			</li>
+																		{/each}
+																	</ul>
 																{/if}
 															</div>
 														{/each}
