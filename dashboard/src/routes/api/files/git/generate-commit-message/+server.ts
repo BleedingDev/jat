@@ -30,7 +30,7 @@ function buildPrompt(diff: string, stagedFiles: string[]): string {
 	// Truncate diff if too long (keep first 8000 chars to stay within token limits)
 	const truncatedDiff = diff.length > 8000 ? diff.substring(0, 8000) + '\n\n[... diff truncated ...]' : diff;
 
-	return `You are a git commit message generator. Analyze the following staged changes and generate a clear, concise commit message.
+	return `Generate a git commit message for these staged changes.
 
 STAGED FILES:
 ${stagedFiles.join('\n')}
@@ -38,22 +38,15 @@ ${stagedFiles.join('\n')}
 DIFF:
 ${truncatedDiff}
 
-Generate a commit message following these conventions:
-1. First line: imperative mood summary (50 chars max), e.g., "Add user authentication", "Fix login redirect bug"
-2. Leave a blank line after the subject
-3. Body (optional): explain WHAT changed and WHY (not HOW - the diff shows that)
-4. Use conventional commit prefixes when appropriate: feat:, fix:, docs:, style:, refactor:, test:, chore:
+Rules:
+- First line: imperative mood, 50 chars max (e.g., "Add user auth", "Fix login bug")
+- Use conventional prefixes: feat:, fix:, docs:, refactor:, test:, chore:
+- Optional body after blank line: explain WHAT and WHY, not HOW
+- Be specific and concise
 
-Guidelines:
-- Be specific but concise
-- Focus on the user-visible impact when possible
-- If multiple unrelated changes, suggest they should be separate commits
+IMPORTANT: Return ONLY valid JSON, no other text. Do not include markdown code blocks.
 
-Respond with ONLY a JSON object in this format:
-{
-  "message": "<commit message>",
-  "reasoning": "<brief explanation of why this message was chosen>"
-}`;
+{"message": "<the commit message>", "reasoning": "<brief explanation>"}`;
 }
 
 export const POST: RequestHandler = async ({ request }) => {
