@@ -22,7 +22,7 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, closeDiffPreviewDrawer, setGitAheadCount } from '$lib/stores/drawerStore';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences, getActiveProject } from '$lib/stores/preferences.svelte';

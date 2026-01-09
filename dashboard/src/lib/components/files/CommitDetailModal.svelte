@@ -7,8 +7,10 @@
 	 * - Complete commit message (multi-line)
 	 * - Formatted date and time
 	 * - Author details (name and email)
-	 * - List of changed files with change types and stats
+	 * - List of changed files with change types and stats (clickable to view diff)
 	 */
+
+	import { openCommitDiffDrawer } from '$lib/stores/drawerStore';
 
 	interface Props {
 		project: string;
@@ -195,6 +197,14 @@
 		}
 	}
 
+	/**
+	 * Handle click on a file to view its diff
+	 */
+	function handleFileClick(filePath: string) {
+		if (!commit) return;
+		openCommitDiffDrawer(filePath, project, commit.hash);
+	}
+
 	// Fetch commit when modal opens
 	$effect(() => {
 		if (isOpen && commitHash) {
@@ -333,7 +343,7 @@
 									{@const typeInfo = getFileTypeInfo(file.type)}
 									{@const fileName = getFileName(file.path)}
 									{@const directory = getDirectory(file.path)}
-									<li class="file-item">
+									<li class="file-item file-item-clickable" onclick={() => handleFileClick(file.path)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && handleFileClick(file.path)}>
 										<span
 											class="file-type"
 											style="color: {typeInfo.color}; background: {typeInfo.bgColor}"
@@ -734,11 +744,31 @@
 		padding: 0.375rem 0.5rem;
 		background: oklch(0.14 0.01 250);
 		border-radius: 0.375rem;
-		transition: background 0.1s ease;
+		transition: all 0.15s ease;
 	}
 
 	.file-item:hover {
 		background: oklch(0.18 0.02 250);
+	}
+
+	.file-item-clickable {
+		cursor: pointer;
+		border: 1px solid transparent;
+	}
+
+	.file-item-clickable:hover {
+		background: oklch(0.20 0.03 200);
+		border-color: oklch(0.40 0.10 200 / 0.3);
+	}
+
+	.file-item-clickable:focus {
+		outline: none;
+		border-color: oklch(0.55 0.15 200);
+		box-shadow: 0 0 0 2px oklch(0.55 0.15 200 / 0.2);
+	}
+
+	.file-item-clickable:active {
+		background: oklch(0.22 0.04 200);
 	}
 
 	.file-type {

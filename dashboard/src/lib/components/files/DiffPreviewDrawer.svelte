@@ -23,6 +23,7 @@
 		filePath = $bindable(''),
 		projectName = $bindable(''),
 		isStaged = $bindable(false),
+		commitHash = $bindable(null),
 		onClose = () => {},
 		onStage = undefined,
 		onUnstage = undefined
@@ -31,6 +32,7 @@
 		filePath?: string;
 		projectName?: string;
 		isStaged?: boolean;
+		commitHash?: string | null;
 		onClose?: () => void;
 		onStage?: (path: string) => Promise<void>;
 		onUnstage?: (path: string) => Promise<void>;
@@ -235,9 +237,14 @@
 		try {
 			const params = new URLSearchParams({
 				project: projectName,
-				path: filePath,
-				staged: isStaged.toString()
+				path: filePath
 			});
+			// Add commit hash if viewing a specific commit's diff
+			if (commitHash) {
+				params.set('commit', commitHash);
+			} else {
+				params.set('staged', isStaged.toString());
+			}
 			const response = await fetch(`/api/files/git/diff?${params}`);
 			const data = await response.json();
 
@@ -386,15 +393,20 @@
 					</div>
 				{/if}
 
-				<!-- Staged indicator -->
-				{#if isStaged}
+				<!-- Commit hash indicator -->
+				{#if commitHash}
+					<span class="badge badge-sm" style="background: oklch(0.45 0.12 200 / 0.3); color: oklch(0.75 0.15 200); border: none;">
+						{commitHash.slice(0, 7)}
+					</span>
+				{:else if isStaged}
+					<!-- Staged indicator -->
 					<span class="badge badge-sm badge-success">Staged</span>
 				{/if}
 			</div>
 
 			<div class="flex items-center gap-2">
-				<!-- Stage/Unstage button -->
-				{#if (onStage && !isStaged) || (onUnstage && isStaged)}
+				<!-- Stage/Unstage button (only for working tree diffs, not commit diffs) -->
+				{#if !commitHash && ((onStage && !isStaged) || (onUnstage && isStaged))}
 					<button
 						onclick={handleStageToggle}
 						class="btn btn-xs"
@@ -478,7 +490,7 @@
 			<div class="flex items-center gap-3">
 				<span>{language()}</span>
 				<span>|</span>
-				<span>{isStaged ? 'Staged changes' : 'Working tree changes'}</span>
+				<span>{commitHash ? `Commit ${commitHash.slice(0, 7)}` : isStaged ? 'Staged changes' : 'Working tree changes'}</span>
 			</div>
 			<div class="flex items-center gap-2">
 				<span>Esc: Close</span>

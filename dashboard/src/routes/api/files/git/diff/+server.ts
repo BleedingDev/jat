@@ -9,6 +9,8 @@
  * - path: Specific file path (optional - if omitted, returns all changes)
  * - staged: 'true' for staged changes (optional)
  * - baseline: Git ref to compare against (optional - e.g., commit SHA, branch name)
+ * - commit: Specific commit hash to show changes from (optional)
+ *           When provided, shows the diff for that commit (parent -> commit)
  *
  * When path is specified, also returns original (baseline/HEAD) and modified (working tree)
  * content for use with Monaco diff editor.
@@ -24,6 +26,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	const filePath = url.searchParams.get('path');
 	const staged = url.searchParams.get('staged') === 'true';
 	const baseline = url.searchParams.get('baseline'); // New: baseline commit for comparison
+	const commit = url.searchParams.get('commit'); // Specific commit to show diff for
 
 	const result = await getGitForProject(projectName);
 	if ('error' in result) {
@@ -35,7 +38,13 @@ export const GET: RequestHandler = async ({ url }) => {
 	try {
 		let diff: string;
 
-		if (baseline) {
+		if (commit) {
+			// Show diff for a specific commit (parent -> commit)
+			// Use commit~1 (parent) as the base for comparison
+			diff = filePath
+				? await git.diff([`${commit}~1`, commit, '--', filePath])
+				: await git.diff([`${commit}~1`, commit]);
+		} else if (baseline) {
 			// Compare against baseline commit (for review diffs)
 			// This shows all changes from baseline to current working tree
 			diff = filePath
@@ -59,7 +68,21 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		if (filePath) {
 			try {
-				if (baseline) {
+				if (commit) {
+					// For commit diff: original is parent commit, modified is the commit itself
+					try {
+						original = await git.show([`${commit}~1:${filePath}`]);
+					} catch {
+						// New file in this commit - no original
+						original = '';
+					}
+					try {
+						modified = await git.show([`${commit}:${filePath}`]);
+					} catch {
+						// Deleted file in this commit - no modified content
+						modified = '';
+					}
+				} else if (baseline) {
 					// For baseline diff: original is baseline commit, modified is working tree
 					try {
 						original = await git.show([`${baseline}:${filePath}`]);
@@ -114,6 +137,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			path: filePath || null,
 			staged,
 			baseline: baseline || null, // Include baseline ref if provided
+			commit: commit || null, // Include commit hash if provided
 			raw: diff,
 			files,
 			// Include original and modified content for Monaco diff editor

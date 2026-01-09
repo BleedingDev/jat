@@ -176,6 +176,7 @@ export const isDiffPreviewDrawerOpen = writable(false);
 export const diffPreviewDrawerPath = writable<string>('');
 export const diffPreviewDrawerProject = writable<string>('');
 export const diffPreviewDrawerIsStaged = writable(false);
+export const diffPreviewDrawerCommitHash = writable<string | null>(null);
 
 /**
  * Open the diff preview drawer for a specific file
@@ -187,6 +188,21 @@ export function openDiffPreviewDrawer(filePath: string, projectName: string, isS
 	diffPreviewDrawerPath.set(filePath);
 	diffPreviewDrawerProject.set(projectName);
 	diffPreviewDrawerIsStaged.set(isStaged);
+	diffPreviewDrawerCommitHash.set(null);
+	isDiffPreviewDrawerOpen.set(true);
+}
+
+/**
+ * Open the diff preview drawer for a specific file in a commit
+ * @param filePath - Path to the file (relative to project root)
+ * @param projectName - Project name (e.g., 'jat', 'chimaro')
+ * @param commitHash - Full or short commit hash
+ */
+export function openCommitDiffDrawer(filePath: string, projectName: string, commitHash: string) {
+	diffPreviewDrawerPath.set(filePath);
+	diffPreviewDrawerProject.set(projectName);
+	diffPreviewDrawerIsStaged.set(false);
+	diffPreviewDrawerCommitHash.set(commitHash);
 	isDiffPreviewDrawerOpen.set(true);
 }
 
