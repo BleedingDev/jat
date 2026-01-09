@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>JAT OG Image Generator</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+		html, body {
+			width: 1200px;
+			height: 630px;
+			max-height: 630px;
+			overflow: hidden;
+			background: linear-gradient(135deg, #0a0a12 0%, #12121f 50%, #0a0a12 100%);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+			position: relative;
+			overflow: hidden;
+		}
+
+		/* Subtle grid pattern */
+		body::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			background-image:
+				linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+				linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+			background-size: 40px 40px;
+		}
+
+		/* Glow effect behind logo */
+		.glow {
+			position: absolute;
+			width: 400px;
+			height: 400px;
+			background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+			border-radius: 50%;
+			filter: blur(60px);
+		}
+
+		.logo-container {
+			position: relative;
+			z-index: 10;
+		}
+
+		.logo {
+			padding: 28px 56px;
+			border-radius: 16px;
+			font-weight: bold;
+			font-size: 100px;
+			letter-spacing: 0.2em;
+			background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%);
+			border: 2px solid rgba(59, 130, 246, 0.3);
+			color: #60a5fa;
+			text-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+		}
+
+		.tagline {
+			margin-top: 40px;
+			font-size: 40px;
+			color: #9ca3af;
+			letter-spacing: 0.05em;
+			position: relative;
+			z-index: 10;
+		}
+
+		.tagline span {
+			color: #60a5fa;
+		}
+
+		.subtitle {
+			margin-top: 20px;
+			font-size: 28px;
+			color: #6b7280;
+			position: relative;
+			z-index: 10;
+		}
+
+		/* Corner accents */
+		.corner {
+			position: absolute;
+			width: 80px;
+			height: 80px;
+			border: 2px solid rgba(59, 130, 246, 0.2);
+		}
+		.corner.tl { top: 40px; left: 40px; border-right: none; border-bottom: none; }
+		.corner.tr { top: 40px; right: 40px; border-left: none; border-bottom: none; }
+		.corner.bl { bottom: 40px; left: 40px; border-right: none; border-top: none; }
+		.corner.br { bottom: 40px; right: 40px; border-left: none; border-top: none; }
+	</style>
+</head>
+<body>
+	<div class="glow"></div>
+	<div class="corner tl"></div>
+	<div class="corner tr"></div>
+	<div class="corner bl"></div>
+	<div class="corner br"></div>
+
+	<div class="logo-container">
+		<div class="logo">JAT</div>
+	</div>
+	<div class="tagline">The World's First <span>Agentic IDE</span></div>
+	<div class="subtitle">Everything you need to vibe code. In one place.</div>
+</body>
+</html>
