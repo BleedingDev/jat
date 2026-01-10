@@ -23,6 +23,7 @@
 	import GitPanel from '$lib/components/files/GitPanel.svelte';
 	import QuickFileFinder from '$lib/components/files/QuickFileFinder.svelte';
 	import GlobalSearch from '$lib/components/files/GlobalSearch.svelte';
+	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 	import { FilesSkeleton } from '$lib/components/skeleton';
 
@@ -73,9 +74,16 @@
 	let fileTreeRef: { scrollToFile: (path: string) => Promise<void> } | null = $state(null);
 
 	// Layout state
-	let leftPanelWidth = $state(303); // pixels
+	let leftPanelWidth = $state(303); // pixels (for desktop horizontal layout)
 	const MIN_PANEL_WIDTH = 180;
 	const MAX_PANEL_WIDTH = 600;
+
+	// Mobile layout state (for vertical stacked layout)
+	let isMobileLayout = $state(false);
+	let topPanelHeight = $state(40); // percentage of container height
+	const MOBILE_BREAKPOINT = 768;
+	const MIN_PANEL_HEIGHT_PERCENT = 15;
+	const MAX_PANEL_HEIGHT_PERCENT = 70;
 
 	// Divider drag state
 	let isDragging = $state(false);
@@ -105,6 +113,19 @@
 		isDragging = false;
 		document.removeEventListener('mousemove', handleDividerMouseMove);
 		document.removeEventListener('mouseup', handleDividerMouseUp);
+	}
+
+	// Mobile horizontal divider resize handler
+	let containerRef: HTMLDivElement | null = $state(null);
+
+	function handleMobileResize(deltaY: number) {
+		if (!containerRef) return;
+		const containerHeight = containerRef.offsetHeight;
+		const deltaPercent = (deltaY / containerHeight) * 100;
+		let newHeight = topPanelHeight + deltaPercent;
+		// Clamp to min/max
+		newHeight = Math.max(MIN_PANEL_HEIGHT_PERCENT, Math.min(MAX_PANEL_HEIGHT_PERCENT, newHeight));
+		topPanelHeight = newHeight;
 	}
 
 	// Sync selectedProject from URL query parameter
@@ -712,8 +733,17 @@
 
 	onMount(() => {
 		fetchProjects();
+
+		// Track viewport size for mobile/desktop layout switching
+		function handleResize() {
+			isMobileLayout = window.innerWidth < MOBILE_BREAKPOINT;
+		}
+		handleResize(); // Check initial state
+		window.addEventListener('resize', handleResize);
+
 		return () => {
 			stopGitStatusPolling();
+			window.removeEventListener('resize', handleResize);
 		};
 	});
 
@@ -802,10 +832,13 @@
 	{:else}
 		<!-- Main Content -->
 		<div class="files-content" transition:fade={{ duration: 150 }}>
-			<!-- Body: Side-by-side layout -->
-			<div class="files-body">
+			<!-- Body: Side-by-side (desktop) or stacked (mobile) layout -->
+			<div class="files-body" class:mobile-layout={isMobileLayout} bind:this={containerRef}>
 				<!-- Left Panel: File Tree -->
-				<div class="file-tree-panel" style="width: {leftPanelWidth}px;">
+				<div
+					class="file-tree-panel"
+					style="{isMobileLayout ? `height: ${topPanelHeight}%` : `width: ${leftPanelWidth}px`};"
+				>
 					<!-- Project Selector in Panel Header -->
 					<div class="panel-header project-header">
 						<div class="dropdown dropdown-bottom flex-1">
@@ -907,20 +940,24 @@
 					</div>
 				</div>
 
-				<!-- Resizable Divider (vertical) -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				class="vertical-divider"
-				class:dragging={isDragging}
-				onmousedown={handleDividerMouseDown}
-				role="separator"
-				aria-orientation="vertical"
-			>
-				<div class="divider-grip">
-					<div class="grip-line"></div>
-					<div class="grip-line"></div>
-				</div>
-			</div>
+				<!-- Resizable Divider: vertical on desktop, horizontal on mobile -->
+				{#if isMobileLayout}
+					<ResizableDivider onResize={handleMobileResize} />
+				{:else}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="vertical-divider"
+						class:dragging={isDragging}
+						onmousedown={handleDividerMouseDown}
+						role="separator"
+						aria-orientation="vertical"
+					>
+						<div class="divider-grip">
+							<div class="grip-line"></div>
+							<div class="grip-line"></div>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Right Panel: Editor -->
 				<div class="editor-panel">
@@ -1389,10 +1426,30 @@
 		margin: 0.5rem 0 0;
 	}
 
-	/* Responsive */
+	/* Mobile Layout (controlled by JS isMobileLayout state) */
+	.files-body.mobile-layout {
+		flex-direction: column;
+	}
+
+	.files-body.mobile-layout .file-tree-panel {
+		width: 100% !important;
+		max-width: none;
+		min-width: 0;
+		min-height: 100px;
+		border-right: none;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.files-body.mobile-layout .editor-panel {
+		min-width: 0;
+		flex: 1;
+		min-height: 0;
+	}
+
+	/* Responsive - additional small screen tweaks */
 	@media (max-width: 768px) {
 		.files-content {
-			padding: 1rem;
+			padding: 0.5rem;
 		}
 
 		.files-header {
@@ -1403,27 +1460,6 @@
 		.project-selector {
 			width: 100%;
 			max-width: none;
-		}
-
-		.files-body {
-			flex-direction: column;
-		}
-
-		.file-tree-panel {
-			width: 100% !important;
-			max-width: none;
-			min-width: 0;
-			max-height: 200px;
-			border-right: none;
-			border-bottom: 1px solid oklch(0.22 0.02 250);
-		}
-
-		.vertical-divider {
-			display: none;
-		}
-
-		.editor-panel {
-			min-width: 0;
 		}
 	}
 </style>
