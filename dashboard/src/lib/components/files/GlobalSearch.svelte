@@ -56,9 +56,17 @@
 	// Debounce timer
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// Search when query changes
+	// Search when query or filters change
 	$effect(() => {
 		if (!isOpen) return;
+
+		// Track filter changes to re-run search
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		globFilter;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		useRegex;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		caseSensitive;
 
 		// Clear previous timer
 		if (debounceTimer) {
