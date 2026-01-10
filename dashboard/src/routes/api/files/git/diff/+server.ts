@@ -155,6 +155,11 @@ interface DiffFile {
 	additions: number;
 	deletions: number;
 	chunks: DiffChunk[];
+	// Metadata changes (mode, rename, etc.)
+	modeChange?: { oldMode: string; newMode: string };
+	isNewFile?: boolean;
+	isDeletedFile?: boolean;
+	isBinary?: boolean;
 }
 
 interface DiffChunk {
@@ -192,8 +197,47 @@ function parseDiff(diff: string): DiffFile[] {
 		const chunks: DiffChunk[] = [];
 		let currentChunk: DiffChunk | null = null;
 
+		// Metadata detection
+		let modeChange: { oldMode: string; newMode: string } | undefined;
+		let isNewFile = false;
+		let isDeletedFile = false;
+		let isBinary = false;
+
 		for (let i = 1; i < lines.length; i++) {
 			const line = lines[i];
+
+			// Detect mode changes
+			if (line.startsWith('old mode ')) {
+				const oldMode = line.substring(9).trim();
+				// Look for new mode on next line
+				const nextLine = lines[i + 1];
+				if (nextLine && nextLine.startsWith('new mode ')) {
+					const newMode = nextLine.substring(9).trim();
+					modeChange = { oldMode, newMode };
+					i++; // Skip the next line since we processed it
+				}
+				continue;
+			}
+			if (line.startsWith('new mode ')) {
+				// Standalone new mode (shouldn't happen but handle gracefully)
+				continue;
+			}
+
+			// Detect new/deleted files
+			if (line.startsWith('new file mode')) {
+				isNewFile = true;
+				continue;
+			}
+			if (line.startsWith('deleted file mode')) {
+				isDeletedFile = true;
+				continue;
+			}
+
+			// Detect binary files
+			if (line.includes('Binary files') || line.startsWith('Binary files')) {
+				isBinary = true;
+				continue;
+			}
 
 			// Chunk header
 			if (line.startsWith('@@')) {
@@ -211,9 +255,7 @@ function parseDiff(diff: string): DiffFile[] {
 			if (
 				line.startsWith('index ') ||
 				line.startsWith('---') ||
-				line.startsWith('+++') ||
-				line.startsWith('new file') ||
-				line.startsWith('deleted file')
+				line.startsWith('+++')
 			) {
 				continue;
 			}
@@ -240,7 +282,11 @@ function parseDiff(diff: string): DiffFile[] {
 			path,
 			additions,
 			deletions,
-			chunks
+			chunks,
+			modeChange,
+			isNewFile,
+			isDeletedFile,
+			isBinary
 		});
 	}
 
