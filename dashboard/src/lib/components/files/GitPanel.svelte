@@ -635,9 +635,32 @@
 		showCommitModal = true;
 	}
 
+	// Auto-refresh interval for git status (5 seconds)
+	const AUTO_REFRESH_INTERVAL = 5000;
+	let statusPollInterval: ReturnType<typeof setInterval> | null = null;
+
+	function startStatusPolling() {
+		if (statusPollInterval) return;
+		statusPollInterval = setInterval(() => {
+			// Only poll if not currently loading or performing an operation
+			if (!isLoading && !isCommitting && !isPushing && !isPulling && !isFetching) {
+				fetchStatus();
+			}
+		}, AUTO_REFRESH_INTERVAL);
+	}
+
+	function stopStatusPolling() {
+		if (statusPollInterval) {
+			clearInterval(statusPollInterval);
+			statusPollInterval = null;
+		}
+	}
+
 	onMount(() => {
 		fetchStatus();
 		fetchTimeline();
+		startStatusPolling();
+		return () => stopStatusPolling();
 	});
 
 	// Refetch when project changes
