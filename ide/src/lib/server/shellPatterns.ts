@@ -50,13 +50,36 @@ export const SHELL_PROMPT_PATTERNS = [
  * This dialog appears on first use of --dangerously-skip-permissions
  * and expects user to select "1. No" or "2. Yes, I understand".
  *
- * When detected, spawn should auto-accept by sending "2" + Enter.
+ * IMPORTANT: The old pattern list included 'dangerously-skip-permissions' which
+ * caused false positives because that string appears in the COMMAND being run,
+ * not just in the warning dialog. The new approach requires MULTIPLE patterns
+ * that can ONLY appear together in the actual warning dialog.
  */
 export const YOLO_WARNING_PATTERNS = [
-	'dangerously-skip-permissions',  // The flag name appears in warning
-	'bypass all permission checks',  // Warning text
+	'bypass all permission checks',  // Warning text - specific to dialog
 	'No, exit',                      // Option 1 text
 	'Yes, I understand',             // Option 2 text
-	'1. No',                         // Option format
-	'2. Yes'                         // Option format
 ];
+
+/**
+ * Detect if the actual YOLO warning dialog is showing.
+ *
+ * Requires MULTIPLE patterns to match to avoid false positives.
+ * The warning dialog contains:
+ * - "bypass all permission checks" (the warning text)
+ * - "Yes, I understand" OR "2. Yes" (the accept option)
+ *
+ * This prevents false matches when 'dangerously-skip-permissions' appears
+ * in the command line or when numbered lists contain "2. Yes".
+ */
+export function isYoloWarningDialog(output: string): boolean {
+	// Must have the warning text
+	const hasWarningText = output.includes('bypass all permission checks');
+	// Must have one of the accept option patterns
+	const hasAcceptOption = output.includes('Yes, I understand') || output.includes('2. Yes');
+	// Must have the reject option to confirm it's the full dialog
+	const hasRejectOption = output.includes('No, exit') || output.includes('1. No');
+
+	// All three conditions must be true for a real YOLO dialog
+	return hasWarningText && hasAcceptOption && hasRejectOption;
+}

@@ -54,6 +54,8 @@
 	let deletedFiles = $state<string[]>([]);
 	let untrackedFiles = $state<string[]>([]);
 	let createdFiles = $state<string[]>([]);
+	let renamedFiles = $state<{ from: string; to: string }[]>([]);
+	let conflictedFiles = $state<string[]>([]);
 
 	// Section collapse state
 	let stagedCollapsed = $state(false);
@@ -77,7 +79,9 @@
 		modifiedFiles.filter(f => !stagedFiles.includes(f)).length +
 		deletedFiles.filter(f => !stagedFiles.includes(f)).length +
 		untrackedFiles.filter(f => !stagedFiles.includes(f)).length +
-		createdFiles.filter(f => !stagedFiles.includes(f)).length
+		createdFiles.filter(f => !stagedFiles.includes(f)).length +
+		renamedFiles.filter(r => !stagedFiles.includes(r.to)).length +
+		conflictedFiles.length // Conflicted files always show, can't be staged until resolved
 	);
 
 	// Timeline state
@@ -156,22 +160,27 @@
 	 */
 	function getStatusIndicator(
 		file: string,
-		type: 'staged' | 'modified' | 'deleted' | 'untracked' | 'created'
+		type: 'staged' | 'modified' | 'deleted' | 'untracked' | 'created' | 'renamed' | 'conflicted'
 	): { letter: string; color: string; title: string } {
 		switch (type) {
 			case 'staged':
-				// Could be added, modified, or deleted - check which
+				// Could be added, modified, deleted, or renamed - check which
 				if (createdFiles.includes(file)) return { letter: 'A', color: 'oklch(0.65 0.15 145)', title: 'Added' };
 				if (deletedFiles.includes(file)) return { letter: 'D', color: 'oklch(0.65 0.15 25)', title: 'Deleted' };
+				if (renamedFiles.some(r => r.to === file)) return { letter: 'R', color: 'oklch(0.65 0.15 200)', title: 'Renamed' };
 				return { letter: 'M', color: 'oklch(0.65 0.15 85)', title: 'Modified' };
 			case 'modified':
 				return { letter: 'M', color: 'oklch(0.65 0.15 85)', title: 'Modified' };
 			case 'deleted':
 				return { letter: 'D', color: 'oklch(0.65 0.15 25)', title: 'Deleted' };
 			case 'untracked':
-				return { letter: '?', color: 'oklch(0.55 0.02 250)', title: 'Untracked' };
+				return { letter: 'U', color: 'oklch(0.55 0.02 250)', title: 'Untracked' };
 			case 'created':
 				return { letter: 'A', color: 'oklch(0.65 0.15 145)', title: 'Added' };
+			case 'renamed':
+				return { letter: 'R', color: 'oklch(0.65 0.15 200)', title: 'Renamed' };
+			case 'conflicted':
+				return { letter: '!', color: 'oklch(0.65 0.18 25)', title: 'Conflict' };
 			default:
 				return { letter: '?', color: 'oklch(0.55 0.02 250)', title: 'Unknown' };
 		}
@@ -259,7 +268,7 @@
 	async function stageAll() {
 		if (isStagingAll) return;
 
-		const allChanges = [...modifiedFiles, ...deletedFiles, ...untrackedFiles, ...createdFiles];
+		const allChanges = [...modifiedFiles, ...deletedFiles, ...untrackedFiles, ...createdFiles, ...renamedFiles.map(r => r.to)];
 		if (allChanges.length === 0) return;
 
 		isStagingAll = true;
@@ -396,11 +405,13 @@
 	 * @param isStaged - Whether this is a staged file (true) or unstaged change (false)
 	 */
 	function handleFileClick(filePath: string, isStaged: boolean) {
-		// Open the diff preview drawer directly
-		openDiffPreviewDrawer(filePath, project, isStaged);
-		// Also call the callback if provided (for custom handling)
+		// If onFileClick callback is provided, use that instead of opening the drawer
+		// This allows parent components (like /git page) to show diff in a different way
 		if (onFileClick) {
 			onFileClick(filePath, isStaged);
+		} else {
+			// Default behavior: Open the diff preview drawer
+			openDiffPreviewDrawer(filePath, project, isStaged);
 		}
 	}
 
@@ -458,6 +469,8 @@
 			deletedFiles = data.deleted || [];
 			untrackedFiles = data.not_added || [];
 			createdFiles = data.created || [];
+			renamedFiles = data.renamed || [];
+			conflictedFiles = data.conflicted || [];
 
 			isClean = data.isClean;
 			error = null;
@@ -1151,6 +1164,73 @@
 											</svg>
 										{/if}
 									</button>
+									<span class="status-indicator" style="color: {status.color}" title={status.title}>
+										{status.letter}
+									</span>
+									<button
+										class="file-name-btn"
+										onclick={() => handleFileClick(file, false)}
+										title={file}
+									>
+										<span class="file-name">{fileName}</span>
+										{#if directory}
+											<span class="file-dir">{directory}</span>
+										{/if}
+									</button>
+								</div>
+							{/each}
+
+							<!-- Renamed files (exclude already staged) -->
+							{#each renamedFiles.filter(r => !stagedFiles.includes(r.to)) as renamed}
+								{@const status = getStatusIndicator(renamed.to, 'renamed')}
+								{@const fileName = getFileName(renamed.to)}
+								{@const fromFileName = getFileName(renamed.from)}
+								{@const directory = getDirectory(renamed.to)}
+								<div class="file-item">
+									<button
+										class="stage-btn"
+										onclick={() => stageFile(renamed.to)}
+										disabled={stagingFiles.has(renamed.to)}
+										title="Stage file"
+									>
+										{#if stagingFiles.has(renamed.to)}
+											<span class="loading loading-spinner loading-xs"></span>
+										{:else}
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<line x1="12" y1="5" x2="12" y2="19" />
+												<line x1="5" y1="12" x2="19" y2="12" />
+											</svg>
+										{/if}
+									</button>
+									<span class="status-indicator" style="color: {status.color}" title={status.title}>
+										{status.letter}
+									</span>
+									<button
+										class="file-name-btn"
+										onclick={() => handleFileClick(renamed.to, false)}
+										title="{renamed.from} → {renamed.to}"
+									>
+										<span class="file-name">{fromFileName} → {fileName}</span>
+										{#if directory}
+											<span class="file-dir">{directory}</span>
+										{/if}
+									</button>
+								</div>
+							{/each}
+
+							<!-- Conflicted files (must resolve before staging) -->
+							{#each conflictedFiles as file}
+								{@const status = getStatusIndicator(file, 'conflicted')}
+								{@const fileName = getFileName(file)}
+								{@const directory = getDirectory(file)}
+								<div class="file-item conflicted">
+									<span class="conflict-icon" title="Resolve conflict before staging">
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+											<line x1="12" y1="9" x2="12" y2="13" />
+											<line x1="12" y1="17" x2="12.01" y2="17" />
+										</svg>
+									</span>
 									<span class="status-indicator" style="color: {status.color}" title={status.title}>
 										{status.letter}
 									</span>
@@ -2142,6 +2222,29 @@
 		width: 12px;
 		text-align: center;
 		flex-shrink: 0;
+	}
+
+	/* Conflict styles */
+	.file-item.conflicted {
+		background: oklch(0.65 0.15 25 / 0.1);
+		border-radius: 0.25rem;
+		padding: 0.125rem 0.25rem;
+		margin: 0 -0.25rem;
+	}
+
+	.conflict-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		color: oklch(0.65 0.18 25);
+		flex-shrink: 0;
+	}
+
+	.conflict-icon svg {
+		width: 14px;
+		height: 14px;
 	}
 
 	.file-name-btn {

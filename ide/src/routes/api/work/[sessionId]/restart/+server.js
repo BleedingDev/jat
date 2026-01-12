@@ -22,7 +22,7 @@ import {
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
 import { getJatDefaults } from '$lib/server/projectPaths.js';
-import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS, YOLO_WARNING_PATTERNS } from '$lib/server/shellPatterns.js';
+import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS, isYoloWarningDialog } from '$lib/server/shellPatterns.js';
 import { stripAnsi } from '$lib/utils/ansiToHtml.js';
 
 const execAsync = promisify(exec);
@@ -140,8 +140,10 @@ export async function POST({ params }) {
 				// Check for YOLO warning dialog (first-time --dangerously-skip-permissions)
 				// This dialog blocks startup and expects "1" (No) or "2" (Yes)
 				// Auto-accept by sending "2" + Enter
+				// IMPORTANT: Use isYoloWarningDialog() which requires MULTIPLE patterns
+				// to avoid false positives from the command line containing the flag name
 				if (!yoloWarningHandled) {
-					const hasYoloWarning = YOLO_WARNING_PATTERNS.some(p => paneOutput.includes(p));
+					const hasYoloWarning = isYoloWarningDialog(paneOutput);
 					if (hasYoloWarning) {
 						console.log(`[restart] YOLO permission warning detected - auto-accepting...`);
 						try {

@@ -20,12 +20,12 @@
 	import { fade, slide } from 'svelte/transition';
 	import { FileEditor, type OpenFile } from '$lib/components/files';
 	import FileTree from '$lib/components/files/FileTree.svelte';
-	import GitPanel from '$lib/components/files/GitPanel.svelte';
 	import QuickFileFinder from '$lib/components/files/QuickFileFinder.svelte';
 	import GlobalSearch from '$lib/components/files/GlobalSearch.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 	import { FilesSkeleton } from '$lib/components/skeleton';
+	import { setGitChangesCount, setGitAheadCount } from '$lib/stores/drawerStore';
 
 	// Types
 	interface Project {
@@ -62,13 +62,6 @@
 
 	// Global search state (Ctrl+Shift+F)
 	let globalSearchOpen = $state(false);
-
-	// Sidebar tab state (Files vs Git)
-	let activeTab = $state<'files' | 'git'>('files');
-
-	// Git status for tab badges (local to this page)
-	let gitChangesCount = $state(0);
-	let gitAheadCount = $state(0);
 
 	// FileTree component reference for scrolling
 	let fileTreeRef: { scrollToFile: (path: string) => Promise<void> } | null = $state(null);
@@ -687,8 +680,8 @@
 
 	async function fetchGitStatusForBadges() {
 		if (!selectedProject) {
-			gitChangesCount = 0;
-			gitAheadCount = 0;
+			setGitChangesCount(0);
+			setGitAheadCount(0);
 			return;
 		}
 
@@ -702,16 +695,16 @@
 				const deleted = (data.deleted || []).filter((f: string) => !staged.includes(f));
 				const untracked = (data.not_added || []).filter((f: string) => !staged.includes(f));
 				const created = (data.created || []).filter((f: string) => !staged.includes(f));
-				gitChangesCount = staged.length + modified.length + deleted.length + untracked.length + created.length;
-				gitAheadCount = data.ahead || 0;
+				setGitChangesCount(staged.length + modified.length + deleted.length + untracked.length + created.length);
+				setGitAheadCount(data.ahead || 0);
 			} else {
-				gitChangesCount = 0;
-				gitAheadCount = 0;
+				setGitChangesCount(0);
+				setGitAheadCount(0);
 			}
 		} catch {
 			// Silently fail - git status is not critical
-			gitChangesCount = 0;
-			gitAheadCount = 0;
+			setGitChangesCount(0);
+			setGitAheadCount(0);
 		}
 	}
 
@@ -882,60 +875,23 @@
 							</svg>
 						</button>
 					</div>
-					<!-- Tab Switcher: Files / Git -->
-					<div class="sidebar-tabs">
-						<button
-							class="sidebar-tab"
-							class:active={activeTab === 'files'}
-							onclick={() => { activeTab = 'files'; }}
-						>
-							<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-							</svg>
-							<span>Files</span>
-							{#if gitChangesCount > 0}
-								<span class="tab-badge tab-badge-changes" title="{gitChangesCount} file{gitChangesCount !== 1 ? 's' : ''} with changes">{gitChangesCount}</span>
-							{/if}
-						</button>
-						<button
-							class="sidebar-tab"
-							class:active={activeTab === 'git'}
-							onclick={() => { activeTab = 'git'; }}
-						>
-							<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-								<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-							</svg>
-							<span>Git</span>
-							{#if gitAheadCount > 0}
-								<span class="tab-badge tab-badge-push" title="{gitAheadCount} commit{gitAheadCount !== 1 ? 's' : ''} to push">↑{gitAheadCount}</span>
-							{/if}
-						</button>
-					</div>
 					<div class="panel-content file-tree-content">
 						{#if !selectedProject}
 							<div class="panel-empty">
 								<p>Select a project to browse files</p>
 							</div>
 						{:else}
-							{#key activeTab}
-								<div class="tab-panel-wrapper" in:fade={{ duration: 150 }}>
-									{#if activeTab === 'files'}
-										<FileTree
-											bind:this={fileTreeRef}
-											project={selectedProject}
-											selectedPath={activeFilePath}
-											onFileSelect={handleFileSelect}
-											onFileDelete={handleFileDelete}
-											onFileRename={handleFileRename}
-											onFileCreate={handleFileCreate}
-											onError={handleTreeError}
-											onSuccess={handleTreeSuccess}
-										/>
-									{:else}
-										<GitPanel project={selectedProject} />
-									{/if}
-								</div>
-							{/key}
+							<FileTree
+								bind:this={fileTreeRef}
+								project={selectedProject}
+								selectedPath={activeFilePath}
+								onFileSelect={handleFileSelect}
+								onFileDelete={handleFileDelete}
+								onFileRename={handleFileRename}
+								onFileCreate={handleFileCreate}
+								onError={handleTreeError}
+								onSuccess={handleTreeSuccess}
+							/>
 						{/if}
 					</div>
 				</div>
@@ -1207,112 +1163,7 @@
 		flex-direction: column;
 	}
 
-	/* Sidebar Tabs (Files / Git) */
-	.sidebar-tabs {
-		display: flex;
-		gap: 0.25rem;
-		padding: 0.375rem 0.5rem;
-		background: oklch(0.15 0.01 250);
-		border-bottom: 1px solid oklch(0.22 0.02 250);
-	}
-
-	.sidebar-tab {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.375rem;
-		flex: 1;
-		padding: 0.5rem 0.5rem;
-		background: transparent;
-		border: none;
-		border-radius: 0.375rem;
-		cursor: pointer;
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: oklch(0.55 0.02 250);
-		transition: color 0.2s ease, background 0.2s ease, transform 0.15s ease;
-	}
-
-	.sidebar-tab::after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 50%;
-		width: 0;
-		height: 2px;
-		background: oklch(0.65 0.15 200);
-		border-radius: 1px;
-		transition: width 0.2s ease, left 0.2s ease;
-	}
-
-	.sidebar-tab:hover {
-		background: oklch(0.18 0.02 250);
-		color: oklch(0.70 0.02 250);
-	}
-
-	.sidebar-tab:active {
-		transform: scale(0.97);
-	}
-
-	.sidebar-tab.active {
-		background: oklch(0.20 0.02 250);
-		color: oklch(0.90 0.02 250);
-	}
-
-	.sidebar-tab.active::after {
-		width: 70%;
-		left: 15%;
-	}
-
-	.sidebar-tab .tab-icon {
-		width: 14px;
-		height: 14px;
-		flex-shrink: 0;
-		transition: transform 0.2s ease;
-	}
-
-	.sidebar-tab.active .tab-icon {
-		transform: scale(1.1);
-	}
-
-	/* Tab Badge Indicators */
-	.tab-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 0.65rem;
-		font-weight: 600;
-		padding: 0.1rem 0.35rem;
-		border-radius: 0.5rem;
-		min-width: 1.1rem;
-		line-height: 1;
-		margin-left: 0.25rem;
-	}
-
-	.tab-badge-changes {
-		background: oklch(0.65 0.18 45 / 0.25);
-		color: oklch(0.85 0.15 45);
-		border: 1px solid oklch(0.65 0.15 45 / 0.4);
-	}
-
-	.tab-badge-push {
-		background: oklch(0.55 0.18 145 / 0.25);
-		color: oklch(0.80 0.15 145);
-		border: 1px solid oklch(0.55 0.15 145 / 0.4);
-	}
-
-	/* Tab Panel Transition Wrapper */
-	.tab-panel-wrapper {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
-		min-height: 0;
-		/* Allow children to scroll - don't use overflow: hidden here */
-	}
-
-	.panel-empty,
-	.panel-placeholder {
+	.panel-empty {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -1450,16 +1301,6 @@
 	@media (max-width: 768px) {
 		.files-content {
 			padding: 0.5rem;
-		}
-
-		.files-header {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-
-		.project-selector {
-			width: 100%;
-			max-width: none;
 		}
 	}
 </style>

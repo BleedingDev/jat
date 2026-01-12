@@ -6,7 +6,9 @@
  *
  * MAIN (core workflow - always visible):
  *   /work     - Work (default route, multi-project sessions view)
- *   /files    - Explorer (project file browser + git)
+ *   /files    - Files (project file browser)
+ *   /source   - Source Control (git changes, diff viewer)
+ *   /sessions - Sessions (all tmux sessions: agents, servers, other)
  *   /servers  - Servers (project server sessions)
  *   /config   - Config (JAT configuration files editor)
  *   /projects - Projects (project configuration & management)
@@ -63,9 +65,23 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 		},
 		{
 			id: 'files',
-			label: 'Explorer',
+			label: 'Files',
 			href: '/files',
 			icon: 'files',
+			category: 'main'
+		},
+		{
+			id: 'source',
+			label: 'Source',
+			href: '/source',
+			icon: 'source',
+			category: 'main'
+		},
+		{
+			id: 'sessions',
+			label: 'Sessions',
+			href: '/sessions',
+			icon: 'tmux',
 			category: 'main'
 		},
 		{
@@ -90,13 +106,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		// VIEWS: Alternative visualizations
-		{
-			id: 'tmux',
-			label: 'Tmux',
-			href: '/tmux',
-			icon: 'tmux',
-			category: 'views'
-		},
 		{
 			id: 'history',
 			label: 'History',

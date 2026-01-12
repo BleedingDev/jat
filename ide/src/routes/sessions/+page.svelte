@@ -1,9 +1,9 @@
 <script lang="ts">
 	/**
-	 * Tmux Sessions Page
+	 * Sessions Page
 	 *
-	 * Orthogonal view of ALL tmux sessions (not just jat-* or server-*).
-	 * Provides a tmux-centric perspective for session management:
+	 * Top-level view of ALL tmux sessions (not just jat-* or server-*).
+	 * Provides a session-centric perspective for session management:
 	 * - View all running tmux sessions
 	 * - Kill/attach sessions
 	 * - See session type (agent, server, other)
@@ -13,6 +13,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { getProjectColor, initProjectColors } from '$lib/utils/projectColors';
+	import SessionCard from '$lib/components/work/SessionCard.svelte';
+	import HorizontalResizeHandle from '$lib/components/HorizontalResizeHandle.svelte';
+	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 
 	interface TmuxSession {
 		name: string;
@@ -32,8 +35,39 @@
 	let copiedCmd = $state<string | null>(null);
 	let attachMessage = $state<{ session: string; message: string; method: string } | null>(null);
 
+	// Expanded session state (inline SessionCard)
+	let expandedSession = $state<string | null>(null);
+	let expandedOutput = $state<string>('');
+	let outputPollInterval: ReturnType<typeof setInterval> | null = null;
+	let expandedHeight = $state(800); // Default height in pixels
+	let isResizing = $state(false);
+
+	// Tmux pane width tracking (in columns)
+	let tmuxWidth = $state(160); // Default 160 columns
+	const PIXELS_PER_COLUMN = 8.5; // Approximate pixels per monospace character
+
 	// Agent to project mapping (from current task)
 	let agentProjects = $state<Map<string, string>>(new Map());
+
+	// Agent to task mapping (full task info for TaskIdBadge)
+	interface AgentTask {
+		id: string;
+		status: string;
+		issue_type?: string;
+		title?: string;
+		priority?: number;
+	}
+	let agentTasks = $state<Map<string, AgentTask>>(new Map());
+
+	// Agent to session info mapping (tokens, cost, etc. from /api/work)
+	interface AgentSessionInfo {
+		tokens: number;
+		cost: number;
+	}
+	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
+
+	// Project order (from /api/projects, sorted by last activity)
+	let projectOrder = $state<string[]>([]);
 
 	// Extract project from task ID (e.g., "jat-abc" → "jat", "chimaro-xyz" → "chimaro")
 	function getProjectFromTaskId(taskId: string): string | undefined {
@@ -65,7 +99,19 @@
 		return { type: 'other' };
 	}
 
-	// Fetch work sessions to get project assignments from task IDs
+	// Fetch project order (same as ActionPill uses, sorted by last activity)
+	async function fetchProjectOrder() {
+		try {
+			const response = await fetch('/api/projects?visible=true&stats=true');
+			if (!response.ok) return;
+			const data = await response.json();
+			projectOrder = (data.projects || []).map((p: { name: string }) => p.name);
+		} catch {
+			// Silent fail - will fall back to alphabetical
+		}
+	}
+
+	// Fetch work sessions to get project assignments, task info, and session metrics
 	async function fetchAgentProjects() {
 		try {
 			const response = await fetch('/api/work');
@@ -73,16 +119,37 @@
 			const data = await response.json();
 
 			const projectMap = new Map<string, string>();
+			const taskMap = new Map<string, AgentTask>();
+			const sessionInfoMap = new Map<string, AgentSessionInfo>();
+
 			for (const session of data.sessions || []) {
+				if (!session.agentName) continue;
+
+				// Store session info (tokens, cost)
+				sessionInfoMap.set(session.agentName, {
+					tokens: session.tokens || 0,
+					cost: session.cost || 0
+				});
+
 				// Get project from current task ID
-				if (session.task?.id && session.agentName) {
+				if (session.task?.id) {
 					const project = getProjectFromTaskId(session.task.id);
 					if (project) {
 						projectMap.set(session.agentName, project);
 					}
+					// Store full task info for TaskIdBadge
+					taskMap.set(session.agentName, {
+						id: session.task.id,
+						status: session.task.status || 'open',
+						issue_type: session.task.issue_type,
+						title: session.task.title,
+						priority: session.task.priority
+					});
 				}
 			}
 			agentProjects = projectMap;
+			agentTasks = taskMap;
+			agentSessionInfo = sessionInfoMap;
 		} catch {
 			// Silent fail - project info is optional
 		}
@@ -113,9 +180,9 @@
 		}
 	}
 
-	// Fetch all data (agents first to populate project map, then sessions)
+	// Fetch all data (project order + agents first, then sessions)
 	async function fetchAllData() {
-		await fetchAgentProjects();
+		await Promise.all([fetchProjectOrder(), fetchAgentProjects()]);
 		await fetchSessions();
 	}
 
@@ -218,6 +285,145 @@
 		}
 	}
 
+	// Fetch output for expanded session
+	async function fetchExpandedOutput(sessionName: string) {
+		try {
+			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output`);
+			if (response.ok) {
+				const data = await response.json();
+				expandedOutput = data.output || '';
+			}
+		} catch (err) {
+			console.error('Failed to fetch session output:', err);
+		}
+	}
+
+	// Fetch current tmux dimensions
+	async function fetchTmuxDimensions(sessionName: string) {
+		try {
+			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/resize`);
+			if (response.ok) {
+				const data = await response.json();
+				tmuxWidth = data.dimensions?.width || 80;
+			}
+		} catch (err) {
+			console.error('Failed to fetch tmux dimensions:', err);
+		}
+	}
+
+	// Resize tmux pane width
+	async function resizeTmuxWidth(sessionName: string, newWidth: number) {
+		try {
+			await fetch(`/api/work/${encodeURIComponent(sessionName)}/resize`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ width: newWidth })
+			});
+		} catch (err) {
+			console.error('Failed to resize tmux pane:', err);
+		}
+	}
+
+	// Handle horizontal resize delta (pixels -> columns)
+	function handleHorizontalResize(deltaX: number) {
+		if (!expandedSession) return;
+		const deltaColumns = Math.round(deltaX / PIXELS_PER_COLUMN);
+		if (deltaColumns !== 0) {
+			tmuxWidth = Math.max(40, tmuxWidth + deltaColumns);
+		}
+	}
+
+	// Commit the resize to tmux when drag ends
+	function handleHorizontalResizeEnd() {
+		if (expandedSession) {
+			resizeTmuxWidth(expandedSession, tmuxWidth);
+		}
+	}
+
+	// Toggle session expansion (works for any session)
+	function toggleExpanded(sessionName: string) {
+		if (expandedSession === sessionName) {
+			// Collapse
+			expandedSession = null;
+			expandedOutput = '';
+			if (outputPollInterval) {
+				clearInterval(outputPollInterval);
+				outputPollInterval = null;
+			}
+		} else {
+			// Expand
+			expandInline(sessionName);
+		}
+	}
+
+	// Expand session inline (works for any session)
+	function expandInline(sessionName: string) {
+		// Close any existing expansion
+		if (outputPollInterval) {
+			clearInterval(outputPollInterval);
+			outputPollInterval = null;
+		}
+
+		expandedSession = sessionName;
+		fetchExpandedOutput(sessionName);
+		fetchTmuxDimensions(sessionName);
+
+		// Poll for output updates
+		outputPollInterval = setInterval(() => {
+			if (expandedSession === sessionName) {
+				fetchExpandedOutput(sessionName);
+			}
+		}, 1000);
+	}
+
+	// Resize handling for expanded session
+	function startResize(e: MouseEvent) {
+		e.preventDefault();
+		isResizing = true;
+		const startY = e.clientY;
+		const startHeight = expandedHeight;
+
+		function onMouseMove(e: MouseEvent) {
+			const delta = e.clientY - startY;
+			expandedHeight = Math.max(200, startHeight + delta);
+		}
+
+		function onMouseUp() {
+			isResizing = false;
+			document.removeEventListener('mousemove', onMouseMove);
+			document.removeEventListener('mouseup', onMouseUp);
+		}
+
+		document.addEventListener('mousemove', onMouseMove);
+		document.addEventListener('mouseup', onMouseUp);
+	}
+
+	// Send input to expanded session
+	async function sendExpandedInput(text: string, type: 'text' | 'key' | 'raw' = 'text'): Promise<boolean> {
+		if (!expandedSession) return false;
+		try {
+			const response = await fetch(`/api/work/${encodeURIComponent(expandedSession)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text, type })
+			});
+			// Refresh output after sending
+			setTimeout(() => fetchExpandedOutput(expandedSession!), 100);
+			return response.ok;
+		} catch (err) {
+			console.error('Failed to send input:', err);
+			return false;
+		}
+	}
+
+	// Get agent name from session name (jat-AgentName -> AgentName)
+	function getAgentName(sessionName: string): string {
+		if (sessionName.startsWith('jat-')) {
+			return sessionName.slice(4);
+		}
+		return sessionName;
+	}
+
 	// Tick for elapsed time updates
 	let tick = $state(0);
 
@@ -235,26 +441,37 @@
 		if (pollInterval) {
 			clearInterval(pollInterval);
 		}
+		if (outputPollInterval) {
+			clearInterval(outputPollInterval);
+		}
 	});
 
-	// Sort sessions: attached first, then by type (agent > server > ide > other), then by project, then by name
+	// Sort sessions: by project first (using same order as ActionPill), then by activity
 	const sortedSessions = $derived(
 		[...sessions].sort((a, b) => {
-			// Attached first
-			if (a.attached !== b.attached) return a.attached ? -1 : 1;
-			// Then by type priority
-			const typePriority = { agent: 0, server: 1, ide: 2, other: 3 };
-			if (typePriority[a.type] !== typePriority[b.type]) {
-				return typePriority[a.type] - typePriority[b.type];
-			}
-			// Then by project (sessions without project go last)
-			const projA = a.project || 'zzz';
-			const projB = b.project || 'zzz';
+			// First by project (using projectOrder from API, unknown projects go last)
+			const projA = a.project || '';
+			const projB = b.project || '';
 			if (projA !== projB) {
-				return projA.localeCompare(projB);
+				const indexA = projA ? projectOrder.indexOf(projA) : -1;
+				const indexB = projB ? projectOrder.indexOf(projB) : -1;
+				// If both are in projectOrder, use that order
+				// If one is not found (-1), it goes after known projects
+				// If neither is found, fall back to alphabetical
+				const orderA = indexA === -1 ? (projA ? 9999 : 99999) : indexA;
+				const orderB = indexB === -1 ? (projB ? 9999 : 99999) : indexB;
+				if (orderA !== orderB) {
+					return orderA - orderB;
+				}
+				// Both unknown, sort alphabetically
+				if (indexA === -1 && indexB === -1) {
+					return projA.localeCompare(projB);
+				}
 			}
-			// Then by name
-			return a.name.localeCompare(b.name);
+			// Then by activity (most recently created first)
+			const createdA = new Date(a.created).getTime();
+			const createdB = new Date(b.created).getTime();
+			return createdB - createdA;
 		})
 	);
 
@@ -284,7 +501,7 @@
 </script>
 
 <svelte:head>
-	<title>Tmux | JAT IDE</title>
+	<title>Sessions | JAT IDE</title>
 	<link rel="icon" href="/favicons/tmux.svg" />
 </svelte:head>
 
@@ -369,27 +586,50 @@
 					<tbody>
 						{#each sortedSessions as session (session.name)}
 							{@const typeBadge = getTypeBadge(session.type)}
+							{@const isExpanded = expandedSession === session.name}
+							{@const sessionAgentName = getAgentName(session.name)}
+							{@const sessionTask = agentTasks.get(sessionAgentName)}
 							<tr
 								class="session-row"
 								class:attached={session.attached}
 								class:selected={selectedSession === session.name}
-								onclick={() => selectedSession = selectedSession === session.name ? null : session.name}
+								class:expanded={isExpanded}
+								class:expandable={true}
+								onclick={() => toggleExpanded(session.name)}
 							>
 								<td class="td-name">
-									<span class="session-name">{session.name}</span>
-									{#if session.project}
-										{@const projectColor = getProjectColor(session.project)}
-										<span
-											class="session-project"
-											style="background: color-mix(in oklch, {projectColor} 20%, transparent); border-color: color-mix(in oklch, {projectColor} 50%, transparent); color: {projectColor};"
-										>
-											<span
-												class="project-dot"
-												style="background: {projectColor};"
-											></span>
-											{session.project}
+									<div class="name-row">
+										<span class="expand-icon" class:rotated={isExpanded}>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+											</svg>
 										</span>
-									{/if}
+										<span class="session-name">{session.name}</span>
+									</div>
+									<div class="session-badges">
+										{#if session.project}
+											{@const projectColor = getProjectColor(session.project)}
+											<span
+												class="session-project"
+												style="background: color-mix(in oklch, {projectColor} 20%, transparent); border-color: color-mix(in oklch, {projectColor} 50%, transparent); color: {projectColor};"
+											>
+												<span
+													class="project-dot"
+													style="background: {projectColor};"
+												></span>
+												{session.project}
+											</span>
+										{/if}
+										{#if sessionTask}
+											<TaskIdBadge
+												task={sessionTask}
+												size="xs"
+												showStatus={true}
+												showType={true}
+												copyOnly={true}
+											/>
+										{/if}
+									</div>
 								</td>
 								<td class="td-type">
 									<span class="type-badge" style="background: {typeBadge.bg}; color: {typeBadge.text};">
@@ -414,12 +654,12 @@
 								</td>
 								<td class="td-actions" onclick={(e) => e.stopPropagation()}>
 									<div class="action-buttons">
-										<!-- Attach button -->
+										<!-- External attach button (opens terminal) -->
 										<button
 											class="action-btn attach"
 											onclick={() => attachSession(session.name)}
 											disabled={actionLoading === session.name}
-											title="Attach to session"
+											title="Open in terminal"
 										>
 											{#if actionLoading === session.name}
 												<span class="loading loading-spinner loading-xs"></span>
@@ -462,6 +702,65 @@
 									</div>
 								</td>
 							</tr>
+							<!-- Expanded SessionCard row -->
+							{#if isExpanded}
+								{@const expandedAgentName = getAgentName(session.name)}
+								{@const expandedTask = agentTasks.get(expandedAgentName)}
+								{@const expandedSessionInfo = agentSessionInfo.get(expandedAgentName)}
+								<tr class="expanded-row">
+									<td colspan="5" class="expanded-content">
+										<div class="expanded-session-wrapper">
+											<div class="expanded-session-card" style="height: {expandedHeight}px;">
+												<SessionCard
+													mode="agent"
+													sessionName={session.name}
+													agentName={expandedAgentName}
+													task={expandedTask ? {
+														id: expandedTask.id,
+														title: expandedTask.title,
+														status: expandedTask.status,
+														priority: expandedTask.priority,
+														issue_type: expandedTask.issue_type
+													} : null}
+													output={expandedOutput}
+													tokens={expandedSessionInfo?.tokens ?? 0}
+													cost={expandedSessionInfo?.cost ?? 0}
+													created={session.created}
+													attached={session.attached}
+													onSendInput={(text, type) => sendExpandedInput(text, type)}
+													onKillSession={() => {
+														expandedSession = null;
+														killSession(session.name);
+													}}
+													onAttachTerminal={() => attachSession(session.name)}
+													onTaskClick={(taskId) => {
+														// Navigate to tasks page with task selected
+														window.location.href = `/tasks?task=${taskId}`;
+													}}
+												/>
+											</div>
+											<!-- Horizontal resize handle for tmux width -->
+											<HorizontalResizeHandle
+												onResize={handleHorizontalResize}
+												onResizeEnd={handleHorizontalResizeEnd}
+											/>
+											<!-- Width indicator -->
+											<div class="width-indicator">{tmuxWidth} cols</div>
+										</div>
+										<!-- Vertical resize divider for height -->
+										<div
+											class="resize-divider"
+											class:resizing={isResizing}
+											onmousedown={startResize}
+											role="separator"
+											aria-orientation="horizontal"
+											tabindex="0"
+										>
+											<div class="resize-handle-vertical"></div>
+										</div>
+									</td>
+								</tr>
+							{/if}
 						{/each}
 					</tbody>
 				</table>
@@ -733,9 +1032,40 @@
 		gap: 0.125rem;
 	}
 
+	.name-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.expand-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: oklch(0.55 0.02 250);
+		transition: transform 0.2s ease, color 0.15s;
+	}
+
+	.expand-icon.rotated {
+		transform: rotate(90deg);
+		color: oklch(0.75 0.15 200);
+	}
+
+	.expandable:hover .expand-icon {
+		color: oklch(0.70 0.12 145);
+	}
+
 	.session-name {
 		font-weight: 500;
 		color: oklch(0.85 0.02 250);
+	}
+
+	.session-badges {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		margin-top: 0.25rem;
 	}
 
 	.session-project {
@@ -987,6 +1317,128 @@
 	.toast-close svg {
 		width: 14px;
 		height: 14px;
+	}
+
+	/* Expandable rows */
+	.session-row.expandable {
+		cursor: pointer;
+	}
+
+	.session-row.expandable:hover {
+		background: oklch(0.65 0.15 145 / 0.15);
+	}
+
+	.session-row.expanded {
+		background: oklch(0.65 0.15 200 / 0.12);
+		border-bottom: none;
+	}
+
+	.session-row.expanded:hover {
+		background: oklch(0.65 0.15 200 / 0.15);
+	}
+
+	/* Expanded row with SessionCard */
+	.expanded-row {
+		background: oklch(0.12 0.01 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.expanded-row:hover {
+		background: oklch(0.12 0.01 250);
+	}
+
+	.expanded-content {
+		padding: 0 !important;
+		border-top: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.expanded-session-card {
+		animation: expand-slide-down 0.2s ease-out;
+		overflow-y: auto;
+		width: 100%;
+		/* Height controlled by inline style for resize functionality */
+	}
+
+	@keyframes expand-slide-down {
+		from {
+			opacity: 0;
+			max-height: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			max-height: 600px;
+			transform: translateY(0);
+		}
+	}
+
+	/* Wrapper for expanded session with horizontal resize */
+	.expanded-session-wrapper {
+		position: relative;
+		padding: 1rem;
+	}
+
+	/* Override SessionCard styles when embedded in table */
+	.expanded-session-card :global(.session-card) {
+		border-radius: 8px;
+		border: 1px solid oklch(0.28 0.02 250);
+		max-width: none;
+		width: 100%;
+	}
+
+	/* Width indicator */
+	.width-indicator {
+		position: absolute;
+		top: 0.5rem;
+		right: 1.5rem;
+		font-size: 0.7rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.55 0.02 250);
+		background: oklch(0.18 0.01 250);
+		padding: 0.125rem 0.375rem;
+		border-radius: 4px;
+		border: 1px solid oklch(0.25 0.02 250);
+		pointer-events: none;
+		z-index: 5;
+	}
+
+	/* Vertical resize divider for expanded session height */
+	.resize-divider {
+		position: relative;
+		height: 8px;
+		cursor: ns-resize;
+		background: oklch(0.18 0.01 250);
+		border-top: 1px solid oklch(0.25 0.02 250);
+		transition: background 0.15s;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.resize-divider:hover {
+		background: oklch(0.22 0.02 250);
+	}
+
+	.resize-divider.resizing {
+		background: oklch(0.25 0.04 200);
+	}
+
+	.resize-handle-vertical {
+		width: 40px;
+		height: 4px;
+		background: oklch(0.35 0.02 250);
+		border-radius: 2px;
+		transition: background 0.15s, width 0.15s;
+	}
+
+	.resize-divider:hover .resize-handle-vertical {
+		background: oklch(0.50 0.02 250);
+		width: 60px;
+	}
+
+	.resize-divider.resizing .resize-handle-vertical {
+		background: oklch(0.65 0.12 200);
+		width: 80px;
 	}
 
 	/* Responsive */

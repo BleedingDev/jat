@@ -21,7 +21,7 @@
 
 	import { page } from '$app/stores';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
-	import { isSidebarCollapsed, gitAheadCount } from '$lib/stores/drawerStore';
+	import { isSidebarCollapsed, gitChangesCount } from '$lib/stores/drawerStore';
 
 	// Helper to check if nav item is active
 	function isActive(href: string): boolean {
@@ -39,6 +39,7 @@
 		// MAIN: Core workflow
 		tasks: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
 		files: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
+		source: 'M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22',
 		servers: 'M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z',
 		tmux: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 		automation: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
@@ -169,34 +170,34 @@
 							<span class="tracking-in-expand">{navItem.label}</span>
 						</span>
 
-						<!-- Git push badge for Explorer (commits ahead of remote) -->
-						{#if navItem.id === 'files' && $gitAheadCount > 0}
+						<!-- Git changes badge for Source (VSCode convention: show changed files count on source control) -->
+						{#if navItem.id === 'source' && $gitChangesCount > 0}
 							<span
 								class="font-mono text-[10px] px-1.5 py-0.5 rounded-full ml-auto"
 								style="
-									background: oklch(0.65 0.15 145 / 0.2);
-									color: oklch(0.70 0.15 145);
-									border: 1px solid oklch(0.65 0.15 145 / 0.3);
+									background: oklch(0.55 0.15 220 / 0.25);
+									color: oklch(0.80 0.12 220);
+									border: 1px solid oklch(0.55 0.15 220 / 0.4);
 								"
-								title="{$gitAheadCount} commit{$gitAheadCount === 1 ? '' : 's'} to push"
+								title="{$gitChangesCount} file{$gitChangesCount === 1 ? '' : 's'} with changes"
 							>
-								↑{$gitAheadCount}
+								{$gitChangesCount}
 							</span>
 						{/if}
 
 						<!-- Active indicator line (extended) -->
-						{#if active && !(navItem.id === 'files' && $gitAheadCount > 0)}
+						{#if active && !(navItem.id === 'source' && $gitChangesCount > 0)}
 							<div
 								class="flex-1 h-px"
 								style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.4), transparent);"
 							></div>
 						{/if}
-					{:else if navItem.id === 'files' && $gitAheadCount > 0}
-						<!-- Badge shown when sidebar is collapsed (as dot indicator) -->
+					{:else if navItem.id === 'source' && $gitChangesCount > 0}
+						<!-- Changes badge shown when sidebar is collapsed (as dot indicator on Source) -->
 						<span
 							class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
-							style="background: oklch(0.65 0.15 145); box-shadow: 0 0 6px oklch(0.65 0.15 145 / 0.6);"
-							title="{$gitAheadCount} commit{$gitAheadCount === 1 ? '' : 's'} to push"
+							style="background: oklch(0.75 0.12 220); box-shadow: 0 0 6px oklch(0.75 0.12 220 / 0.6);"
+							title="{$gitChangesCount} file{$gitChangesCount === 1 ? '' : 's'} with changes"
 						></span>
 					{/if}
 				</a>

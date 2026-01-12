@@ -241,7 +241,7 @@
 			disconnectSessionEvents(); // Disconnect from session events SSE
 			disconnectTaskEvents(); // Disconnect from task events SSE
 			stopActivityPolling(); // Stop activity polling
-			stopGitStatusPolling(); // Stop git status polling for Explorer badge
+			stopGitStatusPolling(); // Stop git status polling for Files badge
 			clearAllBadges(); // Clear favicon and title badges on unmount
 		};
 	});
@@ -521,7 +521,7 @@
 		}
 	}
 
-	// Fetch git status for the active project (to show push badge on Explorer)
+	// Fetch git status for the active project (to show changes badge on Source)
 	// Uses the selected project, or falls back to the first config project
 	let gitStatusPollingInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -533,6 +533,7 @@
 
 		if (!projectToCheck) {
 			setGitAheadCount(0);
+			setGitChangesCount(0);
 			return;
 		}
 
@@ -541,12 +542,21 @@
 			if (response.ok) {
 				const data = await response.json();
 				setGitAheadCount(data.ahead || 0);
+				// Calculate total changed files (staged + modified + deleted + created + untracked)
+				const changesCount = (data.staged?.length || 0) +
+					(data.modified?.length || 0) +
+					(data.deleted?.length || 0) +
+					(data.created?.length || 0) +
+					(data.not_added?.length || 0);
+				setGitChangesCount(changesCount);
 			} else {
 				setGitAheadCount(0);
+				setGitChangesCount(0);
 			}
 		} catch (error) {
 			// Silently fail - git status is not critical
 			setGitAheadCount(0);
+			setGitChangesCount(0);
 		}
 	}
 
