@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Swarm Orchestration Dashboard
+	 * Swarm Orchestration Panel
 	 *
 	 * A dedicated page for agent orchestration and swarm management.
 	 * Consolidates all orchestration settings:

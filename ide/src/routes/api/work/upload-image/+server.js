@@ -2,7 +2,7 @@
  * File Upload API for Work Sessions
  * POST /api/work/upload-image (legacy name, supports all file types)
  *
- * Receives a file from the dashboard, saves it to a temp directory,
+ * Receives a file from the IDE, saves it to a temp directory,
  * and returns the file path so it can be sent to Claude Code.
  *
  * Supports: Images, PDFs, text files, code files, data files

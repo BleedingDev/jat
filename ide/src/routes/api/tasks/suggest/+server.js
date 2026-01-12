@@ -115,7 +115,7 @@ export async function POST({ request }) {
 			return json(
 				{
 					error: true,
-					message: 'ANTHROPIC_API_KEY not configured. Add it to dashboard/.env'
+					message: 'ANTHROPIC_API_KEY not configured. Add it to ide/.env'
 				},
 				{ status: 500 }
 			);

@@ -27,7 +27,7 @@ If applicable, add screenshots to help explain your problem.
  - Claude Code version: [run `claude --version`]
  - JAT version: [check git commit or release tag]
  - Node version: [run `node --version`]
- - Browser: [if dashboard-related]
+ - Browser: [if IDE-related]
 
 **Terminal output**
 ```

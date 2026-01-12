@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# log-agent-activity - Log agent activity for orchestration dashboard
+# log-agent-activity - Log agent activity for orchestration IDE
 #
 # Usage: log-agent-activity --type TYPE [options]
 #

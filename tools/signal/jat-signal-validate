@@ -38,7 +38,7 @@ show_usage() {
     echo "  completing  - Validate rich completing signal"
     echo "  starting    - Validate rich starting signal"
     echo "  compacting  - Validate rich compacting signal"
-    echo "  question    - Validate question signal for dashboard"
+    echo "  question    - Validate question signal for IDE"
     echo ""
     echo "Examples:"
     echo "  jat-signal-validate complete '{\"taskId\":\"jat-abc\",\"agentName\":\"Agent\"}'"

@@ -64,7 +64,7 @@ export async function GET({ params }) {
 /**
  * DELETE /api/work/[sessionId]/question
  *
- * Clears the question file after user answers (called by dashboard after selection)
+ * Clears the question file after user answers (called by IDE after selection)
  */
 export async function DELETE({ params }) {
 	const { sessionId } = params;

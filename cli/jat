@@ -206,7 +206,7 @@ should_check_for_updates() {
 }
 
 # Interactive update check - prompts user if update available
-# Only call this on dashboard launch, not every command
+# Only call this on IDE launch, not every command
 interactive_update_check() {
     # Only run if we should check (respects auto_update setting and 24h throttle)
     should_check_for_updates || return 0
@@ -313,11 +313,11 @@ update_cmd() {
             echo "  jat update           Pull latest updates"
             echo "  jat update --check   Check for updates without installing"
             echo "  jat update --status  Show installation path and version"
-            echo "  jat update --disable Disable update checks on dashboard launch"
-            echo "  jat update --enable  Enable update checks on dashboard launch"
+            echo "  jat update --disable Disable update checks on IDE launch"
+            echo "  jat update --enable  Enable update checks on IDE launch"
             echo ""
             echo -e "${DIM}Update behavior:${NC}"
-            echo "  When you launch the dashboard with 'jat', it checks for updates"
+            echo "  When you launch the IDE with 'jat', it checks for updates"
             echo "  (at most once per 24 hours). If updates are available, you'll be"
             echo "  prompted: 'Update now? [y/N]'. Updates are never auto-installed."
             echo ""
@@ -417,7 +417,7 @@ launch_claude() {
     fi
 
     # Launch N Claude sessions with staggered timing
-    # Each session runs inside tmux so dashboard can track it
+    # Each session runs inside tmux so IDE can track it
     for ((i=1; i<=count; i++)); do
         local window_title
         if [[ $count -eq 1 ]]; then
@@ -440,7 +440,7 @@ launch_claude() {
         local log_file="$logs_dir/session-${session_name}-$(date +%Y%m%d-%H%M%S).log"
 
         # Launch terminal with tmux session containing Claude
-        # This allows dashboard to track the session via tmux
+        # This allows IDE to track the session via tmux
         # Use -x 120 to ensure ANSI boxes don't wrap (default is 80 columns)
         # Capture scrollback buffer on exit (not pipe-pane which logs every redraw)
         $TERMINAL -T "$window_title" -e bash -c "
@@ -502,35 +502,35 @@ launch_browser() {
     ) &
 }
 
-launch_dashboard() {
+launch_ide() {
     local name="$1"
-    local dashboard_port="${2:-3333}"
-    local dashboard_path="$HOME/code/jat/dashboard"
+    local ide_port="${2:-3333}"
+    local ide_path="$JAT_SOURCE_DIR/ide"
 
-    # Check if dashboard directory exists
-    if [[ ! -d "$dashboard_path" ]]; then
-        echo -e "${YELLOW}  ⊘ Dashboard not found: $dashboard_path${NC}"
+    # Check if IDE directory exists
+    if [[ ! -d "$ide_path" ]]; then
+        echo -e "${YELLOW}  ⊘ IDE not found: $ide_path${NC}"
         return 0
     fi
 
-    echo -e "${DIM}  → Dashboard :$dashboard_port${NC}"
+    echo -e "${DIM}  → IDE :$ide_port${NC}"
 
     # Clear Vite cache to prevent stale chunk errors
-    rm -rf "$dashboard_path/.svelte-kit" "$dashboard_path/node_modules/.vite" 2>/dev/null
+    rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
 
     # Use server-jat prefix so the /api/servers endpoint can find it
     local session_name="server-jat"
 
-    # Launch dashboard dev server inside a tmux session
+    # Launch IDE dev server inside a tmux session
     # This allows the attach feature to work with tmux windows
-    $TERMINAL -T "$name: Dashboard :$dashboard_port" -e bash -c "
-        cd '$dashboard_path'
+    $TERMINAL -T "$name: IDE :$ide_port" -e bash -c "
+        cd '$ide_path'
         # Kill existing session if present (server may have crashed)
         tmux kill-session -t '$session_name' 2>/dev/null || true
-        tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$dashboard_path'
+        tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$ide_path'
         # Wait for shell to initialize
         sleep 0.3
-        tmux send-keys -t '$session_name' 'npm run dev -- --port $dashboard_port' Enter
+        tmux send-keys -t '$session_name' 'npm run dev -- --port $ide_port' Enter
         tmux attach-session -t '$session_name'
     " &
 
@@ -538,9 +538,9 @@ launch_dashboard() {
     (
         sleep 3
         if command -v xdg-open &>/dev/null; then
-            xdg-open "http://localhost:$dashboard_port" &>/dev/null
+            xdg-open "http://localhost:$ide_port" &>/dev/null
         elif command -v open &>/dev/null; then
-            open "http://localhost:$dashboard_port"
+            open "http://localhost:$ide_port"
         fi
     ) &
 }
@@ -555,10 +555,10 @@ launch_project() {
     local do_claude=false
     local do_npm=false
     local do_browser=false
-    local do_dashboard=false
+    local do_ide=false
     local session_count=1
     local skip_agent=false
-    local skip_dashboard=false
+    local skip_ide=false
     local auto_mode=false
 
     while [[ $# -gt 0 ]]; do
@@ -567,10 +567,10 @@ launch_project() {
             --claude|-l)     do_all=false; do_claude=true ;;
             --npm|-n)        do_all=false; do_npm=true ;;
             --browser|-b)    do_all=false; do_browser=true ;;
-            --dashboard|-d)  do_all=false; do_dashboard=true ;;
+            --ide|-i)        do_all=false; do_ide=true ;;
             --all|-a)        do_all=true ;;
             --no-agent)      skip_agent=true ;;
-            --no-dashboard)  skip_dashboard=true ;;
+            --no-ide)        skip_ide=true ;;
             --auto)          auto_mode=true ;;
             [0-9]*)          session_count="$1" ;;
             *) echo -e "${RED}Unknown option: $1${NC}"; return 1 ;;
@@ -622,16 +622,16 @@ launch_project() {
     echo ""
 
     # Launch components
-    # Order: npm/browser/dashboard first (need time to start), then Claude sessions last
+    # Order: npm/browser/IDE first (need time to start), then Claude sessions last
     if $do_all; then
         launch_code "$path" "$name"
         sleep 0.3
         launch_npm "$path" "$name" "$port"
         launch_browser "$port" "$name"
-        # Launch dashboard unless --no-dashboard was specified
-        if [[ "$skip_dashboard" != "true" ]]; then
+        # Launch IDE unless --no-ide was specified
+        if [[ "$skip_ide" != "true" ]]; then
             sleep 0.3
-            launch_dashboard "$name"
+            launch_ide "$name"
         fi
         # Launch Claude sessions last (gives servers time to start)
         sleep 0.3
@@ -641,7 +641,7 @@ launch_project() {
         $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent" "$auto_mode"
         $do_npm && launch_npm "$path" "$name" "$port"
         $do_browser && launch_browser "$port" "$name"
-        $do_dashboard && launch_dashboard "$name"
+        $do_ide && launch_ide "$name"
     fi
 
     # Apply Hyprland colors
@@ -1088,17 +1088,17 @@ list_all() {
 show_help() {
     cat << 'EOF'
 
-JAT - AI Agent Task Dashboard
+JAT - AI Agent Task IDE
 
 USAGE:
-    jat                    Launch the dashboard
+    jat                    Launch the IDE
     jat demo               Launch demo environment
     jat list               Show all projects
     jat init               Auto-detect projects in ~/code
 
 QUICK START:
     jat init               Auto-detect and add projects
-    jat                    Launch dashboard to manage agents
+    jat                    Launch IDE to manage agents
 
 PROJECT MANAGEMENT:
     init                   Auto-detect projects in ~/code
@@ -1754,7 +1754,7 @@ demo_cmd() {
             echo "Demo projects for presentations and testing."
             echo ""
             echo -e "${DIM}Usage:${NC}"
-            echo "  jat demo           Launch demo dashboard"
+            echo "  jat demo           Launch IDE with demo projects"
             echo "  jat demo setup     Fresh setup (removes old, creates new)"
             echo "  jat demo on        Show only demo projects"
             echo "  jat demo off       Hide demo projects"
@@ -1766,7 +1766,7 @@ demo_cmd() {
             echo ""
             ;;
         "")
-            # Default: setup if needed, then launch dashboard
+            # Default: setup if needed, then launch IDE
             echo ""
             echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
             echo -e "${BOLD}║              ${CYAN}🎬 JAT Demo Mode${NC}${BOLD}                                ║${NC}"
@@ -1796,11 +1796,11 @@ demo_cmd() {
             echo -e "  ${CYAN}jat-demo-shop${NC}      - E-commerce store"
             echo -e "  ${CYAN}jat-demo-dashboard${NC} - Analytics dashboard"
             echo ""
-            echo -e "${DIM}Launching dashboard...${NC}"
+            echo -e "${DIM}Launching IDE...${NC}"
             echo ""
 
-            # Launch dashboard
-            launch_dashboard "DEMO"
+            # Launch IDE
+            launch_ide "DEMO"
             ;;
         *)
             echo -e "${RED}Unknown demo command: $subcmd${NC}"
@@ -1818,17 +1818,17 @@ main() {
     ensure_config
 
     if [[ $# -eq 0 ]]; then
-        # No arguments - launch dashboard
+        # No arguments - launch IDE
         echo ""
         echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${BOLD}║              ${CYAN}🚀 JAT Dashboard${NC}${BOLD}                                 ║${NC}"
+        echo -e "${BOLD}║              ${CYAN}🚀 JAT IDE${NC}${BOLD}                                       ║${NC}"
         echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
         echo ""
 
-        # Check for updates only on dashboard launch (interactive prompt)
+        # Check for updates only on IDE launch (interactive prompt)
         interactive_update_check
 
-        launch_dashboard "JAT"
+        launch_ide "JAT"
         exit 0
     fi
 
@@ -1882,7 +1882,7 @@ main() {
             config=$(get_project_config "$cmd")
             if [[ -n "$config" ]]; then
                 echo -e "${YELLOW}Note: Direct project launching is deprecated.${NC}"
-                echo -e "${YELLOW}Please use the dashboard to manage agents.${NC}"
+                echo -e "${YELLOW}Please use the IDE to manage agents.${NC}"
                 echo ""
                 launch_project "$cmd" "$@"
             else

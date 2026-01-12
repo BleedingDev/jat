@@ -284,7 +284,7 @@ export async function POST({ params, request }) {
 			}
 		}
 
-		// Build the resume command wrapped in a tmux session for dashboard tracking
+		// Build the resume command wrapped in a tmux session for IDE tracking
 		// 1. Kill any existing session with this name (in case it's stale)
 		// 2. Create new tmux session with claude -r running inside
 		// 3. Attach terminal to that session

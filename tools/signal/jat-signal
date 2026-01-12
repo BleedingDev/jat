@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# jat-signal - Emit structured signals for dashboard consumption
+# jat-signal - Emit structured signals for IDE consumption
 #
 # Usage (State Signals - require JSON payload):
 #   jat-signal working '{"taskId":"jat-abc","taskTitle":"..."}'
@@ -21,7 +21,7 @@
 #
 # All signals emit: [JAT-SIGNAL:<TYPE>] <json-payload>
 # The PostToolUse hook captures this and writes to temp file.
-# Dashboard reads /tmp/jat-signal-{session}.json via SSE.
+# IDE reads /tmp/jat-signal-{session}.json via SSE.
 
 set -euo pipefail
 
@@ -54,7 +54,7 @@ show_usage() {
     echo "  completing '{...}'    - Running completion steps"
     echo "  starting '{...}'      - Session initializing"
     echo "  compacting '{...}'    - Summarizing context"
-    echo "  question '{...}'      - Structured question for dashboard"
+    echo "  question '{...}'      - Structured question for IDE"
     echo ""
     echo "Completion Signal (USE jat-complete-bundle TO GENERATE):"
     echo "  complete '{...}'      - Full completion bundle (see below)"

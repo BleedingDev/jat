@@ -2,24 +2,24 @@
 argument-hint: [prd-path]
 ---
 
-Convert a PRD, spec, or requirements doc into structured Beads tasks with dependencies and priorities.
+Convert a PRD, spec, or requirements doc into structured Beads task tree with dependencies and priorities.
 
-# Bead: PRD to Tasks
+# Tasktree: PRD to Tasks + Dependencies
 
 **Use this command when:**
 - You have a PRD or feature spec to convert into tasks
 - Need to break down requirements into actionable work items
-- Want to create a batch of related Beads with proper dependencies
+- Want to create a batch of related tasks with proper dependencies
 - Converting high-level requirements into agent-ready tasks
 
 **What this does:**
 - Reads and parses the PRD/spec (file, conversation, or inline)
 - Asks clarifying questions if requirements are ambiguous
 - Creates an **epic** for multi-task features with **hierarchical child IDs** (e.g., `jat-auth.1`, `jat-auth.2`)
-- Creates right-sized Beads (2-8 hour tasks)
+- Creates right-sized tasks (2-8 hour tasks)
 - Sets up dependency chains between tasks
 - Assigns priorities (P0-P2) based on criticality
-- Reports summary of created Beads
+- Reports summary of created tasks
 
 **Usage:**
 - `/jat:tasktree` - Parse from conversation context or prompt for input
@@ -109,7 +109,7 @@ Choose based on the spec:
 
 ---
 
-## STEP 5: Create Beads
+## STEP 5: Create Tasks in Beads
 
 ### For Multi-Task Features: Create Epic + Children
 
@@ -210,7 +210,7 @@ Confirm:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════╗
-║                        BEADS CREATED FROM PRD                            ║
+║                     TASKTREE CREATED FROM PRD                            ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
 📄 Source: [file path, inline, or conversation]
@@ -218,7 +218,7 @@ Confirm:
 
 ┌─ SUMMARY ────────────────────────────────────────────────────────────────┐
 │                                                                          │
-│  Total: [X] beads created                                                │
+│  Total: [X] tasks created                                                │
 │  🔴 P0: [X]  🟠 P1: [X]  🟡 P2: [X]                                      │
 │                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -239,7 +239,7 @@ Confirm:
 │                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
 
-┌─ CREATED BEADS ──────────────────────────────────────────────────────────┐
+┌─ CREATED TASKS ──────────────────────────────────────────────────────────┐
 │                                                                          │
 │  [task-id] (P0): [Title]                                                 │
 │  ├─ [Description summary]                                                │
@@ -251,7 +251,7 @@ Confirm:
 │  ├─ Depends: [task-ids]                                                  │
 │  └─ Enables: [task-ids]                                                  │
 │                                                                          │
-│  [...repeat for all beads...]                                            │
+│  [...repeat for all tasks...]                                            │
 │                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
 
@@ -279,7 +279,7 @@ Confirm:
 2. Email verification? → P2, nice-to-have
 3. Use Supabase? → Yes
 
-**Beads created (with hierarchical IDs):**
+**Tasks created (with hierarchical IDs):**
 
 ```
 Epic:

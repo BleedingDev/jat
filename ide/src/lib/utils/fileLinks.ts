@@ -463,8 +463,8 @@ export function openLocalhostUrl(route: string, projectName: string): boolean {
  *
  * @example
  * ```typescript
- * detectRouteFromPath('src/routes/ide/+page.svelte')
- * // → '/dashboard'
+ * detectRouteFromPath('src/routes/work/+page.svelte')
+ * // → '/work'
  *
  * detectRouteFromPath('src/routes/api/users/+server.ts')
  * // → '/api/users'
@@ -520,12 +520,12 @@ export interface FileLinks {
  *
  * @example
  * ```typescript
- * getAllFileLinks('src/routes/ide/+page.svelte', 'jat')
+ * getAllFileLinks('src/routes/work/+page.svelte', 'jat')
  * // → {
- * //     editorUrl: '/files?path=src/routes/ide/+page.svelte',
- * //     diffUrl: '/files?path=src/routes/ide/+page.svelte&diff=true',
- * //     localhostUrl: 'http://localhost:3333/dashboard',
- * //     detectedRoute: '/dashboard'
+ * //     editorUrl: '/files?path=src/routes/work/+page.svelte',
+ * //     diffUrl: '/files?path=src/routes/work/+page.svelte&diff=true',
+ * //     localhostUrl: 'http://localhost:3333/work',
+ * //     detectedRoute: '/work'
  * //   }
  * ```
  */

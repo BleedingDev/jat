@@ -172,13 +172,13 @@ export async function POST({ request }) {
 		}
 
 		// JAT bootstrap prompt - minimal identity, commands load full docs on-demand
-		// This is added via --append-system-prompt so only dashboard-spawned agents get it
+		// This is added via --append-system-prompt so only IDE-spawned agents get it
 		const jatBootstrap = `You are a JAT agent. Run /jat:start to begin work.`;
 		claudeCmd += ` --append-system-prompt '${jatBootstrap}'`;
 
 
 		// Create session with explicit dimensions to ensure proper terminal width from the start
-		// Without -x and -y, tmux uses default 80x24 which may not match dashboard card width
+		// Without -x and -y, tmux uses default 80x24 which may not match IDE card width
 		// Use sleep to allow shell to initialize before sending keys - without this delay,
 		// the shell may not be ready and keys are lost (race condition)
 		const createSessionCmd = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && sleep 0.3 && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;

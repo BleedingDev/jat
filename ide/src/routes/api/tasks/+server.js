@@ -1,6 +1,6 @@
 /**
  * Tasks API Route
- * Provides Beads task data to the dashboard
+ * Provides Beads task data to the IDE
  */
 import { json } from '@sveltejs/kit';
 import { getTasks, getProjects, getTaskById } from '../../../../../lib/beads.js';

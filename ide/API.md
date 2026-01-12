@@ -134,7 +134,7 @@ Get active file reservations (locks) across all projects.
 
 #### GET /api/orchestration
 
-Get unified view of all agent coordination data. This endpoint combines agents, reservations, tasks, and statistics into a single response optimized for dashboard views.
+Get unified view of all agent coordination data. This endpoint combines agents, reservations, tasks, and statistics into a single response optimized for IDE views.
 
 **Query Parameters:**
 - `project` (optional): Filter all data by project name
@@ -188,7 +188,7 @@ Get unified view of all agent coordination data. This endpoint combines agents, 
 
 **Recommended Usage:**
 - Poll this endpoint every 3 seconds (as indicated by `meta.poll_interval_ms`)
-- Use for reactive dashboard updates
+- Use for reactive IDE updates
 - Frontend Svelte stores should cache with 2-second TTL
 
 ## Data Sources
@@ -231,7 +231,7 @@ All endpoints support CORS for local development at `http://localhost:*`.
 
 ## Authentication
 
-Currently no authentication is required. This is a local development dashboard.
+Currently no authentication is required. This is a local development IDE.
 
 ## Performance Notes
 

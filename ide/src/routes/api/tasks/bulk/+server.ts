@@ -192,7 +192,7 @@ async function linkTaskToEpic(
 ): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
 	try {
 		// Check if epic is still open before linking
-		// This prevents linking to closed epics (e.g., when dashboard state is stale)
+		// This prevents linking to closed epics (e.g., when IDE state is stale)
 		const epicOpen = await isEpicOpen(epicId, projectPath);
 		if (!epicOpen) {
 			console.warn(

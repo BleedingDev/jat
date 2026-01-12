@@ -45,7 +45,7 @@ async function readJatConfig() {
 }
 
 /**
- * Read dashboard visibility settings
+ * Read IDE visibility settings
  */
 async function readIdeSettings() {
 	try {
@@ -55,13 +55,13 @@ async function readIdeSettings() {
 		const content = await readFile(IDE_SETTINGS_FILE, 'utf-8');
 		return JSON.parse(content);
 	} catch (error) {
-		console.error('Failed to read dashboard settings:', error);
+		console.error('Failed to read IDE settings:', error);
 		return { hiddenProjects: [] };
 	}
 }
 
 /**
- * Write dashboard visibility settings
+ * Write IDE visibility settings
  * @param {{ hiddenProjects?: string[] }} settings
  */
 async function writeIdeSettings(settings) {
@@ -73,7 +73,7 @@ async function writeIdeSettings(settings) {
 		await writeFile(IDE_SETTINGS_FILE, JSON.stringify(settings, null, 2));
 		return true;
 	} catch (error) {
-		console.error('Failed to write dashboard settings:', error);
+		console.error('Failed to write IDE settings:', error);
 		return false;
 	}
 }
@@ -411,8 +411,8 @@ export async function GET({ url }) {
 
 		// Read JAT config
 		const jatConfig = await readJatConfig();
-		const dashboardSettings = await readIdeSettings();
-		const hiddenProjects = new Set(dashboardSettings.hiddenProjects || []);
+		const ideSettings = await readIdeSettings();
+		const hiddenProjects = new Set(ideSettings.hiddenProjects || []);
 
 		let projects = [];
 

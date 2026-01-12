@@ -17,8 +17,8 @@ import {
 async function test() {
 	console.log('🧪 Testing tokenUsage.ts module\n');
 
-	// Project path (parent of dashboard directory)
-	const projectPath = process.cwd().replace('/dashboard', '');
+	// Project path (parent of ide directory)
+	const projectPath = process.cwd().replace('/ide', '');
 	console.log(`📁 Project path: ${projectPath}\n`);
 
 	// Test 1: Build session-agent map

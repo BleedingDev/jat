@@ -4,7 +4,7 @@
  *
  * Resizes the tmux window to match the SessionCard display width.
  * This allows Claude Code's output (statusline, prompts) to format correctly
- * for the dashboard display.
+ * for the IDE display.
  *
  * Body:
  * - width: Target width in columns (required)

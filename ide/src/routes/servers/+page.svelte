@@ -1147,7 +1147,7 @@
 															copiedTmuxCmd = project.name;
 															setTimeout(() => copiedTmuxCmd = null, 1500);
 														}}
-														title="Copy tmux command (server is running but not tracked - run this to add to dashboard)"
+														title="Copy tmux command (server is running but not tracked - run this to add to IDE)"
 													>
 														{#if copiedTmuxCmd === project.name}
 															<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

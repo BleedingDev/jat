@@ -58,7 +58,7 @@
 			label: "Go to Home",
 			description: "View all tasks in list mode",
 			icon: "🏠",
-			keywords: ["home", "dashboard", "tasks", "list"],
+			keywords: ["home", "ide", "tasks", "list"],
 			execute: () => {
 				goto("/");
 				close();

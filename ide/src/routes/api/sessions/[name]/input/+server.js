@@ -25,8 +25,8 @@ import { appendFileSync } from 'fs';
 const execFileAsync = promisify(execFile);
 
 /**
- * Write a dashboard_input event to the timeline for visibility in EventStack.
- * This ensures dashboard-initiated inputs are tracked even if Claude Code's
+ * Write an ide_input event to the timeline for visibility in EventStack.
+ * This ensures IDE-initiated inputs are tracked even if Claude Code's
  * UserPromptSubmit hook fails.
  *
  * @param {string} sessionName - tmux session name (e.g., 'jat-AgentName')
@@ -43,14 +43,14 @@ function writeTimelineEvent(sessionName, input, inputType) {
 		const isCommand = input.startsWith('/');
 
 		const event = {
-			type: 'dashboard_input',
+			type: 'ide_input',
 			tmux_session: tmuxSession,
 			timestamp: new Date().toISOString(),
 			data: {
 				input: input,
 				inputType: inputType,
 				isCommand: isCommand,
-				source: 'dashboard'
+				source: 'ide'
 			}
 		};
 
@@ -172,7 +172,7 @@ export async function POST({ params, request }) {
 			}
 
 			// Write timeline event for text inputs (commands and regular text)
-			// This ensures dashboard-initiated inputs appear in EventStack
+			// This ensures IDE-initiated inputs appear in EventStack
 			// regardless of whether the UserPromptSubmit hook succeeds
 			if ((type === 'text' || type === undefined) && input) {
 				const inputType = input.startsWith('/') ? 'command' : 'text';

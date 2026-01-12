@@ -36,11 +36,11 @@ function generateTerminalId() {
 
 /**
  * Get the project working directory.
- * Default to jat project directory since that's where the dashboard runs.
+ * Default to jat project directory since that's where the IDE runs.
  * @returns {Promise<string>} Path to project directory
  */
 async function getProjectPath() {
-	// Default to jat project directory (where dashboard runs from)
+	// Default to jat project directory (where IDE runs from)
 	const jatPath = `${homedir()}/code/jat`;
 	if (existsSync(jatPath)) {
 		return jatPath;
@@ -209,7 +209,7 @@ export async function DELETE({ url }) {
 				{
 					success: false,
 					error: 'Invalid session',
-					message: 'Can only kill terminal sessions created by the dashboard'
+					message: 'Can only kill terminal sessions created by the IDE'
 				},
 				{ status: 403 }
 			);

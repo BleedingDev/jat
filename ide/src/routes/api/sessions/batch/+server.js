@@ -106,7 +106,7 @@ export async function POST({ request }) {
 
 		// Spawn sessions with staggered timing
 		// Use jat-pending-* naming so /jat:start can register and rename sessions
-		// This ensures dashboard tracks sessions correctly after agent registration
+		// This ensures IDE tracks sessions correctly after agent registration
 		const results = [];
 		const prompt = autoStart ? '/jat:start auto' : '';
 

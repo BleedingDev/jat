@@ -48,7 +48,7 @@ function cleanupStaleSignalFiles(): { cleaned: number; errors: number } {
 		/^jat-signal-.*\.json$/,
 		/^jat-activity-.*\.json$/,
 		// NOTE: jat-timeline-*.jsonl files are NOT deleted - they're append-only session history
-		// that agents need for displaying EventStack. They should persist across dashboard restarts.
+		// that agents need for displaying EventStack. They should persist across IDE restarts.
 		// Old timeline files are naturally cleaned up on system reboot (/tmp is ephemeral).
 		/^jat-question-.*\.json$/,
 		/^jat-monitor-.*\.pid$/,
@@ -89,7 +89,7 @@ function cleanupStaleSignalFiles(): { cleaned: number; errors: number } {
 /**
  * Clean up orphaned .claude/sessions/agent-*.txt files
  *
- * These files map Claude session IDs to agent names for dashboard tracking.
+ * These files map Claude session IDs to agent names for IDE tracking.
  * Over time, sessions accumulate but the corresponding Claude project sessions
  * get deleted or expire. This function identifies orphaned files by checking
  * if the session ID still exists in ~/.claude/projects/.

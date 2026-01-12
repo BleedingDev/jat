@@ -1069,7 +1069,7 @@
 
 /* ==========================================================================
    STANDARDIZED ANIMATION UTILITY CLASSES
-   Reusable animations for consistent UI interactions across the dashboard.
+   Reusable animations for consistent UI interactions across the IDE.
    These replace duplicated @keyframes in component <style> blocks.
    ========================================================================== */
 

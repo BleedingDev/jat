@@ -296,7 +296,7 @@ export async function getTokenTimeSeries(
 	} = options;
 
 	const homeDir = os.homedir();
-	// Strip /dashboard suffix if present (when running from dashboard directory)
+	// Strip /ide suffix if present (when running from IDE directory)
 	const actualProjectPath = projectPath.replace(/\/ide$/, '');
 	const projectSlug = actualProjectPath.replace(/\//g, '-');
 	const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);

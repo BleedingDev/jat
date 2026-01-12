@@ -70,7 +70,7 @@
 
 💡 What's next:
    • Close this terminal (session complete)
-   • Spawn a new agent from dashboard for next task
+   • Spawn a new agent from IDE for next task
 ```
 
 **When to use:**

@@ -100,7 +100,7 @@ if [ -n "$JAT_INSTALL_DIR" ]; then
     # User specified custom location via environment variable
     INSTALL_DIR="$JAT_INSTALL_DIR"
     echo -e "${BLUE}Using JAT_INSTALL_DIR: $INSTALL_DIR${NC}"
-elif [ -f "$SCRIPT_DIR/install.sh" ] && [ -d "$SCRIPT_DIR/tools" ] && [ -d "$SCRIPT_DIR/dashboard" ]; then
+elif [ -f "$SCRIPT_DIR/install.sh" ] && [ -d "$SCRIPT_DIR/tools" ] && [ -d "$SCRIPT_DIR/ide" ]; then
     # Running from a JAT repo (developer mode)
     INSTALL_DIR="$SCRIPT_DIR"
     echo -e "${BLUE}Using current JAT repo: $INSTALL_DIR${NC}"
@@ -196,12 +196,12 @@ if command -v npm &> /dev/null; then
             echo -e "  ${YELLOW}⚠${NC} browser-tools npm install failed (run manually: cd tools/browser && npm install)"
     fi
 
-    # Install dashboard dependencies (SvelteKit, etc.)
+    # Install IDE dependencies (SvelteKit, etc.)
     if [ -f "$INSTALL_DIR/ide/package.json" ]; then
-        echo "  → Installing dashboard dependencies..."
+        echo "  → Installing IDE dependencies..."
         (cd "$INSTALL_DIR/ide" && npm install --legacy-peer-deps --engine-strict=false --silent 2>/dev/null) && \
-            echo -e "  ${GREEN}✓${NC} dashboard dependencies installed" || \
-            echo -e "  ${YELLOW}⚠${NC} dashboard npm install failed (run manually: cd dashboard && npm install --legacy-peer-deps)"
+            echo -e "  ${GREEN}✓${NC} IDE dependencies installed" || \
+            echo -e "  ${YELLOW}⚠${NC} IDE npm install failed (run manually: cd ide && npm install --legacy-peer-deps)"
     fi
 else
     echo -e "${YELLOW}  ⚠ npm not found - skipping Node.js dependencies${NC}"

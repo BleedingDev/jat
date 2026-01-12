@@ -129,8 +129,8 @@ export interface ProjectColors {
  *   name: 'JAT',
  *   path: '~/code/jat',
  *   port: 5174,
- *   server_path: '~/code/jat/dashboard',
- *   description: 'Jomarchy Agent Tools dashboard',
+ *   server_path: '~/code/jat/ide',
+ *   description: 'Jomarchy Agent Tools IDE',
  *   colors: {
  *     active: 'oklch(0.75 0.15 145)',
  *     inactive: 'oklch(0.55 0.10 145)'

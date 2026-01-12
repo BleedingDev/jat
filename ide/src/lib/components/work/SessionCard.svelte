@@ -639,7 +639,7 @@
 				}
 				nextTaskFetchFailed = false;
 			} else {
-				// 404 means endpoint doesn't exist (project dashboard without /api/tasks/next)
+				// 404 means endpoint doesn't exist (project IDE without /api/tasks/next)
 				// Don't log error for 404 - this is expected for projects without the endpoint
 				nextTaskInfo = null;
 				nextTaskFetchFailed = true;

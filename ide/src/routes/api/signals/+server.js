@@ -3,7 +3,7 @@
  *
  * GET /api/signals
  *   Returns all current signals from /tmp/jat-signal-*.json files
- *   Useful for dashboard overview of agent states
+ *   Useful for IDE overview of agent states
  *
  * DELETE /api/signals
  *   Clears all signal files (cleanup)

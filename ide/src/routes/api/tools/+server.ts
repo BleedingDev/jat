@@ -100,7 +100,7 @@ function findJatPath(): string | null {
 		join(homedir(), 'code', 'jat'),
 		join(homedir(), 'projects', 'jat'),
 		join(homedir(), '.local', 'share', 'jat'),
-		// Also check where dashboard is running from (parent of ide/)
+		// Also check where IDE is running from (parent of ide/)
 		join(process.cwd(), '..'),
 		process.cwd().replace('/ide', '')
 	];

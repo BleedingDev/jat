@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Multi-project task management dashboard powered by Beads + Agent Mail. Built with SvelteKit 5, Tailwind CSS v4, and DaisyUI.
+Multi-project task management IDE powered by Beads + Agent Mail. Built with SvelteKit 5, Tailwind CSS v4, and DaisyUI.
 
 ## Tech Stack
 
@@ -1118,7 +1118,7 @@ export const HIGH_USAGE_WARNING_THRESHOLD = TOKEN_THRESHOLDS.high;
 
 **To Customize:**
 1. Edit `tokenUsageConfig.ts` with your preferred thresholds
-2. Reload dashboard (no restart needed)
+2. Reload IDE (no restart needed)
 3. Colors update automatically
 
 **Example (smaller budget):**
@@ -1276,7 +1276,7 @@ curl 'http://localhost:5173/api/agents/WisePrairie/usage?range=week'
 **Benefits:**
 - Reduces JSONL parsing overhead
 - Faster response times
-- Lower CPU usage on dashboard server
+- Lower CPU usage on IDE server
 
 ### Troubleshooting
 
@@ -1299,13 +1299,13 @@ curl 'http://localhost:5173/api/agents/WisePrairie/usage?range=week'
    ```
 
 3. **Verify project path in API:**
-   - IDE uses `process.cwd().replace('/dashboard', '')`
+   - IDE uses `process.cwd().replace('/ide', '')`
    - Should resolve to parent project directory
    - Check server logs for path transformation
 
 4. **Run test script:**
    ```bash
-   cd dashboard
+   cd ide
    npx tsx test-token-usage.ts
    ```
 
@@ -1560,7 +1560,7 @@ While Phase 2 data loads, show DaisyUI skeleton loaders:
 ### Files Implementing This Pattern
 
 **Pages:**
-- `src/routes/dash/+page.svelte` - Agent dashboard with usage lazy loading
+- `src/routes/dash/+page.svelte` - Agent overview page with usage lazy loading
 - `src/routes/work/+page.svelte` - Work sessions with usage lazy loading
 
 **Stores:**
@@ -1705,7 +1705,7 @@ jat-signal review '{"taskId":"jat-abc","summary":["Added login"]}'
 jat-signal complete '{"taskId":"jat-abc","agentName":"Agent","completionMode":"review_required","summary":["Added login"],"quality":{"tests":"passing","build":"clean"},"suggestedTasks":[]}'
 ```
 
-The PostToolUse hook captures these signals and writes them to `/tmp/jat-signal-{session}.json`. The SSE server reads these files and broadcasts state changes to connected dashboard clients via `session-signal` events.
+The PostToolUse hook captures these signals and writes them to `/tmp/jat-signal-{session}.json`. The SSE server reads these files and broadcasts state changes to connected IDE clients via `session-signal` events.
 
 **See:** `shared/signals.md` for the complete signal system documentation.
 
@@ -1966,7 +1966,7 @@ tmux_session=$(tmux display-message -p '#S' 2>/dev/null)
 # Read JSON from stdin (Claude Code passes tool input)
 json_input=$(cat)
 
-# Write to temp file for dashboard to read
+# Write to temp file for IDE to read
 echo "$json_input" > "/tmp/claude-question-tmux-${tmux_session}.json"
 ```
 
@@ -2542,7 +2542,7 @@ The **SwarmSettingsEditor** component (`src/lib/components/config/SwarmSettingsE
 | `review_required` | Signal value: don't auto-spawn |
 | **spawn** | Create a new session for the next task |
 | **auto-complete** | IDE auto-triggers `/jat:complete` based on review rules |
-| **auto-kill** | Session self-destructs (tracked by dashboard, not in signal) |
+| **auto-kill** | Session self-destructs (tracked by IDE, not in signal) |
 
 ### Features
 

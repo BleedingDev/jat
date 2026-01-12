@@ -7,7 +7,7 @@ import { watch, type FSWatcher, existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, dirname, basename } from 'path';
 
-// Dashboard runs from /home/jw/code/jat/dashboard
+// IDE runs from /home/jw/code/jat/ide
 // Beads file is at /home/jw/code/jat/.beads/issues.jsonl (parent directory)
 const BEADS_FILE = join(process.cwd(), '..', '.beads', 'issues.jsonl');
 const BEADS_DIR = dirname(BEADS_FILE);

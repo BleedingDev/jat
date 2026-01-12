@@ -1,12 +1,12 @@
 # Beads Task IDE
 
-A modern, real-time task management dashboard for multi-project Beads workflows. Built with SvelteKit 5, Tailwind CSS, and DaisyUI.
+A modern, real-time task management IDE for multi-project Beads workflows. Built with SvelteKit 5, Tailwind CSS, and DaisyUI.
 
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte)](https://svelte.dev)
 [![SvelteKit](https://img.shields.io/badge/SvelteKit-2-FF3E00)](https://kit.svelte.dev)
 [![DaisyUI](https://img.shields.io/badge/DaisyUI-32%20Themes-5A0EF8)](https://daisyui.com)
 
-![IDE Screenshot](./dashboard-screenshot.png)
+![IDE Screenshot](./ide-screenshot.png)
 *Beads Task IDE with dependency graph visualization showing task relationships*
 
 ## Overview
@@ -38,8 +38,8 @@ The Beads Task IDE provides a unified web interface for viewing and managing tas
 ### Quick Start
 
 ```bash
-# Navigate to dashboard directory
-cd ~/code/jat/dashboard
+# Navigate to IDE directory
+cd ~/code/jat/ide
 
 # Install dependencies
 npm install
@@ -174,7 +174,7 @@ ide/
 │   ├── app.html                 # HTML template
 │   ├── routes/
 │   │   ├── +layout.svelte       # Root layout
-│   │   ├── +page.svelte         # Main dashboard page
+│   │   ├── +page.svelte         # Main IDE page
 │   │   └── api/
 │   │       └── tasks/
 │   │           └── +server.ts   # API endpoint for task data
@@ -202,7 +202,7 @@ ide/
 
 ### Svelte 5 Reactivity Approach
 
-This dashboard showcases Svelte 5's new runes-based reactivity system:
+This IDE showcases Svelte 5's new runes-based reactivity system:
 
 #### `$state` - Reactive State
 
@@ -479,7 +479,7 @@ node build/index.js
 Or use a process manager:
 
 ```bash
-pm2 start build/index.js --name beads-dashboard
+pm2 start build/index.js --name beads-ide
 ```
 
 ### Environment Variables

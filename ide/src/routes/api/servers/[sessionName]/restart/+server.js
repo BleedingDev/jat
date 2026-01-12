@@ -113,14 +113,14 @@ export async function POST({ params }) {
 		const restartCommand = `npm run dev${portArg}`;
 
 		// Determine the correct working directory
-		// Check if dashboard subdirectory exists with package.json
+		// Check if ide subdirectory exists with package.json
 		let workDir = projectPath;
 		try {
 			const { stdout: checkResult } = await execAsync(
-				`test -f "${projectPath}/dashboard/package.json" && echo "dashboard" || echo "root"`
+				`test -f "${projectPath}/ide/package.json" && echo "ide" || echo "root"`
 			);
-			if (checkResult.trim() === 'dashboard') {
-				workDir = `${projectPath}/dashboard`;
+			if (checkResult.trim() === 'ide') {
+				workDir = `${projectPath}/ide`;
 			}
 		} catch {
 			// Use projectPath as-is
