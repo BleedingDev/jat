@@ -59,9 +59,68 @@
 	let tmuxWidth = $state(160); // Default 160 columns
 	const PIXELS_PER_COLUMN = 8.5; // Approximate pixels per monospace character
 
+	// Container width for sessions table (resizable)
+	let containerWidth = $state(1200); // Default max-width in pixels
+	let isContainerResizing = $state(false);
+
 	// Task detail panel state (inline, not drawer overlay)
 	let expandedTaskId = $state<string | null>(null);
 	let taskDetailOpen = $state(false);
+
+	// Extended task detail data (fetched when panel opens)
+	interface TaskAttachment {
+		id: string;
+		path: string;
+		filename: string;
+		url: string;
+	}
+
+	interface TaskDependency {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+	}
+
+	interface TimelineEvent {
+		type: 'beads_event' | 'agent_mail';
+		event: string;
+		timestamp: string;
+		description: string;
+		metadata: Record<string, any>;
+	}
+
+	interface ExtendedTaskDetails {
+		labels?: string[];
+		assignee?: string;
+		depends_on?: TaskDependency[];
+		blocked_by?: TaskDependency[];
+		created_at?: string;
+		updated_at?: string;
+		attachments: TaskAttachment[];
+		timeline: TimelineEvent[];
+		timelineCounts: { total: number; beads_events: number; agent_mail: number };
+	}
+
+	let expandedTaskDetails = $state<ExtendedTaskDetails | null>(null);
+	let taskDetailsLoading = $state(false);
+	let timelineFilter = $state<'all' | 'tasks' | 'messages'>('all');
+
+	// Status and priority colors
+	const statusColors: Record<string, string> = {
+		open: 'badge-info',
+		in_progress: 'badge-warning',
+		blocked: 'badge-error',
+		closed: 'badge-success'
+	};
+
+	const priorityColors: Record<number, string> = {
+		0: 'badge-error',
+		1: 'badge-warning',
+		2: 'badge-info',
+		3: 'badge-ghost',
+		4: 'badge-ghost'
+	};
 
 	// Agent to project mapping (from current task)
 	let agentProjects = $state<Map<string, string>>(new Map());
@@ -82,6 +141,7 @@
 		tokens: number;
 		cost: number;
 		activityState?: string; // 'working' | 'idle' | 'needs-input' | 'ready-for-review' | 'completing' | 'completed'
+		activityStateTimestamp?: number; // Timestamp when state was fetched (so SessionCard trusts sseState)
 	}
 	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
 
@@ -183,7 +243,8 @@
 				sessionInfoMap.set(session.agentName, {
 					tokens: session.tokens || 0,
 					cost: session.cost || 0,
-					activityState: session.sessionState || undefined
+					activityState: session.sessionState || undefined,
+					activityStateTimestamp: Date.now() // Timestamp so SessionCard trusts the state
 				});
 
 				// Get project from current task ID, or fall back to lastCompletedTask
@@ -442,6 +503,54 @@
 		}
 	}
 
+	// Fetch extended task details (attachments, dependencies, timeline)
+	async function fetchExpandedTaskDetails(taskId: string) {
+		if (!taskId) return;
+
+		taskDetailsLoading = true;
+		expandedTaskDetails = null;
+
+		try {
+			// Fetch task details, attachments, and history in parallel
+			const [taskRes, attachmentsRes, historyRes] = await Promise.all([
+				fetch(`/api/tasks/${taskId}`),
+				fetch(`/api/tasks/${taskId}/images`),
+				fetch(`/api/tasks/${taskId}/history`)
+			]);
+
+			const taskData = taskRes.ok ? await taskRes.json() : null;
+			const attachmentsData = attachmentsRes.ok ? await attachmentsRes.json() : { images: [] };
+			const historyData = historyRes.ok ? await historyRes.json() : { timeline: [], count: { total: 0, beads_events: 0, agent_mail: 0 } };
+
+			expandedTaskDetails = {
+				labels: taskData?.task?.labels || [],
+				assignee: taskData?.task?.assignee,
+				depends_on: taskData?.task?.depends_on || [],
+				blocked_by: taskData?.task?.blocked_by || [],
+				created_at: taskData?.task?.created_at,
+				updated_at: taskData?.task?.updated_at,
+				attachments: (attachmentsData.images || []).map((img: any) => ({
+					id: img.id || img.path,
+					path: img.path,
+					filename: img.filename || img.path.split('/').pop(),
+					url: `/api/tasks/${taskId}/images/${encodeURIComponent(img.path.split('/').pop())}`
+				})),
+				timeline: historyData.timeline || [],
+				timelineCounts: historyData.count || { total: 0, beads_events: 0, agent_mail: 0 }
+			};
+		} catch (err) {
+			console.error('Failed to fetch task details:', err);
+			expandedTaskDetails = {
+				labels: [],
+				attachments: [],
+				timeline: [],
+				timelineCounts: { total: 0, beads_events: 0, agent_mail: 0 }
+			};
+		} finally {
+			taskDetailsLoading = false;
+		}
+	}
+
 	// Expand session inline (works for any session)
 	function expandInline(sessionName: string) {
 		// Close any existing expansion
@@ -453,6 +562,21 @@
 		expandedSession = sessionName;
 		fetchExpandedOutput(sessionName);
 		fetchTmuxDimensions(sessionName);
+
+		// Auto-open task panel if this session has a task
+		const agentName = getAgentName(sessionName);
+		const task = agentTasks.get(agentName);
+		if (task) {
+			expandedTaskId = task.id;
+			taskDetailOpen = true;
+			// Fetch extended task details
+			fetchExpandedTaskDetails(task.id);
+		} else {
+			// Close task panel if session has no task
+			expandedTaskId = null;
+			taskDetailOpen = false;
+			expandedTaskDetails = null;
+		}
 
 		// Poll for output updates
 		outputPollInterval = setInterval(() => {
@@ -476,6 +600,30 @@
 
 		function onMouseUp() {
 			isResizing = false;
+			document.removeEventListener('mousemove', onMouseMove);
+			document.removeEventListener('mouseup', onMouseUp);
+		}
+
+		document.addEventListener('mousemove', onMouseMove);
+		document.addEventListener('mouseup', onMouseUp);
+	}
+
+	// Container width resize handling
+	function startContainerResize(e: MouseEvent) {
+		e.preventDefault();
+		isContainerResizing = true;
+		const startX = e.clientX;
+		const startWidth = containerWidth;
+
+		function onMouseMove(e: MouseEvent) {
+			const delta = e.clientX - startX;
+			// Allow expanding up to 95% of viewport width, minimum 800px
+			const maxWidth = window.innerWidth * 0.95;
+			containerWidth = Math.max(800, Math.min(maxWidth, startWidth + delta));
+		}
+
+		function onMouseUp() {
+			isContainerResizing = false;
 			document.removeEventListener('mousemove', onMouseMove);
 			document.removeEventListener('mouseup', onMouseUp);
 		}
@@ -695,8 +843,9 @@
 
 	</div>
 
-	<!-- Content -->
-	<div class="tmux-content">
+	<!-- Content with resizable width -->
+	<div class="tmux-content-wrapper">
+		<div class="tmux-content" style="max-width: {containerWidth}px;">
 		<!-- Session type tabs + Sort control (above table) -->
 		<div class="table-controls">
 			<SessionsTabs
@@ -993,10 +1142,10 @@
 								{@const expandedSessionInfo = agentSessionInfo.get(expandedAgentName)}
 								<tr class="expanded-row">
 									<td colspan="2" class="expanded-content">
-										<div class="expanded-session-wrapper" class:with-task-panel={expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id}>
+										<div class="expanded-session-wrapper" class:with-task-panel={expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id} class:collapsing={isCollapsing}>
 											<!-- SessionCard section -->
 											<div class="session-card-section">
-												<div class="expanded-session-card" class:collapsing={isCollapsing} style="height: {expandedHeight}px;">
+												<div class="expanded-session-card" style="height: {expandedHeight}px;">
 													<SessionCard
 														mode={session.type === 'server' ? 'server' : 'agent'}
 														sessionName={session.name}
@@ -1013,6 +1162,8 @@
 														output={expandedOutput}
 														tokens={expandedSessionInfo?.tokens ?? 0}
 														cost={expandedSessionInfo?.cost ?? 0}
+														sseState={expandedSessionInfo?.activityState}
+														sseStateTimestamp={expandedSessionInfo?.activityStateTimestamp}
 														startTime={session.created ? new Date(session.created) : null}
 														created={session.created}
 														attached={session.attached}
@@ -1035,9 +1186,11 @@
 															if (expandedTaskId === taskId && taskDetailOpen) {
 																taskDetailOpen = false;
 																expandedTaskId = null;
+																expandedTaskDetails = null;
 															} else {
 																expandedTaskId = taskId;
 																taskDetailOpen = true;
+																fetchExpandedTaskDetails(taskId);
 															}
 														}}
 													/>
@@ -1067,44 +1220,219 @@
 														</button>
 													</div>
 													<div class="task-panel-content">
-														<!-- Task ID and badges row -->
-														<div class="task-panel-badges">
-															<TaskIdBadge
-																task={{
-																	id: expandedTask.id,
-																	status: expandedTask.status,
-																	issue_type: expandedTask.issue_type,
-																	priority: expandedTask.priority
-																}}
-																size="sm"
-																variant="projectPill"
-																showType={true}
-															/>
-														</div>
+														<!-- Loading state -->
+														{#if taskDetailsLoading}
+															<div class="task-panel-loading">
+																<span class="loading loading-spinner loading-sm"></span>
+																<span>Loading task details...</span>
+															</div>
+														{:else}
+															<!-- Task ID and badges row -->
+															<div class="task-panel-badges">
+																<TaskIdBadge
+																	task={{
+																		id: expandedTask.id,
+																		status: expandedTask.status,
+																		issue_type: expandedTask.issue_type,
+																		priority: expandedTask.priority
+																	}}
+																	size="sm"
+																	variant="projectPill"
+																	showType={true}
+																/>
+															</div>
 
-														<!-- Title -->
-														<h4 class="task-panel-task-title">{expandedTask.title || 'Untitled'}</h4>
+															<!-- Title -->
+															<h4 class="task-panel-task-title">{expandedTask.title || 'Untitled'}</h4>
 
-														<!-- Description -->
-														{#if expandedTask.description}
+															<!-- Description -->
+															{#if expandedTask.description}
+																<div class="task-panel-section">
+																	<span class="task-panel-label">Description</span>
+																	<p class="task-panel-description">{expandedTask.description}</p>
+																</div>
+															{/if}
+
+															<!-- Labels -->
+															{#if expandedTaskDetails?.labels && expandedTaskDetails.labels.length > 0}
+																<div class="task-panel-section">
+																	<span class="task-panel-label">Labels</span>
+																	<div class="task-panel-labels">
+																		{#each expandedTaskDetails.labels as label}
+																			<span class="badge badge-outline badge-sm">{label}</span>
+																		{/each}
+																	</div>
+																</div>
+															{/if}
+
+															<!-- Attachments -->
+															{#if expandedTaskDetails?.attachments && expandedTaskDetails.attachments.length > 0}
+																<div class="task-panel-section">
+																	<span class="task-panel-label">
+																		Attachments
+																		<span class="badge badge-xs ml-1">{expandedTaskDetails.attachments.length}</span>
+																	</span>
+																	<div class="task-panel-attachments">
+																		{#each expandedTaskDetails.attachments as attachment}
+																			<a
+																				href={attachment.url}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				class="task-panel-attachment"
+																				title={attachment.filename}
+																			>
+																				<img
+																					src={attachment.url}
+																					alt={attachment.filename}
+																					class="task-panel-attachment-img"
+																				/>
+																			</a>
+																		{/each}
+																	</div>
+																</div>
+															{/if}
+
+															<!-- Dependencies -->
+															{#if (expandedTaskDetails?.depends_on && expandedTaskDetails.depends_on.length > 0) || (expandedTaskDetails?.blocked_by && expandedTaskDetails.blocked_by.length > 0)}
+																<div class="task-panel-section">
+																	<span class="task-panel-label">Dependencies</span>
+																	<div class="task-panel-dependencies">
+																		{#if expandedTaskDetails?.depends_on && expandedTaskDetails.depends_on.length > 0}
+																			<div class="dep-group">
+																				<span class="dep-label">Depends on:</span>
+																				{#each expandedTaskDetails.depends_on as dep}
+																					<a href="/tasks?task={dep.id}" class="dep-item">
+																						<span class="dep-id">{dep.id}</span>
+																						<span class="badge badge-xs {statusColors[dep.status] || 'badge-ghost'}">{dep.status}</span>
+																					</a>
+																				{/each}
+																			</div>
+																		{/if}
+																		{#if expandedTaskDetails?.blocked_by && expandedTaskDetails.blocked_by.length > 0}
+																			<div class="dep-group">
+																				<span class="dep-label">Blocks:</span>
+																				{#each expandedTaskDetails.blocked_by as dep}
+																					<a href="/tasks?task={dep.id}" class="dep-item">
+																						<span class="dep-id">{dep.id}</span>
+																						<span class="badge badge-xs {statusColors[dep.status] || 'badge-ghost'}">{dep.status}</span>
+																					</a>
+																				{/each}
+																			</div>
+																		{/if}
+																	</div>
+																</div>
+															{/if}
+
+															<!-- Metadata -->
 															<div class="task-panel-section">
-																<span class="task-panel-label">Description</span>
-																<p class="task-panel-description">{expandedTask.description}</p>
+																<span class="task-panel-label">Metadata</span>
+																<div class="task-panel-metadata">
+																	{#if expandedTaskDetails?.assignee}
+																		<div class="meta-row">
+																			<span class="meta-label">Assignee</span>
+																			<span class="meta-value">
+																				<AgentAvatar name={expandedTaskDetails.assignee} size={16} />
+																				{expandedTaskDetails.assignee}
+																			</span>
+																		</div>
+																	{/if}
+																	{#if expandedTaskDetails?.created_at}
+																		<div class="meta-row">
+																			<span class="meta-label">Created</span>
+																			<span class="meta-value">{new Date(expandedTaskDetails.created_at).toLocaleDateString()}</span>
+																		</div>
+																	{/if}
+																	{#if expandedTaskDetails?.updated_at}
+																		<div class="meta-row">
+																			<span class="meta-label">Updated</span>
+																			<span class="meta-value">{new Date(expandedTaskDetails.updated_at).toLocaleDateString()}</span>
+																		</div>
+																	{/if}
+																</div>
+															</div>
+
+															<!-- Activity Timeline -->
+															{#if expandedTaskDetails?.timeline && expandedTaskDetails.timeline.length > 0}
+																<div class="task-panel-section task-panel-timeline-section">
+																	<div class="timeline-header">
+																		<span class="task-panel-label">Activity Timeline</span>
+																		<div class="timeline-tabs">
+																			<button
+																				class="timeline-tab"
+																				class:active={timelineFilter === 'all'}
+																				onclick={() => timelineFilter = 'all'}
+																			>
+																				All ({expandedTaskDetails.timelineCounts.total})
+																			</button>
+																			<button
+																				class="timeline-tab"
+																				class:active={timelineFilter === 'tasks'}
+																				onclick={() => timelineFilter = 'tasks'}
+																			>
+																				Tasks ({expandedTaskDetails.timelineCounts.beads_events})
+																			</button>
+																			<button
+																				class="timeline-tab"
+																				class:active={timelineFilter === 'messages'}
+																				onclick={() => timelineFilter = 'messages'}
+																			>
+																				Messages ({expandedTaskDetails.timelineCounts.agent_mail})
+																			</button>
+																		</div>
+																	</div>
+																	<div class="task-panel-timeline">
+																		{#each expandedTaskDetails.timeline.filter(e =>
+																			timelineFilter === 'all' ||
+																			(timelineFilter === 'tasks' && e.type === 'beads_event') ||
+																			(timelineFilter === 'messages' && e.type === 'agent_mail')
+																		) as event}
+																			<div class="timeline-event" class:task-event={event.type === 'beads_event'} class:message-event={event.type === 'agent_mail'}>
+																				<div class="timeline-event-header">
+																					<span class="timeline-event-type">
+																						{#if event.type === 'beads_event'}
+																							📋
+																						{:else}
+																							💬
+																						{/if}
+																						{event.event}
+																					</span>
+																					<span class="timeline-event-time">
+																						{new Date(event.timestamp).toLocaleString()}
+																					</span>
+																				</div>
+																				<p class="timeline-event-desc">{event.description}</p>
+																				{#if event.metadata}
+																					<div class="timeline-event-meta">
+																						{#if event.metadata.status}
+																							<span class="badge badge-xs {statusColors[event.metadata.status]}">{event.metadata.status}</span>
+																						{/if}
+																						{#if event.metadata.assignee}
+																							<span class="badge badge-xs badge-outline">@{event.metadata.assignee}</span>
+																						{/if}
+																						{#if event.metadata.from_agent}
+																							<span class="badge badge-xs badge-outline">from: {event.metadata.from_agent}</span>
+																						{/if}
+																					</div>
+																				{/if}
+																			</div>
+																		{/each}
+																	</div>
+																</div>
+															{/if}
+
+															<!-- View full details link -->
+															<div class="task-panel-actions">
+																<a
+																	href="/tasks?task={expandedTask.id}"
+																	class="task-panel-link"
+																>
+																	<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+																		<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+																	</svg>
+																	View full details
+																</a>
 															</div>
 														{/if}
-
-														<!-- View full details link -->
-														<div class="task-panel-actions">
-															<a
-																href="/tasks?task={expandedTask.id}"
-																class="task-panel-link"
-															>
-																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-																	<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-																</svg>
-																View full details
-															</a>
-														</div>
 													</div>
 												</div>
 											{/if}
@@ -1136,6 +1464,23 @@
 				<code class="hint-code">tmux a -t {"<session>"}</code>
 			</div>
 		{/if}
+		</div>
+		<!-- Container resize handle (right edge) -->
+		<div
+			class="container-resize-handle"
+			class:resizing={isContainerResizing}
+			onmousedown={startContainerResize}
+			role="separator"
+			aria-orientation="vertical"
+			tabindex="0"
+			title="Drag to resize container width"
+		>
+			<div class="container-resize-bar"></div>
+		</div>
+		<!-- Width indicator -->
+		<div class="container-width-indicator" class:visible={isContainerResizing}>
+			{containerWidth}px
+		</div>
 	</div>
 
 	<!-- Attach feedback toast -->
@@ -1222,9 +1567,78 @@
 		margin-bottom: 0.75rem;
 	}
 
+	/* Content wrapper with resize handle */
+	.tmux-content-wrapper {
+		position: relative;
+		display: flex;
+		align-items: flex-start;
+		gap: 0;
+	}
+
 	/* Content */
 	.tmux-content {
-		max-width: 1200px;
+		/* max-width controlled by inline style */
+		flex: 0 0 auto;
+		transition: max-width 0.05s ease-out;
+	}
+
+	/* Container resize handle (right edge) - sticky to stay visible while scrolling */
+	.container-resize-handle {
+		position: sticky;
+		top: 80px; /* Below header */
+		align-self: flex-start;
+		width: 12px;
+		height: 80px;
+		cursor: ew-resize;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		margin-left: -4px;
+		z-index: 10;
+	}
+
+	.container-resize-bar {
+		width: 4px;
+		height: 60px;
+		background: oklch(0.30 0.02 250);
+		border-radius: 2px;
+		transition: all 0.15s;
+	}
+
+	.container-resize-handle:hover .container-resize-bar {
+		background: oklch(0.50 0.08 200);
+		height: 80px;
+		width: 5px;
+	}
+
+	.container-resize-handle.resizing .container-resize-bar {
+		background: oklch(0.65 0.15 200);
+		height: 100px;
+		width: 6px;
+	}
+
+	/* Width indicator */
+	.container-width-indicator {
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		background: oklch(0.20 0.02 250);
+		border: 1px solid oklch(0.35 0.02 250);
+		padding: 0.375rem 0.75rem;
+		border-radius: 6px;
+		font-size: 0.75rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.70 0.12 200);
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 0.15s;
+		z-index: 100;
+	}
+
+	.container-width-indicator.visible {
+		opacity: 1;
 	}
 
 	/* Loading skeleton */
@@ -1725,7 +2139,6 @@
 	}
 
 	.expanded-session-card {
-		animation: expand-slide-down 0.2s ease-out;
 		overflow-y: auto;
 		width: 100%;
 		/* Height controlled by inline style for resize functionality */
@@ -1757,16 +2170,17 @@
 		}
 	}
 
-	.expanded-session-card.collapsing {
-		animation: expand-slide-up 0.2s ease-out forwards;
-	}
-
 	/* Wrapper for expanded session with horizontal resize */
 	.expanded-session-wrapper {
 		position: relative;
 		padding: 1rem;
 		display: flex;
 		gap: 1rem;
+		animation: expand-slide-down 0.2s ease-out;
+	}
+
+	.expanded-session-wrapper.collapsing {
+		animation: expand-slide-up 0.2s ease-out forwards;
 	}
 
 	/* SessionCard takes all space when no task panel */
@@ -1894,6 +2308,221 @@
 
 	.task-panel-link:hover {
 		color: oklch(0.80 0.18 200);
+	}
+
+	/* Task panel loading state */
+	.task-panel-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 2rem;
+		color: oklch(0.55 0.02 250);
+		font-size: 0.8rem;
+	}
+
+	/* Labels section */
+	.task-panel-labels {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+	}
+
+	/* Attachments section */
+	.task-panel-attachments {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.task-panel-attachment {
+		display: block;
+		width: 64px;
+		height: 64px;
+		border-radius: 6px;
+		overflow: hidden;
+		border: 1px solid oklch(0.28 0.02 250);
+		transition: all 0.15s;
+	}
+
+	.task-panel-attachment:hover {
+		border-color: oklch(0.45 0.12 200);
+		transform: scale(1.05);
+	}
+
+	.task-panel-attachment-img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	/* Dependencies section */
+	.task-panel-dependencies {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.dep-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.dep-label {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.dep-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		background: oklch(0.20 0.02 250);
+		border-radius: 4px;
+		text-decoration: none;
+		transition: all 0.15s;
+	}
+
+	.dep-item:hover {
+		background: oklch(0.25 0.04 200);
+	}
+
+	.dep-id {
+		font-size: 0.75rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.70 0.12 200);
+	}
+
+	/* Metadata section */
+	.task-panel-metadata {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.meta-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.meta-label {
+		font-size: 0.7rem;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.meta-value {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.75rem;
+		color: oklch(0.75 0.02 250);
+	}
+
+	/* Activity Timeline section */
+	.task-panel-timeline-section {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.timeline-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.timeline-tabs {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.timeline-tab {
+		padding: 0.25rem 0.5rem;
+		font-size: 0.65rem;
+		font-weight: 500;
+		color: oklch(0.55 0.02 250);
+		background: transparent;
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 4px;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.timeline-tab:hover {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.timeline-tab.active {
+		background: oklch(0.25 0.04 200);
+		border-color: oklch(0.45 0.12 200);
+		color: oklch(0.80 0.12 200);
+	}
+
+	/* Timeline events list */
+	.task-panel-timeline {
+		flex: 1;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding-right: 0.25rem;
+	}
+
+	.timeline-event {
+		padding: 0.5rem;
+		background: oklch(0.18 0.01 250);
+		border-radius: 6px;
+		border-left: 2px solid oklch(0.35 0.02 250);
+	}
+
+	.timeline-event.task-event {
+		border-left-color: oklch(0.60 0.15 200);
+	}
+
+	.timeline-event.message-event {
+		border-left-color: oklch(0.65 0.15 280);
+	}
+
+	.timeline-event-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.timeline-event-type {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.70 0.02 250);
+	}
+
+	.timeline-event-time {
+		font-size: 0.65rem;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.timeline-event-desc {
+		font-size: 0.75rem;
+		color: oklch(0.65 0.02 250);
+		margin: 0;
+		line-height: 1.4;
+	}
+
+	.timeline-event-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		margin-top: 0.375rem;
 	}
 
 	/* Override SessionCard styles when embedded in table */
