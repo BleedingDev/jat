@@ -2,7 +2,10 @@
 	/**
 	 * ProjectSelector Component
 	 * DaisyUI dropdown for filtering by project
+	 * Supports showing project colors - pass projectColors prop for immediate colors,
+	 * or uses getProjectColor utility as fallback (async, may have delay)
 	 */
+	import { getProjectColor } from "$lib/utils/projectColors";
 
 	interface Props {
 		projects: string[];
@@ -10,6 +13,9 @@
 		onProjectChange: (project: string) => void;
 		taskCounts?: Map<string, number> | null;
 		compact?: boolean;
+		showColors?: boolean;
+		/** Optional map of project name → color. If provided, used instead of getProjectColor() */
+		projectColors?: Map<string, string> | null;
 	}
 
 	let {
@@ -17,16 +23,26 @@
 		selectedProject,
 		onProjectChange,
 		taskCounts = null,
-		compact = false
+		compact = false,
+		showColors = false,
+		projectColors = null,
 	}: Props = $props();
 
+	// Get color for a project - prefer passed projectColors, fall back to utility
+	function getColor(project: string): string {
+		if (projectColors && projectColors.has(project)) {
+			return projectColors.get(project)!;
+		}
+		return getProjectColor(project);
+	}
+
 	function handleSelect(project: string) {
-		console.log('🔵 [ProjectSelector] Project selected');
-		console.log('  → Selected value:', project);
-		console.log('  → Previous value:', selectedProject);
-		console.log('  → Calling onProjectChange...');
+		console.log("🔵 [ProjectSelector] Project selected");
+		console.log("  → Selected value:", project);
+		console.log("  → Previous value:", selectedProject);
+		console.log("  → Calling onProjectChange...");
 		onProjectChange(project);
-		console.log('  ✓ onProjectChange called');
+		console.log("  ✓ onProjectChange called");
 
 		// Close dropdown by removing focus
 		if (document.activeElement instanceof HTMLElement) {
@@ -36,8 +52,8 @@
 
 	// Format project option with task count if available
 	function formatProjectOption(project: string): string {
-		if (project === 'All Projects') {
-			return 'All Projects';
+		if (project === "All Projects") {
+			return "All Projects";
 		}
 
 		if (taskCounts && taskCounts.has(project)) {
@@ -55,9 +71,19 @@
 	<div
 		tabindex="0"
 		role="button"
-		class="{compact ? 'px-2.5 py-1' : 'px-3 py-2'} rounded cursor-pointer transition-all industrial-hover flex items-center justify-between w-full font-mono text-xs tracking-wider bg-base-200 border border-base-300 text-base-content/60"
+		class="{compact
+			? 'px-2.5 py-1'
+			: 'px-3 py-2'} rounded cursor-pointer transition-all industrial-hover flex items-center justify-between w-full font-mono text-xs tracking-wider bg-base-200 border border-base-300 text-base-content/60"
 	>
-		<span>{formatProjectOption(selectedProject)}</span>
+		<span class="flex items-center gap-2">
+			{#if showColors && selectedProject && selectedProject !== "All Projects"}
+				<span
+					class="w-2 h-2 rounded-full flex-shrink-0"
+					style="background: {getColor(selectedProject)};"
+				></span>
+			{/if}
+			{formatProjectOption(selectedProject)}
+		</span>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			fill="none"
@@ -66,21 +92,34 @@
 			stroke="currentColor"
 			class="w-4 h-4 text-base-content/50"
 		>
-			<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+			<path
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+			/>
 		</svg>
 	</div>
 	<!-- Dropdown Menu - Industrial -->
 	<ul
 		tabindex="0"
-		class="dropdown-content menu rounded-box z-[60] min-w-40 w-max p-2 shadow-lg max-h-80 overflow-y-auto overflow-x-hidden bg-base-200 border border-base-300"
+		class="dropdown-content rounded-box z-[60] w-full p-2 shadow-lg max-h-80 overflow-y-auto overflow-x-hidden bg-base-200 border border-base-300"
 	>
 		{#each projects as project, index}
-			<li class="fade-in fade-in-delay-{Math.min(index, 12)}">
+			<li class="fade-in-fast fade-in-fast-delay-{Math.min(index, 12)}">
 				<button
 					type="button"
-					class="font-mono text-xs transition-all industrial-hover {selectedProject === project ? 'project-option-selected' : 'project-option-default'}"
+					class="font-mono text-xs py-2 px-3 rounded transition-all industrial-hover flex items-center gap-2 w-full {selectedProject ===
+					project
+						? 'project-option-selected'
+						: 'project-option-default'}"
 					onclick={() => handleSelect(project)}
 				>
+					{#if showColors && project !== "All Projects"}
+						<span
+							class="w-2 h-2 rounded-full flex-shrink-0"
+							style="background: {getColor(project)};"
+						></span>
+					{/if}
 					{formatProjectOption(project)}
 				</button>
 			</li>

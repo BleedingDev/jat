@@ -19,6 +19,7 @@
 	import GitPanel from '$lib/components/files/GitPanel.svelte';
 	import DiffViewer from '$lib/components/files/DiffViewer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
+	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 	import { FilesSkeleton } from '$lib/components/skeleton';
 
@@ -42,11 +43,12 @@
 	let selectedFilePath = $state<string | null>(null);
 	let selectedFileIsStaged = $state(false);
 
-	// Derived: selected project's color
-	const selectedProjectColor = $derived(
-		selectedProject
-			? projects.find(p => p.name === selectedProject)?.activeColor || null
-			: null
+	// Derived: project names for the ProjectSelector (sorted by last activity from API)
+	const projectNames = $derived(projects.map(p => p.name));
+
+	// Derived: project colors map for immediate color display
+	const projectColors = $derived(
+		new Map(projects.filter(p => p.activeColor).map(p => [p.name, p.activeColor!]))
 	);
 
 	// Layout state
@@ -127,7 +129,8 @@
 	// Fetch visible projects
 	async function fetchProjects() {
 		try {
-			const response = await fetch('/api/projects?visible=true');
+			// Include stats=true to get projects sorted by last activity (most recent first)
+			const response = await fetch('/api/projects?visible=true&stats=true');
 			const data = await response.json();
 
 			if (!response.ok) {
@@ -216,11 +219,6 @@
 		selectedFilePath = null;
 	}
 
-	// Get display name for selected project
-	const selectedProjectDisplay = $derived(
-		projects.find(p => p.name === selectedProject)?.displayName || selectedProject || 'Select Project'
-	);
-
 	onMount(() => {
 		fetchProjects();
 
@@ -281,35 +279,14 @@
 				>
 					<!-- Project Selector in Panel Header -->
 					<div class="panel-header project-header">
-						<div class="dropdown dropdown-bottom flex-1">
-							<button class="project-selector-compact" tabindex="0">
-								{#if selectedProjectColor}
-									<span
-										class="w-2 h-2 rounded-full flex-shrink-0"
-										style="background: {selectedProjectColor};"
-									></span>
-								{/if}
-								<span class="project-name-compact">{selectedProjectDisplay}</span>
-								<svg class="dropdown-arrow-compact" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-								</svg>
-							</button>
-							<ul tabindex="-1" class="dropdown-content bg-base-200 rounded-box shadow-xl border border-base-300 max-h-64 overflow-y-auto z-50 p-1.5 w-full min-w-48">
-								{#each projects as project (project.name)}
-									<button
-										class="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md hover:bg-base-300 transition-colors text-left text-sm"
-										class:bg-base-300={selectedProject === project.name}
-										onclick={() => { handleProjectChange(project.name); }}
-									>
-										<span
-											class="w-2 h-2 rounded-full flex-shrink-0"
-											style="background: {project.activeColor || 'oklch(0.60 0.15 145)'};"
-										></span>
-										<span class="font-medium text-base-content truncate">{project.displayName}</span>
-									</button>
-								{/each}
-							</ul>
-						</div>
+						<ProjectSelector
+							projects={projectNames}
+							selectedProject={selectedProject || 'Select Project'}
+							onProjectChange={handleProjectChange}
+							showColors={true}
+							compact={true}
+							{projectColors}
+						/>
 					</div>
 
 					<!-- Page Title -->
@@ -405,42 +382,6 @@
 	/* Project Selector (compact) */
 	.project-header {
 		padding: 0.375rem 0.5rem;
-	}
-
-	.project-selector-compact {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		padding: 0.25rem 0.5rem;
-		background: transparent;
-		border: none;
-		border-radius: 0.375rem;
-		cursor: pointer;
-		transition: background 0.15s ease;
-	}
-
-	.project-selector-compact:hover {
-		background: oklch(0.22 0.02 250);
-	}
-
-	.project-name-compact {
-		font-size: 0.8125rem;
-		font-weight: 600;
-		color: oklch(0.80 0.02 250);
-		font-family: ui-monospace, monospace;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		flex: 1;
-		text-align: left;
-	}
-
-	.dropdown-arrow-compact {
-		width: 0.875rem;
-		height: 0.875rem;
-		color: oklch(0.45 0.02 250);
-		flex-shrink: 0;
 	}
 
 	/* Body: Side-by-side layout */
