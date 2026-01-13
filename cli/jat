@@ -347,16 +347,26 @@ apply_border_color() {
         return 0  # Skip if not on Hyprland
     fi
 
-    # Use windowrulev2 to set border color for windows with this title prefix
-    # Format: bordercolor <active> [inactive],title:^(PREFIX)
-    local color_spec="$active_color"
-    if [[ -n "$inactive_color" ]]; then
-        color_spec="$active_color $inactive_color"
-    fi
+    # Find all windows with matching title prefix and apply colors using setprop
+    # This uses hyprctl dispatch setprop which is the correct API for Hyprland 0.52+
+    local clients
+    clients=$(hyprctl clients -j 2>/dev/null) || return 0
 
-    # The title_prefix already includes the colon (e.g., "JAT:")
-    local rule="bordercolor $color_spec,title:^($title_prefix)"
-    hyprctl keyword windowrulev2 "$rule" &>/dev/null || true
+    echo "$clients" | jq -r --arg prefix "$title_prefix" \
+        '.[] | select(.title | startswith($prefix)) | .address' | \
+    while read -r address; do
+        [[ -z "$address" ]] && continue
+
+        # Apply active border color
+        if [[ -n "$active_color" ]]; then
+            hyprctl dispatch setprop "address:$address" activebordercolor "$active_color" &>/dev/null || true
+        fi
+
+        # Apply inactive border color
+        if [[ -n "$inactive_color" ]]; then
+            hyprctl dispatch setprop "address:$address" inactivebordercolor "$inactive_color" &>/dev/null || true
+        fi
+    done
 }
 
 apply_all_colors() {
