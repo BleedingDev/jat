@@ -529,20 +529,25 @@ launch_ide() {
         return 0
     fi
 
+    # Use server-jat prefix so the /api/servers endpoint can find it
+    local session_name="server-jat"
+
+    # Kill existing IDE server session before spawning new terminal
+    # This allows running `jat` to reset/restart the IDE server
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+        echo -e "${DIM}  → Stopping existing IDE server...${NC}"
+        tmux kill-session -t "$session_name" 2>/dev/null || true
+    fi
+
     echo -e "${DIM}  → IDE :$ide_port${NC}"
 
     # Clear Vite cache to prevent stale chunk errors
     rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
 
-    # Use server-jat prefix so the /api/servers endpoint can find it
-    local session_name="server-jat"
-
     # Launch IDE dev server inside a tmux session
     # This allows the attach feature to work with tmux windows
     $TERMINAL -T "$name: IDE :$ide_port" -e bash -c "
         cd '$ide_path'
-        # Kill existing session if present (server may have crashed)
-        tmux kill-session -t '$session_name' 2>/dev/null || true
         tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$ide_path'
         # Wait for shell to initialize
         sleep 0.3
