@@ -104,7 +104,9 @@ async function getProjectsWithColors() {
 }
 
 /**
- * Apply border colors for all projects
+ * Apply border colors for all projects using windowrulev2
+ * This uses hyprctl keyword windowrulev2 to set per-window border colors
+ * based on window title prefix matching.
  */
 export async function POST() {
 	// Check if Hyprland is available
@@ -126,60 +128,46 @@ export async function POST() {
 		});
 	}
 
-	// Get all Hyprland clients
-	const clients = await getHyprlandClients();
-	if (clients.length === 0) {
-		return json({
-			success: true,
-			message: 'No Hyprland windows found',
-			windowsUpdated: 0
-		});
-	}
-
 	const results = [];
 
-	// For each project, find matching windows and apply colors
+	// For each project, add a windowrulev2 for its title prefix
 	for (const project of projects) {
-		// Match windows with title starting with project name or display name
-		// e.g., "JAT: Claude", "CHIMARO: jat-AgentName"
+		// Create rules for both displayName and uppercase name prefixes
 		const prefixes = [
-			project.displayName + ':',
-			project.name.toUpperCase() + ':'
+			project.displayName,
+			project.name.toUpperCase()
 		];
 
-		const matchingClients = clients.filter(client =>
-			client.title && prefixes.some(prefix => client.title.startsWith(prefix))
-		);
+		// Remove duplicates
+		const uniquePrefixes = [...new Set(prefixes)];
 
-		for (const client of matchingClients) {
+		for (const prefix of uniquePrefixes) {
 			try {
-				// Set active border color
-				if (project.activeColor) {
-					await execAsync(
-						`hyprctl dispatch setprop "address:${client.address}" activebordercolor "${project.activeColor}"`,
-						{ timeout: 2000 }
-					);
+				// Build the bordercolor rule
+				// Format: bordercolor <active> [inactive],title:^(PREFIX:)
+				let colorSpec = project.activeColor;
+				if (project.inactiveColor) {
+					colorSpec += ` ${project.inactiveColor}`;
 				}
 
-				// Set inactive border color
-				if (project.inactiveColor) {
-					await execAsync(
-						`hyprctl dispatch setprop "address:${client.address}" inactivebordercolor "${project.inactiveColor}"`,
-						{ timeout: 2000 }
-					);
-				}
+				// Use windowrulev2 to set border color for windows with this title prefix
+				// The regex ^(PREFIX:) matches titles starting with "PREFIX:"
+				const rule = `bordercolor ${colorSpec},title:^(${prefix}:)`;
+				await execAsync(
+					`hyprctl keyword windowrulev2 '${rule}'`,
+					{ timeout: 2000 }
+				);
 
 				results.push({
 					project: project.name,
-					address: client.address,
-					title: client.title,
+					prefix,
+					rule,
 					success: true
 				});
 			} catch (err) {
 				results.push({
 					project: project.name,
-					address: client.address,
-					title: client.title,
+					prefix,
 					success: false,
 					error: err instanceof Error ? err.message : String(err)
 				});
@@ -189,8 +177,8 @@ export async function POST() {
 
 	return json({
 		success: true,
-		message: `Applied colors to ${results.filter(r => r.success).length} windows`,
-		windowsUpdated: results.filter(r => r.success).length,
+		message: `Applied ${results.filter(r => r.success).length} window rules`,
+		rulesApplied: results.filter(r => r.success).length,
 		projectsWithColors: projects.length,
 		results
 	});

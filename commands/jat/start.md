@@ -135,9 +135,48 @@ bd search "$SEARCH_TERM" --updated-after "$DATE_7_DAYS_AGO" --limit 20 --json
 ```
 
 **Actions based on findings:**
-- **Duplicate found**: Consider closing current task as duplicate, or clarify how it differs
-- **Related closed task**: Read its description/commits for context, may inform approach
-- **Related in-progress task**: Send Agent Mail to coordinate, check file reservations
+
+1. **Potential duplicate found** (closed task with very similar title/goal):
+
+   First, emit the `needs_input` signal:
+   ```bash
+   jat-signal needs_input '{
+     "taskId": "jat-xyz",
+     "question": "Found potential duplicate: jat-abc. Is this a duplicate, different scope, or incomplete?",
+     "questionType": "duplicate_check",
+     "options": ["duplicate", "different_scope", "incomplete"]
+   }'
+   ```
+
+   Then ask the user using AskUserQuestion:
+   ```
+   Found potential duplicate: jat-abc "Similar feature X" [CLOSED]
+
+   Options:
+   1. This is a duplicate - close my task and reference jat-abc
+   2. Different scope - proceed (explain how this differs)
+   3. Incomplete - jat-abc didn't fully solve it, continue work
+   ```
+
+   **Wait for user response** before proceeding. After response, emit `working` signal to resume.
+
+2. **Related closed task found** (similar area, useful context):
+   - Read the task description with `bd show jat-xyz`
+   - Note the approach used and files modified
+   - Mention it in your approach: "Building on jat-xyz which did X..."
+   - **Proceed to Step 6**
+
+3. **Related in-progress task found** (another agent working on similar area):
+   ```bash
+   # Check their file reservations
+   am-reservations --json | jq '.[] | select(.agent != "YourName")'
+
+   # Send coordination message
+   am-send "[jat-abc] Coordination" "Starting jat-xyz which touches similar files. Let me know if conflicts." \
+     --from YourName --to OtherAgent --thread jat-abc
+   ```
+   - Wait for response or check reservations before proceeding
+   - May need to pick a different task if files overlap
 
 **If no relevant tasks found**, proceed to Step 6.
 
@@ -219,6 +258,83 @@ Then output the banner:
 ┌─ APPROACH ──────────────────────────────────────────────┐
 │  {YOUR_APPROACH_DESCRIPTION}                            │
 └─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Asking Questions During Work
+
+**CRITICAL: Always emit `needs_input` signal BEFORE asking questions.**
+
+When you need clarification from the user, follow this pattern:
+
+### Step 1: Emit the signal FIRST
+```bash
+jat-signal needs_input '{
+  "taskId": "jat-abc",
+  "question": "Brief description of what you need",
+  "questionType": "clarification"
+}'
+```
+
+**Question types:**
+- `clarification` - Need more details about requirements
+- `decision` - User needs to choose between options
+- `approval` - Confirming before a significant action
+- `blocker` - Cannot proceed without this information
+- `duplicate_check` - Found potential duplicate task
+
+### Step 2: Ask using AskUserQuestion tool
+```
+Use the AskUserQuestion tool with your options
+```
+
+### Step 3: After response, emit working signal
+```bash
+jat-signal working '{
+  "taskId": "jat-abc",
+  "taskTitle": "Task title",
+  "approach": "Updated approach based on user response..."
+}'
+```
+
+### Common Examples
+
+**Clarifying requirements:**
+```bash
+jat-signal needs_input '{
+  "taskId": "jat-abc",
+  "question": "Should the export include archived items?",
+  "questionType": "clarification"
+}'
+```
+
+**Choosing between approaches:**
+```bash
+jat-signal needs_input '{
+  "taskId": "jat-abc",
+  "question": "Two approaches possible: (1) Add new endpoint, (2) Extend existing. Which do you prefer?",
+  "questionType": "decision",
+  "options": ["new_endpoint", "extend_existing"]
+}'
+```
+
+**Confirming destructive action:**
+```bash
+jat-signal needs_input '{
+  "taskId": "jat-abc",
+  "question": "This will delete 50 old records. Proceed?",
+  "questionType": "approval"
+}'
+```
+
+**Blocked on external dependency:**
+```bash
+jat-signal needs_input '{
+  "taskId": "jat-abc",
+  "question": "Need API credentials for the payment service. Can you provide?",
+  "questionType": "blocker"
+}'
 ```
 
 ---
