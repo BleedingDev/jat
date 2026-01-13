@@ -31,6 +31,7 @@
 	} from "$lib/utils/soundEffects";
 	import { slide } from "svelte/transition";
 	import { successToast, infoToast } from "$lib/stores/toasts.svelte";
+	import AnimatedDigits from "$lib/components/AnimatedDigits.svelte";
 
 	interface SlashCommand {
 		name: string;
@@ -61,12 +62,21 @@
 		priority?: number;
 	}
 
+	interface ElapsedTime {
+		hours: string;
+		minutes: string;
+		seconds: string;
+		showHours: boolean;
+	}
+
 	interface Props {
 		sessionState: SessionState;
 		sessionName: string;
 		disabled?: boolean;
 		dropUp?: boolean;
 		alignRight?: boolean;
+		/** Elapsed time to display in badge (optional) */
+		elapsed?: ElapsedTime | null;
 		/** 'badge' = standalone badge with bg/border, 'integrated' = minimal style for embedding in tabs */
 		variant?: "badge" | "integrated";
 		/** When true, shows dormant variant (💤) for states that support it (completed) */
@@ -105,6 +115,7 @@
 		disabled = false,
 		dropUp = false,
 		alignRight = false,
+		elapsed = null,
 		variant = "badge",
 		isDormant = false,
 		dormantTooltip = null,
@@ -736,6 +747,17 @@
 		title={dormantTooltip || config.description || "Click for actions"}
 	>
 		{variant === "integrated" ? displayShortLabel : displayLabel}
+		{#if elapsed}
+			<span class="elapsed-time">
+				{#if elapsed.showHours}
+					<AnimatedDigits value={elapsed.hours} class="text-[9px]" />
+					<span class="elapsed-sep">:</span>
+				{/if}
+				<AnimatedDigits value={elapsed.minutes} class="text-[9px]" />
+				<span class="elapsed-sep">:</span>
+				<AnimatedDigits value={elapsed.seconds} class="text-[9px]" />
+			</span>
+		{/if}
 		{#if autoKillCountdown !== null && autoKillCountdown > 0}
 			<span
 				class="ml-1 font-mono text-[9px] opacity-75"
@@ -1385,5 +1407,18 @@
 	.source-badge-backlog {
 		color: var(--color-info);
 		background: color-mix(in oklch, var(--color-info) 15%, transparent);
+	}
+
+	/* Elapsed time in badge */
+	.elapsed-time {
+		display: inline-flex;
+		align-items: baseline;
+		margin-left: 0.375rem;
+		font-family: ui-monospace, monospace;
+		opacity: 0.85;
+	}
+
+	.elapsed-sep {
+		opacity: 0.5;
 	}
 </style>

@@ -81,9 +81,18 @@
 	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
 
 	// Sort configuration for sessions
-	type SortOption = 'state' | 'project' | 'created';
-	let sortBy = $state<SortOption>('state');
-	let sortDir = $state<'asc' | 'desc'>('asc');
+	type SessionSortOption = 'state' | 'project' | 'created';
+	type SessionSortDirection = 'asc' | 'desc';
+
+	interface SessionSortConfig {
+		value: string;
+		label: string;
+		icon: string;
+		defaultDir: SessionSortDirection;
+	}
+
+	let sortBy = $state<SessionSortOption>('state');
+	let sortDir = $state<SessionSortDirection>('asc');
 
 	// State priority for sorting (lower = more urgent/higher priority)
 	const STATE_PRIORITY: Record<string, number> = {
@@ -100,10 +109,10 @@
 	};
 
 	// Sort options for dropdown
-	const SORT_OPTIONS = [
-		{ value: 'state', label: 'State', icon: '🎯', defaultDir: 'asc' as const },
-		{ value: 'project', label: 'Project', icon: '📁', defaultDir: 'asc' as const },
-		{ value: 'created', label: 'Created', icon: '⏱️', defaultDir: 'desc' as const }
+	const SORT_OPTIONS: SessionSortConfig[] = [
+		{ value: 'state', label: 'State', icon: '🎯', defaultDir: 'asc' },
+		{ value: 'project', label: 'Project', icon: '📁', defaultDir: 'asc' },
+		{ value: 'created', label: 'Created', icon: '⏱️', defaultDir: 'desc' }
 	];
 
 	// Project order (from /api/projects, sorted by last activity)
@@ -537,7 +546,7 @@
 
 	// Handle sort change from dropdown
 	function handleSortChange(value: string, dir: 'asc' | 'desc') {
-		sortBy = value as SortOption;
+		sortBy = value as SessionSortOption;
 		sortDir = dir;
 	}
 
@@ -681,7 +690,7 @@
 				onTabChange={handleTabChange}
 			/>
 			<SortDropdown
-				options={SORT_OPTIONS}
+				options={SORT_OPTIONS as any}
 				{sortBy}
 				{sortDir}
 				onSortChange={handleSortChange}
@@ -841,27 +850,17 @@
 								</td>
 								<td class="td-actions" onclick={(e) => e.stopPropagation()}>
 									{#if session.type === 'agent'}
-										<!-- Two-row layout: Agent info row, then StatusActionBadge -->
+										<!-- Two-row layout: Agent info row, then StatusActionBadge with timer -->
 										<div class="agent-column">
-											<!-- Row 1: Avatar + Name + Timer -->
+											<!-- Row 1: Avatar + Name -->
 											<div class="agent-info-row">
 												<AgentAvatar name={sessionAgentName} size={16} />
 												<span class="agent-name">{sessionAgentName}</span>
-												{#if elapsed}
-													<span class="agent-timer">
-														{#if elapsed.showHours}
-															<AnimatedDigits value={elapsed.hours} class="text-[10px]" />
-															<span class="timer-sep">:</span>
-														{/if}
-														<AnimatedDigits value={elapsed.minutes} class="text-[10px]" />
-														<span class="timer-sep">:</span>
-														<AnimatedDigits value={elapsed.seconds} class="text-[10px]" />
-													</span>
-												{/if}
 											</div>
-											<!-- Row 2: Status action badge -->
+											<!-- Row 2: Status action badge with elapsed time -->
 											<StatusActionBadge
 												sessionState={activityState || 'idle'}
+												{elapsed}
 												sessionName={session.name}
 												onAction={async (actionId) => {
 													if (actionId === 'attach') {
@@ -1295,7 +1294,7 @@
 
 	/* Column widths - give narrow columns fixed widths so SESSION expands */
 	.th-status, .td-status { width: 90px; }
-	.th-actions, .td-actions { width: 160px; }
+	.th-actions, .td-actions { width: 220px; }
 
 	/* Session name */
 	.td-name {
@@ -1375,23 +1374,10 @@
 		font-size: 0.7rem;
 		font-weight: 500;
 		color: oklch(0.75 0.02 250);
-		max-width: 70px;
+		max-width: 120px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.agent-timer {
-		font-family: ui-monospace, monospace;
-		font-size: 0.625rem;
-		color: oklch(0.55 0.02 250);
-		display: inline-flex;
-		align-items: baseline;
-		margin-left: auto;
-	}
-
-	.timer-sep {
-		opacity: 0.5;
 	}
 
 	/* Status */
