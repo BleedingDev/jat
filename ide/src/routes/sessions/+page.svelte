@@ -792,14 +792,49 @@
 											</div>
 											<!-- Row 2: Status action badge -->
 											<StatusActionBadge
-												sessionState="idle"
+												sessionState={activityState || 'idle'}
 												sessionName={session.name}
 												onAction={async (actionId) => {
 													if (actionId === 'attach') {
 														await attachSession(session.name);
-													} else if (actionId === 'kill') {
+													} else if (actionId === 'kill' || actionId === 'cleanup') {
 														await killSession(session.name);
+													} else if (actionId === 'view-task' && sessionTask) {
+														window.location.href = `/tasks?task=${sessionTask.id}`;
+													} else if (actionId === 'complete') {
+														// Send /jat:complete command to session
+														await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({ input: '/jat:complete', type: 'text' })
+														});
+													} else if (actionId === 'complete-kill') {
+														// Send /jat:complete --kill command to session
+														await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({ input: '/jat:complete --kill', type: 'text' })
+														});
+													} else if (actionId === 'interrupt') {
+														// Send Ctrl+C to session
+														await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({ type: 'ctrl-c' })
+														});
+													} else if (actionId === 'escape') {
+														// Send Escape key to session
+														await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({ type: 'escape' })
+														});
 													}
+												}}
+												task={sessionTask ? { id: sessionTask.id, issue_type: sessionTask.issue_type, priority: sessionTask.priority } : null}
+												project={session.project || null}
+												onViewEpic={(epicId) => {
+													window.location.href = `/tasks?task=${epicId}`;
 												}}
 											/>
 										</div>
