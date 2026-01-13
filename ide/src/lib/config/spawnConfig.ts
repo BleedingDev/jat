@@ -7,9 +7,8 @@
 // Valid aliases: 'opus', 'sonnet', 'haiku' or full IDs like 'claude-opus-4-5-20250514'
 export const DEFAULT_MODEL = 'opus';
 
-// Skip permission prompts for autonomous operation
-// Enables fully autonomous agents without human confirmation
-export const DANGEROUSLY_SKIP_PERMISSIONS = true;
+// NOTE: skip_permissions is now in ~/.config/jat/projects.json under defaults.skip_permissions
+// It defaults to FALSE - user must manually accept YOLO warning once, then enable it in config
 
 // Agent Mail server URL (for inter-agent communication)
 export const AGENT_MAIL_URL = 'http://localhost:8765';

@@ -149,6 +149,10 @@
 	// Update timer for elapsed time display (every 30s)
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
 
+	// Poll for signals updates (for Activity Timeline real-time updates)
+	let signalsPollInterval: ReturnType<typeof setInterval> | null = null;
+	const SIGNALS_POLL_INTERVAL_MS = 5000; // Poll every 5 seconds
+
 	// Derived: Find agent for this task
 	const taskAgent = $derived(
 		task?.assignee ? agents.find(a => a.name === task!.assignee) : null
@@ -819,6 +823,37 @@
 		}
 	});
 
+	// Poll for signals updates when drawer is open with an in-progress task
+	// This keeps the Activity Timeline updated in real-time
+	$effect(() => {
+		// Only poll when drawer is open, has a taskId, and task is in_progress
+		const shouldPoll = isOpen && taskId && task?.status === 'in_progress';
+
+		if (shouldPoll) {
+			// Start polling if not already
+			if (!signalsPollInterval) {
+				signalsPollInterval = setInterval(() => {
+					if (taskId) {
+						fetchTaskSignals(taskId);
+					}
+				}, SIGNALS_POLL_INTERVAL_MS);
+			}
+		} else {
+			// Stop polling
+			if (signalsPollInterval) {
+				clearInterval(signalsPollInterval);
+				signalsPollInterval = null;
+			}
+		}
+
+		// Cleanup on effect re-run or component destroy
+		return () => {
+			if (signalsPollInterval) {
+				clearInterval(signalsPollInterval);
+				signalsPollInterval = null;
+			}
+		};
+	});
 
 	// Show toast notification
 	function showToast(type: 'success' | 'error' | 'warning', text: string) {
@@ -1641,6 +1676,10 @@
 			if (timerInterval) {
 				clearInterval(timerInterval);
 				timerInterval = null;
+			}
+			if (signalsPollInterval) {
+				clearInterval(signalsPollInterval);
+				signalsPollInterval = null;
 			}
 		}
 	});

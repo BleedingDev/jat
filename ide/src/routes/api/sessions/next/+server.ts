@@ -15,7 +15,6 @@ import { promisify } from 'util';
 import { getReadyTasks } from '$lib/server/beads.js';
 import {
 	DEFAULT_MODEL,
-	DANGEROUSLY_SKIP_PERMISSIONS,
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
 import { getJatDefaults } from '$lib/server/projectPaths.js';
@@ -100,7 +99,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		let claudeCmd = `cd "${projectPath}"`;
 		claudeCmd += ` && AGENT_MAIL_URL="${AGENT_MAIL_URL}"`;
 		claudeCmd += ` claude --model ${DEFAULT_MODEL}`;
-		if (DANGEROUSLY_SKIP_PERMISSIONS) {
+		// Only pass --dangerously-skip-permissions if user has explicitly enabled it
+		// User must accept the YOLO warning manually first, then set skip_permissions: true in config
+		if (jatDefaults.skip_permissions) {
 			claudeCmd += ' --dangerously-skip-permissions';
 		}
 

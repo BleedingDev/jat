@@ -28,6 +28,7 @@ const JAT_CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
  * @property {number} [agent_stagger] - Stagger delay between agent spawns (seconds)
  * @property {number} [claude_startup_timeout] - Claude startup timeout (seconds)
  * @property {number} [auto_proceed_delay] - Delay before spawning next task on auto-proceed (seconds)
+ * @property {boolean} [skip_permissions] - Pass --dangerously-skip-permissions to Claude (user must accept YOLO first)
  */
 
 /**
@@ -148,15 +149,18 @@ export async function getJatDefaults() {
 	const jatConfig = await readJatConfig();
 
 	// Default values
+	// NOTE: skip_permissions defaults to false for safety - user must explicitly enable
+	// after they've manually accepted the YOLO warning once
 	const defaults = {
 		terminal: 'alacritty',
 		editor: 'code',
 		tools_path: '~/.local/bin',
-		claude_flags: '--dangerously-skip-permissions',
+		claude_flags: '',
 		model: 'opus',
 		agent_stagger: 15,
 		claude_startup_timeout: 20,
-		auto_proceed_delay: 2
+		auto_proceed_delay: 2,
+		skip_permissions: false
 	};
 
 	// Override with config values if present
@@ -170,6 +174,7 @@ export async function getJatDefaults() {
 		if (typeof configDefaults.agent_stagger === 'number') defaults.agent_stagger = configDefaults.agent_stagger;
 		if (typeof configDefaults.claude_startup_timeout === 'number') defaults.claude_startup_timeout = configDefaults.claude_startup_timeout;
 		if (typeof configDefaults.auto_proceed_delay === 'number') defaults.auto_proceed_delay = configDefaults.auto_proceed_delay;
+		if (typeof configDefaults.skip_permissions === 'boolean') defaults.skip_permissions = configDefaults.skip_permissions;
 	}
 
 	return defaults;

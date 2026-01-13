@@ -125,23 +125,221 @@ async function findProjectForAgent(agentName) {
 }
 
 /**
- * Apply Hyprland border colors for a session
- * @param {string} sessionName - tmux session name
- * @param {string} projectName - Project name
+ * Check if Hyprland is available
  */
-async function applyHyprlandColors(sessionName, projectName) {
+async function isHyprlandAvailable() {
 	try {
-		const response = await globalThis.fetch(
-			`http://localhost:${process.env.PORT || 3333}/api/sessions/${sessionName}/hyprland-color?project=${projectName}`,
-			{ method: 'POST' }
-		);
-		if (response.ok) {
-			const result = await response.json();
-			console.log(`[attach] Hyprland colors applied: ${result.windowsUpdated || 0} windows`);
-		}
+		await execAsync('command -v hyprctl', { timeout: 1000 });
+		return true;
 	} catch {
-		// Silent - Hyprland coloring is optional
+		return false;
 	}
+}
+
+/**
+ * Get all Hyprland window addresses
+ * @returns {Promise<Set<string>>}
+ */
+async function getHyprlandWindowAddresses() {
+	try {
+		const { stdout } = await execAsync('hyprctl clients -j', { timeout: 5000 });
+		const clients = JSON.parse(stdout);
+		return new Set(clients.map((/** @type {{address: string}} */ c) => c.address));
+	} catch {
+		return new Set();
+	}
+}
+
+/**
+ * Apply border color directly to a window by address
+ * @param {string} address - Window address
+ * @param {string} activeColor - Active border color
+ * @param {string} inactiveColor - Inactive border color
+ */
+async function applyBorderColorToWindow(address, activeColor, inactiveColor) {
+	try {
+		if (activeColor) {
+			await execAsync(
+				`hyprctl dispatch setprop "address:${address}" activebordercolor "${activeColor}"`,
+				{ timeout: 2000 }
+			);
+		}
+		if (inactiveColor) {
+			await execAsync(
+				`hyprctl dispatch setprop "address:${address}" inactivebordercolor "${inactiveColor}"`,
+				{ timeout: 2000 }
+			);
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Get project colors from config
+ * @param {string} projectName
+ * @returns {Promise<{activeColor: string, inactiveColor: string} | null>}
+ */
+async function getProjectColors(projectName) {
+	try {
+		const configPath = join(homedir(), '.config', 'jat', 'projects.json');
+		if (!existsSync(configPath)) return null;
+
+		const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+		const projectConfig = config.projects?.[projectName];
+		if (!projectConfig?.active_color) return null;
+
+		// Normalize colors to rgb() format
+		const normalize = (/** @type {string} */ c) => {
+			if (!c) return '';
+			if (c.startsWith('rgb(')) return c;
+			if (c.startsWith('#')) return `rgb(${c.slice(1)})`;
+			return `rgb(${c})`;
+		};
+
+		return {
+			activeColor: normalize(projectConfig.active_color),
+			inactiveColor: normalize(projectConfig.inactive_color)
+		};
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Get the currently active/focused Hyprland window address
+ * @returns {Promise<string | null>}
+ */
+async function getActiveWindowAddress() {
+	try {
+		const { stdout } = await execAsync('hyprctl activewindow -j', { timeout: 2000 });
+		const activeWindow = JSON.parse(stdout);
+		return activeWindow?.address || null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Find Hyprland window by matching tmux client PID
+ * @param {string} parentSession - tmux session name to find client for
+ * @returns {Promise<string | null>} Window address or null
+ */
+async function findWindowByTmuxClient(parentSession) {
+	try {
+		// Get the PID of the terminal attached to the parent session
+		const { stdout: clientInfo } = await execAsync(
+			`tmux list-clients -t "${parentSession}" -F '#{client_pid}' 2>/dev/null | head -1`,
+			{ timeout: 2000 }
+		);
+		const clientPid = clientInfo.trim();
+		if (!clientPid) return null;
+
+		// Get all Hyprland windows
+		const { stdout: clientsJson } = await execAsync('hyprctl clients -j', { timeout: 5000 });
+		const clients = JSON.parse(clientsJson);
+
+		// Find window with matching PID (or parent PID for terminal emulators)
+		for (const client of clients) {
+			if (client.pid && (
+				client.pid.toString() === clientPid ||
+				client.pid.toString() === clientPid.split('\n')[0]
+			)) {
+				return client.address;
+			}
+		}
+
+		// Also try finding by checking if client PID is a child of window PID
+		// (terminal emulators spawn shells as children)
+		for (const client of clients) {
+			if (client.pid && client.class?.toLowerCase().includes('alacritty')) {
+				try {
+					const { stdout: ppid } = await execAsync(
+						`ps -o ppid= -p ${clientPid} 2>/dev/null | tr -d ' '`,
+						{ timeout: 1000 }
+					);
+					if (ppid.trim() === client.pid.toString()) {
+						return client.address;
+					}
+				} catch {
+					// Ignore
+				}
+			}
+		}
+
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Apply Hyprland border colors to the parent session's terminal window
+ * @param {string} parentSession - tmux session name
+ * @param {string} projectName - Project name for colors
+ */
+async function applyColorsToParentSession(parentSession, projectName) {
+	if (!await isHyprlandAvailable()) return;
+
+	const colors = await getProjectColors(projectName);
+	if (!colors) return;
+
+	// Small delay to let tmux window switch complete
+	await new Promise(r => setTimeout(r, 200));
+
+	// Try to find window by tmux client
+	const address = await findWindowByTmuxClient(parentSession);
+	if (address) {
+		const success = await applyBorderColorToWindow(address, colors.activeColor, colors.inactiveColor);
+		if (success) {
+			console.log(`[attach] Applied Hyprland colors to parent session window ${address}`);
+		}
+		return;
+	}
+
+	// Fallback: try active window (in case user focused the terminal)
+	const activeAddress = await getActiveWindowAddress();
+	if (activeAddress) {
+		const success = await applyBorderColorToWindow(activeAddress, colors.activeColor, colors.inactiveColor);
+		if (success) {
+			console.log(`[attach] Applied Hyprland colors to active window ${activeAddress} (fallback)`);
+		}
+	}
+}
+
+/**
+ * Apply Hyprland border colors to a newly spawned window
+ * Waits for the window to appear and applies colors directly by address
+ * @param {Set<string>} windowsBefore - Window addresses before spawn
+ * @param {string} projectName - Project name for colors
+ */
+async function applyHyprlandColorsToNewWindow(windowsBefore, projectName) {
+	if (!await isHyprlandAvailable()) return;
+
+	const colors = await getProjectColors(projectName);
+	if (!colors) return;
+
+	// Poll for new window (up to 3 seconds)
+	for (let i = 0; i < 6; i++) {
+		await new Promise(r => setTimeout(r, 500));
+
+		const windowsAfter = await getHyprlandWindowAddresses();
+		const newWindows = [...windowsAfter].filter(addr => !windowsBefore.has(addr));
+
+		if (newWindows.length > 0) {
+			// Apply colors to all new windows (usually just one)
+			for (const address of newWindows) {
+				const success = await applyBorderColorToWindow(address, colors.activeColor, colors.inactiveColor);
+				if (success) {
+					console.log(`[attach] Applied Hyprland colors to new window ${address}`);
+				}
+			}
+			return;
+		}
+	}
+
+	console.log('[attach] No new Hyprland window detected');
 }
 
 /**
@@ -202,13 +400,12 @@ export async function POST({ params }) {
 			try {
 				await execAsync(`tmux new-window -t "${parentSession}" -n "${windowName}" "bash -c '${attachCommand}'"`);
 
-				// Apply Hyprland colors (best-effort, delay to allow window to open)
-				setTimeout(async () => {
-					const projectName = await findProjectForAgent(agentName);
-					if (projectName) {
-						await applyHyprlandColors(sessionName, projectName);
-					}
-				}, 1000);
+				// Apply Hyprland colors to the parent session's terminal window
+				const projectName = await findProjectForAgent(agentName);
+				if (projectName) {
+					// Run in background - don't block response
+					applyColorsToParentSession(parentSession, projectName);
+				}
 
 				return json({
 					success: true,
@@ -232,6 +429,9 @@ export async function POST({ params }) {
 		const foundProject = await findProjectForAgent(agentName);
 		const displayName = foundProject ? foundProject.toUpperCase() : 'JAT';
 		const windowTitle = `${displayName}: ${sessionName}`;
+
+		// Capture window addresses before spawning terminal for color application
+		const windowsBeforeTerminal = await getHyprlandWindowAddresses();
 
 		let child;
 		switch (terminal) {
@@ -268,13 +468,11 @@ export async function POST({ params }) {
 
 		child.unref();
 
-		// Apply Hyprland colors (best-effort, delay to allow terminal to open)
-		setTimeout(async () => {
-			const projectName = await findProjectForAgent(agentName);
-			if (projectName) {
-				await applyHyprlandColors(sessionName, projectName);
-			}
-		}, 1500);
+		// Apply Hyprland colors to new window (detect by address diff)
+		if (foundProject) {
+			// Run in background - don't block response
+			applyHyprlandColorsToNewWindow(windowsBeforeTerminal, foundProject);
+		}
 
 		return json({
 			success: true,

@@ -158,7 +158,14 @@ bd search "$SEARCH_TERM" --updated-after "$DATE_7_DAYS_AGO" --limit 20 --json
    3. Incomplete - jat-abc didn't fully solve it, continue work
    ```
 
-   **Wait for user response** before proceeding. After response, emit `working` signal to resume.
+   **Wait for user response** before proceeding. After response, emit `working` signal to resume:
+   ```bash
+   jat-signal working '{
+     "taskId": "jat-xyz",
+     "taskTitle": "Your task title",
+     "approach": "Proceeding with different scope - this task focuses on X while jat-abc did Y"
+   }'
+   ```
 
 2. **Related closed task found** (similar area, useful context):
    - Read the task description with `bd show jat-xyz`
@@ -341,8 +348,11 @@ jat-signal needs_input '{
 
 ## When You Finish Working
 
-**You MUST emit a `review` signal when done.**
+**CRITICAL: You MUST emit a `review` signal BEFORE presenting your findings to the user.**
 
+This applies to ALL work completion - not just code changes. Research, investigation, documentation, and analysis tasks all require a review signal.
+
+**For code changes:**
 ```bash
 jat-signal review '{
   "taskId": "jat-abc",
@@ -357,7 +367,18 @@ jat-signal review '{
 }'
 ```
 
-Then output:
+**For research/investigation tasks (no code changes):**
+```bash
+jat-signal review '{
+  "taskId": "jat-abc",
+  "taskTitle": "Investigate auth timeout issue",
+  "summary": ["Found root cause: token refresh timing", "Identified fix location"],
+  "findings": ["Issue is in src/auth/refresh.ts:45", "Timeout set to 5s but API takes 8s"],
+  "recommendedActions": ["Increase timeout to 15s", "Add retry logic"]
+}'
+```
+
+**Emit the signal FIRST, then output:**
 ```
 ┌────────────────────────────────────────────────────────┐
 │  🔍 READY FOR REVIEW: {TASK_ID}                        │
@@ -391,7 +412,7 @@ IDE spawns agent
        │ jat-signal review
        ▼
   ┌──────────┐
-  │  REVIEW  │  Code done, awaiting user
+  │  REVIEW  │  Work done, awaiting user
   └────┬─────┘
        │ /jat:complete
        ▼
@@ -411,7 +432,23 @@ To work on another task → spawn new agent
 | `jat-signal starting '{...}'` | Starting | After registration | agentName, model, gitBranch, gitStatus, tools |
 | `jat-signal working '{...}'` | Working | After reading task | taskId, taskTitle, approach, expectedFiles |
 | `jat-signal needs_input '{...}'` | Needs Input | Clarification needed | taskId, question, questionType |
-| `jat-signal review '{...}'` | Ready for Review | Code complete | taskId, summary, filesModified |
+| `jat-signal review '{...}'` | Ready for Review | Work complete (code OR research) | taskId, summary, filesModified or findings |
+
+### Minimal Copy-Paste Templates
+
+```bash
+# Starting (after registration)
+jat-signal starting '{"agentName":"NAME","sessionId":"ID","project":"PROJECT","model":"MODEL","gitBranch":"BRANCH","gitStatus":"clean","tools":[],"uncommittedFiles":[]}'
+
+# Working (after reading task)
+jat-signal working '{"taskId":"ID","taskTitle":"TITLE","approach":"APPROACH"}'
+
+# Needs Input (before AskUserQuestion)
+jat-signal needs_input '{"taskId":"ID","question":"QUESTION","questionType":"clarification"}'
+
+# Review (before presenting findings)
+jat-signal review '{"taskId":"ID","taskTitle":"TITLE","summary":["ITEM1","ITEM2"]}'
+```
 
 ---
 

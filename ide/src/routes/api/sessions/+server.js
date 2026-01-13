@@ -10,7 +10,6 @@ import { promisify } from 'util';
 import { readFileSync, existsSync } from 'fs';
 import {
 	DEFAULT_MODEL,
-	DANGEROUSLY_SKIP_PERMISSIONS,
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
 import { getJatDefaults } from '$lib/server/projectPaths.js';
@@ -171,13 +170,17 @@ export async function GET({ url }) {
 export async function POST({ request }) {
 	try {
 		const body = await request.json();
+
+		// Get JAT config defaults for skip_permissions setting
+		const jatDefaults = await getJatDefaults();
+
 		const {
 			agentName,
 			project,
 			model = DEFAULT_MODEL,
 			task,
 			prompt,
-			skipPermissions = DANGEROUSLY_SKIP_PERMISSIONS
+			skipPermissions = jatDefaults.skip_permissions
 		} = body;
 
 		// Determine project path

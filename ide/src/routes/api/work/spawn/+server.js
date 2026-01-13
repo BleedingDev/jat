@@ -21,7 +21,6 @@ import { promisify } from 'util';
 import { existsSync } from 'fs';
 import {
 	DEFAULT_MODEL,
-	DANGEROUSLY_SKIP_PERMISSIONS,
 	AGENT_MAIL_URL,
 	CLAUDE_STARTUP_TIMEOUT_SECONDS
 } from '$lib/config/spawnConfig.js';
@@ -100,6 +99,9 @@ export async function POST({ request }) {
 
 		console.log('[spawn] Project path:', projectPath, inferredFromTaskId ? '(inferred from task ID)' : '');
 
+		// Get JAT config defaults (used for skip_permissions, timeout, etc.)
+		const jatDefaults = await getJatDefaults();
+
 		// Step 1: Generate new agent name via am-register
 		let agentName;
 		try {
@@ -167,7 +169,9 @@ export async function POST({ request }) {
 		claudeCmd += ` && AGENT_MAIL_URL="${AGENT_MAIL_URL}"`;
 		claudeCmd += ` claude --model ${model}`;
 
-		if (DANGEROUSLY_SKIP_PERMISSIONS) {
+		// Only pass --dangerously-skip-permissions if user has explicitly enabled it
+		// User must accept the YOLO warning manually first, then set skip_permissions: true in config
+		if (jatDefaults.skip_permissions) {
 			claudeCmd += ' --dangerously-skip-permissions';
 		}
 
@@ -219,8 +223,6 @@ export async function POST({ request }) {
 
 		// Wait for Claude to initialize with verification
 		// Check that Claude Code TUI is running (not just bash prompt)
-		// Get configurable timeout from JAT config (defaults to CLAUDE_STARTUP_TIMEOUT_SECONDS)
-		const jatDefaults = await getJatDefaults();
 		const maxWaitSeconds = jatDefaults.claude_startup_timeout || 20;
 		const checkIntervalMs = 500;
 		let claudeReady = false;

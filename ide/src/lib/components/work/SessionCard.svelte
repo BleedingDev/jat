@@ -3796,15 +3796,22 @@
 				// Clear any previous error
 				sendInputError = null;
 
-				// When live streaming is enabled, ALWAYS clear the line first as a
-				// defensive measure against stale terminal state (from previous
-				// sessions, crashes, or race conditions)
+				// STEP 1: Send Ctrl-C and Escape BEFORE the message to clear any
+				// stale terminal state (from streaming, previous sessions, or race conditions)
+				// This ensures a clean slate before we send our actual message
+				await onSendInput("ctrl-c", "key");
+				await new Promise((r) => setTimeout(r, 50));
+				await onSendInput("escape", "key");
+				await new Promise((r) => setTimeout(r, 50));
+
+				// When live streaming is enabled, also clear the line
 				if (liveStreamEnabled) {
 					await onSendInput("ctrl-u", "key");
 					await new Promise((r) => setTimeout(r, 30));
 				}
-				// Send the complete message and submit
-				// Note: "text" type already includes Enter in the API, so we don't need to send it separately
+
+				// STEP 2: Send the complete message and submit
+				// Note: "text" type already includes Enter in the API
 				const sendResult = await onSendInput(message, "text");
 
 				// Check if send failed (timeout, network error, etc.)
@@ -3813,6 +3820,12 @@
 					sendInputError = "Message failed to send. Your text has been preserved - please try again.";
 					return; // Don't clear input
 				}
+
+				// STEP 3: Send an extra Enter after a delay
+				// This handles cases where the first Enter was interpreted as Shift+Enter
+				// or a linebreak instead of a submission command
+				await new Promise((r) => setTimeout(r, 100));
+				await onSendInput("enter", "key");
 			}
 
 			// Capture text for exit animation before clearing

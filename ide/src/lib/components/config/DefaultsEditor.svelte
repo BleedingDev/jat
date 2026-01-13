@@ -27,6 +27,7 @@
 		auto_kill_p2: boolean;
 		auto_kill_p3: boolean;
 		auto_kill_p4: boolean;
+		skip_permissions: boolean;
 	}
 
 	// State
@@ -55,6 +56,8 @@
 	let autoKillP2 = $state(false);
 	let autoKillP3 = $state(true);
 	let autoKillP4 = $state(true);
+	let skipPermissions = $state(false);
+	let launchingYolo = $state(false);
 
 	// Track if form has changes
 	let originalValues = $state<JatDefaults | null>(null);
@@ -75,7 +78,8 @@
 			autoKillP1 !== originalValues.auto_kill_p1 ||
 			autoKillP2 !== originalValues.auto_kill_p2 ||
 			autoKillP3 !== originalValues.auto_kill_p3 ||
-			autoKillP4 !== originalValues.auto_kill_p4
+			autoKillP4 !== originalValues.auto_kill_p4 ||
+			skipPermissions !== originalValues.skip_permissions
 		)
 	);
 
@@ -183,6 +187,7 @@
 			autoKillP2 = defaults.auto_kill_p2 ?? true;
 			autoKillP3 = defaults.auto_kill_p3 ?? true;
 			autoKillP4 = defaults.auto_kill_p4 ?? true;
+			skipPermissions = defaults.skip_permissions ?? false;
 			configPath = data.configPath || '';
 
 			// Store original values for change detection
@@ -194,7 +199,8 @@
 				auto_kill_p1: autoKillP1,
 				auto_kill_p2: autoKillP2,
 				auto_kill_p3: autoKillP3,
-				auto_kill_p4: autoKillP4
+				auto_kill_p4: autoKillP4,
+				skip_permissions: skipPermissions
 			};
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load defaults';
@@ -229,7 +235,8 @@
 						auto_kill_p1: autoKillP1,
 						auto_kill_p2: autoKillP2,
 						auto_kill_p3: autoKillP3,
-						auto_kill_p4: autoKillP4
+						auto_kill_p4: autoKillP4,
+						skip_permissions: skipPermissions
 					}
 				})
 			});
@@ -257,7 +264,8 @@
 				auto_kill_p1: autoKillP1,
 				auto_kill_p2: autoKillP2,
 				auto_kill_p3: autoKillP3,
-				auto_kill_p4: autoKillP4
+				auto_kill_p4: autoKillP4,
+				skip_permissions: skipPermissions
 			};
 
 			// Update the runtime auto-kill config store so changes take effect immediately
@@ -300,6 +308,7 @@
 			autoKillP2 = originalValues.auto_kill_p2;
 			autoKillP3 = originalValues.auto_kill_p3;
 			autoKillP4 = originalValues.auto_kill_p4;
+			skipPermissions = originalValues.skip_permissions;
 		}
 	}
 
@@ -337,6 +346,7 @@
 			autoKillP2 = defaults.auto_kill_p2 ?? true;
 			autoKillP3 = defaults.auto_kill_p3 ?? true;
 			autoKillP4 = defaults.auto_kill_p4 ?? true;
+			skipPermissions = defaults.skip_permissions ?? false;
 
 			// Update original values
 			originalValues = {
@@ -347,7 +357,8 @@
 				auto_kill_p1: autoKillP1,
 				auto_kill_p2: autoKillP2,
 				auto_kill_p3: autoKillP3,
-				auto_kill_p4: autoKillP4
+				auto_kill_p4: autoKillP4,
+				skip_permissions: skipPermissions
 			};
 
 			success = 'Defaults reset to factory values';
@@ -357,6 +368,35 @@
 		} finally {
 			resetting = false;
 			showResetConfirm = false;
+		}
+	}
+
+	/**
+	 * Launch a Claude session with --dangerously-skip-permissions flag
+	 * so the user can accept the YOLO warning in their terminal
+	 */
+	async function launchYoloSession() {
+		launchingYolo = true;
+		error = null;
+
+		try {
+			const response = await fetch('/api/sessions/yolo', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to launch session');
+			}
+
+			success = 'Claude session launched! Accept the permissions warning in your terminal, then enable the toggle here.';
+			setTimeout(() => { success = null; }, 8000);
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to launch session';
+		} finally {
+			launchingYolo = false;
 		}
 	}
 </script>
@@ -493,6 +533,79 @@
 						{/if}
 					</div>
 				</div>
+			</div>
+
+			<!-- Autonomous Mode Section -->
+			<div class="form-section autonomous-section">
+				<h3 class="section-title">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon">
+						<path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+					</svg>
+					Autonomous Mode
+				</h3>
+				<p class="section-description">
+					Enable autonomous operation by passing <code>--dangerously-skip-permissions</code> to Claude.
+					This allows agents to execute commands without confirmation prompts.
+				</p>
+
+				<div class="autonomous-warning">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="warning-icon">
+						<path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+					</svg>
+					<div class="warning-content">
+						<strong>First time setup required</strong>
+						<p>
+							Before enabling this toggle, you must accept Claude's permissions warning once in your terminal.
+							Click the button below to launch a Claude session where you can accept it.
+						</p>
+					</div>
+				</div>
+
+				<div class="autonomous-actions">
+					<button
+						type="button"
+						class="btn btn-warning"
+						onclick={launchYoloSession}
+						disabled={launchingYolo || skipPermissions}
+					>
+						{#if launchingYolo}
+							<span class="btn-spinner"></span>
+							Launching...
+						{:else}
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+								<path d="M5 3l14 9-14 9V3z"/>
+							</svg>
+							Launch Claude to Accept Warning
+						{/if}
+					</button>
+					{#if skipPermissions}
+						<span class="already-enabled">Already enabled</span>
+					{/if}
+				</div>
+
+				<div class="form-group" style="margin-top: 1.25rem;">
+					<label class="form-label toggle-label" for="skip-permissions">
+						<span class="toggle-label-text">
+							Enable autonomous mode
+							<span class="label-hint">Pass --dangerously-skip-permissions to spawned agents</span>
+						</span>
+						<input
+							type="checkbox"
+							id="skip-permissions"
+							class="toggle toggle-warning"
+							bind:checked={skipPermissions}
+						/>
+					</label>
+				</div>
+
+				{#if skipPermissions}
+					<div class="enabled-notice">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="notice-icon">
+							<path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+						</svg>
+						<span>Autonomous mode is <strong>enabled</strong>. Agents will run without permission prompts.</span>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Tools Section -->
@@ -1276,5 +1389,96 @@
 	.priority-label {
 		font-size: 0.75rem;
 		color: oklch(0.65 0.02 250);
+	}
+
+	/* Autonomous Mode Section */
+	.autonomous-section {
+		border-color: oklch(0.35 0.12 45);
+		background: oklch(0.16 0.03 45 / 0.3);
+	}
+
+	.section-icon {
+		width: 18px;
+		height: 18px;
+		display: inline-block;
+		vertical-align: middle;
+		margin-right: 0.5rem;
+		color: oklch(0.70 0.15 45);
+	}
+
+	.autonomous-warning {
+		display: flex;
+		gap: 0.75rem;
+		padding: 1rem;
+		background: oklch(0.20 0.08 45 / 0.4);
+		border: 1px solid oklch(0.40 0.12 45 / 0.5);
+		border-radius: 8px;
+		margin-bottom: 1rem;
+	}
+
+	.warning-icon {
+		width: 24px;
+		height: 24px;
+		flex-shrink: 0;
+		color: oklch(0.70 0.18 45);
+	}
+
+	.warning-content {
+		font-size: 0.85rem;
+		color: oklch(0.75 0.02 250);
+		line-height: 1.5;
+	}
+
+	.warning-content strong {
+		color: oklch(0.85 0.10 45);
+		display: block;
+		margin-bottom: 0.25rem;
+	}
+
+	.warning-content p {
+		margin: 0;
+		color: oklch(0.65 0.02 250);
+	}
+
+	.autonomous-actions {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.btn-warning {
+		background: oklch(0.45 0.12 45);
+		border: 1px solid oklch(0.55 0.15 45);
+		color: oklch(0.98 0.02 45);
+	}
+
+	.btn-warning:hover:not(:disabled) {
+		background: oklch(0.50 0.15 45);
+	}
+
+	.already-enabled {
+		font-size: 0.8rem;
+		color: oklch(0.55 0.02 250);
+		font-style: italic;
+	}
+
+	.enabled-notice {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 1rem;
+		padding: 0.75rem 1rem;
+		background: oklch(0.25 0.08 145 / 0.3);
+		border: 1px solid oklch(0.40 0.12 145 / 0.5);
+		border-radius: 8px;
+		font-size: 0.85rem;
+		color: oklch(0.80 0.10 145);
+	}
+
+	.notice-icon {
+		width: 18px;
+		height: 18px;
+		flex-shrink: 0;
+		color: oklch(0.70 0.15 145);
 	}
 </style>

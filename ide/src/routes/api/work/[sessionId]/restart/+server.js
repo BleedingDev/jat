@@ -18,7 +18,6 @@ import { existsSync } from 'fs';
 import { getTasks } from '$lib/server/beads.js';
 import {
 	DEFAULT_MODEL,
-	DANGEROUSLY_SKIP_PERMISSIONS,
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
 import { getJatDefaults } from '$lib/server/projectPaths.js';
@@ -71,6 +70,9 @@ export async function POST({ params }) {
 			}, { status: 400 });
 		}
 
+		// Get JAT config defaults (used for skip_permissions, timeout, etc.)
+		const jatDefaults = await getJatDefaults();
+
 		// Step 2: Kill the existing tmux session
 		try {
 			await execAsync(`tmux kill-session -t "${sessionId}" 2>/dev/null`);
@@ -93,7 +95,9 @@ export async function POST({ params }) {
 		claudeCmd += ` && AGENT_MAIL_URL="${AGENT_MAIL_URL}"`;
 		claudeCmd += ` claude --model ${DEFAULT_MODEL}`;
 
-		if (DANGEROUSLY_SKIP_PERMISSIONS) {
+		// Only pass --dangerously-skip-permissions if user has explicitly enabled it
+		// User must accept the YOLO warning manually first, then set skip_permissions: true in config
+		if (jatDefaults.skip_permissions) {
 			claudeCmd += ' --dangerously-skip-permissions';
 		}
 
@@ -122,7 +126,6 @@ export async function POST({ params }) {
 
 		// Wait for Claude to initialize with verification
 		// Check that Claude Code TUI is running (not just bash prompt)
-		const jatDefaults = await getJatDefaults();
 		const maxWaitSeconds = jatDefaults.claude_startup_timeout || 20;
 		const checkIntervalMs = 500;
 		let claudeReady = false;

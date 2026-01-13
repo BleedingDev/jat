@@ -226,7 +226,13 @@ export const JAT_DEFAULTS = {
 	auto_kill_p1: false,
 	auto_kill_p2: false,
 	auto_kill_p3: true,
-	auto_kill_p4: true
+	auto_kill_p4: true,
+	/**
+	 * Enable autonomous mode (--dangerously-skip-permissions)
+	 * User must manually accept the YOLO warning first, then enable this flag.
+	 * When false, agents will NOT pass --dangerously-skip-permissions.
+	 */
+	skip_permissions: false
 } as const;
 
 // =============================================================================
