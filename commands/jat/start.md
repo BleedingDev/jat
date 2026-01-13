@@ -24,8 +24,9 @@ argument-hint: [agent-name | task-id | agent-name task-id]
 1. **Register agent** - Create new or resume existing
 2. **Check Agent Mail** - Read messages before starting work
 3. **Select task** - From parameter or show recommendations
-4. **Start work** - Reserve files, update Beads, announce start
-5. **Plan approach** - Analyze task, emit rich working signal
+4. **Review prior tasks** - Check for duplicates and related work
+5. **Start work** - Reserve files, update Beads, announce start
+6. **Plan approach** - Analyze task, emit rich working signal
 
 ---
 
@@ -96,7 +97,53 @@ bd ready --json | jq -r '.[] | "  [\(.priority)] \(.id) - \(.title)"'
 
 ---
 
-### STEP 5: Conflict Detection (skip with quick mode)
+### STEP 5: Review Prior Tasks (skip with quick mode)
+
+**Search for related or duplicate work before starting.**
+
+This step helps avoid duplicate effort and surfaces relevant context from recent work.
+
+```bash
+# Extract key terms from task title (remove common words)
+TASK_TITLE="Your task title here"
+# Search for tasks updated in last 7 days with similar keywords
+DATE_7_DAYS_AGO=$(date -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d)
+bd search "$SEARCH_TERM" --updated-after "$DATE_7_DAYS_AGO" --limit 20 --json
+```
+
+**What to look for:**
+- **Duplicates**: Tasks with nearly identical titles or descriptions → may already be done
+- **Related work**: Tasks touching similar files/features → useful context or dependencies
+- **Recent completions**: Recently closed tasks in same area → learn from their approach
+
+**Output format** (if relevant tasks found):
+```
+┌─ RELATED TASKS (last 7 days) ───────────────────────────────────┐
+│                                                                 │
+│  Potential duplicates:                                          │
+│    [CLOSED] jat-abc: Similar feature X                          │
+│    → May already address this. Review before proceeding.        │
+│                                                                 │
+│  Related work:                                                  │
+│    [CLOSED] jat-def: Refactored auth module                     │
+│    → Touched same files. Check approach used.                   │
+│                                                                 │
+│    [IN_PROGRESS] jat-ghi: Auth improvements (by OtherAgent)     │
+│    → Currently being worked on. Coordinate to avoid conflicts.  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Actions based on findings:**
+- **Duplicate found**: Consider closing current task as duplicate, or clarify how it differs
+- **Related closed task**: Read its description/commits for context, may inform approach
+- **Related in-progress task**: Send Agent Mail to coordinate, check file reservations
+
+**If no relevant tasks found**, proceed to Step 6.
+
+---
+
+### STEP 6: Conflict Detection (skip with quick mode)
 
 ```bash
 am-reservations --json          # Check file locks
@@ -106,7 +153,7 @@ bd show "$TASK_ID" --json | jq -r '.[0].dependencies[]'  # Check deps
 
 ---
 
-### STEP 6: Start Task
+### STEP 7: Start Task
 
 ```bash
 bd update "$TASK_ID" --status in_progress --assignee "$AGENT_NAME"
@@ -116,7 +163,7 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" "Starting work" --from "$AGENT_NAME" 
 
 ---
 
-### STEP 7: Emit Signals & Plan
+### STEP 8: Emit Signals & Plan
 
 **Starting signal** (with full session context for IDE display):
 ```bash

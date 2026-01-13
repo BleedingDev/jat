@@ -182,7 +182,7 @@
 	<!-- Project pill mode: outline pill with status dot and project name -->
 	<div class="inline-flex flex-col items-start gap-0.5 relative" bind:this={dropdownRef}>
 		<button
-			class="inline-flex items-center gap-1.5 font-mono rounded-full cursor-pointer
+			class="inline-flex items-center gap-1.5 font-mono cursor-pointer uppercase
 				   hover:opacity-90 transition-all {size === 'xs' ? 'text-xs px-2 py-0.5' : size === 'sm' ? 'text-sm px-2.5 py-0.5' : 'text-base px-3 py-1'}"
 			style="
 				background: color-mix(in oklch, {projectColor} 15%, transparent);
@@ -287,7 +287,7 @@
 	<!-- Default mode: full badge with server info -->
 	<div class="inline-flex flex-col items-start gap-0.5 relative" bind:this={dropdownRef}>
 		<button
-			class="inline-flex items-center font-mono rounded cursor-pointer
+			class="inline-flex items-center font-mono cursor-pointer uppercase
 				   bg-base-100 hover:bg-base-200 transition-colors group border border-base-300 {sizeClasses[size]}"
 			onclick={handleBadgeClick}
 			title="Click for server actions"
