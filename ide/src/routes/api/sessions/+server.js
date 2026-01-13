@@ -50,6 +50,29 @@ function getProjectFromSignal(sessionName) {
 }
 
 /**
+ * Get project from tmux session's working directory
+ * @param {string} sessionName - tmux session name
+ * @returns {Promise<string|null>} Project name or null
+ */
+async function getProjectFromTmuxCwd(sessionName) {
+	try {
+		const { stdout } = await execAsync(`tmux display-message -t "${sessionName}" -p '#{pane_current_path}'`);
+		const cwd = stdout.trim();
+		// Extract project name from path like /home/user/code/steelbridge -> steelbridge
+		if (cwd && cwd.includes('/code/')) {
+			const parts = cwd.split('/code/');
+			if (parts[1]) {
+				// Get first path segment after /code/
+				return parts[1].split('/')[0];
+			}
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * GET /api/sessions
  * List all tmux sessions
  * Query params:
@@ -66,26 +89,36 @@ export async function GET({ url }) {
 		try {
 			const { stdout } = await execAsync(command);
 
-			const sessions = stdout
+			const rawSessions = stdout
 				.trim()
 				.split('\n')
 				.filter(line => line.length > 0)
 				.map(line => {
 					const [name, created, attached, windows] = line.split(':');
-					// Try to get project from signal file
-					const project = getProjectFromSignal(name);
 					return {
 						name,
 						created: new Date(parseInt(created, 10) * 1000).toISOString(),
 						attached: parseInt(attached, 10) > 0,
-						windows: parseInt(windows, 10) || 1,
-						project
+						windows: parseInt(windows, 10) || 1
 					};
 				})
 				.filter(session => {
 					if (filter === 'all') return true;
 					return session.name.startsWith('jat-');
 				});
+
+			// Get project for each session (signal file first, then tmux cwd fallback)
+			const sessions = await Promise.all(
+				rawSessions.map(async (session) => {
+					// Try signal file first (fast, sync)
+					let project = getProjectFromSignal(session.name);
+					// Fall back to tmux working directory (slower, async)
+					if (!project && session.name.startsWith('jat-')) {
+						project = await getProjectFromTmuxCwd(session.name);
+					}
+					return { ...session, project };
+				})
+			);
 
 			return json({
 				success: true,

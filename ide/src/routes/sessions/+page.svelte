@@ -216,12 +216,13 @@
 			}
 			const data = await response.json();
 
-			sessions = (data.sessions || []).map((s: { name: string; created: string; attached: boolean }) => {
-				const { type, project } = categorizeSession(s.name);
+			sessions = (data.sessions || []).map((s: { name: string; created: string; attached: boolean; project?: string }) => {
+				const { type, project: categorizedProject } = categorizeSession(s.name);
 				return {
 					...s,
 					type,
-					project
+					// Use project from API (signal/cwd) if available, else fall back to categorized
+					project: s.project || categorizedProject
 				};
 			});
 			error = null;
