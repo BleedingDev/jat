@@ -14,7 +14,7 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getProjectColor, initProjectColors } from '$lib/utils/projectColors';
+	import { getProjectColor, fetchAndGetProjectColors } from '$lib/utils/projectColors';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import HorizontalResizeHandle from '$lib/components/HorizontalResizeHandle.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
@@ -45,7 +45,7 @@
 	let attachMessage = $state<{ session: string; message: string; method: string } | null>(null);
 
 	// Tab filter state - synced with URL
-	let activeTab = $state('all');
+	let activeTab = $state('agents');
 
 	// Expanded session state (inline SessionCard)
 	let expandedSession = $state<string | null>(null);
@@ -67,6 +67,10 @@
 	let expandedTaskId = $state<string | null>(null);
 	let taskDetailOpen = $state(false);
 
+	// Poll for task details updates (signals) when panel is open
+	let taskDetailsPollInterval: ReturnType<typeof setInterval> | null = null;
+	const TASK_DETAILS_POLL_MS = 5000; // Poll every 5 seconds
+
 	// Extended task detail data (fetched when panel opens)
 	interface TaskAttachment {
 		id: string;
@@ -83,11 +87,12 @@
 	}
 
 	interface TimelineEvent {
-		type: 'beads_event' | 'agent_mail';
-		event: string;
+		type: 'beads_event' | 'agent_mail' | 'signal';
+		event?: string;
 		timestamp: string;
-		description: string;
-		metadata: Record<string, any>;
+		description?: string;
+		metadata?: Record<string, any>;
+		data?: Record<string, any>;  // For signal events
 	}
 
 	interface ExtendedTaskDetails {
@@ -99,7 +104,7 @@
 		updated_at?: string;
 		attachments: TaskAttachment[];
 		timeline: TimelineEvent[];
-		timelineCounts: { total: number; beads_events: number; agent_mail: number };
+		timelineCounts: { total: number; beads_events: number; agent_mail: number; signals?: number };
 	}
 
 	let expandedTaskDetails = $state<ExtendedTaskDetails | null>(null);
@@ -124,6 +129,16 @@
 
 	// Agent to project mapping (from current task)
 	let agentProjects = $state<Map<string, string>>(new Map());
+
+	// Project colors (reactive state to trigger re-render when colors are fetched)
+	let projectColors = $state<Record<string, string>>({});
+
+	// Helper to get project color from reactive state
+	function getProjectColorReactive(taskIdOrProject: string): string | null {
+		if (!taskIdOrProject) return null;
+		const projectPrefix = taskIdOrProject.split('-')[0].toLowerCase();
+		return projectColors[projectPrefix] || getProjectColor(taskIdOrProject);
+	}
 
 	// Agent to task mapping (full task info for TaskIdBadge)
 	interface AgentTask {
@@ -299,9 +314,19 @@
 		}
 	}
 
-	// Fetch all data (project order + agents first, then sessions)
+	// Fetch project colors into reactive state
+	async function fetchProjectColors() {
+		try {
+			const colors = await fetchAndGetProjectColors();
+			projectColors = colors;
+		} catch (err) {
+			console.warn('Failed to fetch project colors:', err);
+		}
+	}
+
+	// Fetch all data (project order + agents + colors first, then sessions)
 	async function fetchAllData() {
-		await Promise.all([fetchProjectOrder(), fetchAgentProjects()]);
+		await Promise.all([fetchProjectOrder(), fetchAgentProjects(), fetchProjectColors()]);
 		await fetchSessions();
 	}
 
@@ -503,7 +528,7 @@
 		}
 	}
 
-	// Fetch extended task details (attachments, dependencies, timeline)
+	// Fetch extended task details (attachments, dependencies, timeline, signals)
 	async function fetchExpandedTaskDetails(taskId: string) {
 		if (!taskId) return;
 
@@ -511,16 +536,33 @@
 		expandedTaskDetails = null;
 
 		try {
-			// Fetch task details, attachments, and history in parallel
-			const [taskRes, attachmentsRes, historyRes] = await Promise.all([
+			// Fetch task details, attachments, history, and signals in parallel
+			const [taskRes, attachmentsRes, historyRes, signalsRes] = await Promise.all([
 				fetch(`/api/tasks/${taskId}`),
 				fetch(`/api/tasks/${taskId}/images`),
-				fetch(`/api/tasks/${taskId}/history`)
+				fetch(`/api/tasks/${taskId}/history`),
+				fetch(`/api/tasks/${taskId}/signals`)
 			]);
 
 			const taskData = taskRes.ok ? await taskRes.json() : null;
 			const attachmentsData = attachmentsRes.ok ? await attachmentsRes.json() : { images: [] };
 			const historyData = historyRes.ok ? await historyRes.json() : { timeline: [], count: { total: 0, beads_events: 0, agent_mail: 0 } };
+			const signalsData = signalsRes.ok ? await signalsRes.json() : { signals: [] };
+
+			// Convert signals to timeline event format and merge with history
+			const signalEvents = (signalsData.signals || []).map((signal: any) => ({
+				type: 'signal' as const,
+				timestamp: signal.timestamp,
+				data: {
+					state: signal.state,
+					agentName: signal.agent_name,
+					...signal.data
+				}
+			}));
+
+			// Merge history timeline with signal events and sort by timestamp
+			const mergedTimeline = [...(historyData.timeline || []), ...signalEvents]
+				.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
 			expandedTaskDetails = {
 				labels: taskData?.task?.labels || [],
@@ -535,8 +577,13 @@
 					filename: img.filename || img.path.split('/').pop(),
 					url: `/api/tasks/${taskId}/images/${encodeURIComponent(img.path.split('/').pop())}`
 				})),
-				timeline: historyData.timeline || [],
-				timelineCounts: historyData.count || { total: 0, beads_events: 0, agent_mail: 0 }
+				timeline: mergedTimeline,
+				timelineCounts: {
+					total: mergedTimeline.length,
+					beads_events: historyData.count?.beads_events || 0,
+					agent_mail: historyData.count?.agent_mail || 0,
+					signals: signalEvents.length
+				}
 			};
 		} catch (err) {
 			console.error('Failed to fetch task details:', err);
@@ -548,6 +595,53 @@
 			};
 		} finally {
 			taskDetailsLoading = false;
+		}
+	}
+
+	// Fetch only signals and merge into existing timeline (for polling updates)
+	async function fetchTaskSignalsOnly(taskId: string) {
+		if (!taskId || !expandedTaskDetails) return;
+
+		try {
+			const signalsRes = await fetch(`/api/tasks/${taskId}/signals`);
+			if (!signalsRes.ok) return;
+
+			const signalsData = await signalsRes.json();
+			const signalEvents = (signalsData.signals || []).map((signal: any) => ({
+				type: 'signal' as const,
+				timestamp: signal.timestamp,
+				data: {
+					state: signal.state,
+					agentName: signal.agent_name,
+					...signal.data
+				}
+			}));
+
+			// Filter out existing signals and only add new ones
+			const existingTimestamps = new Set(
+				expandedTaskDetails.timeline
+					.filter(e => e.type === 'signal')
+					.map(e => e.timestamp)
+			);
+			const newSignals = signalEvents.filter((s: any) => !existingTimestamps.has(s.timestamp));
+
+			if (newSignals.length > 0) {
+				// Merge and re-sort timeline
+				const mergedTimeline = [...expandedTaskDetails.timeline, ...newSignals]
+					.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+				expandedTaskDetails = {
+					...expandedTaskDetails,
+					timeline: mergedTimeline,
+					timelineCounts: {
+						...expandedTaskDetails.timelineCounts,
+						total: mergedTimeline.length,
+						signals: (expandedTaskDetails.timelineCounts.signals || 0) + newSignals.length
+					}
+				};
+			}
+		} catch (err) {
+			console.error('Failed to fetch task signals:', err);
 		}
 	}
 
@@ -683,7 +777,8 @@
 	function handleTabChange(tabId: string) {
 		activeTab = tabId;
 		const url = new URL(window.location.href);
-		if (tabId === 'all') {
+		if (tabId === 'agents') {
+			// 'agents' is the default, so no tab param needed
 			url.searchParams.delete('tab');
 		} else {
 			url.searchParams.set('tab', tabId);
@@ -695,10 +790,11 @@
 	$effect(() => {
 		if (browser) {
 			const tabParam = $page.url.searchParams.get('tab');
-			if (tabParam && ['agents', 'servers', 'terminal'].includes(tabParam)) {
+			if (tabParam && ['all', 'servers', 'terminal'].includes(tabParam)) {
 				activeTab = tabParam;
 			} else {
-				activeTab = 'all';
+				// Default to 'agents' when no tab param or invalid param
+				activeTab = 'agents';
 			}
 		}
 	});
@@ -710,7 +806,6 @@
 	}
 
 	onMount(() => {
-		initProjectColors();
 		fetchAllData();
 		// Poll every 3 seconds
 		pollInterval = setInterval(() => {
@@ -726,6 +821,40 @@
 		if (outputPollInterval) {
 			clearInterval(outputPollInterval);
 		}
+		if (taskDetailsPollInterval) {
+			clearInterval(taskDetailsPollInterval);
+		}
+	});
+
+	// Poll for task details (signals) when panel is open
+	$effect(() => {
+		const shouldPoll = taskDetailOpen && expandedTaskId;
+
+		if (shouldPoll) {
+			// Start polling if not already
+			if (!taskDetailsPollInterval) {
+				taskDetailsPollInterval = setInterval(() => {
+					if (expandedTaskId) {
+						// Only refetch signals, merge into existing timeline
+						fetchTaskSignalsOnly(expandedTaskId);
+					}
+				}, TASK_DETAILS_POLL_MS);
+			}
+		} else {
+			// Stop polling
+			if (taskDetailsPollInterval) {
+				clearInterval(taskDetailsPollInterval);
+				taskDetailsPollInterval = null;
+			}
+		}
+
+		// Cleanup on effect re-run
+		return () => {
+			if (taskDetailsPollInterval) {
+				clearInterval(taskDetailsPollInterval);
+				taskDetailsPollInterval = null;
+			}
+		};
 	});
 
 	// Helper function to get state priority for a session
@@ -933,9 +1062,9 @@
 							}
 							{@const derivedProject = agentProjects.get(sessionAgentName) || session.project || null}
 							{@const rowProjectColor = sessionTask?.id
-								? getProjectColor(sessionTask.id)
+								? getProjectColorReactive(sessionTask.id)
 								: derivedProject
-									? getProjectColor(`${derivedProject}-x`)
+									? getProjectColorReactive(`${derivedProject}-x`)
 									: null
 							}
 							{@const elapsed = getElapsedFormatted(session.created)}
@@ -1383,36 +1512,67 @@
 																	<div class="task-panel-timeline">
 																		{#each expandedTaskDetails.timeline.filter(e =>
 																			timelineFilter === 'all' ||
-																			(timelineFilter === 'tasks' && e.type === 'beads_event') ||
+																			(timelineFilter === 'tasks' && (e.type === 'beads_event' || e.type === 'signal')) ||
 																			(timelineFilter === 'messages' && e.type === 'agent_mail')
 																		) as event}
-																			<div class="timeline-event" class:task-event={event.type === 'beads_event'} class:message-event={event.type === 'agent_mail'}>
+																			<div class="timeline-event" class:task-event={event.type === 'beads_event'} class:message-event={event.type === 'agent_mail'} class:signal-event={event.type === 'signal'}>
 																				<div class="timeline-event-header">
 																					<span class="timeline-event-type">
 																						{#if event.type === 'beads_event'}
 																							📋
+																						{:else if event.type === 'signal'}
+																							⚡
 																						{:else}
 																							💬
 																						{/if}
-																						{event.event}
+																						{#if event.type === 'signal'}
+																							{event.data?.state || 'signal'}
+																						{:else}
+																							{event.event}
+																						{/if}
 																					</span>
 																					<span class="timeline-event-time">
 																						{new Date(event.timestamp).toLocaleString()}
 																					</span>
 																				</div>
-																				<p class="timeline-event-desc">{event.description}</p>
-																				{#if event.metadata}
-																					<div class="timeline-event-meta">
-																						{#if event.metadata.status}
-																							<span class="badge badge-xs {statusColors[event.metadata.status]}">{event.metadata.status}</span>
+																				{#if event.type === 'signal'}
+																					<p class="timeline-event-desc">
+																						{#if event.data?.state === 'starting'}
+																							Agent {event.data?.agentName || ''} started working
+																						{:else if event.data?.state === 'working'}
+																							Working on: {event.data?.taskTitle || event.data?.taskId || ''}
+																						{:else if event.data?.state === 'review'}
+																							Ready for review
+																						{:else if event.data?.state === 'needs_input'}
+																							{event.data?.question || 'Waiting for input'}
+																						{:else if event.data?.state === 'completing'}
+																							Completing task (step: {event.data?.currentStep || ''})
+																						{:else if event.data?.state === 'completed'}
+																							Task completed
+																						{:else}
+																							State: {event.data?.state || 'unknown'}
 																						{/if}
-																						{#if event.metadata.assignee}
-																							<span class="badge badge-xs badge-outline">@{event.metadata.assignee}</span>
-																						{/if}
-																						{#if event.metadata.from_agent}
-																							<span class="badge badge-xs badge-outline">from: {event.metadata.from_agent}</span>
-																						{/if}
-																					</div>
+																					</p>
+																					{#if event.data?.agentName}
+																						<div class="timeline-event-meta">
+																							<span class="badge badge-xs badge-outline">@{event.data.agentName}</span>
+																						</div>
+																					{/if}
+																				{:else}
+																					<p class="timeline-event-desc">{event.description}</p>
+																					{#if event.metadata}
+																						<div class="timeline-event-meta">
+																							{#if event.metadata.status}
+																								<span class="badge badge-xs {statusColors[event.metadata.status]}">{event.metadata.status}</span>
+																							{/if}
+																							{#if event.metadata.assignee}
+																								<span class="badge badge-xs badge-outline">@{event.metadata.assignee}</span>
+																							{/if}
+																							{#if event.metadata.from_agent}
+																								<span class="badge badge-xs badge-outline">from: {event.metadata.from_agent}</span>
+																							{/if}
+																						</div>
+																					{/if}
 																				{/if}
 																			</div>
 																		{/each}
@@ -2490,6 +2650,10 @@
 
 	.timeline-event.message-event {
 		border-left-color: oklch(0.65 0.15 280);
+	}
+
+	.timeline-event.signal-event {
+		border-left-color: oklch(0.70 0.18 85); /* amber/yellow for signals */
 	}
 
 	.timeline-event-header {

@@ -177,3 +177,12 @@ export function getProjectColorMap(tasks: Array<{ id: string }>): Map<string, st
 export function getCachedProjectColors(): Record<string, string> {
 	return { ...dynamicProjectColors };
 }
+
+/**
+ * Fetch project colors and return them - for use in reactive contexts
+ * Returns the colors object after ensuring they're fetched
+ */
+export async function fetchAndGetProjectColors(): Promise<Record<string, string>> {
+	await fetchProjectColors();
+	return { ...dynamicProjectColors };
+}

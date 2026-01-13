@@ -3,12 +3,13 @@
 	 * SessionsTabs Component
 	 *
 	 * Minimal tab-based navigation for filtering sessions by type on the Sessions page.
-	 * Simple colored text with brackets: [agents] [servers] [terminal]
+	 * Simple colored text with brackets: [agents] [servers] [terminal] [all]
 	 *
-	 * Tabs:
-	 * - agents: Agent sessions (jat-* tmux sessions) - cyan
-	 * - servers: Dev server sessions (server-* tmux sessions) - green
-	 * - terminal: Other terminal sessions - purple
+	 * Tabs (in display order):
+	 * - agents: Agent sessions (jat-* tmux sessions) - default
+	 * - servers: Dev server sessions (server-* tmux sessions)
+	 * - terminal: Other terminal sessions
+	 * - all: Show all sessions (last option)
 	 *
 	 * @see ide/src/routes/sessions/+page.svelte for usage
 	 */
@@ -41,13 +42,6 @@
 	// Tab definitions with icons
 	const tabs = $derived([
 		{
-			id: 'all',
-			label: 'all',
-			count: counts.total,
-			// Grid icon
-			icon: 'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z'
-		},
-		{
 			id: 'agents',
 			label: 'agents',
 			count: counts.agent,
@@ -67,6 +61,13 @@
 			count: counts.other,
 			// Terminal icon
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z'
+		},
+		{
+			id: 'all',
+			label: 'all',
+			count: counts.total,
+			// Grid icon
+			icon: 'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z'
 		}
 	]);
 
