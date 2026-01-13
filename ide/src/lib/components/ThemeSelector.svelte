@@ -91,30 +91,51 @@
 </script>
 
 {#if inline}
-	<!-- Inline mode: render theme grid directly without dropdown wrapper -->
-	<div class="max-h-32 overflow-y-auto px-1">
-		<div class="grid grid-cols-4 gap-1">
+	<!-- Inline mode: collapsible theme list with color previews and animations -->
+	<details class="w-full theme-details">
+		<summary class="flex items-center gap-2 cursor-pointer hover:bg-base-300 transition-colors px-2 py-1.5 rounded list-none">
+			<!-- Theme color preview blocks with animation -->
+			<div
+				data-theme={currentTheme}
+				class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-0.5 shadow-sm w-4 h-4 transition-transform duration-300 ease-out"
+				class:theme-spin={isAnimating}
+			>
+				<div class="bg-base-content size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 0ms"></div>
+				<div class="bg-primary size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 50ms"></div>
+				<div class="bg-secondary size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 100ms"></div>
+				<div class="bg-accent size-1 rounded-full transition-all duration-300 theme-dot" class:theme-dot-animate={isAnimating} style="--dot-delay: 150ms"></div>
+			</div>
+			<span class="text-xs flex-1 text-left text-base-content/70">{currentThemeLabel}</span>
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 text-base-content/50 transition-transform duration-200 details-chevron">
+				<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+			</svg>
+		</summary>
+		<div class="max-h-48 overflow-y-auto mt-1 ml-2 border-l border-base-content/10 pl-2">
 			{#each themes as theme}
 				<button
-					class="flex flex-col items-center gap-0.5 p-1 rounded transition-colors hover:bg-base-300 {currentTheme === theme.name ? 'bg-primary/20 ring-1 ring-primary/50' : ''}"
+					class="flex items-center gap-2 w-full px-2 py-1 rounded transition-colors hover:bg-base-300 {currentTheme === theme.name ? 'bg-primary/20' : ''}"
 					onclick={() => handleThemeChange(theme.name)}
-					title={theme.label}
 				>
 					<!-- Theme color preview -->
 					<div
 						data-theme={theme.name}
-						class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-0.5 shadow-sm w-5 h-5"
+						class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-0.5 shadow-sm w-4 h-4"
 					>
-						<div class="bg-base-content size-1.5 rounded-full"></div>
-						<div class="bg-primary size-1.5 rounded-full"></div>
-						<div class="bg-secondary size-1.5 rounded-full"></div>
-						<div class="bg-accent size-1.5 rounded-full"></div>
+						<div class="bg-base-content size-1 rounded-full"></div>
+						<div class="bg-primary size-1 rounded-full"></div>
+						<div class="bg-secondary size-1 rounded-full"></div>
+						<div class="bg-accent size-1 rounded-full"></div>
 					</div>
-					<span class="text-[9px] text-base-content/70 truncate w-full text-center">{theme.label}</span>
+					<span class="text-xs text-base-content/70 flex-1 text-left">{theme.label}</span>
+					{#if currentTheme === theme.name}
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3 text-primary">
+							<path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"></path>
+						</svg>
+					{/if}
 				</button>
 			{/each}
 		</div>
-	</div>
+	</details>
 {:else}
 	<!-- Dropdown mode: full dropdown with theme previews -->
 	<div class="dropdown dropdown-end">
@@ -212,6 +233,11 @@
 {/if}
 
 <style>
+	/* Rotate chevron when details is open */
+	.theme-details[open] .details-chevron {
+		transform: rotate(180deg);
+	}
+
 	/* Theme toggle animation - spin and scale the preview grid */
 	.theme-spin {
 		animation: theme-spin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
