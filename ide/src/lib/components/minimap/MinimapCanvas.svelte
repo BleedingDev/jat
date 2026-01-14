@@ -27,10 +27,10 @@
 	let viewportHeight = $state(20);
 	let isDragging = $state(false);
 
-	// ANSI color extraction regex
-	const ANSI_COLOR_REGEX = /\x1b\[([0-9;]*)m/g;
+	// ANSI color extraction regex - matches all SGR sequences
+	const ANSI_REGEX = /\x1b\[([0-9;]*)m/g;
 
-	// Color palette for ANSI codes
+	// Basic 16-color palette
 	const ANSI_COLORS: Record<number, string> = {
 		30: '#1a1a1a', 31: '#e74c3c', 32: '#2ecc71', 33: '#f39c12',
 		34: '#3498db', 35: '#9b59b6', 36: '#00bcd4', 37: '#ecf0f1',
@@ -38,32 +38,76 @@
 		94: '#74b9ff', 95: '#fd79a8', 96: '#81ecec', 97: '#ffffff'
 	};
 
+	// 256-color palette (standard xterm colors)
+	function get256Color(n: number): string {
+		if (n < 16) {
+			// Standard colors - map to our palette
+			const map: Record<number, string> = {
+				0: '#1a1a1a', 1: '#e74c3c', 2: '#2ecc71', 3: '#f39c12',
+				4: '#3498db', 5: '#9b59b6', 6: '#00bcd4', 7: '#ecf0f1',
+				8: '#636e72', 9: '#ff6b6b', 10: '#55efc4', 11: '#ffeaa7',
+				12: '#74b9ff', 13: '#fd79a8', 14: '#81ecec', 15: '#ffffff'
+			};
+			return map[n] || '#9ca3af';
+		} else if (n < 232) {
+			// 216 color cube (6x6x6)
+			const idx = n - 16;
+			const r = Math.floor(idx / 36) * 51;
+			const g = Math.floor((idx % 36) / 6) * 51;
+			const b = (idx % 6) * 51;
+			return `rgb(${r},${g},${b})`;
+		} else {
+			// Grayscale (24 shades)
+			const gray = (n - 232) * 10 + 8;
+			return `rgb(${gray},${gray},${gray})`;
+		}
+	}
+
+	// Parse ANSI codes and return color
+	function parseAnsiCodes(codes: number[]): string | null {
+		for (let i = 0; i < codes.length; i++) {
+			const code = codes[i];
+			if (code === 0) return '#9ca3af'; // Reset
+			if (code === 38 && codes[i + 1] === 5) {
+				// 256-color: \x1b[38;5;Nm
+				return get256Color(codes[i + 2] || 0);
+			}
+			if (code === 38 && codes[i + 1] === 2) {
+				// RGB: \x1b[38;2;R;G;Bm
+				const r = codes[i + 2] || 0;
+				const g = codes[i + 3] || 0;
+				const b = codes[i + 4] || 0;
+				return `rgb(${r},${g},${b})`;
+			}
+			if (ANSI_COLORS[code]) return ANSI_COLORS[code];
+		}
+		return null;
+	}
+
 	// Parse output and extract colored segments per line
 	function parseOutputLines(text: string): Array<{ text: string; color: string }[]> {
 		const lines = text.split('\n');
 		const result: Array<{ text: string; color: string }[]> = [];
+		let currentColor = '#9ca3af'; // Default gray - persists across lines
 
 		for (const line of lines) {
 			const segments: { text: string; color: string }[] = [];
-			let currentColor = '#9ca3af'; // Default gray
 			let lastIndex = 0;
 			let match;
 
-			ANSI_COLOR_REGEX.lastIndex = 0;
+			ANSI_REGEX.lastIndex = 0;
 
-			while ((match = ANSI_COLOR_REGEX.exec(line)) !== null) {
+			while ((match = ANSI_REGEX.exec(line)) !== null) {
 				// Add text before this escape
 				if (match.index > lastIndex) {
 					const text = line.slice(lastIndex, match.index);
 					if (text) segments.push({ text, color: currentColor });
 				}
 
-				// Parse color code
+				// Parse color codes
 				const codes = match[1].split(';').map(c => parseInt(c, 10));
-				for (const code of codes) {
-					if (code === 0) currentColor = '#9ca3af';
-					else if (ANSI_COLORS[code]) currentColor = ANSI_COLORS[code];
-				}
+				const newColor = parseAnsiCodes(codes);
+				if (newColor) currentColor = newColor;
 
 				lastIndex = match.index + match[0].length;
 			}
@@ -73,7 +117,7 @@
 				segments.push({ text: line.slice(lastIndex), color: currentColor });
 			}
 
-			result.push(segments.length > 0 ? segments : [{ text: ' ', color: '#9ca3af' }]);
+			result.push(segments.length > 0 ? segments : [{ text: ' ', color: currentColor }]);
 		}
 
 		return result;
@@ -101,45 +145,43 @@
 		ctx.fillStyle = 'oklch(0.12 0.01 250)';
 		ctx.fillRect(0, 0, containerWidth, height);
 
-		// Parse and render lines
+		// Parse lines
 		const lines = parseOutputLines(output);
 		const totalLines = lines.length;
-		const visibleLines = Math.floor(height / lineHeight);
+		if (totalLines === 0) return;
 
-		// Calculate which lines to show (centered around viewport)
-		const startLine = Math.max(0, Math.floor((viewportTop / 100) * totalLines) - visibleLines / 2);
+		// Scale all lines to fit the canvas height
+		const scaledLineHeight = height / totalLines;
 
-		let y = 0;
-		for (let i = startLine; i < lines.length && y < height; i++) {
+		// Render all lines scaled to fit
+		for (let i = 0; i < totalLines; i++) {
 			const segments = lines[i];
+			const y = i * scaledLineHeight;
 			let x = 2;
 
 			for (const segment of segments) {
-				// Render each character as a small rectangle
 				ctx.fillStyle = segment.color;
 				const strippedText = stripAnsi(segment.text);
 
 				for (const char of strippedText) {
 					if (char !== ' ' && char !== '\t') {
-						// Draw a tiny pixel for each character
-						ctx.fillRect(x, y, 1, lineHeight - 1);
+						// Draw pixel for each character, at least 1px tall
+						ctx.fillRect(x, y, 1, Math.max(1, scaledLineHeight - 0.5));
 					}
-					x += 1.2; // Character width
+					x += 1.2;
 					if (x > containerWidth - 4) break;
 				}
 			}
-
-			y += lineHeight;
 		}
 
-		// Draw viewport indicator
+		// Draw viewport indicator - directly maps to canvas coordinates
 		const viewportY = (viewportTop / 100) * height;
 		const viewportH = Math.max(10, (viewportHeight / 100) * height);
 
-		ctx.fillStyle = 'rgba(96, 165, 250, 0.2)';
+		ctx.fillStyle = 'rgba(96, 165, 250, 0.25)';
 		ctx.fillRect(0, viewportY, containerWidth, viewportH);
 
-		ctx.strokeStyle = 'rgba(96, 165, 250, 0.6)';
+		ctx.strokeStyle = 'rgba(96, 165, 250, 0.7)';
 		ctx.lineWidth = 1;
 		ctx.strokeRect(0.5, viewportY + 0.5, containerWidth - 1, viewportH - 1);
 	}
@@ -199,11 +241,7 @@
 <svelte:window onmousemove={handleDrag} onmouseup={handleDragEnd} />
 
 <div class="minimap-canvas" style="height: {height}px;">
-	<div class="minimap-header">
-		<span class="minimap-title">Canvas Minimap</span>
-		<span class="minimap-info">Line height: {lineHeight}px</span>
-	</div>
-
+	
 	<div
 		class="minimap-container"
 		bind:this={container}
@@ -222,31 +260,9 @@
 	.minimap-canvas {
 		display: flex;
 		flex-direction: column;
-		background: oklch(0.15 0.01 250);
-		border: 1px solid oklch(0.25 0.02 250);
-		border-radius: 0.5rem;
+		background: oklch(0.12 0.01 250);
 		overflow: hidden;
-	}
-
-	.minimap-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.5rem 0.75rem;
-		background: oklch(0.18 0.01 250);
-		border-bottom: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.minimap-title {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: oklch(0.75 0.12 145);
-	}
-
-	.minimap-info {
-		font-size: 0.65rem;
-		color: oklch(0.60 0.02 250);
-		font-family: monospace;
+		height: 100%;
 	}
 
 	.minimap-container {

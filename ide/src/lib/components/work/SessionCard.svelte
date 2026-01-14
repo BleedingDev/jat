@@ -108,7 +108,7 @@
 	import IdleSignalCard from "$lib/components/signals/IdleSignalCard.svelte";
 	import StartingSignalCard from "$lib/components/signals/StartingSignalCard.svelte";
 	import CompactingSignalCard from "$lib/components/signals/CompactingSignalCard.svelte";
-	import { MinimapCanvas } from "$lib/components/minimap";
+	import { MinimapCssScale } from "$lib/components/minimap";
 	import type {
 		WorkingSignal,
 		ReviewSignal,
@@ -1225,7 +1225,7 @@
 
 	// Minimap state
 	let showMinimap = $state(false);
-	let minimapRef: MinimapCanvas | null = $state(null);
+	let minimapRef: MinimapCssScale | null = $state(null);
 	let outputContainerHeight = $state(0);
 
 	// Suggested tasks panel expanded state (inline) and modal state
@@ -5517,11 +5517,10 @@
 						style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"
 						bind:clientHeight={outputContainerHeight}
 					>
-						<MinimapCanvas
+						<MinimapCssScale
 							bind:this={minimapRef}
 							output={output}
 							height={outputContainerHeight}
-							lineHeight={2}
 							onPositionClick={handleMinimapClick}
 						/>
 					</div>

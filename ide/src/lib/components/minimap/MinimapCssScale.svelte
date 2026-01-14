@@ -10,17 +10,15 @@
 	let {
 		output = '',
 		height = 200,
-		scale = 0.08,
 		onPositionClick = (percent: number) => {}
 	}: {
 		output: string;
 		height?: number;
-		scale?: number;
 		onPositionClick?: (percent: number) => void;
 	} = $props();
 
 	let minimapContainer: HTMLDivElement;
-	let contentContainer: HTMLDivElement;
+	let measureContainer: HTMLDivElement;
 	let viewportIndicator: HTMLDivElement;
 
 	// Track viewport position (0-100%)
@@ -30,14 +28,21 @@
 	// Derived HTML content
 	const htmlContent = $derived(ansiToHtml(output));
 
-	// Calculate content dimensions
-	let contentHeight = $state(0);
+	// Measure natural content height and compute scale
+	let naturalHeight = $state(0);
 	let isDragging = $state(false);
 
+	// Compute scale to fit all content in minimap height
+	const computedScale = $derived(
+		naturalHeight > 0 && height > 0
+			? Math.min(1, height / naturalHeight)
+			: 0.1
+	);
+
 	$effect(() => {
-		if (contentContainer) {
-			// Measure scaled content height
-			contentHeight = contentContainer.scrollHeight * scale;
+		if (measureContainer && output) {
+			// Measure content at natural size
+			naturalHeight = measureContainer.scrollHeight;
 		}
 	});
 
@@ -81,9 +86,9 @@
 <svelte:window onmousemove={handleDrag} onmouseup={handleDragEnd} />
 
 <div class="minimap-css-scale" style="height: {height}px;">
-	<div class="minimap-header">
-		<span class="minimap-title">CSS Scale Minimap</span>
-		<span class="minimap-scale">Scale: {scale}</span>
+	<!-- Hidden container to measure natural content height -->
+	<div class="measure-container" bind:this={measureContainer}>
+		<pre class="terminal-output">{@html htmlContent}</pre>
 	</div>
 
 	<div
@@ -95,11 +100,10 @@
 		aria-label="Minimap navigation"
 		aria-valuenow={viewportTop}
 	>
-		<!-- Scaled content clone -->
+		<!-- Scaled content -->
 		<div
 			class="minimap-content"
-			bind:this={contentContainer}
-			style="transform: scale({scale}); transform-origin: top left;"
+			style="transform: scale({computedScale}); transform-origin: top left; width: {computedScale > 0 ? 100/computedScale : 1000}%;"
 		>
 			<pre class="terminal-output">{@html htmlContent}</pre>
 		</div>
@@ -121,31 +125,18 @@
 	.minimap-css-scale {
 		display: flex;
 		flex-direction: column;
-		background: oklch(0.15 0.01 250);
-		border: 1px solid oklch(0.25 0.02 250);
-		border-radius: 0.5rem;
+		background: oklch(0.12 0.01 250);
 		overflow: hidden;
+		height: 100%;
+		position: relative;
 	}
 
-	.minimap-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.5rem 0.75rem;
-		background: oklch(0.18 0.01 250);
-		border-bottom: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.minimap-title {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: oklch(0.85 0.05 200);
-	}
-
-	.minimap-scale {
-		font-size: 0.65rem;
-		color: oklch(0.60 0.02 250);
-		font-family: monospace;
+	/* Hidden container for measuring natural content height */
+	.measure-container {
+		position: absolute;
+		visibility: hidden;
+		width: 600px; /* Standard width for measurement */
+		pointer-events: none;
 	}
 
 	.minimap-container {
@@ -159,7 +150,6 @@
 		position: absolute;
 		top: 0;
 		left: 0;
-		width: 1250%; /* 100% / 0.08 scale = ~1250% to fill width */
 		pointer-events: none;
 	}
 

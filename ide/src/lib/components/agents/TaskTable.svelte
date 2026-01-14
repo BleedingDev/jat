@@ -448,7 +448,6 @@
 	 * @param mode - The grouping mode to set ('type', 'parent', 'label', 'project')
 	 */
 	function setGroupingMode(mode: GroupingMode) {
-		console.log('[TaskTable] setGroupingMode called:', mode, '(was:', groupingMode, ')');
 		groupingMode = mode;
 
 		// Sync to URL
@@ -460,7 +459,6 @@
 			url.searchParams.set('groupBy', mode);
 		}
 		replaceState(url, {});
-		console.log('[TaskTable] groupingMode is now:', groupingMode);
 	}
 
 	// Detect new, removed, and status-changed tasks when tasks array changes
@@ -1019,25 +1017,17 @@
 
 			return 0;
 		});
-		const after = result.map(t => t.id);
-		if (before.length > 1) {
-			console.log('[TaskTable] sortTasksForProjectMode - before:', before, 'after:', after, 'changed:', JSON.stringify(before) !== JSON.stringify(after));
-		}
 		return result;
 	}
 
 	// Sort function used within each group
 	// Priority: 1) User's sort column, 2) Tiebreakers (working, assigned)
 	function sortTasks(tasksToSort: Task[]): Task[] {
-		console.log('[TaskTable] sortTasks called - groupingMode:', groupingMode, 'sortColumn:', sortColumn, 'sortDirection:', sortDirection, 'tasksCount:', tasksToSort.length);
-
 		// Use specialized sorting for project mode
 		if (groupingMode === 'project') {
-			console.log('[TaskTable] Using sortTasksForProjectMode');
 			return sortTasksForProjectMode(tasksToSort);
 		}
 
-		console.log('[TaskTable] Using standard sort by', sortColumn, sortDirection);
 		return [...tasksToSort].sort((a, b) => {
 			// PRIMARY: apply user's sort column first
 			let aVal, bVal;
@@ -1139,15 +1129,11 @@
 		const _sortCol = sortColumn;
 		const _sortDir = sortDirection;
 
-		console.log('[TaskTable] groupedTasks derived - groupingMode:', groupingMode, 'sortColumn:', _sortCol, 'sortDir:', _sortDir, 'filteredTasks:', filteredTasks.length);
-
 		const groups = new Map<string | null, Task[]>();
 
 		// For 'none' mode, put all tasks in a single group and sort by user's column
 		if (groupingMode === 'none') {
-			console.log('[TaskTable] NONE mode - creating single __all__ group');
 			const sorted = sortTasks([...filteredTasks]);
-			console.log('[TaskTable] NONE mode - sorted tasks:', sorted.slice(0, 5).map(t => ({ id: t.id, title: t.title?.slice(0, 20), updated: t.updated_at })));
 			groups.set('__all__', sorted);
 			return groups;
 		}
@@ -1243,7 +1229,6 @@
 				if (projectCompare !== 0) return projectCompare;
 				return (epicA || '').localeCompare(epicB || '');
 			});
-			console.log('[TaskTable] Project mode group sort by', _sortCol, _sortDir, '- groups:', sortedEntries.map(([k, t]) => k + '(' + t.length + ')').slice(0, 5));
 			return new Map(sortedEntries);
 		}
 
@@ -1354,7 +1339,6 @@
 			// Tiebreaker: alphabetically by project name
 			return projA.localeCompare(projB);
 		});
-		console.log('[TaskTable] nestedGroupedTasks sort by', _sortCol, _sortDir, '- projects:', sortedProjectEntries.map(([p]) => p));
 		return new Map(sortedProjectEntries);
 	});
 
@@ -1563,14 +1547,12 @@
 
 	// Sorting
 	function handleSort(column: string) {
-		console.log('[TaskTable] handleSort called:', column, '(current:', sortColumn, sortDirection, ')');
 		if (sortColumn === column) {
 			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
 		} else {
 			sortColumn = column;
 			sortDirection = 'asc';
 		}
-		console.log('[TaskTable] handleSort - new state:', sortColumn, sortDirection);
 		updateURL();
 	}
 

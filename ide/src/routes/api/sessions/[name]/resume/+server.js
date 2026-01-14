@@ -76,8 +76,9 @@ function findSessionIdFromJsonl(agentName, projectPath) {
 		// Search for agent name in multiple patterns:
 		// 1. "agentName":"TrueCave" in tool output - from jat-signal
 		// 2. <command-args>TrueCave in early messages - from /jat:start command
-		// Pattern 2 is checked only in the first 50 lines to avoid matching sessions
-		// where the agent name is just mentioned (like in error messages)
+		// Pattern 2 is checked only in the first 5 lines to avoid false positives from
+		// tool_results that contain context from OTHER sessions. The /jat:start command
+		// always appears in line 1-3 of the JSONL file.
 		const signalPattern = new RegExp(`"agentName"\\s*:\\s*"${agentName}"`, 'i');
 		const commandPattern = new RegExp(`<command-args>${agentName}\\s`, 'i');
 
@@ -91,8 +92,10 @@ function findSessionIdFromJsonl(agentName, projectPath) {
 					return file.sessionId;
 				}
 
-				// Check command pattern only in first 50 lines (session start)
-				const lines = content.split('\n').slice(0, 50).join('\n');
+				// Check command pattern only in first 5 lines (session start)
+				// The /jat:start command is always in lines 1-3, so 5 lines is safe
+				// but prevents matching tool_results that contain other session contexts
+				const lines = content.split('\n').slice(0, 5).join('\n');
 				if (commandPattern.test(lines)) {
 					console.log(`Found session for ${agentName} via command pattern: ${file.sessionId}`);
 					return file.sessionId;

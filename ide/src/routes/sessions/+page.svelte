@@ -61,6 +61,7 @@
 	// Tmux pane width tracking (in columns)
 	let tmuxWidth = $state(160); // Default 160 columns
 	const PIXELS_PER_COLUMN = 8.5; // Approximate pixels per monospace character
+	let isCardResizing = $state(false); // For showing cols indicator during resize
 
 	// Container width for sessions table (resizable)
 	let containerWidth = $state(1200); // Default max-width in pixels
@@ -498,6 +499,7 @@
 	// Handle horizontal resize delta (pixels -> columns)
 	function handleHorizontalResize(deltaX: number) {
 		if (!expandedSession) return;
+		isCardResizing = true; // Show cols indicator
 		const deltaColumns = Math.round(deltaX / PIXELS_PER_COLUMN);
 		if (deltaColumns !== 0) {
 			tmuxWidth = Math.max(40, tmuxWidth + deltaColumns);
@@ -506,6 +508,7 @@
 
 	// Commit the resize to tmux when drag ends
 	function handleHorizontalResizeEnd() {
+		isCardResizing = false; // Hide cols indicator
 		if (expandedSession) {
 			resizeTmuxWidth(expandedSession, tmuxWidth);
 		}
@@ -1340,8 +1343,8 @@
 													onResize={handleHorizontalResize}
 													onResizeEnd={handleHorizontalResizeEnd}
 												/>
-												<!-- Width indicator -->
-												<div class="width-indicator">{tmuxWidth} cols</div>
+												<!-- Width indicator - visible only during resize -->
+												<div class="width-indicator" class:visible={isCardResizing}>{tmuxWidth} cols</div>
 											</div>
 
 											<!-- Inline Task Detail Panel -->
@@ -2722,7 +2725,7 @@
 		width: 100%;
 	}
 
-	/* Width indicator - positioned within session-card-section */
+	/* Width indicator - positioned within session-card-section, hidden by default */
 	.session-card-section .width-indicator {
 		position: absolute;
 		top: 0.5rem;
@@ -2736,6 +2739,12 @@
 		border: 1px solid oklch(0.25 0.02 250);
 		pointer-events: none;
 		z-index: 5;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+
+	.session-card-section .width-indicator.visible {
+		opacity: 1;
 	}
 
 	/* Vertical resize divider for expanded session height */
