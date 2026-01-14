@@ -10,10 +10,12 @@
 	let {
 		output = '',
 		height = 200,
+		terminalWidth = 800,
 		onPositionClick = (percent: number) => {}
 	}: {
 		output: string;
 		height?: number;
+		terminalWidth?: number;
 		onPositionClick?: (percent: number) => void;
 	} = $props();
 
@@ -78,16 +80,18 @@
 
 	// Update viewport indicator based on external scroll position
 	export function setViewportPosition(scrollPercent: number, visiblePercent: number) {
-		viewportTop = scrollPercent;
 		viewportHeight = visiblePercent;
+		// Scale viewportTop so viewport stays within 0-100% range
+		// When scrollPercent=0, viewportTop=0; when scrollPercent=100, viewportTop=100-viewportHeight
+		viewportTop = (scrollPercent / 100) * (100 - visiblePercent);
 	}
 </script>
 
 <svelte:window onmousemove={handleDrag} onmouseup={handleDragEnd} />
 
 <div class="minimap-css-scale" style="height: {height}px;">
-	<!-- Hidden container to measure natural content height -->
-	<div class="measure-container" bind:this={measureContainer}>
+	<!-- Hidden container to measure natural content height (matches terminal width) -->
+	<div class="measure-container" bind:this={measureContainer} style="width: {terminalWidth}px;">
 		<pre class="terminal-output">{@html htmlContent}</pre>
 	</div>
 
@@ -135,8 +139,8 @@
 	.measure-container {
 		position: absolute;
 		visibility: hidden;
-		width: 600px; /* Standard width for measurement */
 		pointer-events: none;
+		/* Width is set inline to match terminal width */
 	}
 
 	.minimap-container {
@@ -159,8 +163,7 @@
 		font-family: 'JetBrains Mono', 'Fira Code', monospace;
 		font-size: 12px;
 		line-height: 1.4;
-		white-space: pre-wrap;
-		word-break: break-all;
+		white-space: pre;
 		color: oklch(0.85 0.02 250);
 	}
 

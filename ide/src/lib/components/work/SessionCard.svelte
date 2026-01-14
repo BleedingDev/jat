@@ -1227,6 +1227,7 @@
 	let showMinimap = $state(false);
 	let minimapRef: MinimapCssScale | null = $state(null);
 	let outputContainerHeight = $state(0);
+	let terminalWidth = $state(800);
 
 	// Suggested tasks panel expanded state (inline) and modal state
 	let suggestedTasksExpanded = $state(false);
@@ -5498,7 +5499,6 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					bind:this={scrollContainerRef}
-					bind:clientHeight={outputContainerHeight}
 					class="absolute inset-0 overflow-y-auto overflow-x-auto px-3 leading-relaxed cursor-text"
 					style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250); {showMinimap && output ? 'right: 60px;' : ''}"
 					onscroll={handleScroll}
@@ -5518,6 +5518,7 @@
 					<div
 						class="absolute top-0 right-0 bottom-0 w-[60px] border-l overflow-hidden"
 						style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"
+						bind:clientHeight={outputContainerHeight}
 					>
 						<MinimapCssScale
 							bind:this={minimapRef}
