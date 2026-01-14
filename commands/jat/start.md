@@ -209,9 +209,14 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" "Starting work" --from "$AGENT_NAME" 
 
 ---
 
-### STEP 8: Emit Signals & Plan
+### STEP 8: Emit Signals & Begin Work
 
-**Starting signal** (with full session context for IDE display):
+**CRITICAL: You must emit BOTH signals in sequence before starting actual work.**
+
+The IDE tracks agent state through these signals. Without them, your session shows incorrect status.
+
+#### 8A: Emit Starting Signal (immediately after registration)
+
 ```bash
 jat-signal starting '{
   "agentName": "AgentName",
@@ -241,7 +246,10 @@ jat-signal starting '{
 - `taskId` - Task ID if starting on a specific task
 - `taskTitle` - Task title if starting on a specific task
 
-**Working signal** (with approach):
+#### 8B: Emit Working Signal (REQUIRED before coding)
+
+**Do NOT skip this step.** After reading the task and planning your approach, emit the working signal:
+
 ```bash
 jat-signal working '{
   "taskId": "jat-123",
@@ -252,7 +260,18 @@ jat-signal working '{
 }'
 ```
 
-Then output the banner:
+**Required fields:**
+- `taskId` - The task ID you're working on
+- `taskTitle` - The task title
+- `approach` - Brief description of your implementation plan
+
+**Optional fields:**
+- `expectedFiles` - Array of file patterns you expect to modify
+- `baselineCommit` - Current commit hash before changes
+
+#### 8C: Output the Banner
+
+After BOTH signals are emitted, output the banner:
 ```
 ╔════════════════════════════════════════════════════════╗
 ║         🚀 STARTING WORK: {TASK_ID}                    ║
@@ -427,12 +446,14 @@ To work on another task → spawn new agent
 
 ## Signal Reference
 
-| Signal | State | When | Key Fields |
-|--------|-------|------|------------|
-| `jat-signal starting '{...}'` | Starting | After registration | agentName, model, gitBranch, gitStatus, tools |
-| `jat-signal working '{...}'` | Working | After reading task | taskId, taskTitle, approach, expectedFiles |
-| `jat-signal needs_input '{...}'` | Needs Input | Clarification needed | taskId, question, questionType |
-| `jat-signal review '{...}'` | Ready for Review | Work complete (code OR research) | taskId, summary, filesModified or findings |
+**Signals must be emitted in order as you progress through states:**
+
+| Order | Signal | State | When | Key Fields |
+|-------|--------|-------|------|------------|
+| 1 | `jat-signal starting '{...}'` | Starting | Immediately after registration | agentName, model, gitBranch, gitStatus, tools |
+| 2 | `jat-signal working '{...}'` | Working | After reading task, before coding | taskId, taskTitle, approach, expectedFiles |
+| - | `jat-signal needs_input '{...}'` | Needs Input | When clarification needed (anytime) | taskId, question, questionType |
+| 3 | `jat-signal review '{...}'` | Ready for Review | When work complete, before /jat:complete | taskId, summary, filesModified or findings |
 
 ### Minimal Copy-Paste Templates
 

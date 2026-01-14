@@ -34,9 +34,37 @@ Complete current task properly with full verification. Session ends after comple
 **When NOT to use:**
 - Need to pivot quickly → use `/jat:pause` instead
 
+**PREREQUISITE: Emit the `review` signal BEFORE calling /jat:complete**
+
+Before this command is triggered, you must have emitted a `review` signal to enter "ready-for-review" state:
+
+```bash
+jat-signal review '{
+  "taskId": "jat-abc",
+  "taskTitle": "Your task title",
+  "summary": ["What you accomplished", "Key changes made"],
+  "filesModified": [
+    {"path": "src/file.ts", "changeType": "modified", "linesAdded": 50, "linesRemoved": 10}
+  ]
+}'
+```
+
+Then display the review banner and wait for user approval:
+```
+┌────────────────────────────────────────────────────────┐
+│  🔍 READY FOR REVIEW: {TASK_ID}                        │
+└────────────────────────────────────────────────────────┘
+
+📋 Summary:
+  • [accomplishment 1]
+  • [accomplishment 2]
+
+Run /jat:complete when ready to close this task.
+```
+
 **How the IDE triggers this command:**
 
-When the agent enters "ready-for-review" state, the IDE checks review rules:
+When the agent enters "ready-for-review" state (via the `review` signal), the IDE checks review rules:
 
 | Review Rules Result | IDE Action |
 |---------------------|------------------|

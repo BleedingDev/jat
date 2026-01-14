@@ -257,8 +257,9 @@ export const SIGNAL_TTL = {
 	 * - completed: waiting for user to acknowledge/cleanup
 	 * - review: waiting for user to approve and run /jat:complete
 	 * - needs_input: waiting for user to answer a question
+	 * - working: agents can work for 20+ mins without emitting new signals
 	 */
-	USER_WAITING_STATES: ['completed', 'review', 'needs_input'] as const
+	USER_WAITING_STATES: ['completed', 'review', 'needs_input', 'working'] as const
 } as const;
 
 // =============================================================================
