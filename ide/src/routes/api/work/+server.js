@@ -307,9 +307,11 @@ function detectSessionStateFromOutput(output, task, lastCompletedTask) {
 			return sorted[0].state;
 		}
 
-		// No markers found - agent has task, default to working
-		// (task.status may be 'open' or 'in_progress' - either way they're actively working)
-		return 'working';
+		// No markers found - agent has task but hasn't shown activity yet
+		// Default to 'starting' since if agent were truly working, it would have:
+		// 1. Emitted a signal (caught by readSignalState above), or
+		// 2. Produced output markers (caught by the positions check above)
+		return 'starting';
 	}
 
 	// No active task - check if we just completed something
