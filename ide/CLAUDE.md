@@ -1879,6 +1879,43 @@ SessionCard receives agent activity state via SSE from the signals API:
 
 **See:** `shared/signals.md` for the complete signal system documentation.
 
+### Terminal Minimap
+
+SessionCard includes a VS Code-style minimap for terminal output navigation (agent mode only).
+
+**Behavior:**
+- **Show on hover** - Minimap appears when mouse enters the SessionCard
+- **Hide on leave** - Minimap disappears when mouse leaves the card
+- **60px sidebar** - Appears on the right edge of the terminal output area
+
+**Features:**
+| Feature | Description |
+|---------|-------------|
+| CSS Scale rendering | Uses `transform: scale()` on cloned content, preserves ANSI colors |
+| Viewport indicator | Draggable rectangle showing visible portion of terminal |
+| Click navigation | Click anywhere on minimap to scroll terminal to that position |
+| Drag navigation | Drag viewport indicator for smooth scrolling |
+| No text wrapping | Uses `white-space: pre` to match terminal behavior |
+
+**Implementation:**
+- Component: `src/lib/components/minimap/MinimapCssScale.svelte`
+- Scale is auto-computed: `scale = minimapHeight / contentNaturalHeight`
+- Viewport position formula: `viewportTop = (scrollPercent / 100) * (100 - visiblePercent)`
+
+**Props (MinimapCssScale):**
+| Prop | Type | Description |
+|------|------|-------------|
+| `output` | string | Terminal output with ANSI codes |
+| `height` | number | Minimap container height in pixels |
+| `terminalWidth` | number | Terminal width for consistent text measurement |
+| `onPositionClick` | function | Callback when user clicks/drags to a position (0-100%) |
+
+**Exported Methods:**
+```typescript
+// Update viewport indicator position
+minimap.setViewportPosition(scrollPercent: number, visiblePercent: number)
+```
+
 ### Files
 
 **Core Component:**
@@ -1889,6 +1926,7 @@ SessionCard receives agent activity state via SSE from the signals API:
 - `src/lib/components/agent/kanban/AgentKanbanBoard.svelte` - Kanban board using compact mode
 - `src/lib/components/agent/kanban/AgentKanbanColumn.svelte` - Kanban column wrapper
 - `src/lib/components/agents/AgentGrid.svelte` - Agent grid using compact mode
+- `src/lib/components/minimap/MinimapCssScale.svelte` - Terminal minimap component
 
 **Configuration:**
 - `src/lib/config/statusColors.ts` - Visual state definitions (SESSION_STATE_VISUALS)
