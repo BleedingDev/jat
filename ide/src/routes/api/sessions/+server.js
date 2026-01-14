@@ -19,6 +19,29 @@ import { stripAnsi } from '$lib/utils/ansiToHtml.js';
 const execAsync = promisify(exec);
 
 /**
+ * Check if session is a resumed session
+ * @param {string} sessionName - tmux session name
+ * @returns {{ resumed: boolean, originalSessionId?: string, resumedAt?: string } | null}
+ */
+function getResumeInfo(sessionName) {
+	const resumeFile = `/tmp/jat-resumed-${sessionName}.json`;
+	try {
+		if (!existsSync(resumeFile)) {
+			return null;
+		}
+		const content = readFileSync(resumeFile, 'utf-8');
+		const data = JSON.parse(content);
+		return {
+			resumed: true,
+			originalSessionId: data.originalSessionId,
+			resumedAt: data.resumedAt
+		};
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Read project from signal file for a session
  * @param {string} sessionName - tmux session name
  * @returns {string|null} Project name or null if not found
@@ -106,7 +129,7 @@ export async function GET({ url }) {
 					return session.name.startsWith('jat-');
 				});
 
-			// Get project for each session (signal file first, then tmux cwd fallback)
+			// Get project and resume info for each session
 			const sessions = await Promise.all(
 				rawSessions.map(async (session) => {
 					// Try signal file first (fast, sync)
@@ -115,7 +138,13 @@ export async function GET({ url }) {
 					if (!project && session.name.startsWith('jat-')) {
 						project = await getProjectFromTmuxCwd(session.name);
 					}
-					return { ...session, project };
+					// Check if this is a resumed session
+					const resumeInfo = getResumeInfo(session.name);
+					return {
+						...session,
+						project,
+						...(resumeInfo || {})
+					};
 				})
 			);
 

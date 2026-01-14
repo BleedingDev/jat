@@ -1139,8 +1139,15 @@ DEMO MODE:
     demo setup             Fresh setup (cleans & recreates)
     demo on/off            Toggle demo visibility
 
+SESSION MANAGEMENT:
+    resume <agent>         Resume session by agent name (e.g., CrystalTundra)
+    resume <id>            Resume session by ID (partial OK)
+    resume --list          List recent sessions
+    find-session <agent>   Find session ID for an agent
+    -r                     Shortcut for resume
+    -fs                    Shortcut for find-session
+
 ADVANCED:
-    resume <id>            Resume a Claude session
     cleanup                Remove stale agents
     config                 Show configuration
 
@@ -1459,6 +1466,187 @@ install_hooks() {
 }
 
 #------------------------------------------------------------------------------
+# Find Session by Agent Name
+#------------------------------------------------------------------------------
+
+# Find session ID for an agent by name
+# Searches: 1) .claude/sessions/agent-*.txt files, 2) signal files, 3) timeline files
+# Returns: session_id or empty string
+find_session_by_agent() {
+    local target_agent="$1"
+    local found_session=""
+    local found_project=""
+    local found_mtime=0
+
+    # Method 1: Search .claude/sessions/agent-*.txt files in all projects
+    # These files contain the agent name, filename contains session ID
+    for project in $(list_projects 2>/dev/null); do
+        local config path
+        config=$(get_project_config "$project")
+        path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+
+        # Check sessions subdirectory first
+        for agent_file in "$path/.claude/sessions/agent-"*.txt; do
+            [[ ! -f "$agent_file" ]] && continue
+            local file_agent
+            file_agent=$(cat "$agent_file" 2>/dev/null | tr -d '\n')
+            if [[ "$file_agent" == "$target_agent" ]]; then
+                # Extract session ID from filename: agent-{session_id}.txt
+                local session_id
+                session_id=$(basename "$agent_file" .txt | sed 's/^agent-//')
+                # Get file modification time to find most recent
+                local mtime
+                mtime=$(stat -c %Y "$agent_file" 2>/dev/null || stat -f %m "$agent_file" 2>/dev/null || echo "0")
+                if [[ "$mtime" -gt "$found_mtime" ]]; then
+                    found_session="$session_id"
+                    found_project="$project"
+                    found_mtime="$mtime"
+                fi
+            fi
+        done
+
+        # Also check legacy location (.claude/agent-*.txt)
+        for agent_file in "$path/.claude/agent-"*.txt; do
+            [[ ! -f "$agent_file" ]] && continue
+            [[ "$agent_file" == *"/sessions/"* ]] && continue  # Skip if somehow in sessions
+            local file_agent
+            file_agent=$(cat "$agent_file" 2>/dev/null | tr -d '\n')
+            if [[ "$file_agent" == "$target_agent" ]]; then
+                local session_id
+                session_id=$(basename "$agent_file" .txt | sed 's/^agent-//')
+                local mtime
+                mtime=$(stat -c %Y "$agent_file" 2>/dev/null || stat -f %m "$agent_file" 2>/dev/null || echo "0")
+                if [[ "$mtime" -gt "$found_mtime" ]]; then
+                    found_session="$session_id"
+                    found_project="$project"
+                    found_mtime="$mtime"
+                fi
+            fi
+        done
+    done
+
+    # Method 2: Search signal files in /tmp
+    if [[ -z "$found_session" ]]; then
+        for signal_file in /tmp/jat-signal-*.json; do
+            [[ ! -f "$signal_file" ]] && continue
+            [[ "$signal_file" == *"-tmux-"* ]] && continue
+
+            local file_agent tmux_session file_session
+            file_agent=$(jq -r '.data.agentName // empty' "$signal_file" 2>/dev/null)
+
+            # Also check tmux_session field (format: jat-AgentName)
+            if [[ -z "$file_agent" ]]; then
+                tmux_session=$(jq -r '.tmux_session // empty' "$signal_file" 2>/dev/null)
+                if [[ "$tmux_session" == "jat-$target_agent" ]]; then
+                    file_agent="$target_agent"
+                fi
+            fi
+
+            if [[ "$file_agent" == "$target_agent" ]]; then
+                file_session=$(jq -r '.session_id // empty' "$signal_file" 2>/dev/null)
+                if [[ -n "$file_session" ]]; then
+                    found_session="$file_session"
+                    found_project=$(jq -r '.data.project // empty' "$signal_file" 2>/dev/null)
+                    break
+                fi
+            fi
+        done
+    fi
+
+    # Method 3: Search timeline files
+    if [[ -z "$found_session" ]]; then
+        for timeline_file in /tmp/jat-timeline-*.jsonl; do
+            [[ ! -f "$timeline_file" ]] && continue
+
+            # Search for agent name in timeline
+            local line
+            line=$(grep "\"agentName\":\"$target_agent\"" "$timeline_file" 2>/dev/null | tail -1)
+            if [[ -z "$line" ]]; then
+                # Also try tmux_session format
+                line=$(grep "\"tmux_session\":\"jat-$target_agent\"" "$timeline_file" 2>/dev/null | tail -1)
+            fi
+
+            if [[ -n "$line" ]]; then
+                found_session=$(echo "$line" | jq -r '.session_id // empty')
+                found_project=$(echo "$line" | jq -r '.data.project // empty')
+                break
+            fi
+        done
+    fi
+
+    # Method 4: Search Claude's internal JSONL files (~/.claude/projects/)
+    # These contain session history including /jat:start commands
+    # The filename IS the session ID
+    # Important: Check the FIRST command-args in each file to find who started it
+    if [[ -z "$found_session" ]]; then
+        for project_dir in ~/.claude/projects/-home-jw-code-*; do
+            [[ ! -d "$project_dir" ]] && continue
+
+            for jsonl_file in "$project_dir"/*.jsonl; do
+                [[ ! -f "$jsonl_file" ]] && continue
+
+                # Check if the FIRST /jat:start in this file is for our target agent
+                local first_cmd
+                first_cmd=$(grep -m1 'command-args' "$jsonl_file" 2>/dev/null)
+
+                if echo "$first_cmd" | grep -q "command-args>${target_agent} \|command-args>${target_agent}<"; then
+                    # This session was started by our target agent
+                    found_session=$(basename "$jsonl_file" .jsonl)
+                    # Extract project from directory name
+                    local dir_name
+                    dir_name=$(basename "$project_dir")
+                    # dir_name is like "-home-jw-code-jat" -> extract "jat"
+                    found_project=$(echo "$dir_name" | sed 's/.*-code-//' | sed 's/-.*$//')
+                    break 2  # Break out of both loops
+                fi
+            done
+        done
+    fi
+
+    # Output results
+    if [[ -n "$found_session" ]]; then
+        echo "$found_session"
+        return 0
+    fi
+    return 1
+}
+
+# Command to find session by agent name
+find_session_cmd() {
+    local agent_name="$1"
+
+    if [[ -z "$agent_name" ]] || [[ "$agent_name" == "--help" ]] || [[ "$agent_name" == "-h" ]]; then
+        echo -e "${BOLD}Find session ID by agent name${NC}"
+        echo ""
+        echo -e "${DIM}Usage:${NC}"
+        echo "  jat find-session <agent-name>"
+        echo ""
+        echo -e "${DIM}Examples:${NC}"
+        echo "  jat find-session CrystalTundra"
+        echo "  jat find-session WildWind"
+        echo ""
+        echo -e "${DIM}Then resume with:${NC}"
+        echo "  jat resume \$(jat find-session CrystalTundra)"
+        echo ""
+        echo -e "${DIM}Or use the shortcut:${NC}"
+        echo "  jat resume CrystalTundra"
+        echo ""
+        return 0
+    fi
+
+    local session_id
+    session_id=$(find_session_by_agent "$agent_name")
+
+    if [[ -n "$session_id" ]]; then
+        echo "$session_id"
+        return 0
+    else
+        echo -e "${RED}No session found for agent: $agent_name${NC}" >&2
+        return 1
+    fi
+}
+
+#------------------------------------------------------------------------------
 # Resume Session
 #------------------------------------------------------------------------------
 
@@ -1471,14 +1659,15 @@ resume_session() {
         echo -e "${BOLD}Resume a Claude Code session${NC}"
         echo ""
         echo -e "${DIM}Usage:${NC}"
-        echo "  jat resume <session-id> [project]"
-        echo "  jat resume --list [project]"
+        echo "  jat resume <agent-name>          # Resume by agent name"
+        echo "  jat resume <session-id>          # Resume by session ID"
+        echo "  jat resume --list [project]      # List recent sessions"
         echo ""
         echo -e "${DIM}Examples:${NC}"
-        echo "  jat resume 4a5001aa-04eb-47f6-a4da-75048baf4c79"
-        echo "  jat resume 4a5001aa chimaro      # Partial ID + project"
-        echo "  jat resume --list                # Show recent sessions"
-        echo "  jat resume --list chimaro        # Show sessions for project"
+        echo "  jat resume CrystalTundra                    # By agent name"
+        echo "  jat resume 4a5001aa-04eb-47f6-a4da-75048baf # By session ID"
+        echo "  jat resume 4a5001aa chimaro                 # Partial ID + project"
+        echo "  jat resume --list                           # Show recent sessions"
         echo ""
         return 0
     fi
@@ -1487,6 +1676,31 @@ resume_session() {
     if [[ "$session_id" == "--list" ]] || [[ "$session_id" == "-l" ]]; then
         list_sessions "$project"
         return $?
+    fi
+
+    # Check if input looks like an agent name (not a UUID or partial UUID)
+    # Agent names are PascalCase words, UUIDs have dashes and hex chars
+    local is_agent_name=false
+    if [[ ! "$session_id" =~ ^[0-9a-f-]+$ ]]; then
+        # Doesn't look like a UUID - try as agent name
+        is_agent_name=true
+    fi
+
+    # If it looks like an agent name, try to find the session ID
+    if [[ "$is_agent_name" == "true" ]]; then
+        local looked_up_session
+        looked_up_session=$(find_session_by_agent "$session_id")
+        if [[ -n "$looked_up_session" ]]; then
+            echo -e "${DIM}Found session for agent $session_id: ${looked_up_session:0:8}...${NC}"
+            # Shift project to $2 position if agent name was in $1
+            project="${project:-}"
+            session_id="$looked_up_session"
+        else
+            echo -e "${RED}No session found for agent: $session_id${NC}"
+            echo ""
+            echo "Use 'jat resume --list' to see recent sessions"
+            return 1
+        fi
     fi
 
     # Find full session ID if partial provided
@@ -1568,6 +1782,21 @@ resume_session() {
         fi
     fi
 
+    # Fallback: If we have a session ID but no project, find it from JSONL files
+    # The JSONL file location tells us the project
+    if [[ -n "$full_session_id" ]] && [[ -z "$found_project" ]]; then
+        for project_dir in ~/.claude/projects/-home-jw-code-*; do
+            [[ ! -d "$project_dir" ]] && continue
+            if [[ -f "$project_dir/${full_session_id}.jsonl" ]]; then
+                local dir_name
+                dir_name=$(basename "$project_dir")
+                # dir_name is like "-home-jw-code-jat" -> extract "jat"
+                found_project=$(echo "$dir_name" | sed 's/.*-code-//' | sed 's/-.*$//')
+                break
+            fi
+        done
+    fi
+
     # Determine project path
     local project_path=""
     if [[ -n "$project" ]]; then
@@ -1620,14 +1849,31 @@ resume_session() {
     local jat_bootstrap='You are a JAT agent. Run /jat:start to begin work.'
     claude_flags="$claude_flags --append-system-prompt '$jat_bootstrap'"
 
-    # Create session name - use resume-{short-id} format
-    local session_name="jat-resume-${full_session_id:0:8}"
+    # Create session name - use agent name if available, fallback to resume-{short-id}
+    local session_name
+    if [[ -n "$agent_name" ]]; then
+        session_name="jat-${agent_name}"
+    else
+        session_name="jat-resume-${full_session_id:0:8}"
+    fi
 
     # Window title
     local window_title="${project^^}: Claude (resumed)"
     [[ -n "$agent_name" ]] && window_title="${project^^}: $agent_name (resumed)"
 
     echo -e "${DIM}  → Launching Claude Code with session resume...${NC}"
+
+    # Write resume marker file so IDE can show "RESUMED" badge
+    local resume_marker="/tmp/jat-resumed-${session_name}.json"
+    cat > "$resume_marker" <<EOF
+{
+    "resumed": true,
+    "originalSessionId": "$full_session_id",
+    "agentName": "${agent_name:-unknown}",
+    "project": "$found_project",
+    "resumedAt": "$(date -Iseconds)"
+}
+EOF
 
     # Launch terminal with tmux session containing resumed Claude
     $TERMINAL -T "$window_title" -e bash -c "
@@ -1881,8 +2127,11 @@ main() {
         remove|rm)
             remove_project "$@"
             ;;
-        resume)
+        resume|-r)
             resume_session "$@"
+            ;;
+        find-session|-fs)
+            find_session_cmd "$@"
             ;;
         demo)
             demo_cmd "$@"

@@ -73,16 +73,28 @@ function findSessionIdFromJsonl(agentName, projectPath) {
 			}))
 			.sort((a, b) => b.mtime - a.mtime); // Newest first
 
-		// Search for agent name in signal data (most reliable pattern)
-		// Look for: "agentName":"TrueCave" in jat-signal outputs
-		const agentPattern = new RegExp(`"agentName"\\s*:\\s*"${agentName}"`, 'i');
+		// Search for agent name in multiple patterns:
+		// 1. "agentName":"TrueCave" in tool output - from jat-signal
+		// 2. <command-args>TrueCave in early messages - from /jat:start command
+		// Pattern 2 is checked only in the first 50 lines to avoid matching sessions
+		// where the agent name is just mentioned (like in error messages)
+		const signalPattern = new RegExp(`"agentName"\\s*:\\s*"${agentName}"`, 'i');
+		const commandPattern = new RegExp(`<command-args>${agentName}\\s`, 'i');
 
 		for (const file of files) {
 			try {
 				const content = readFileSync(file.path, 'utf-8');
-				// Check if this session contains our agent's signals
-				if (agentPattern.test(content)) {
-					console.log(`Found session for ${agentName} in JSONL: ${file.sessionId}`);
+
+				// Check signal pattern anywhere in file (reliable - from tool output)
+				if (signalPattern.test(content)) {
+					console.log(`Found session for ${agentName} via signal pattern: ${file.sessionId}`);
+					return file.sessionId;
+				}
+
+				// Check command pattern only in first 50 lines (session start)
+				const lines = content.split('\n').slice(0, 50).join('\n');
+				if (commandPattern.test(lines)) {
+					console.log(`Found session for ${agentName} via command pattern: ${file.sessionId}`);
 					return file.sessionId;
 				}
 			} catch (e) {
@@ -351,6 +363,22 @@ export async function POST({ params, request }) {
 			} catch (e) {
 				// Use default
 			}
+		}
+
+		// Write resume marker file so IDE can show "RESUMED" badge
+		const resumeMarker = `/tmp/jat-resumed-${sessionName}.json`;
+		const resumeData = JSON.stringify({
+			resumed: true,
+			originalSessionId: sessionId,
+			agentName,
+			project: projectPath,
+			resumedAt: new Date().toISOString()
+		}, null, 2);
+		try {
+			const { writeFileSync } = await import('fs');
+			writeFileSync(resumeMarker, resumeData);
+		} catch (e) {
+			console.error('Failed to write resume marker:', e);
 		}
 
 		// Build the resume command wrapped in a tmux session for IDE tracking

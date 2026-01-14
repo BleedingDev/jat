@@ -108,6 +108,7 @@
 	import IdleSignalCard from "$lib/components/signals/IdleSignalCard.svelte";
 	import StartingSignalCard from "$lib/components/signals/StartingSignalCard.svelte";
 	import CompactingSignalCard from "$lib/components/signals/CompactingSignalCard.svelte";
+	import { MinimapCanvas } from "$lib/components/minimap";
 	import type {
 		WorkingSignal,
 		ReviewSignal,
@@ -1222,6 +1223,11 @@
 	let userScrolledUp = $state(false);
 	let scrollContainerRef: HTMLDivElement | null = null;
 
+	// Minimap state
+	let showMinimap = $state(false);
+	let minimapRef: MinimapCanvas | null = $state(null);
+	let outputContainerHeight = $state(0);
+
 	// Suggested tasks panel expanded state (inline) and modal state
 	let suggestedTasksExpanded = $state(false);
 	let suggestedTasksModalOpen = $state(false);
@@ -1517,6 +1523,29 @@
 			// User scrolled up significantly, disable auto-scroll temporarily
 			userScrolledUp = true;
 		}
+
+		// Sync minimap viewport position
+		syncMinimapViewport();
+	}
+
+	// Minimap scroll sync functions
+	function syncMinimapViewport() {
+		if (!scrollContainerRef || !minimapRef) return;
+		const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef;
+		const maxScroll = scrollHeight - clientHeight;
+		if (maxScroll > 0) {
+			const scrollPercent = (scrollTop / maxScroll) * 100;
+			const visiblePercent = (clientHeight / scrollHeight) * 100;
+			minimapRef.setViewportPosition(scrollPercent, visiblePercent);
+		}
+	}
+
+	function handleMinimapClick(percent: number) {
+		if (!scrollContainerRef) return;
+		const { scrollHeight, clientHeight } = scrollContainerRef;
+		const maxScroll = scrollHeight - clientHeight;
+		const targetScroll = (percent / 100) * maxScroll;
+		scrollContainerRef.scrollTo({ top: targetScroll, behavior: 'smooth' });
 	}
 
 	// Control button loading states
@@ -3474,6 +3503,13 @@
 					scrollContainerRef.scrollTop = scrollContainerRef.scrollHeight;
 				}
 			});
+		}
+	});
+
+	// Sync minimap viewport when output changes or minimap is shown
+	$effect(() => {
+		if (output && showMinimap && minimapRef) {
+			requestAnimationFrame(() => syncMinimapViewport());
 		}
 	});
 
@@ -5453,22 +5489,42 @@
 				</div>
 			{/if}
 
-			<!-- Output Content - Click to center card, add glow effect, and focus input -->
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				bind:this={scrollContainerRef}
-				class="overflow-y-auto overflow-x-auto px-3 leading-relaxed flex-1 min-h-0 cursor-text"
-				style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250);"
-				onscroll={handleScroll}
-				onclick={handleCardClick}
-			>
-				{#if output}
-					<pre
-						class="whitespace-pre m-0 text-base-content"
-						style="font-family: var(--terminal-font); font-size: var(--terminal-font-size);">{@html renderedOutput}</pre>
-				{:else}
-					<p class="text-base-content/40 italic m-0">No output yet...</p>
+			<!-- Output Content with Minimap Sidebar -->
+			<div class="flex flex-1 min-h-0">
+				<!-- Terminal Output - Click to center card, add glow effect, and focus input -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					bind:this={scrollContainerRef}
+					class="flex-1 overflow-y-auto overflow-x-auto px-3 leading-relaxed min-h-0 cursor-text"
+					style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250);"
+					onscroll={handleScroll}
+					onclick={handleCardClick}
+				>
+					{#if output}
+						<pre
+							class="whitespace-pre m-0 text-base-content"
+							style="font-family: var(--terminal-font); font-size: var(--terminal-font-size);">{@html renderedOutput}</pre>
+					{:else}
+						<p class="text-base-content/40 italic m-0">No output yet...</p>
+					{/if}
+				</div>
+
+				<!-- Minimap Sidebar -->
+				{#if showMinimap && output && mode === 'agent'}
+					<div
+						class="w-[60px] border-l flex-shrink-0"
+						style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"
+						bind:clientHeight={outputContainerHeight}
+					>
+						<MinimapCanvas
+							bind:this={minimapRef}
+							output={output}
+							height={outputContainerHeight}
+							lineHeight={2}
+							onPositionClick={handleMinimapClick}
+						/>
+					</div>
 				{/if}
 			</div>
 
@@ -6577,6 +6633,27 @@
 									stroke-linecap="round"
 									stroke-linejoin="round"
 									d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3"
+								/>
+							</svg>
+						</button>
+						<!-- Minimap toggle -->
+						<button
+							class="btn btn-xs btn-ghost"
+							onclick={() => showMinimap = !showMinimap}
+							title={showMinimap ? "Hide minimap" : "Show minimap"}
+						>
+							<svg
+								class="w-3 h-3 transition-colors"
+								class:text-secondary={showMinimap}
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"
 								/>
 							</svg>
 						</button>
