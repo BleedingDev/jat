@@ -758,16 +758,37 @@
 	}
 
 	onMount(() => {
-		fetchStatus();
-		fetchTimeline();
+		// Note: Initial data fetch is handled by the $effect below which runs when project changes.
+		// onMount only sets up the status polling interval.
 		startStatusPolling();
 		return () => stopStatusPolling();
 	});
 
 	// Refetch when project changes
+	// Note: We must read `project` synchronously in the effect to track it as a dependency.
+	// The async functions also read `project`, but that happens after the effect tracking phase.
 	$effect(() => {
-		if (project) {
+		const currentProject = project; // Track dependency synchronously
+		if (currentProject) {
+			// Reset all state to loading/empty before fetching new data
 			isLoading = true;
+			isLoadingTimeline = true;
+			error = null;
+			timelineError = null;
+			commits = [];
+			stagedFiles = [];
+			modifiedFiles = [];
+			deletedFiles = [];
+			untrackedFiles = [];
+			createdFiles = [];
+			renamedFiles = [];
+			conflictedFiles = [];
+			currentBranch = null;
+			tracking = null;
+			ahead = 0;
+			behind = 0;
+			unpushedCount = 0;
+
 			fetchStatus();
 			fetchTimeline();
 		}
