@@ -41,14 +41,13 @@ export const GET: RequestHandler = async ({ url }) => {
 				});
 				unpushedHashes = new Set(unpushedLog.all.map(c => c.hash));
 
-				// Get the remote HEAD commit hash for reference
-				const remoteLog = await git.log({
-					maxCount: 1,
-					from: tracking,
-					to: tracking
-				});
-				if (remoteLog.latest) {
-					remoteHeadHash = remoteLog.latest.hash;
+				// Get the remote HEAD commit hash using rev-parse
+				// This correctly gets the hash of the tracking branch
+				try {
+					remoteHeadHash = await git.revparse([tracking]);
+				} catch {
+					// Tracking branch ref might not exist locally
+					remoteHeadHash = null;
 				}
 			} catch {
 				// If tracking branch doesn't exist on remote yet, all commits are unpushed

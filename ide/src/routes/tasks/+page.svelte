@@ -1037,8 +1037,9 @@
 				<table class="sessions-table">
 					<thead>
 						<tr>
-							<th class="th-name">Task</th>
-							<th class="th-actions">Agent</th>
+							<th class="th-task">Task</th>
+							<th class="th-agent">Agent</th>
+							<th class="th-status">Status</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -1085,7 +1086,8 @@
 								class:expandable={true}
 								onclick={() => toggleExpanded(session.name)}
 							>
-								<td class="td-name">
+								<!-- Column 1: TaskIdBadge + Agent below -->
+								<td class="td-task">
 									{#if session.type === 'server'}
 										<!-- Server session display -->
 										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -1105,14 +1107,11 @@
 													}
 												}}
 											/>
-										</div>
-										<div class="server-name">
 											<span class="session-name">{session.name}</span>
 										</div>
 									{:else}
-										<!-- Agent session display -->
-										<!-- Row 1: Project pill + Task title -->
-										<div class="task-row">
+										<!-- Agent session: TaskIdBadge on top, Agent below -->
+										<div class="task-cell-content">
 											{#if sessionTask}
 												<TaskIdBadge
 													task={sessionTask}
@@ -1121,9 +1120,6 @@
 													showType={true}
 													{statusDotColor}
 												/>
-												<span class="task-title" title={sessionTask.title}>
-													{sessionTask.title || sessionTask.id}
-												</span>
 											{:else}
 												<!-- No task - show project badge if known, otherwise session name -->
 												{#if derivedProject}
@@ -1136,24 +1132,10 @@
 												{:else}
 													<span class="session-name-pill">{session.name}</span>
 												{/if}
-												<span class="no-task-label">No active task</span>
 											{/if}
-										</div>
-										<!-- Row 2: Task description (truncated) -->
-										{#if sessionTask?.description}
-											<div class="task-description">
-												{sessionTask.description}
-											</div>
-										{/if}
-									{/if}
-								</td>
-									<td class="td-actions" onclick={(e) => e.stopPropagation()}>
-									{#if session.type === 'agent'}
-										<!-- Two-row layout: Agent info row, then StatusActionBadge with timer -->
-										<div class="agent-column">
-											<!-- Row 1: Avatar + Name + Attached indicator -->
-											<div class="agent-info-row">
-												<AgentAvatar name={sessionAgentName} size={16} />
+											<!-- Agent info row below badge -->
+											<div class="agent-info-row mt-1">
+												<AgentAvatar name={sessionAgentName} size={20} />
 												<span class="agent-name">{sessionAgentName}</span>
 												{#if session.resumed}
 													<span class="resumed-badge" title="Resumed from previous session">
@@ -1170,12 +1152,40 @@
 													</span>
 												{/if}
 											</div>
-											<!-- Row 2: Status action badge with elapsed time -->
+										</div>
+									{/if}
+								</td>
+								<!-- Column 2: Task Title + Description -->
+								<td class="td-agent">
+									{#if session.type === 'agent'}
+										<div class="agent-cell-content">
+											{#if sessionTask}
+												<span class="task-title" title={sessionTask.title}>
+													{sessionTask.title || sessionTask.id}
+												</span>
+												{#if sessionTask.description}
+													<div class="task-description">
+														{sessionTask.description}
+													</div>
+												{/if}
+											{:else}
+												<span class="no-task-label">No active task</span>
+											{/if}
+										</div>
+									{:else}
+										<!-- Non-agent sessions show empty -->
+										<span class="no-agent-label">Server</span>
+									{/if}
+								</td>
+								<!-- Column 3: Status (StatusActionBadge + expand chevron) -->
+								<td class="td-status" onclick={(e) => e.stopPropagation()}>
+									{#if session.type === 'agent'}
+										<div class="status-cell-content">
 											<StatusActionBadge
 												sessionState={activityState || 'idle'}
 												{elapsed}
 												sessionName={session.name}
-												alignRight={true}
+												alignRight={false}
 												onAction={async (actionId) => {
 													if (actionId === 'attach') {
 														await attachSession(session.name);
@@ -1185,7 +1195,6 @@
 														window.location.href = `/tasks?task=${sessionTask.id}`;
 													} else if (actionId === 'complete') {
 														// Send /jat:complete command to session
-														// Claude Code slash commands need: Ctrl+U clear, text, extra Enter
 														const sessionId = encodeURIComponent(session.name);
 														await fetch(`/api/work/${sessionId}/input`, {
 															method: 'POST',
@@ -1206,7 +1215,6 @@
 														});
 													} else if (actionId === 'complete-kill') {
 														// Send /jat:complete --kill command to session
-														// Claude Code slash commands need: Ctrl+U clear, text, extra Enter
 														const sessionId = encodeURIComponent(session.name);
 														await fetch(`/api/work/${sessionId}/input`, {
 															method: 'POST',
@@ -1226,14 +1234,12 @@
 															body: JSON.stringify({ type: 'enter' })
 														});
 													} else if (actionId === 'interrupt') {
-														// Send Ctrl+C to session
 														await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
 															method: 'POST',
 															headers: { 'Content-Type': 'application/json' },
 															body: JSON.stringify({ type: 'ctrl-c' })
 														});
 													} else if (actionId === 'escape') {
-														// Send Escape key to session
 														await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
 															method: 'POST',
 															headers: { 'Content-Type': 'application/json' },
@@ -1247,6 +1253,16 @@
 													window.location.href = `/tasks?task=${epicId}`;
 												}}
 											/>
+											<!-- Expand/Collapse chevron button -->
+											<button
+												class="expand-btn"
+												onclick={(e) => { e.stopPropagation(); toggleExpanded(session.name); }}
+												title={isExpanded ? 'Collapse' : 'Expand'}
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="expand-icon" class:expanded={isExpanded}>
+													<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+												</svg>
+											</button>
 										</div>
 									{:else}
 										<!-- Non-agent sessions: simple buttons -->
@@ -1285,7 +1301,7 @@
 								{@const expandedTask = agentTasks.get(expandedAgentName)}
 								{@const expandedSessionInfo = agentSessionInfo.get(expandedAgentName)}
 								<tr class="expanded-row">
-									<td colspan="2" class="expanded-content">
+									<td colspan="3" class="expanded-content">
 										<div class="expanded-session-wrapper" class:with-task-panel={expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id} class:collapsing={isCollapsing}>
 											<!-- SessionCard section -->
 											<div class="session-card-section">
@@ -1966,17 +1982,75 @@
 		color: oklch(0.75 0.02 250);
 	}
 
-	/* Column widths - fixed second column, first column gets remainder */
-	.th-actions, .td-actions { width: 205px; min-width: 205px; max-width: 205px; }
+	/* Three-column layout widths */
+	.th-task, .td-task { width: 15%; min-width: 120px; }
+	.th-agent, .td-agent { width: 65%; }
+	.th-status, .td-status { width: 20%; min-width: 140px; text-align: right; }
 
-	/* Session name */
-	.td-name {
+	/* Task column (Column 1) - badge on top, agent below */
+	.task-cell-content {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 0.125rem;
-		min-width: 0; /* Allow column to shrink below content width */
-		max-width: 100%;
+		gap: 0.25rem;
+		width: 100%;
+		min-width: 0;
+	}
+
+	/* Agent column (Column 2) - inner flex container */
+	.agent-cell-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		width: 100%;
+		min-width: 0;
+	}
+
+	.no-agent-label {
+		font-size: 0.75rem;
+		color: oklch(0.50 0.02 250);
+		font-style: italic;
+	}
+
+	/* Status column (Column 3) - right aligned */
+	.status-cell-content {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		justify-content: flex-end;
+	}
+
+	/* Expand/Collapse button */
+	.expand-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		padding: 0;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 6px;
+		color: oklch(0.65 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.expand-btn:hover {
+		background: oklch(0.28 0.02 250);
+		border-color: oklch(0.40 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.expand-icon {
+		width: 16px;
+		height: 16px;
+		transition: transform 0.2s ease;
+	}
+
+	.expand-icon.expanded {
+		transform: rotate(180deg);
 	}
 
 	.session-name {
@@ -2012,14 +2086,6 @@
 		font-style: italic;
 	}
 
-	.task-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		min-width: 0; /* Allow flex children to shrink */
-	}
-
 	.server-row {
 		display: flex;
 		align-items: center;
@@ -2047,21 +2113,14 @@
 	}
 
 	.task-description {
-		font-size: 0.7rem;
-		color: oklch(0.55 0.02 250);
-		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		color: oklch(0.65 0.05 200);
+		margin-top: 0.125rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		width: 100%;
 		max-width: 100%;
-	}
-
-	/* Agent column layout (two rows: info row + badge) */
-	.agent-column {
-		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
 	}
 
 	.agent-info-row {
@@ -2071,8 +2130,8 @@
 	}
 
 	.agent-name {
-		font-size: 0.7rem;
-		font-weight: 500;
+		font-size: 1rem;
+		font-weight: 700;
 		color: oklch(0.75 0.02 250);
 		white-space: nowrap;
 	}

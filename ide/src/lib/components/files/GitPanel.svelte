@@ -507,7 +507,10 @@
 	 * Fetch commit timeline from API
 	 */
 	async function fetchTimeline() {
-		if (!project) return;
+		if (!project) {
+			isLoadingTimeline = false;
+			return;
+		}
 
 		isLoadingTimeline = true;
 		timelineError = null;
