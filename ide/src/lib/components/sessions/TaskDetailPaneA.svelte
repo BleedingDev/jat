@@ -423,6 +423,19 @@
 									type="button"
 									class="task-panel-description-display"
 									onclick={() => descriptionEditing = true}
+									draggable={task.description ? "true" : "false"}
+									ondragstart={(e) => {
+										if (task.description) {
+											e.dataTransfer?.setData('text/plain', task.description);
+											e.dataTransfer?.setData('application/x-jat-text', JSON.stringify({
+												type: 'description',
+												taskId: task.id,
+												content: task.description
+											}));
+											if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+										}
+									}}
+									title={task.description ? "Click to edit, drag to SessionCard to paste" : "Click to add description"}
 								>
 									{#if task.description}
 										{task.description}
@@ -478,6 +491,19 @@
 									type="button"
 									class="task-panel-notes-display notes-fill"
 									onclick={() => notesEditing = true}
+									draggable={details?.notes ? "true" : "false"}
+									ondragstart={(e) => {
+										if (details?.notes) {
+											e.dataTransfer?.setData('text/plain', details.notes);
+											e.dataTransfer?.setData('application/x-jat-text', JSON.stringify({
+												type: 'notes',
+												taskId: task.id,
+												content: details.notes
+											}));
+											if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+										}
+									}}
+									title={details?.notes ? "Click to edit, drag to SessionCard to paste" : "Click to add notes..."}
 								>
 									{#if details?.notes}
 										{details.notes}
@@ -1307,6 +1333,18 @@
 
 	.attachment-thumbnail-wrapper {
 		position: relative;
+		animation: attachment-pop-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+	}
+
+	@keyframes attachment-pop-in {
+		0% {
+			opacity: 0;
+			transform: scale(0.5);
+		}
+		100% {
+			opacity: 1;
+			transform: scale(1);
+		}
 	}
 
 	.attachment-thumbnail {

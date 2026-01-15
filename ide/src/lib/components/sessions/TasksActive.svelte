@@ -842,6 +842,12 @@
 														fetchExpandedTaskDetails(taskId);
 													}
 												}}
+												onFileAttachedToTask={(taskId) => {
+													// Refresh task details to show new attachment
+													if (expandedTaskId === taskId) {
+														fetchExpandedTaskDetails(taskId);
+													}
+												}}
 											/>
 										</div>
 									</div>

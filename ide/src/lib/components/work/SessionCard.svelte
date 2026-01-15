@@ -191,6 +191,7 @@
 		) => Promise<boolean | void>;
 		onDismiss?: () => void; // Agent mode: called when completion banner auto-dismisses
 		onTaskDataChange?: () => Promise<void> | void; // Called when task data changes (e.g., linked to epic)
+		onFileAttachedToTask?: (taskId: string) => void; // Called when a file is attached to the task
 		// Server mode callbacks
 		onStopServer?: () => Promise<void>;
 		onRestartServer?: () => Promise<void>;
@@ -316,6 +317,7 @@
 		onSendInput,
 		onDismiss,
 		onTaskDataChange,
+		onFileAttachedToTask,
 		// Server mode callbacks
 		onStopServer,
 		onRestartServer,
@@ -1636,108 +1638,6 @@
 			saveTitle();
 		} else if (event.key === "Escape") {
 			editingTitle = false;
-		}
-	}
-
-	// Track drag state for visual feedback
-	let inputDragOver = $state(false);
-
-	// Handle image drop onto input textarea
-	function handleInputDragEnter(e: DragEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		console.log('[SessionCard] DragEnter on input area');
-		inputDragOver = true;
-	}
-
-	function handleInputDragOver(e: DragEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		if (e.dataTransfer) {
-			e.dataTransfer.dropEffect = 'copy';
-		}
-		inputDragOver = true;
-	}
-
-	function handleInputDragLeave(e: DragEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		// Only set to false if leaving the container entirely (not entering a child)
-		const relatedTarget = e.relatedTarget as HTMLElement | null;
-		const container = e.currentTarget as HTMLElement;
-		if (!relatedTarget || !container.contains(relatedTarget)) {
-			inputDragOver = false;
-		}
-	}
-
-	function handleInputDrop(e: DragEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		inputDragOver = false;
-
-		console.log('[SessionCard] Drop event received', {
-			types: e.dataTransfer?.types,
-			plainText: e.dataTransfer?.getData('text/plain'),
-			jatImage: e.dataTransfer?.getData('application/x-jat-image')
-		});
-
-		// Check for JAT image data first (custom MIME type)
-		const jatImageData = e.dataTransfer?.getData('application/x-jat-image');
-		if (jatImageData) {
-			try {
-				const imageInfo = JSON.parse(jatImageData);
-				if (imageInfo.path) {
-					// Insert the image path at cursor position or append
-					const pathToInsert = imageInfo.path;
-					if (inputRef) {
-						const start = inputRef.selectionStart || 0;
-						const end = inputRef.selectionEnd || 0;
-						const before = inputText.slice(0, start);
-						const after = inputText.slice(end);
-						inputText = before + pathToInsert + after;
-						// Place cursor after inserted path
-						setTimeout(() => {
-							if (inputRef) {
-								inputRef.selectionStart = inputRef.selectionEnd = start + pathToInsert.length;
-								inputRef.focus();
-							}
-						}, 0);
-					} else {
-						inputText += pathToInsert;
-					}
-					// Visual feedback
-					attachFlash = true;
-					setTimeout(() => { attachFlash = false; }, 300);
-					// Trigger live streaming if enabled
-					setTimeout(handleInputChange, 0);
-					return;
-				}
-			} catch {
-				// Fall through to plain text handling
-			}
-		}
-
-		// Fall back to plain text (just the path)
-		const plainText = e.dataTransfer?.getData('text/plain');
-		if (plainText) {
-			if (inputRef) {
-				const start = inputRef.selectionStart || 0;
-				const end = inputRef.selectionEnd || 0;
-				const before = inputText.slice(0, start);
-				const after = inputText.slice(end);
-				inputText = before + plainText + after;
-				setTimeout(() => {
-					if (inputRef) {
-						inputRef.selectionStart = inputRef.selectionEnd = start + plainText.length;
-						inputRef.focus();
-					}
-				}, 0);
-			} else {
-				inputText += plainText;
-			}
-			attachFlash = true;
-			setTimeout(() => { attachFlash = false; }, 300);
-			setTimeout(handleInputChange, 0);
 		}
 	}
 
@@ -3858,6 +3758,15 @@
 			// Upload all attached files first and collect paths
 			const filePaths: string[] = [];
 			for (const file of attachedFiles) {
+				// If the file already has a path (dragged from TaskDetailPaneA), use it directly
+				if (file.path) {
+					filePaths.push(file.path);
+					continue;
+				}
+
+				// Otherwise, upload the blob
+				if (!file.blob) continue;
+
 				const formData = new FormData();
 				formData.append("file", file.blob, file.name);
 				formData.append("sessionName", sessionName);
@@ -3932,9 +3841,12 @@
 			maxStreamedLength = 0; // Reset high water mark after submit
 			// Reset textarea height after clearing
 			setTimeout(autoResizeTextarea, 0);
-			// Revoke object URLs to prevent memory leaks
+			// Revoke object URLs to prevent memory leaks (only for blob-based attachments)
 			for (const file of attachedFiles) {
-				if (file.preview) URL.revokeObjectURL(file.preview);
+				// Don't revoke server URLs from path-based attachments
+				if (file.preview && !file.path && file.preview.startsWith('blob:')) {
+					URL.revokeObjectURL(file.preview);
+				}
 			}
 			attachedFiles = [];
 
@@ -4160,14 +4072,18 @@
 		attachedFiles = attachedFiles.filter((f) => f.id !== id);
 	}
 
-	// Handle drag-and-drop for file attachments
+	// Handle drag-and-drop for file attachments and image paths
 	function handleDragOver(e: DragEvent) {
 		e.preventDefault();
 		e.stopPropagation();
-		// Only show drag state if files are being dragged and we can send input
-		if (e.dataTransfer?.types.includes("Files") && onSendInput) {
+		// Show drag state for files OR custom JAT image/text data OR plain text paths
+		const hasFiles = e.dataTransfer?.types.includes("Files");
+		const hasJatImage = e.dataTransfer?.types.includes("application/x-jat-image");
+		const hasJatText = e.dataTransfer?.types.includes("application/x-jat-text");
+		const hasText = e.dataTransfer?.types.includes("text/plain");
+		if ((hasFiles || hasJatImage || hasJatText || hasText) && onSendInput) {
 			isDragOver = true;
-			e.dataTransfer.dropEffect = "copy";
+			e.dataTransfer!.dropEffect = "copy";
 		}
 	}
 
@@ -4188,7 +4104,11 @@
 	function handleDragEnter(e: DragEvent) {
 		e.preventDefault();
 		e.stopPropagation();
-		if (e.dataTransfer?.types.includes("Files") && onSendInput) {
+		const hasFiles = e.dataTransfer?.types.includes("Files");
+		const hasJatImage = e.dataTransfer?.types.includes("application/x-jat-image");
+		const hasJatText = e.dataTransfer?.types.includes("application/x-jat-text");
+		const hasText = e.dataTransfer?.types.includes("text/plain");
+		if ((hasFiles || hasJatImage || hasJatText || hasText) && onSendInput) {
 			isDragOver = true;
 		}
 	}
@@ -4197,6 +4117,94 @@
 		e.preventDefault();
 		e.stopPropagation();
 		isDragOver = false;
+
+		// Check for custom JAT image path data (dragged from TaskDetailPaneA thumbnails)
+		const jatImageData = e.dataTransfer?.getData('application/x-jat-image');
+		if (jatImageData) {
+			try {
+				const imageInfo = JSON.parse(jatImageData);
+				if (imageInfo.path) {
+					// Add as a proper attachment with the image preview
+					const id = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+					const filename = imageInfo.filename || imageInfo.path.split('/').pop() || 'image';
+
+					attachedFiles = [
+						...attachedFiles,
+						{
+							id,
+							blob: null, // No blob needed - we have the path
+							preview: imageInfo.url, // Use the served URL for preview
+							name: filename,
+							category: 'image',
+							icon: 'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
+							iconColor: 'oklch(0.70 0.15 200)',
+							// Store the path for when we send the message
+							path: imageInfo.path,
+						},
+					];
+
+					attachFlash = true;
+					setTimeout(() => { attachFlash = false; }, 300);
+					return;
+				}
+			} catch {
+				// Fall through to file handling
+			}
+		}
+
+		// Check for custom JAT text data (dragged description or notes from TaskDetailPaneA)
+		const jatTextData = e.dataTransfer?.getData('application/x-jat-text');
+		if (jatTextData) {
+			try {
+				const textInfo = JSON.parse(jatTextData);
+				if (textInfo.content) {
+					// Insert the text content into the input field
+					if (inputText.trim()) {
+						inputText = inputText.trim() + "\n\n" + textInfo.content;
+					} else {
+						inputText = textInfo.content;
+					}
+					// Focus the input for immediate editing
+					setTimeout(() => {
+						const textarea = document.querySelector(`[data-session-input="true"][data-session-name="${sessionName}"]`) as HTMLTextAreaElement;
+						textarea?.focus();
+					}, 50);
+					return;
+				}
+			} catch {
+				// Fall through to other handling
+			}
+		}
+
+		// Also check for plain text path (fallback) - only if it looks like an image path
+		const plainText = e.dataTransfer?.getData('text/plain');
+		if (plainText && plainText.startsWith('/') && !e.dataTransfer?.files?.length) {
+			// Check if it looks like an image path
+			const isImagePath = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(plainText);
+			if (isImagePath) {
+				// Add as attachment with path
+				const id = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+				const filename = plainText.split('/').pop() || 'image';
+
+				attachedFiles = [
+					...attachedFiles,
+					{
+						id,
+						blob: null,
+						preview: `/api/work/image/${encodeURIComponent(plainText)}`,
+						name: filename,
+						category: 'image',
+						icon: 'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
+						iconColor: 'oklch(0.70 0.15 200)',
+						path: plainText,
+					},
+				];
+
+				attachFlash = true;
+				setTimeout(() => { attachFlash = false; }, 300);
+				return;
+			}
+		}
 
 		if (!onSendInput || !e.dataTransfer?.files) return;
 
@@ -4247,13 +4255,17 @@
 			const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
 			// Save to task for persistence (shows in TaskDetailDrawer)
-			await fetch(`/api/tasks/${taskId}/image`, {
+			const saveResponse = await fetch(`/api/tasks/${taskId}/image`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ path: filePath, id: fileId, action: "add" }),
 			});
 
-			console.log(`Archived file to task ${taskId}: ${filePath}`);
+			if (saveResponse.ok) {
+				console.log(`Archived file to task ${taskId}: ${filePath}`);
+				// Notify parent to refresh task details (so attachment shows in TaskDetailPaneA)
+				onFileAttachedToTask?.(taskId);
+			}
 		} catch (err) {
 			console.error("Failed to archive file to task:", err);
 		}
@@ -6847,11 +6859,7 @@
 
 					<!-- MIDDLE: Text input (flexible width) with clear button and streaming indicator -->
 					<div
-						class="relative flex-1 min-w-0 {inputDragOver ? 'ring-2 ring-success/70 rounded' : ''}"
-						ondragenter={handleInputDragEnter}
-						ondragover={handleInputDragOver}
-						ondragleave={handleInputDragLeave}
-						ondrop={handleInputDrop}
+						class="relative flex-1 min-w-0"
 						role="textbox"
 						tabindex="-1"
 					>
