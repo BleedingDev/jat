@@ -7,7 +7,6 @@
 	 */
 
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
-	import HorizontalResizeHandle from '$lib/components/HorizontalResizeHandle.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import ServerSessionBadge from '$lib/components/ServerSessionBadge.svelte';
@@ -116,10 +115,9 @@
 	let expandedHeight = $state(800);
 	let isResizing = $state(false);
 
-	// Tmux pane width tracking
-	let tmuxWidth = $state(160);
-	const PIXELS_PER_COLUMN = 8.5;
-	let isCardResizing = $state(false);
+	// Horizontal split between SessionCard and TaskDetailPane
+	let sessionPanelPercent = $state(60); // SessionCard gets this %, TaskDetailPane gets the rest
+	let isSplitResizing = $state(false);
 
 	// Task detail panel state
 	let expandedTaskId = $state<string | null>(null);
@@ -197,44 +195,32 @@
 		}
 	}
 
-	async function fetchTmuxDimensions(sessionName: string) {
-		try {
-			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/resize`);
-			if (response.ok) {
-				const data = await response.json();
-				tmuxWidth = data.dimensions?.width || 80;
-			}
-		} catch (err) {
-			console.error('Failed to fetch tmux dimensions:', err);
-		}
-	}
+	// Handle horizontal split resize between SessionCard and TaskDetailPane
+	let splitResizeContainer: HTMLDivElement | null = null;
 
-	async function resizeTmuxWidth(sessionName: string, newWidth: number) {
-		try {
-			await fetch(`/api/work/${encodeURIComponent(sessionName)}/resize`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ width: newWidth })
-			});
-		} catch (err) {
-			console.error('Failed to resize tmux pane:', err);
-		}
-	}
+	function startSplitResize(e: MouseEvent) {
+		e.preventDefault();
+		isSplitResizing = true;
+		const startX = e.clientX;
+		const startPercent = sessionPanelPercent;
 
-	function handleHorizontalResize(deltaX: number) {
-		if (!expandedSession) return;
-		isCardResizing = true;
-		const deltaColumns = Math.round(deltaX / PIXELS_PER_COLUMN);
-		if (deltaColumns !== 0) {
-			tmuxWidth = Math.max(40, tmuxWidth + deltaColumns);
+		function onMouseMove(e: MouseEvent) {
+			if (!splitResizeContainer) return;
+			const containerRect = splitResizeContainer.getBoundingClientRect();
+			const containerWidth = containerRect.width;
+			const deltaX = e.clientX - startX;
+			const deltaPercent = (deltaX / containerWidth) * 100;
+			sessionPanelPercent = Math.max(30, Math.min(80, startPercent + deltaPercent));
 		}
-	}
 
-	function handleHorizontalResizeEnd() {
-		isCardResizing = false;
-		if (expandedSession) {
-			resizeTmuxWidth(expandedSession, tmuxWidth);
+		function onMouseUp() {
+			isSplitResizing = false;
+			document.removeEventListener('mousemove', onMouseMove);
+			document.removeEventListener('mouseup', onMouseUp);
 		}
+
+		document.addEventListener('mousemove', onMouseMove);
+		document.addEventListener('mouseup', onMouseUp);
 	}
 
 	function toggleExpanded(sessionName: string) {
@@ -263,7 +249,6 @@
 
 		expandedSession = sessionName;
 		fetchExpandedOutput(sessionName);
-		fetchTmuxDimensions(sessionName);
 
 		const agentName = getAgentName(sessionName);
 		const task = agentTasks.get(agentName);
@@ -374,6 +359,65 @@
 			};
 		} finally {
 			taskDetailsLoading = false;
+		}
+	}
+
+	// Upload attachment for task
+	async function handleUploadAttachment(taskId: string, file: File) {
+		try {
+			// Step 1: Upload file via /api/work/upload-image
+			const formData = new FormData();
+			formData.append('image', file, `task-${taskId}-${Date.now()}-${file.name}`);
+			formData.append('sessionName', `task-${taskId}`);
+
+			const uploadResponse = await fetch('/api/work/upload-image', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (!uploadResponse.ok) {
+				throw new Error('Failed to upload file');
+			}
+
+			const { filePath } = await uploadResponse.json();
+
+			// Step 2: Save metadata via /api/tasks/${taskId}/image
+			const metadataResponse = await fetch(`/api/tasks/${taskId}/image`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ path: filePath, id: `img-${Date.now()}` })
+			});
+
+			if (!metadataResponse.ok) {
+				throw new Error('Failed to save attachment metadata');
+			}
+
+			// Step 3: Refresh task details to show new attachment
+			if (expandedTaskId === taskId) {
+				await fetchExpandedTaskDetails(taskId);
+			}
+		} catch (err) {
+			console.error('Failed to upload attachment:', err);
+		}
+	}
+
+	// Remove attachment from task
+	async function handleRemoveAttachment(taskId: string, attachmentId: string) {
+		try {
+			const response = await fetch(`/api/tasks/${taskId}/image/${encodeURIComponent(attachmentId)}`, {
+				method: 'DELETE'
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to remove attachment');
+			}
+
+			// Refresh task details to update attachments list
+			if (expandedTaskId === taskId) {
+				await fetchExpandedTaskDetails(taskId);
+			}
+		} catch (err) {
+			console.error('Failed to remove attachment:', err);
 		}
 	}
 
@@ -742,9 +786,14 @@
 						{@const expandedSessionInfo = agentSessionInfo.get(expandedAgentName)}
 						<tr class="expanded-row">
 							<td colspan="3" class="expanded-content">
-								<div class="expanded-session-wrapper" class:with-task-panel={expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id} class:collapsing={isCollapsing}>
+								<div
+									class="expanded-session-wrapper"
+									class:with-task-panel={expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id}
+									class:collapsing={isCollapsing}
+									bind:this={splitResizeContainer}
+								>
 									<!-- SessionCard section -->
-									<div class="session-card-section">
+									<div class="session-card-section" style={expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id ? `flex: 0 0 ${sessionPanelPercent}%;` : ''}>
 										<div class="expanded-session-card" style="height: {expandedHeight}px;">
 											<SessionCard
 												mode={session.type === 'server' ? 'server' : 'agent'}
@@ -793,14 +842,19 @@
 												}}
 											/>
 										</div>
-										<!-- Horizontal resize handle for tmux width -->
-										<HorizontalResizeHandle
-											onResize={handleHorizontalResize}
-											onResizeEnd={handleHorizontalResizeEnd}
-										/>
-										<!-- Width indicator - visible only during resize -->
-										<div class="width-indicator" class:visible={isCardResizing}>{tmuxWidth} cols</div>
 									</div>
+
+									<!-- Horizontal resize handle between SessionCard and TaskDetailPane -->
+									{#if expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id}
+										<!-- svelte-ignore a11y_no_static_element_interactions -->
+										<div
+											class="split-resize-handle"
+											class:resizing={isSplitResizing}
+											onmousedown={startSplitResize}
+										>
+											<div class="split-resize-bar"></div>
+										</div>
+									{/if}
 
 									<!-- Inline Task Detail Panel (Concept A: Tabbed) -->
 									{#if expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id}
@@ -814,6 +868,8 @@
 												notesValue = notes;
 												await saveNotes(taskId);
 											}}
+											onUploadAttachment={handleUploadAttachment}
+											onRemoveAttachment={handleRemoveAttachment}
 										/>
 									{/if}
 								</div>
@@ -1203,11 +1259,58 @@
 		min-width: 0;
 	}
 
-	/* When task panel is showing, SessionCard gets 60% and panel gets 40% */
-	.expanded-session-wrapper.with-task-panel .session-card-section {
-		flex: 0 0 60%;
+	/* When task panel is showing, flex is controlled by inline style for resizable width */
+	/* The inline style sets flex: 0 0 {sessionPanelPercent}% */
+
+	/* Horizontal split resize handle (between SessionCard and TaskDetailPane) */
+	.split-resize-handle {
+		flex-shrink: 0;
+		width: 8px;
+		cursor: ew-resize;
+		background: oklch(0.18 0.01 250);
+		border-left: 1px solid oklch(0.25 0.02 250);
+		border-right: 1px solid oklch(0.25 0.02 250);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: background 0.15s;
+		user-select: none;
 	}
 
+	.split-resize-handle:hover {
+		background: oklch(0.22 0.02 250);
+	}
+
+	.split-resize-handle.resizing {
+		background: oklch(0.25 0.04 200);
+	}
+
+	.split-resize-bar {
+		width: 4px;
+		height: 40px;
+		background: oklch(0.35 0.02 250);
+		border-radius: 2px;
+		transition: background 0.15s, height 0.15s;
+	}
+
+	.split-resize-handle:hover .split-resize-bar {
+		background: oklch(0.50 0.02 250);
+		height: 60px;
+	}
+
+	.split-resize-handle.resizing .split-resize-bar {
+		background: oklch(0.65 0.12 200);
+		height: 80px;
+	}
+
+	/* TaskDetailPane fills remaining space in split view */
+	.expanded-session-wrapper.with-task-panel :global(.task-detail-panel) {
+		flex: 1;
+		min-width: 0;
+		border-left: 1px solid oklch(0.25 0.02 250);
+		border-top: none;
+		border-radius: 8px;
+	}
 
 	/* Override SessionCard styles when embedded in table */
 	.expanded-session-card :global(.session-card) {
@@ -1215,28 +1318,6 @@
 		border: 1px solid oklch(0.28 0.02 250);
 		max-width: none;
 		width: 100%;
-	}
-
-	/* Width indicator */
-	.session-card-section .width-indicator {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		font-size: 0.7rem;
-		font-family: ui-monospace, monospace;
-		color: oklch(0.55 0.02 250);
-		background: oklch(0.18 0.01 250);
-		padding: 0.125rem 0.375rem;
-		border-radius: 4px;
-		border: 1px solid oklch(0.25 0.02 250);
-		pointer-events: none;
-		z-index: 5;
-		opacity: 0;
-		transition: opacity 0.15s ease;
-	}
-
-	.session-card-section .width-indicator.visible {
-		opacity: 1;
 	}
 
 	/* Vertical resize divider */

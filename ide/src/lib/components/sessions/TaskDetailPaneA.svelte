@@ -62,18 +62,24 @@
 		loading = false,
 		height = 300,
 		onViewTask,
+		onSaveDescription,
 		onSaveNotes,
 		onAddLabel,
-		onRemoveLabel
+		onRemoveLabel,
+		onUploadAttachment,
+		onRemoveAttachment
 	}: {
 		task: AgentTask;
 		details: ExtendedTaskDetails | null;
 		loading?: boolean;
 		height?: number;
 		onViewTask?: (taskId: string) => void;
+		onSaveDescription?: (taskId: string, description: string) => Promise<void>;
 		onSaveNotes?: (taskId: string, notes: string) => Promise<void>;
 		onAddLabel?: (taskId: string, label: string) => Promise<void>;
 		onRemoveLabel?: (taskId: string, label: string) => Promise<void>;
+		onUploadAttachment?: (taskId: string, file: File) => Promise<void>;
+		onRemoveAttachment?: (taskId: string, attachmentId: string) => Promise<void>;
 	} = $props();
 
 	// Status colors for badges
@@ -87,18 +93,33 @@
 	// Active tab
 	let activeTab = $state<'details' | 'activity' | 'deps'>('details');
 
+	// Description editing state
+	let descriptionEditing = $state(false);
+	let descriptionValue = $state('');
+	let descriptionSaving = $state(false);
+
 	// Notes editing state
 	let notesEditing = $state(false);
 	let notesValue = $state('');
 	let notesSaving = $state(false);
 
-	// Attachments expanded
-	let attachmentsExpanded = $state(false);
+	// Attachment management state
+	let isDragOver = $state(false);
+	let attachmentUploading = $state(false);
+	let fileInputRef: HTMLInputElement;
+	let attachmentsExpanded = $state(true);
 
 	// Label management state
 	let showLabelInput = $state(false);
 	let newLabelValue = $state('');
 	let labelSaving = $state(false);
+
+	// Initialize description value when task changes
+	$effect(() => {
+		if (task?.description !== undefined) {
+			descriptionValue = task.description || '';
+		}
+	});
 
 	// Initialize notes value when details change
 	$effect(() => {
@@ -106,6 +127,26 @@
 			notesValue = details.notes || '';
 		}
 	});
+
+	async function saveDescription() {
+		if (!task?.id || descriptionSaving) return;
+
+		const currentDescription = task?.description || '';
+		if (descriptionValue === currentDescription) {
+			descriptionEditing = false;
+			return;
+		}
+
+		descriptionSaving = true;
+		try {
+			if (onSaveDescription) {
+				await onSaveDescription(task.id, descriptionValue);
+			}
+		} finally {
+			descriptionSaving = false;
+			descriptionEditing = false;
+		}
+	}
 
 	async function saveNotes() {
 		if (!task?.id || notesSaving) return;
@@ -170,6 +211,98 @@
 		} else if (e.key === 'Escape') {
 			newLabelValue = '';
 			showLabelInput = false;
+		}
+	}
+
+	// Copy to clipboard
+	let copiedField = $state<'description' | 'notes' | null>(null);
+	async function copyToClipboard(text: string, field: 'description' | 'notes') {
+		try {
+			await navigator.clipboard.writeText(text);
+			copiedField = field;
+			setTimeout(() => copiedField = null, 1500);
+		} catch (err) {
+			console.error('Failed to copy:', err);
+		}
+	}
+
+	// Attachment handling
+	function handleDragOver(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+
+		// CRITICAL: Must set dropEffect for browser to allow the drop
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = 'copy';
+		}
+		isDragOver = true;
+	}
+
+	function handleDragEnter(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+	}
+
+	function handleDragLeave(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+
+		// Only set to false if leaving the dropzone entirely
+		// Check if we're leaving to a child element
+		const relatedTarget = e.relatedTarget as HTMLElement | null;
+		const dropzone = e.currentTarget as HTMLElement;
+		if (!relatedTarget || !dropzone.contains(relatedTarget)) {
+			isDragOver = false;
+		}
+	}
+
+	async function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		isDragOver = false;
+
+		const files = e.dataTransfer?.files;
+		if (!files || files.length === 0) return;
+
+		for (const file of files) {
+			await uploadFile(file);
+		}
+	}
+
+	function handleFileSelect(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const files = input.files;
+		if (!files || files.length === 0) return;
+
+		for (const file of files) {
+			uploadFile(file);
+		}
+		// Reset input so same file can be selected again
+		input.value = '';
+	}
+
+	async function uploadFile(file: File) {
+		if (!task?.id || attachmentUploading) return;
+
+		attachmentUploading = true;
+		try {
+			if (onUploadAttachment) {
+				await onUploadAttachment(task.id, file);
+			}
+		} finally {
+			attachmentUploading = false;
+		}
+	}
+
+	async function removeAttachment(attachmentId: string) {
+		if (!task?.id) return;
+
+		try {
+			if (onRemoveAttachment) {
+				await onRemoveAttachment(task.id, attachmentId);
+			}
+		} catch (err) {
+			console.error('Failed to remove attachment:', err);
 		}
 	}
 
@@ -246,23 +379,87 @@
 					<!-- Details tab: Description at top, Notes fills middle, Labels pinned at bottom -->
 					<div class="details-layout">
 						<!-- Top section: Description -->
-						{#if task.description}
-							<div class="task-panel-section description-section">
+						<div class="task-panel-section description-section">
+							<div class="section-header">
 								<span class="task-panel-label">Description</span>
-								<p class="task-panel-description">{task.description}</p>
+								{#if !descriptionEditing && task.description}
+									<div class="header-actions">
+										<button
+											class="copy-btn"
+											onclick={() => copyToClipboard(task.description || '', 'description')}
+											title="Copy description"
+										>
+											{#if copiedField === 'description'}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+												</svg>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+												</svg>
+											{/if}
+										</button>
+										<button class="edit-btn" onclick={() => descriptionEditing = true} title="Edit description">
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+											</svg>
+										</button>
+									</div>
+								{/if}
 							</div>
-						{/if}
+							{#if descriptionEditing}
+								<textarea
+									class="task-panel-description-input"
+									bind:value={descriptionValue}
+									onblur={saveDescription}
+									placeholder="Add description..."
+									disabled={descriptionSaving}
+								></textarea>
+								{#if descriptionSaving}
+									<span class="task-panel-saving">Saving...</span>
+								{/if}
+							{:else}
+								<button
+									type="button"
+									class="task-panel-description-display"
+									onclick={() => descriptionEditing = true}
+								>
+									{#if task.description}
+										{task.description}
+									{:else}
+										<span class="text-base-content/40 italic">Click to add description...</span>
+									{/if}
+								</button>
+							{/if}
+						</div>
 
 						<!-- Middle section: Notes (flex-grow to fill space) -->
 						<div class="task-panel-section notes-section">
 							<div class="section-header">
 								<span class="task-panel-label">Notes</span>
 								{#if !notesEditing && details?.notes}
-									<button class="edit-btn" onclick={() => notesEditing = true} title="Edit notes">
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-										</svg>
-									</button>
+									<div class="header-actions">
+										<button
+											class="copy-btn"
+											onclick={() => copyToClipboard(details?.notes || '', 'notes')}
+											title="Copy notes"
+										>
+											{#if copiedField === 'notes'}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+												</svg>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+												</svg>
+											{/if}
+										</button>
+										<button class="edit-btn" onclick={() => notesEditing = true} title="Edit notes">
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+											</svg>
+										</button>
+									</div>
 								{/if}
 							</div>
 							{#if notesEditing}
@@ -291,20 +488,106 @@
 							{/if}
 						</div>
 
+						<!-- Attachments section with drop zone -->
+						<div class="task-panel-section attachments-section">
+							<span class="task-panel-label">
+								Attachments
+								{#if details?.attachments && details.attachments.length > 0}
+									<span class="badge badge-xs ml-1">{details.attachments.length}</span>
+								{/if}
+							</span>
+							<div
+								class="attachments-dropzone"
+								class:drag-over={isDragOver}
+								class:has-attachments={details?.attachments && details.attachments.length > 0}
+								ondrop={handleDrop}
+								ondragover={handleDragOver}
+								ondragenter={handleDragEnter}
+								ondragleave={handleDragLeave}
+								role="button"
+								tabindex="0"
+								onclick={() => fileInputRef?.click()}
+								onkeydown={(e) => e.key === 'Enter' && fileInputRef?.click()}
+							>
+								<input
+									type="file"
+									bind:this={fileInputRef}
+									onchange={handleFileSelect}
+									accept="image/*"
+									multiple
+									class="hidden"
+								/>
+
+								{#if details?.attachments && details.attachments.length > 0}
+									<!-- Show thumbnails when attachments exist -->
+									<div class="attachments-thumbnails">
+										{#each details.attachments as attachment}
+											<div class="attachment-thumbnail-wrapper">
+												<a
+													href={attachment.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="attachment-thumbnail"
+													title={attachment.filename}
+													onclick={(e) => e.stopPropagation()}
+												>
+													<img
+														src={attachment.url}
+														alt={attachment.filename}
+														class="attachment-thumbnail-img"
+													/>
+												</a>
+												<button
+													class="attachment-remove-btn"
+													onclick={(e) => { e.stopPropagation(); removeAttachment(attachment.id); }}
+													title="Remove attachment"
+												>
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+													</svg>
+												</button>
+											</div>
+										{/each}
+										<!-- Add more button within thumbnails -->
+										<button
+											class="attachment-add-btn"
+											onclick={(e) => { e.stopPropagation(); fileInputRef?.click(); }}
+											title="Add attachment"
+										>
+											{#if attachmentUploading}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+												</svg>
+											{/if}
+										</button>
+									</div>
+								{:else}
+									<!-- Empty drop zone state -->
+									<div class="dropzone-empty pointer-events-none">
+										{#if attachmentUploading}
+											<span class="loading loading-spinner loading-sm"></span>
+											<span class="dropzone-text">Uploading...</span>
+										{:else if isDragOver}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 dropzone-icon">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+											</svg>
+											<span class="dropzone-text">Drop files here</span>
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 dropzone-icon">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+											</svg>
+											<span class="dropzone-text">Drop images or click to upload</span>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						</div>
+
 						<!-- Bottom section: Labels (pinned to bottom) -->
 						<div class="task-panel-section labels-section">
-							<div class="section-header">
-								<span class="task-panel-label">Labels</span>
-								<button
-									class="add-label-btn"
-									onclick={() => showLabelInput = !showLabelInput}
-									title="Add label"
-								>
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-									</svg>
-								</button>
-							</div>
+							<span class="task-panel-label">Labels</span>
 							<div class="task-panel-labels">
 								{#if details?.labels && details.labels.length > 0}
 									{#each details.labels as label}
@@ -351,47 +634,23 @@
 											</button>
 										{/if}
 									</div>
+								{:else}
+									<!-- Add button inline after labels -->
+									<button
+										class="add-label-btn-inline"
+										onclick={() => showLabelInput = true}
+										title="Add label"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+										</svg>
+									</button>
 								{/if}
 								{#if (!details?.labels || details.labels.length === 0) && !showLabelInput}
 									<span class="no-labels-hint">No labels</span>
 								{/if}
 							</div>
 						</div>
-
-						<!-- Attachments (collapsible, below labels) -->
-						{#if details?.attachments && details.attachments.length > 0}
-							<div class="task-panel-section attachments-section">
-								<button class="section-toggle" onclick={() => attachmentsExpanded = !attachmentsExpanded}>
-									<span class="task-panel-label">
-										Attachments
-										<span class="badge badge-xs ml-1">{details.attachments.length}</span>
-									</span>
-									<span class="toggle-icon" class:expanded={attachmentsExpanded}>
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-										</svg>
-									</button>
-								{#if attachmentsExpanded}
-									<div class="task-panel-attachments">
-										{#each details.attachments as attachment}
-											<a
-												href={attachment.url}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="task-panel-attachment"
-												title={attachment.filename}
-											>
-												<img
-													src={attachment.url}
-													alt={attachment.filename}
-													class="task-panel-attachment-img"
-												/>
-											</a>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/if}
 					</div>
 
 				{:else if activeTab === 'activity'}
@@ -647,6 +906,12 @@
 		justify-content: space-between;
 	}
 
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
 	.task-panel-label {
 		font-size: 0.65rem;
 		font-weight: 600;
@@ -666,6 +931,21 @@
 	}
 
 	.edit-btn:hover {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.75 0.02 250);
+	}
+
+	.copy-btn {
+		padding: 0.25rem;
+		background: transparent;
+		border: none;
+		color: oklch(0.55 0.02 250);
+		cursor: pointer;
+		border-radius: 4px;
+		transition: all 0.15s;
+	}
+
+	.copy-btn:hover {
 		background: oklch(0.22 0.02 250);
 		color: oklch(0.75 0.02 250);
 	}
@@ -696,6 +976,57 @@
 		margin: 0;
 		line-height: 1.5;
 		white-space: pre-wrap;
+	}
+
+	.task-panel-description-input {
+		width: 100%;
+		font-size: 0.8rem;
+		color: oklch(0.85 0.02 250);
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		padding: 0.5rem 0.625rem;
+		line-height: 1.5;
+		resize: vertical;
+		font-family: inherit;
+		transition: border-color 0.15s, box-shadow 0.15s;
+		field-sizing: content;
+		min-height: calc(4 * 1.5em + 1rem);
+	}
+
+	.task-panel-description-input:focus {
+		outline: none;
+		border-color: oklch(0.60 0.15 200);
+		box-shadow: 0 0 0 2px oklch(0.60 0.15 200 / 0.2);
+	}
+
+	.task-panel-description-display {
+		display: block;
+		width: 100%;
+		font-size: 0.8rem;
+		color: oklch(0.70 0.02 250);
+		background: oklch(0.14 0.01 250);
+		border: 1px dashed oklch(0.25 0.02 250);
+		border-radius: 0.375rem;
+		padding: 0.5rem 0.625rem;
+		text-align: left;
+		line-height: 1.5;
+		cursor: pointer;
+		height: calc(4 * 1.5em + 1rem);
+		overflow: hidden;
+		white-space: pre-wrap;
+		transition: border-color 0.15s, background-color 0.15s;
+	}
+
+	.task-panel-description-display:hover {
+		border-color: oklch(0.35 0.02 250);
+		background: oklch(0.16 0.01 250);
+	}
+
+	.task-panel-saving {
+		font-size: 0.7rem;
+		color: oklch(0.55 0.02 250);
+		font-style: italic;
 	}
 
 	/* Notes */
@@ -755,23 +1086,24 @@
 		font-style: italic;
 	}
 
-	/* Add label button */
-	.add-label-btn {
-		padding: 0.125rem;
+	/* Add label button - inline with labels */
+	.add-label-btn-inline {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.125rem 0.375rem;
 		background: transparent;
 		border: 1px dashed oklch(0.30 0.02 250);
-		color: oklch(0.50 0.02 250);
+		color: oklch(0.45 0.02 250);
 		cursor: pointer;
 		border-radius: 4px;
 		transition: all 0.15s;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+		height: 1.5rem;
 	}
 
-	.add-label-btn:hover {
+	.add-label-btn-inline:hover {
 		background: oklch(0.20 0.02 250);
-		border-color: oklch(0.40 0.02 250);
+		border-color: oklch(0.45 0.02 250);
 		color: oklch(0.70 0.02 250);
 	}
 
@@ -886,32 +1218,140 @@
 		font-style: italic;
 	}
 
-	/* Attachments */
-	.task-panel-attachments {
+	/* Attachments Drop Zone */
+	.attachments-dropzone {
+		display: flex;
+		flex-direction: column;
+		min-height: 60px;
+		padding: 0.5rem;
+		border: 2px dashed oklch(0.30 0.02 250);
+		border-radius: 0.5rem;
+		background: oklch(0.14 0.01 250);
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.attachments-dropzone:hover {
+		border-color: oklch(0.40 0.02 250);
+		background: oklch(0.16 0.01 250);
+	}
+
+	.attachments-dropzone.drag-over {
+		border-color: oklch(0.60 0.15 200);
+		background: oklch(0.60 0.15 200 / 0.1);
+		border-style: solid;
+	}
+
+	.attachments-dropzone.has-attachments {
+		min-height: auto;
+		cursor: default;
+	}
+
+	.dropzone-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.375rem;
+		padding: 0.5rem;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.dropzone-icon {
+		color: oklch(0.45 0.02 250);
+	}
+
+	.drag-over .dropzone-icon {
+		color: oklch(0.60 0.15 200);
+	}
+
+	.dropzone-text {
+		font-size: 0.75rem;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.drag-over .dropzone-text {
+		color: oklch(0.70 0.15 200);
+	}
+
+	/* Attachments Thumbnails */
+	.attachments-thumbnails {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		margin-top: 0.375rem;
+		align-items: center;
 	}
 
-	.task-panel-attachment {
+	.attachment-thumbnail-wrapper {
+		position: relative;
+	}
+
+	.attachment-thumbnail {
 		display: block;
-		width: 50px;
-		height: 50px;
+		width: 56px;
+		height: 56px;
 		border-radius: 6px;
 		overflow: hidden;
-		border: 1px solid oklch(0.25 0.02 250);
-		transition: border-color 0.15s;
+		border: 1px solid oklch(0.28 0.02 250);
+		transition: all 0.15s;
 	}
 
-	.task-panel-attachment:hover {
+	.attachment-thumbnail:hover {
 		border-color: oklch(0.45 0.02 250);
+		transform: scale(1.02);
 	}
 
-	.task-panel-attachment-img {
+	.attachment-thumbnail-img {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+	}
+
+	.attachment-remove-btn {
+		position: absolute;
+		top: -6px;
+		right: -6px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		background: oklch(0.55 0.15 30);
+		border: none;
+		color: oklch(0.95 0.02 250);
+		cursor: pointer;
+		border-radius: 50%;
+		opacity: 0;
+		transition: all 0.15s;
+	}
+
+	.attachment-thumbnail-wrapper:hover .attachment-remove-btn {
+		opacity: 1;
+	}
+
+	.attachment-remove-btn:hover {
+		background: oklch(0.60 0.18 30);
+		transform: scale(1.1);
+	}
+
+	.attachment-add-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 56px;
+		height: 56px;
+		border: 2px dashed oklch(0.30 0.02 250);
+		border-radius: 6px;
+		background: transparent;
+		color: oklch(0.45 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.attachment-add-btn:hover {
+		border-color: oklch(0.45 0.02 250);
+		color: oklch(0.65 0.02 250);
+		background: oklch(0.18 0.01 250);
 	}
 
 	/* Dependencies */

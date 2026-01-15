@@ -67,7 +67,6 @@
 		getServerStateVisual,
 	} from "$lib/config/statusColors";
 	import { SIGNAL_TTL } from "$lib/config/constants";
-	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
 	import {
 		setHoveredSession,
 		completingSessionFlash,
@@ -1224,7 +1223,6 @@
 	let scrollContainerRef: HTMLDivElement | null = null;
 
 	// Minimap state
-	let showMinimap = $state(false);
 	let minimapRef: MinimapCssScale | null = $state(null);
 	let outputContainerHeight = $state(0);
 	let terminalWidth = $state(800);
@@ -1342,48 +1340,6 @@
 
 	// Effective width (prop takes precedence over internal state)
 	const effectiveWidth = $derived(cardWidth ?? internalWidth);
-
-	/**
-	 * Handle manual resize via drag handle
-	 */
-	function handleManualResize(deltaX: number) {
-		const currentWidth = effectiveWidth ?? 400; // Default if no width set
-		const newWidth = Math.max(
-			MIN_CARD_WIDTH,
-			Math.min(MAX_CARD_WIDTH, currentWidth + deltaX),
-		);
-
-		if (onWidthChange) {
-			onWidthChange(newWidth);
-		} else {
-			internalWidth = newWidth;
-		}
-	}
-
-	/**
-	 * Called when resize drag ends - trigger tmux resize with final width and persist
-	 */
-	function handleResizeEnd() {
-		// Trigger tmux resize with final width
-		if (scrollContainerRef) {
-			const rect = scrollContainerRef.getBoundingClientRect();
-			const columns = calculateColumns(rect.width);
-			resizeTmuxSession(columns);
-		}
-
-		// Persist width to localStorage if using internal state
-		if (
-			typeof window !== "undefined" &&
-			sessionName &&
-			internalWidth &&
-			!cardWidth
-		) {
-			localStorage.setItem(
-				`${STORAGE_KEY_PREFIX}${sessionName}`,
-				internalWidth.toString(),
-			);
-		}
-	}
 
 	// Horizontal padding in the output container (px-3 = 12px on each side)
 	const CONTAINER_PADDING_PX = 24;
@@ -1783,7 +1739,6 @@
 	// Always steals focus between session cards, only protects search boxes/filters
 	function handleCardMouseEnter() {
 		setHoveredSession(sessionName);
-		showMinimap = true;
 
 		// Focus-follows-mouse: focus the input when hovering over the card
 		// Skip ONLY if user is typing in a non-session input (search box, filter, etc.)
@@ -1802,7 +1757,6 @@
 
 	function handleCardMouseLeave() {
 		setHoveredSession(null);
-		showMinimap = false;
 	}
 
 	// Handle click anywhere in the card to center it and focus input
@@ -3509,9 +3463,9 @@
 		}
 	});
 
-	// Sync minimap viewport when output changes or minimap is shown
+	// Sync minimap viewport when output changes
 	$effect(() => {
-		if (output && showMinimap && minimapRef) {
+		if (output && minimapRef) {
 			requestAnimationFrame(() => syncMinimapViewport());
 		}
 	});
@@ -4673,9 +4627,9 @@
 			: isJumpHighlighted
 				? '0 0 20px oklch(0.60 0.15 220 / 0.6), inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'
 				: 'inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'};
-			width: {effectiveWidth ?? DEFAULT_CARD_WIDTH}px;
-			min-width: {MIN_CARD_WIDTH}px;
-			flex-shrink: 0;
+			width: {headerless ? '100%' : `${effectiveWidth ?? DEFAULT_CARD_WIDTH}px`};
+			min-width: {headerless ? 'auto' : `${MIN_CARD_WIDTH}px`};
+			flex-shrink: {headerless ? 1 : 0};
 			scroll-margin-top: 6rem;
 		"
 		data-agent-name={agentName}
@@ -4721,11 +4675,6 @@
 				</div>
 			</div>
 		{/if}
-		<!-- Horizontal resize handle on right edge -->
-		<HorizontalResizeHandle
-			onResize={handleManualResize}
-			onResizeEnd={handleResizeEnd}
-		/>
 		<!-- Status accent bar - left edge (color reflects session state) -->
 		<div
 			class="absolute left-0 top-0 bottom-0 w-1 z-10"
@@ -5511,7 +5460,7 @@
 				<div
 					bind:this={scrollContainerRef}
 					class="absolute inset-0 overflow-y-auto overflow-x-auto px-3 leading-relaxed cursor-text"
-					style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250); {showMinimap && output ? 'right: 60px;' : ''}"
+					style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250); {output ? 'right: 60px;' : ''}"
 					onscroll={handleScroll}
 					onclick={handleCardClick}
 				>
@@ -5524,8 +5473,8 @@
 					{/if}
 				</div>
 
-				<!-- Minimap Sidebar (absolute positioned) -->
-				{#if showMinimap && output && mode === 'agent'}
+				<!-- Minimap Sidebar (absolute positioned, always visible when there's output) -->
+				{#if output && mode === 'agent'}
 					<div
 						class="absolute top-0 right-0 bottom-0 w-[60px] border-l overflow-hidden"
 						style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"

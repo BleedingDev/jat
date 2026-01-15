@@ -201,6 +201,7 @@
 	});
 
 	function handleClick(e: MouseEvent) {
+		e.preventDefault(); // Prevent text selection
 		if (!container) return;
 
 		const rect = container.getBoundingClientRect();
@@ -211,6 +212,7 @@
 	}
 
 	function handleDragStart(e: MouseEvent) {
+		e.preventDefault(); // Prevent text selection
 		isDragging = true;
 		handleDrag(e);
 	}
@@ -269,6 +271,8 @@
 		position: relative;
 		flex: 1;
 		cursor: pointer;
+		user-select: none;
+		-webkit-user-select: none;
 	}
 
 	canvas {

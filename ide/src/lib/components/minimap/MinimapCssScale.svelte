@@ -49,6 +49,7 @@
 	});
 
 	function handleMinimapClick(e: MouseEvent) {
+		e.preventDefault(); // Prevent text selection
 		if (!minimapContainer) return;
 
 		const rect = minimapContainer.getBoundingClientRect();
@@ -59,6 +60,7 @@
 	}
 
 	function handleDragStart(e: MouseEvent) {
+		e.preventDefault(); // Prevent text selection
 		isDragging = true;
 		handleDrag(e);
 	}
@@ -148,6 +150,8 @@
 		flex: 1;
 		overflow: hidden;
 		cursor: pointer;
+		user-select: none;
+		-webkit-user-select: none;
 	}
 
 	.minimap-content {
@@ -155,6 +159,8 @@
 		top: 0;
 		left: 0;
 		pointer-events: none;
+		user-select: none;
+		-webkit-user-select: none;
 	}
 
 	.terminal-output {
