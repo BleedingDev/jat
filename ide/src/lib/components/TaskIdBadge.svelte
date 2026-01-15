@@ -277,23 +277,27 @@
 {:else if copyOnly}
 	<!-- Copy-only mode: just a clickable badge, no dropdown (for use in tables where info is already visible) -->
 	<div class="inline-flex flex-col items-start gap-0.5 relative">
-		<!-- Blocked by (ABOVE badge) - compact single-line with / icon -->
+		<!-- Blocked by (ABOVE badge) - compact with wrapping and indent -->
 		{#if hasBlockers}
-			<div class="text-xs flex items-center gap-1" style="color: oklch(0.65 0.20 25);">
-				<span class="font-mono opacity-50">┌</span>
-				<svg class="w-3 h-3 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-				</svg>
-				{#each unresolvedBlockers.slice(0, 2) as dep, i}
-					<button
-						class="font-mono hover:underline"
-						onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
-						title={dep.title || dep.id}
-					>{dep.id}</button>{#if i < Math.min(unresolvedBlockers.length, 2) - 1}<span>,</span>{/if}
-				{/each}
-				{#if unresolvedBlockers.length > 2}
-					<span class="opacity-60">+{unresolvedBlockers.length - 2}</span>
-				{/if}
+			<div class="text-xs flex" style="color: oklch(0.65 0.20 25);">
+				<span class="flex items-center gap-1 shrink-0">
+					<span class="font-mono opacity-50">┌</span>
+					<svg class="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+					</svg>
+				</span>
+				<span class="flex items-center gap-1 flex-wrap ml-1">
+					{#each unresolvedBlockers.slice(0, 2) as dep, i}
+						<button
+							class="font-mono hover:underline"
+							onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+							title={dep.title || dep.id}
+						>{dep.id}</button>{#if i < Math.min(unresolvedBlockers.length, 2) - 1}<span>,</span>{/if}
+					{/each}
+					{#if unresolvedBlockers.length > 2}
+						<span class="opacity-60">+{unresolvedBlockers.length - 2}</span>
+					{/if}
+				</span>
 			</div>
 		{/if}
 
@@ -365,46 +369,54 @@
 			/>
 		{/if}
 
-		<!-- Blocks (BELOW badge) - compact single-line with arrow icon -->
+		<!-- Blocks (BELOW badge) - compact with wrapping and indent -->
 		{#if hasBlocks}
-			<div class="text-xs flex items-center gap-1" style="color: oklch(0.60 0.15 200);">
-				<span class="font-mono opacity-50">└</span>
-				<svg class="w-3 h-3 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-				</svg>
-				{#each activeBlocks.slice(0, 2) as dep, i}
-					<button
-						class="font-mono hover:underline"
-						onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
-						title={dep.title || dep.id}
-					>{dep.id}</button>{#if i < Math.min(activeBlocks.length, 2) - 1}<span>,</span>{/if}
-				{/each}
-				{#if activeBlocks.length > 2}
-					<span class="opacity-60">+{activeBlocks.length - 2}</span>
-				{/if}
+			<div class="text-xs flex" style="color: oklch(0.60 0.15 200);">
+				<span class="flex items-center gap-1 shrink-0">
+					<span class="font-mono opacity-50">└</span>
+					<svg class="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+					</svg>
+				</span>
+				<span class="flex items-center gap-1 flex-wrap ml-1">
+					{#each activeBlocks.slice(0, 2) as dep, i}
+						<button
+							class="font-mono hover:underline"
+							onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+							title={dep.title || dep.id}
+						>{dep.id}</button>{#if i < Math.min(activeBlocks.length, 2) - 1}<span>,</span>{/if}
+					{/each}
+					{#if activeBlocks.length > 2}
+						<span class="opacity-60">+{activeBlocks.length - 2}</span>
+					{/if}
+				</span>
 			</div>
 		{/if}
 	</div>
 {:else}
 	<!-- Full mode: badge with type icon, project-colored ID, status icon, and dropdown -->
 	<div class="inline-flex flex-col items-start gap-0.5 relative">
-		<!-- Blocked by (ABOVE badge) - compact single-line with / icon -->
+		<!-- Blocked by (ABOVE badge) - compact with wrapping and indent -->
 		{#if hasBlockers}
-			<div class="text-xs flex items-center gap-1" style="color: oklch(0.65 0.20 25);">
-				<span class="font-mono opacity-50">┌</span>
-				<svg class="w-3 h-3 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-				</svg>
-				{#each unresolvedBlockers.slice(0, 2) as dep, i}
-					<button
-						class="font-mono hover:underline"
-						onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
-						title={dep.title || dep.id}
-					>{dep.id}</button>{#if i < Math.min(unresolvedBlockers.length, 2) - 1}<span>,</span>{/if}
-				{/each}
-				{#if unresolvedBlockers.length > 2}
-					<span class="opacity-60">+{unresolvedBlockers.length - 2}</span>
-				{/if}
+			<div class="text-xs flex" style="color: oklch(0.65 0.20 25);">
+				<span class="flex items-center gap-1 shrink-0">
+					<span class="font-mono opacity-50">┌</span>
+					<svg class="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+					</svg>
+				</span>
+				<span class="flex items-center gap-1 flex-wrap ml-1">
+					{#each unresolvedBlockers.slice(0, 2) as dep, i}
+						<button
+							class="font-mono hover:underline"
+							onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+							title={dep.title || dep.id}
+						>{dep.id}</button>{#if i < Math.min(unresolvedBlockers.length, 2) - 1}<span>,</span>{/if}
+					{/each}
+					{#if unresolvedBlockers.length > 2}
+						<span class="opacity-60">+{unresolvedBlockers.length - 2}</span>
+					{/if}
+				</span>
 			</div>
 		{/if}
 
@@ -631,23 +643,27 @@
 			/>
 		{/if}
 
-		<!-- Blocks (BELOW badge) - compact single-line with arrow icon -->
+		<!-- Blocks (BELOW badge) - compact with wrapping and indent -->
 		{#if hasBlocks}
-			<div class="text-xs flex items-center gap-1" style="color: oklch(0.60 0.15 200);">
-				<span class="font-mono opacity-50">└</span>
-				<svg class="w-3 h-3 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-				</svg>
-				{#each activeBlocks.slice(0, 2) as dep, i}
-					<button
-						class="font-mono hover:underline"
-						onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
-						title={dep.title || dep.id}
-					>{dep.id}</button>{#if i < Math.min(activeBlocks.length, 2) - 1}<span>,</span>{/if}
-				{/each}
-				{#if activeBlocks.length > 2}
-					<span class="opacity-60">+{activeBlocks.length - 2}</span>
-				{/if}
+			<div class="text-xs flex" style="color: oklch(0.60 0.15 200);">
+				<span class="flex items-center gap-1 shrink-0">
+					<span class="font-mono opacity-50">└</span>
+					<svg class="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+					</svg>
+				</span>
+				<span class="flex items-center gap-1 flex-wrap ml-1">
+					{#each activeBlocks.slice(0, 2) as dep, i}
+						<button
+							class="font-mono hover:underline"
+							onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+							title={dep.title || dep.id}
+						>{dep.id}</button>{#if i < Math.min(activeBlocks.length, 2) - 1}<span>,</span>{/if}
+					{/each}
+					{#if activeBlocks.length > 2}
+						<span class="opacity-60">+{activeBlocks.length - 2}</span>
+					{/if}
+				</span>
 			</div>
 		{/if}
 	</div>
