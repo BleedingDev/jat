@@ -149,8 +149,8 @@
 								<TaskIdBadge
 									{task}
 									size="xs"
-									variant="projectPill"
 									showType={true}
+									copyOnly
 									blockedBy={unresolvedBlockers}
 									blocks={blockedTasks}
 									showDependencies={true}
