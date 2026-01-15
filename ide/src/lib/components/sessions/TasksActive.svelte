@@ -32,6 +32,7 @@
 		title?: string;
 		priority?: number;
 		description?: string;
+		notes?: string;
 	}
 
 	interface AgentSessionInfo {
@@ -67,6 +68,7 @@
 	interface ExtendedTaskDetails {
 		labels?: string[];
 		assignee?: string;
+		notes?: string;
 		depends_on?: TaskDependency[];
 		blocked_by?: TaskDependency[];
 		created_at?: string;
@@ -124,6 +126,11 @@
 	let expandedTaskDetails = $state<ExtendedTaskDetails | null>(null);
 	let taskDetailsLoading = $state(false);
 	let timelineFilter = $state<'all' | 'tasks' | 'messages'>('all');
+
+	// Notes editing state
+	let notesEditing = $state(false);
+	let notesValue = $state('');
+	let notesSaving = $state(false);
 
 	// Action loading state
 	let actionLoading = $state<string | null>(null);
@@ -334,6 +341,7 @@
 			expandedTaskDetails = {
 				labels: taskData?.task?.labels || [],
 				assignee: taskData?.task?.assignee,
+				notes: taskData?.task?.notes || '',
 				depends_on: taskData?.task?.depends_on || [],
 				blocked_by: taskData?.task?.blocked_by || [],
 				created_at: taskData?.task?.created_at,
@@ -352,6 +360,9 @@
 					signals: signalEvents.length
 				}
 			};
+			// Initialize notes editing state
+			notesValue = taskData?.task?.notes || '';
+			notesEditing = false;
 		} catch (err) {
 			console.error('Failed to fetch task details:', err);
 			expandedTaskDetails = {
@@ -362,6 +373,45 @@
 			};
 		} finally {
 			taskDetailsLoading = false;
+		}
+	}
+
+	// Save notes on blur
+	async function saveNotes(taskId: string) {
+		if (!taskId || notesSaving) return;
+
+		// Don't save if value hasn't changed
+		const currentNotes = expandedTaskDetails?.notes || '';
+		if (notesValue === currentNotes) {
+			notesEditing = false;
+			return;
+		}
+
+		notesSaving = true;
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ notes: notesValue })
+			});
+
+			if (response.ok) {
+				// Update local state
+				if (expandedTaskDetails) {
+					expandedTaskDetails.notes = notesValue;
+				}
+			} else {
+				console.error('Failed to save notes:', await response.text());
+				// Revert on error
+				notesValue = currentNotes;
+			}
+		} catch (err) {
+			console.error('Error saving notes:', err);
+			// Revert on error
+			notesValue = currentNotes;
+		} finally {
+			notesSaving = false;
+			notesEditing = false;
 		}
 	}
 
@@ -769,6 +819,36 @@
 															<p class="task-panel-description">{expandedTask.description}</p>
 														</div>
 													{/if}
+
+													<!-- Notes -->
+													<div class="task-panel-section">
+														<span class="task-panel-label">Notes</span>
+														{#if notesEditing}
+															<textarea
+																class="task-panel-notes-input"
+																bind:value={notesValue}
+																onblur={() => saveNotes(expandedTask.id)}
+																placeholder="Add notes..."
+																rows="3"
+																disabled={notesSaving}
+															></textarea>
+														{:else}
+															<button
+																type="button"
+																class="task-panel-notes-display"
+																onclick={() => { notesEditing = true; }}
+															>
+																{#if expandedTaskDetails?.notes}
+																	{expandedTaskDetails.notes}
+																{:else}
+																	<span class="text-base-content/40 italic">Click to add notes...</span>
+																{/if}
+															</button>
+														{/if}
+														{#if notesSaving}
+															<span class="task-panel-notes-saving">Saving...</span>
+														{/if}
+													</div>
 
 													<!-- Labels -->
 													{#if expandedTaskDetails?.labels && expandedTaskDetails.labels.length > 0}

@@ -9,12 +9,12 @@
  *   /work     - Work (multi-project sessions view with terminal output)
  *   /files    - Files (project file browser)
  *   /source   - Source Control (git changes, diff viewer)
- *   /sessions - Sessions (all tmux sessions: agents, servers, other)
  *   /servers  - Servers (project server sessions)
  *   /config   - Config (JAT configuration files editor)
  *   /projects - Projects (project configuration & management)
  *
  * VIEWS (alternative visualizations):
+ *   /sessions - Sessions (all tmux sessions: agents, servers, other)
  *   /history  - History (completed task history with streak calendar)
  *   /graph    - Dependency visualization
  *   /timeline - Historical view
@@ -85,7 +85,7 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Sessions',
 			href: '/sessions',
 			icon: 'tmux',
-			category: 'main'
+			category: 'views'
 		},
 		{
 			id: 'servers',

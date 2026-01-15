@@ -285,7 +285,7 @@
 				{@const active = isActive(navItem.href)}
 				<a
 					href={navItem.href}
-					class="w-full flex items-center gap-3 px-3 py-2 rounded transition-all duration-200 group
+					class="w-full flex items-center gap-3 px-3 py-2 rounded transition-all duration-200 group relative
 						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (mainItems.length + index) : ''}
 						{active ? '' : 'industrial-hover'}"
 					style="
@@ -326,13 +326,35 @@
 							<span class="tracking-in-expand">{navItem.label}</span>
 						</span>
 
+						<!-- Active sessions badge for Sessions -->
+						{#if navItem.id === 'sessions' && $activeSessionsCount > 0}
+							<span
+								class="font-mono text-[10px] px-1.5 py-0.5 rounded-full ml-auto"
+								style="
+									background: oklch(0.55 0.15 145 / 0.25);
+									color: oklch(0.75 0.15 145);
+									border: 1px solid oklch(0.55 0.15 145 / 0.4);
+								"
+								title="{$activeSessionsCount} active session{$activeSessionsCount === 1 ? '' : 's'}"
+							>
+								{$activeSessionsCount}
+							</span>
+						{/if}
+
 						<!-- Active indicator line (extended) -->
-						{#if active}
+						{#if active && !(navItem.id === 'sessions' && $activeSessionsCount > 0)}
 							<div
 								class="flex-1 h-px"
 								style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.3), transparent);"
 							></div>
 						{/if}
+					{:else if navItem.id === 'sessions' && $activeSessionsCount > 0}
+						<!-- Sessions badge shown when sidebar is collapsed (as dot indicator) -->
+						<span
+							class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
+							style="background: oklch(0.70 0.15 145); box-shadow: 0 0 6px oklch(0.70 0.15 145 / 0.6);"
+							title="{$activeSessionsCount} active session{$activeSessionsCount === 1 ? '' : 's'}"
+						></span>
 					{/if}
 				</a>
 			{/each}
