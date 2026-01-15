@@ -202,6 +202,32 @@ else
 fi
 
 echo ""
+echo -e "${BLUE}Setting up jat-demo...${NC}"
+echo ""
+
+# Symlink jat-demo (demo environment setup)
+JAT_DEMO_SOURCE="$PROJECT_ROOT/tools/scripts/jat-demo"
+JAT_DEMO_TARGET="$HOME/.local/bin/jat-demo"
+
+if [ -f "$JAT_DEMO_SOURCE" ]; then
+    if [ -L "$JAT_DEMO_TARGET" ]; then
+        CURRENT_TARGET=$(readlink "$JAT_DEMO_TARGET")
+        if [ "$CURRENT_TARGET" = "$JAT_DEMO_SOURCE" ]; then
+            echo -e "  ${GREEN}✓${NC} jat-demo (already linked)"
+        else
+            echo -e "  ${YELLOW}↻${NC} jat-demo (updating link)"
+            rm "$JAT_DEMO_TARGET"
+            ln -s "$JAT_DEMO_SOURCE" "$JAT_DEMO_TARGET"
+        fi
+    else
+        echo -e "  ${GREEN}+${NC} jat-demo (linked)"
+        ln -s "$JAT_DEMO_SOURCE" "$JAT_DEMO_TARGET"
+    fi
+else
+    echo -e "  ${YELLOW}⚠${NC} jat-demo not found at $JAT_DEMO_SOURCE"
+fi
+
+echo ""
 echo -e "${BLUE}Setting up jat-uninstall...${NC}"
 echo ""
 

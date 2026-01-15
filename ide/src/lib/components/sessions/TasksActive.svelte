@@ -6,6 +6,7 @@
 	 * Extracted from /tasks page for reuse in other views.
 	 */
 
+	import { untrack } from 'svelte';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
@@ -133,6 +134,102 @@
 
 	// Action loading state
 	let actionLoading = $state<string | null>(null);
+
+	// Animation state tracking - maintains order so exiting sessions stay in position
+	let previousSessionObjects = $state<Map<string, TmuxSession>>(new Map());
+	let sessionOrder = $state<string[]>([]); // Tracks order for position preservation
+	let newSessionNames = $state<string[]>([]);
+	let exitingSessionNames = $state<Set<string>>(new Set());
+
+	// Effect to detect new and exiting sessions while preserving order
+	$effect(() => {
+		const currentNames = new Set(sessions.map(s => s.name));
+
+		// Use untrack to read previous state without creating a dependency
+		const prevObjects = untrack(() => previousSessionObjects);
+		const prevOrder = untrack(() => sessionOrder);
+		const prevExiting = untrack(() => exitingSessionNames);
+
+		// Build current session object map
+		const currentObjects = new Map<string, TmuxSession>();
+		for (const session of sessions) {
+			currentObjects.set(session.name, session);
+		}
+
+		// Skip on initial load - just set initial order
+		if (prevOrder.length === 0 && sessions.length > 0) {
+			sessionOrder = sessions.map(s => s.name);
+			previousSessionObjects = currentObjects;
+			return;
+		}
+
+		// Find new sessions (in current but not in previous order)
+		const newNames: string[] = [];
+		for (const name of currentNames) {
+			if (!prevOrder.includes(name)) {
+				newNames.push(name);
+			}
+		}
+
+		// Find exiting sessions (in previous order but not in current)
+		const exitNames = new Set<string>();
+		for (const name of prevOrder) {
+			if (!currentNames.has(name) && !prevExiting.has(name)) {
+				exitNames.add(name);
+			}
+		}
+
+		// Update order: keep existing order, add new sessions at the end
+		let newOrder = [...prevOrder];
+		for (const name of newNames) {
+			newOrder.push(name);
+		}
+
+		// Remove sessions that have finished exiting (not current and not newly exiting)
+		newOrder = newOrder.filter(name => currentNames.has(name) || exitNames.has(name) || prevExiting.has(name));
+
+		if (newNames.length > 0) {
+			newSessionNames = newNames;
+			setTimeout(() => {
+				newSessionNames = [];
+			}, 600);
+		}
+
+		if (exitNames.size > 0) {
+			// Add new exiting sessions to the set
+			exitingSessionNames = new Set([...prevExiting, ...exitNames]);
+			// Clear them after animation completes
+			setTimeout(() => {
+				exitingSessionNames = new Set([...exitingSessionNames].filter(n => !exitNames.has(n)));
+				// Also remove from order after animation
+				sessionOrder = sessionOrder.filter(n => !exitNames.has(n));
+			}, 600);
+		}
+
+		sessionOrder = newOrder;
+		// Merge previous objects with current (keep exiting session objects available)
+		const mergedObjects = new Map(prevObjects);
+		for (const [name, session] of currentObjects) {
+			mergedObjects.set(name, session);
+		}
+		previousSessionObjects = mergedObjects;
+	});
+
+	// Derived: sessions to render in order (includes exiting sessions in their original position)
+	const orderedSessions = $derived(() => {
+		const result: Array<{ session: TmuxSession; isExiting: boolean; isNew: boolean }> = [];
+		for (const name of sessionOrder) {
+			const session = sessions.find(s => s.name === name) || previousSessionObjects.get(name);
+			if (session) {
+				result.push({
+					session,
+					isExiting: exitingSessionNames.has(name),
+					isNew: newSessionNames.includes(name)
+				});
+			}
+		}
+		return result;
+	});
 
 	// Helper functions
 	function getAgentName(sessionName: string): string {
@@ -540,7 +637,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each sessions as session (session.name)}
+				{#each orderedSessions() as { session, isExiting, isNew } (session.name)}
 					{@const typeBadge = getTypeBadge(session.type)}
 					{@const isExpanded = expandedSession === session.name}
 					{@const isCollapsing = collapsingSession === session.name}
@@ -575,12 +672,12 @@
 					}
 					{@const elapsed = getElapsedFormatted(session.created)}
 					<tr
-						class="session-row"
+						class="session-row {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''}"
 						class:attached={session.attached}
 						class:expanded={isExpanded}
-						class:expandable={true}
-						style={rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : ''}
-						onclick={() => toggleExpanded(session.name)}
+						class:expandable={!isExiting}
+						style="{rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
+						onclick={() => !isExiting && toggleExpanded(session.name)}
 					>
 						<!-- Column 1: TaskIdBadge + Agent -->
 						<td class="td-task">

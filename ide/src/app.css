@@ -1184,7 +1184,39 @@
 	animation: scale-in 0.15s ease-out forwards;
 }
 
-/* Scale in from center - full scale (0 to 1) for task transitions */
+/* Slide in from back center - 3D slide entrance for tasks (Animista) */
+@keyframes slide-in-fwd-center {
+	0% {
+		transform: perspective(1000px) translateZ(-1400px);
+		opacity: 0;
+	}
+	100% {
+		transform: perspective(1000px) translateZ(0);
+		opacity: 1;
+	}
+}
+
+.animate-slide-in-fwd-center {
+	animation: slide-in-fwd-center 0.4s cubic-bezier(0.250, 0.460, 0.450, 0.940) both;
+}
+
+/* Scale out to center - for task exit (keeping original that worked) */
+@keyframes slide-out-bck-center {
+	0% {
+		transform: scale(1);
+		opacity: 1;
+	}
+	100% {
+		transform: scale(0);
+		opacity: 1;
+	}
+}
+
+.animate-slide-out-bck-center {
+	animation: slide-out-bck-center 0.5s cubic-bezier(0.550, 0.085, 0.680, 0.530) both;
+}
+
+/* Legacy scale animations - kept for backward compatibility */
 @keyframes scale-in-center {
 	0% {
 		transform: scale(0);
@@ -1200,7 +1232,6 @@
 	animation: scale-in-center 0.5s cubic-bezier(0.250, 0.460, 0.450, 0.940) both;
 }
 
-/* Scale out to center - full scale (1 to 0) for task removal */
 @keyframes scale-out-center {
 	0% {
 		transform: scale(1);
@@ -1424,6 +1455,8 @@
 	.animate-scale-in,
 	.animate-scale-in-center,
 	.animate-scale-out-center,
+	.animate-slide-in-fwd-center,
+	.animate-slide-out-bck-center,
 	.animate-dropdown,
 	.animate-pop,
 	.animate-pulse-subtle,

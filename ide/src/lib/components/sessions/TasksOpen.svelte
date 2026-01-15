@@ -7,6 +7,7 @@
 	 */
 
 	import { untrack, onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import { getProjectColor } from '$lib/utils/projectColors';
 
@@ -76,55 +77,205 @@
 		}
 	});
 
-	// Track task IDs for animations
-	let previousTaskIds = $state<Set<string>>(new Set());
+	// Track task IDs for animations - maintains order so exiting tasks stay in position
+	let previousTaskObjects = $state<Map<string, Task>>(new Map());
+	let taskOrder = $state<string[]>([]); // Tracks order for position preservation
 	let newTaskIds = $state<string[]>([]);
-	let exitingTaskIds = $state<string[]>([]);
+	let exitingTaskIds = $state<Set<string>>(new Set());
 
-	// Effect to detect new tasks entering the list
+	// Track filter-based animations (separate from data changes)
+	let filterExitingTaskIds = $state<Set<string>>(new Set());
+	let filterEnteringTaskIds = $state<string[]>([]);
+	let previousSelectedProject = $state<string | null | undefined>(undefined); // undefined = not initialized
+
+	// Effect to detect new and exiting tasks while preserving order
 	$effect(() => {
-		const currentIds = new Set(tasks.filter(t => t.status === 'open').map(t => t.id));
+		const openTasks = tasks.filter(t => t.status === 'open');
+		const currentIds = new Set(openTasks.map(t => t.id));
 
-		// Use untrack to read previousTaskIds without creating a dependency
-		// This prevents infinite loops when we write to previousTaskIds
-		const prevIds = untrack(() => previousTaskIds);
+		// Use untrack to read previous state without creating a dependency
+		const prevObjects = untrack(() => previousTaskObjects);
+		const prevOrder = untrack(() => taskOrder);
+		const prevExiting = untrack(() => exitingTaskIds);
 
-		// Skip on initial load
-		if (prevIds.size === 0) {
-			previousTaskIds = currentIds;
+		// Build current task object map
+		const currentObjects = new Map<string, Task>();
+		for (const task of openTasks) {
+			currentObjects.set(task.id, task);
+		}
+
+		// Skip on initial load - just set initial order (sorted by priority)
+		if (prevOrder.length === 0 && openTasks.length > 0) {
+			taskOrder = openTasks.sort((a, b) => a.priority - b.priority).map(t => t.id);
+			previousTaskObjects = currentObjects;
 			return;
 		}
 
-		// Find new tasks (in current but not in previous)
+		// Find new tasks (in current but not in previous order)
 		const newIds: string[] = [];
 		for (const id of currentIds) {
-			if (!prevIds.has(id)) {
+			if (!prevOrder.includes(id)) {
 				newIds.push(id);
 			}
 		}
 
+		// Find exiting tasks (in previous order but not in current)
+		const exitIds = new Set<string>();
+		for (const id of prevOrder) {
+			if (!currentIds.has(id) && !prevExiting.has(id)) {
+				exitIds.add(id);
+			}
+		}
+
+		// Update order: keep existing order (preserve positions), add new tasks sorted by priority
+		let newOrder = [...prevOrder];
+		// Sort new tasks by priority and add them
+		const newTasksSorted = newIds
+			.map(id => currentObjects.get(id))
+			.filter((t): t is Task => t !== undefined)
+			.sort((a, b) => a.priority - b.priority);
+		for (const task of newTasksSorted) {
+			// Insert at correct position based on priority
+			const insertIndex = newOrder.findIndex(existingId => {
+				const existing = currentObjects.get(existingId) || prevObjects.get(existingId);
+				return existing && existing.priority > task.priority;
+			});
+			if (insertIndex === -1) {
+				newOrder.push(task.id);
+			} else {
+				newOrder.splice(insertIndex, 0, task.id);
+			}
+		}
+
+		// Remove tasks that have finished exiting
+		newOrder = newOrder.filter(id => currentIds.has(id) || exitIds.has(id) || prevExiting.has(id));
+
 		if (newIds.length > 0) {
 			newTaskIds = newIds;
-			// Clear animation class after animation completes (0.5s)
 			setTimeout(() => {
 				newTaskIds = [];
 			}, 600);
 		}
 
-		previousTaskIds = currentIds;
-	});
-
-	// Track exiting tasks (when spawning starts)
-	$effect(() => {
-		// Use untrack to read exitingTaskIds without creating a dependency
-		const exitingIds = untrack(() => exitingTaskIds);
-		if (spawningTaskId && !exitingIds.includes(spawningTaskId)) {
-			exitingTaskIds = [...exitingIds, spawningTaskId];
-			// Clear after animation completes (0.5s)
+		if (exitIds.size > 0) {
+			exitingTaskIds = new Set([...prevExiting, ...exitIds]);
 			setTimeout(() => {
-				exitingTaskIds = exitingTaskIds.filter(id => id !== spawningTaskId);
+				exitingTaskIds = new Set([...exitingTaskIds].filter(id => !exitIds.has(id)));
+				taskOrder = taskOrder.filter(id => !exitIds.has(id));
 			}, 600);
 		}
+
+		taskOrder = newOrder;
+		// Merge previous objects with current (keep exiting task objects available)
+		const mergedObjects = new Map(prevObjects);
+		for (const [id, task] of currentObjects) {
+			mergedObjects.set(id, task);
+		}
+		previousTaskObjects = mergedObjects;
+	});
+
+	// Effect to detect filter changes and animate tasks being filtered in/out
+	$effect(() => {
+		// Track the current selectedProject
+		const currentFilter = selectedProject;
+
+		// Use untrack to read previous state without creating dependencies
+		const prevFilter = untrack(() => previousSelectedProject);
+		const currentOrder = untrack(() => taskOrder);
+		const taskObjects = untrack(() => previousTaskObjects);
+		const currentTasks = untrack(() => tasks);
+		const prevFilterExiting = untrack(() => filterExitingTaskIds);
+
+		// Skip on initial load (undefined means not initialized yet)
+		if (prevFilter === undefined) {
+			previousSelectedProject = currentFilter;
+			return;
+		}
+
+		// If filter hasn't changed, nothing to do
+		if (prevFilter === currentFilter) {
+			return;
+		}
+
+		// Helper to check if a task passes the filter
+		const passesFilter = (taskId: string, filter: string | null): boolean => {
+			if (filter === null) return true;
+			return getProjectFromTaskId(taskId) === filter;
+		};
+
+		// Get all open task IDs that exist in our order
+		const openTaskIds = currentOrder.filter(id => {
+			const task = currentTasks.find(t => t.id === id && t.status === 'open') || taskObjects.get(id);
+			return task !== undefined;
+		});
+
+		// Find tasks that were visible before but not now (filter exit)
+		const exitingIds = new Set<string>();
+		for (const id of openTaskIds) {
+			const wasVisible = passesFilter(id, prevFilter) && !prevFilterExiting.has(id);
+			const isVisible = passesFilter(id, currentFilter);
+			if (wasVisible && !isVisible) {
+				exitingIds.add(id);
+			}
+		}
+
+		// Find tasks that were not visible before but are now (filter enter)
+		const enteringIds: string[] = [];
+		for (const id of openTaskIds) {
+			const wasVisible = passesFilter(id, prevFilter);
+			const isVisible = passesFilter(id, currentFilter);
+			if (!wasVisible && isVisible) {
+				enteringIds.push(id);
+			}
+		}
+
+		// Update animation states
+		if (exitingIds.size > 0) {
+			filterExitingTaskIds = new Set([...prevFilterExiting, ...exitingIds]);
+			setTimeout(() => {
+				filterExitingTaskIds = new Set([...filterExitingTaskIds].filter(id => !exitingIds.has(id)));
+			}, 600);
+		}
+
+		if (enteringIds.length > 0) {
+			filterEnteringTaskIds = enteringIds;
+			setTimeout(() => {
+				filterEnteringTaskIds = [];
+			}, 600);
+		}
+
+		// Update previous filter
+		previousSelectedProject = currentFilter;
+	});
+
+	// Derived: tasks to render in order (includes exiting tasks in their original position)
+	const orderedTasks = $derived(() => {
+		const result: Array<{ task: Task; isExiting: boolean; isNew: boolean }> = [];
+		for (const id of taskOrder) {
+			const task = tasks.find(t => t.id === id && t.status === 'open') || previousTaskObjects.get(id);
+			if (task) {
+				const taskProject = getProjectFromTaskId(task.id);
+				const matchesFilter = selectedProject === null || taskProject === selectedProject;
+				const isFilterExiting = filterExitingTaskIds.has(id);
+
+				// Include task if it matches filter OR if it's animating out due to filter change
+				if (!matchesFilter && !isFilterExiting) {
+					continue;
+				}
+
+				// Task is exiting if: data-removed OR filter-removed
+				const isExiting = exitingTaskIds.has(id) || isFilterExiting;
+				// Task is new if: data-added OR filter-added
+				const isNew = newTaskIds.includes(id) || filterEnteringTaskIds.includes(id);
+
+				result.push({
+					task,
+					isExiting,
+					isNew
+				});
+			}
+		}
+		return result;
 	});
 
 	// Extract project from task ID (prefix before first hyphen)
@@ -200,20 +351,24 @@
 			<div class="project-filter">
 				{#each uniqueProjects() as project}
 					{@const color = projectColors[project] || getProjectColor(project) || 'oklch(0.65 0.15 250)'}
-					<button
-						type="button"
-						class="project-filter-btn {selectedProject === project ? 'active' : ''}"
-						style="--project-color: {color};"
-						onclick={() => selectedProject = selectedProject === project ? null : project}
-					>
-						{project}
-					</button>
+					{#if selectedProject === null || selectedProject === project}
+						<button
+							type="button"
+							class="project-filter-btn {selectedProject === project ? 'active' : ''}"
+							style="--project-color: {color};"
+							onclick={() => selectedProject = selectedProject === project ? null : project}
+							transition:fade={{ duration: 200 }}
+						>
+							{project}
+						</button>
+					{/if}
 				{/each}
 				{#if selectedProject !== null}
 					<button
 						type="button"
 						class="project-filter-btn all-btn"
 						onclick={() => selectedProject = null}
+						transition:fade={{ duration: 200 }}
 					>
 						All
 					</button>
@@ -251,20 +406,18 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each sortedOpenTasks as task (task.id)}
+					{#each orderedTasks() as { task, isExiting, isNew } (task.id)}
 						{@const projectColor = getProjectColorReactive(task.id)}
 						{@const isBlocked = hasUnresolvedBlockers(task)}
 						{@const blockReason = isBlocked ? getBlockingReason(task) : ''}
 						{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
 						{@const blockedTasks = blockedByMap.get(task.id) || []}
-						{@const isNewTask = newTaskIds.includes(task.id)}
-						{@const isExiting = exitingTaskIds.includes(task.id)}
 						<tr
-							class="task-row {isBlocked ? 'opacity-70' : ''} {isNewTask ? 'animate-scale-in-center' : ''} {isExiting ? 'animate-scale-out-center' : ''}"
-							style={projectColor ? `border-left: 3px solid ${projectColor};` : ''}
-							onclick={() => handleRowClick(task.id)}
+							class="task-row {isBlocked && !isExiting ? 'opacity-70' : ''} {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''}"
+							style="{projectColor ? `border-left: 3px solid ${projectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
+							onclick={() => !isExiting && handleRowClick(task.id)}
 						>
-							<td class="td-task">
+							<td class="td-task" style={isExiting ? 'background: transparent;' : ''}>
 								<TaskIdBadge
 									{task}
 									size="xs"
@@ -276,7 +429,7 @@
 									onOpenTask={handleRowClick}
 								/>
 							</td>
-							<td class="td-title">
+							<td class="td-title" style={isExiting ? 'background: transparent;' : ''}>
 								<span class="task-title" title={task.title}>
 									{task.title}
 								</span>
@@ -286,11 +439,11 @@
 									</div>
 								{/if}
 							</td>
-							<td class="td-actions">
+							<td class="td-actions" style={isExiting ? 'background: transparent;' : ''}>
 								<button
 									class="btn btn-xs btn-ghost hover:btn-primary rocket-btn {spawningTaskId === task.id ? 'rocket-launching' : ''}"
 									onclick={(e) => { e.stopPropagation(); onSpawnTask(task); }}
-									disabled={spawningTaskId === task.id || isBlocked}
+									disabled={spawningTaskId === task.id || isBlocked || isExiting}
 									title={isBlocked ? blockReason : 'Launch agent'}
 								>
 									<div class="relative w-5 h-5 flex items-center justify-center overflow-visible">
