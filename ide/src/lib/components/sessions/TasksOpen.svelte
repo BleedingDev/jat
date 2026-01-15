@@ -427,14 +427,15 @@
 									blocks={blockedTasks}
 									showDependencies={true}
 									onOpenTask={handleRowClick}
+									animate={isNew}
 								/>
 							</td>
 							<td class="td-title" style={isExiting ? 'background: transparent;' : ''}>
-								<span class="task-title" title={task.title}>
+								<span class="task-title {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''} title={task.title}>
 									{task.title}
 								</span>
 								{#if task.description}
-									<div class="task-description">
+									<div class="task-description {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>
 										{task.description}
 									</div>
 								{/if}
@@ -629,7 +630,8 @@
 	}
 
 	/* Three-column layout widths to match TasksActive */
-	.th-task, .td-task { width: 200px; }
+	/* Task: fixed width for TaskIdBadge */
+	.th-task, .td-task { width: 210px; }
 	.th-title, .td-title { width: auto; }
 	.th-actions, .td-actions { width: 80px; text-align: right; }
 

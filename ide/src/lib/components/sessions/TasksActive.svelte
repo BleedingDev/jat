@@ -140,6 +140,8 @@
 	let sessionOrder = $state<string[]>([]); // Tracks order for position preservation
 	let newSessionNames = $state<string[]>([]);
 	let exitingSessionNames = $state<Set<string>>(new Set());
+	// Track sessions that had task data when they first appeared (for text animation)
+	let sessionsWithTaskOnEntry = $state<Set<string>>(new Set());
 
 	// Effect to detect new and exiting sessions while preserving order
 	$effect(() => {
@@ -190,8 +192,21 @@
 
 		if (newNames.length > 0) {
 			newSessionNames = newNames;
+			// Track which new sessions have task data right now (for text animation timing)
+			const newWithTask = new Set<string>();
+			for (const name of newNames) {
+				const agentName = name.startsWith('jat-') ? name.slice(4) : name;
+				if (agentTasks.get(agentName)) {
+					newWithTask.add(name);
+				}
+			}
+			if (newWithTask.size > 0) {
+				sessionsWithTaskOnEntry = new Set([...sessionsWithTaskOnEntry, ...newWithTask]);
+			}
 			setTimeout(() => {
 				newSessionNames = [];
+				// Clean up task-on-entry tracking after animation window
+				sessionsWithTaskOnEntry = new Set([...sessionsWithTaskOnEntry].filter(n => !newNames.includes(n)));
 			}, 600);
 		}
 
@@ -217,14 +232,15 @@
 
 	// Derived: sessions to render in order (includes exiting sessions in their original position)
 	const orderedSessions = $derived(() => {
-		const result: Array<{ session: TmuxSession; isExiting: boolean; isNew: boolean }> = [];
+		const result: Array<{ session: TmuxSession; isExiting: boolean; isNew: boolean; hadTaskOnEntry: boolean }> = [];
 		for (const name of sessionOrder) {
 			const session = sessions.find(s => s.name === name) || previousSessionObjects.get(name);
 			if (session) {
 				result.push({
 					session,
 					isExiting: exitingSessionNames.has(name),
-					isNew: newSessionNames.includes(name)
+					isNew: newSessionNames.includes(name),
+					hadTaskOnEntry: sessionsWithTaskOnEntry.has(name)
 				});
 			}
 		}
@@ -637,7 +653,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each orderedSessions() as { session, isExiting, isNew } (session.name)}
+				{#each orderedSessions() as { session, isExiting, isNew, hadTaskOnEntry } (session.name)}
 					{@const typeBadge = getTypeBadge(session.type)}
 					{@const isExpanded = expandedSession === session.name}
 					{@const isCollapsing = collapsingSession === session.name}
@@ -714,6 +730,7 @@
 												agentName={sessionAgentName}
 												showType={true}
 												{statusDotColor}
+												animate={isNew && hadTaskOnEntry}
 											/>
 											{#if session.resumed}
 												<span class="resumed-badge" title="Resumed from previous session">
@@ -755,11 +772,12 @@
 							{#if session.type === 'agent'}
 								<div class="agent-cell-content">
 									{#if sessionTask}
-										<span class="task-title" title={sessionTask.title}>
+										{@const animateText = isNew && hadTaskOnEntry}
+										<span class="task-title {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''} title={sessionTask.title}>
 											{sessionTask.title || sessionTask.id}
 										</span>
 										{#if sessionTask.description}
-											<div class="task-description">
+											<div class="task-description {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''}>
 												{sessionTask.description}
 											</div>
 										{/if}
@@ -781,6 +799,7 @@
 										stacked={true}
 										sessionName={session.name}
 										alignRight={true}
+										animate={isNew}
 										onAction={async (actionId) => {
 											if (actionId === 'attach') {
 												await handleAttachSession(session.name);
@@ -1088,11 +1107,10 @@
 	}
 
 	/* Three-column layout widths */
-	/* Note: table-layout: fixed ignores min-width, so use max() for columns needing minimums */
-	/* Task: compact badge ~200px, Agent: title/desc needs most space, Status: badge ~180px */
-	.th-task, .td-task { width: 200px; }
+	/* Task: fixed width for TaskIdBadge, Agent: takes remaining space, Status: fixed ~140px */
+	.th-task, .td-task { width: 210px; }
 	.th-agent, .td-agent { width: auto; }
-	.th-status, .td-status { width: 180px; text-align: right; }
+	.th-status, .td-status { width: 140px; text-align: right; }
 
 	/* Task column */
 	.task-cell-content {

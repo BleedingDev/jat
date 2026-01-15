@@ -1012,7 +1012,7 @@
 	{#if layoutMode === 'inline'}
 		<!-- Inline layout: always expanded, no hover interaction -->
 		<div class="space-y-2 {className}">
-			{#each filteredEvents as event, idx (event.timestamp + idx)}
+			{#each filteredEvents as event, idx (event.timestamp + '-' + idx)}
 				{@const style = getEventStyle(event)}
 				{@const isQuestionEvent = event.type === 'question' || event.state === 'question'}
 				{@const isUnansweredQuestion = isQuestionEvent && !answeredQuestions.has(getEventKey(event))}
@@ -1484,7 +1484,7 @@
 				transition:slide={{ duration: 200, easing: cubicOut }}
 			>
 				<div class="p-2 flex flex-col-reverse gap-1">
-					{#each filteredEvents as event, idx (event.timestamp + idx)}
+					{#each filteredEvents as event, idx (event.timestamp + '-' + idx)}
 						{@const style = getEventStyle(event)}
 						{@const isQuestionEvent = event.type === 'question' || event.state === 'question'}
 						{@const isUnansweredQuestion = isQuestionEvent && !answeredQuestions.has(getEventKey(event))}
@@ -2493,7 +2493,7 @@
 			<!-- Collapsed view - stacked cards peeking above input -->
 			<!-- stack-top: older events peek out above the newest (bottom) card -->
 			<div class="stack stack-top h-10 w-full">
-				{#each filteredEvents.slice(0, 3) as event, idx (getEventKey(event))}
+				{#each filteredEvents.slice(0, 3) as event, idx (getEventKey(event) + '-' + idx)}
 					{@const style = getEventStyle(event)}
 					{@const isNewest = idx === 0}
 					{@const isNew = newEventIds.has(getEventKey(event))}
