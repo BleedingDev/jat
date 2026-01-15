@@ -24,7 +24,7 @@
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
 	import { connect as connectWebSocket, disconnect as disconnectWebSocket } from '$lib/stores/websocket.svelte';
 	import { registerConnection, unregisterConnection } from '$lib/utils/connectionManager';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount } from '$lib/stores/drawerStore';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences, getActiveProject } from '$lib/stores/preferences.svelte';
@@ -249,6 +249,7 @@
 		// Load sessions and servers count for sidebar badges
 		loadSessionsCount();
 		loadServersCount();
+		loadAgentSessionsCount();
 
 		// Activity polling - 500ms is responsive enough, 200ms was too aggressive
 		startActivityPolling(500);
@@ -300,6 +301,7 @@
 		if (event.type === 'session-created' || event.type === 'session-destroyed') {
 			loadSessionsCount();
 			loadServersCount(); // Servers are also tmux sessions
+			loadAgentSessionsCount(); // Agent sessions for Tasks badge
 		}
 	});
 
@@ -313,6 +315,23 @@
 			}
 		} catch {
 			// Silently fail - servers count is not critical
+		}
+	}
+
+	// Update active agent sessions count for Tasks sidebar badge (agents only, not servers/IDE)
+	async function loadAgentSessionsCount() {
+		try {
+			const response = await fetch('/api/sessions?filter=jat');
+			if (response.ok) {
+				const data = await response.json();
+				// Filter to only include agent sessions (jat-*, excluding jat-ide)
+				const agentSessions = (data.sessions || []).filter((s: { name: string }) =>
+					s.name.startsWith('jat-') && !s.name.startsWith('jat-ide')
+				);
+				setActiveAgentSessionsCount(agentSessions.length);
+			}
+		} catch {
+			// Silently fail - agent sessions count is not critical
 		}
 	}
 

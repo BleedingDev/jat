@@ -252,3 +252,15 @@ export function setRunningServersCount(count: number) {
 export function getRunningServersCount(): number {
 	return get(runningServersCount);
 }
+
+// Active agent sessions count store (for Tasks sidebar badge)
+// This counts only agent-type sessions (not servers)
+export const activeAgentSessionsCount = writable(0);
+
+export function setActiveAgentSessionsCount(count: number) {
+	activeAgentSessionsCount.set(count);
+}
+
+export function getActiveAgentSessionsCount(): number {
+	return get(activeAgentSessionsCount);
+}

@@ -5,7 +5,8 @@
  * NAVIGATION STRUCTURE:
  *
  * MAIN (core workflow - always visible):
- *   /work     - Work (default route, multi-project sessions view)
+ *   /tasks    - Tasks (active sessions + open tasks with spawn)
+ *   /work     - Work (multi-project sessions view with terminal output)
  *   /files    - Files (project file browser)
  *   /source   - Source Control (git changes, diff viewer)
  *   /sessions - Sessions (all tmux sessions: agents, servers, other)
@@ -23,11 +24,6 @@
  *   /automation - Automation rules configuration
  *   /triage   - Task triage (needs work)
  *   /swarm    - Swarm attack interface (experimental)
- *
- * DROPPED (removed):
- *   /         - Replaced by /work as default
- *   /tasks    - Redundant with /work (removed)
- *   /agents   - Redundant with /work (removed)
  */
 
 export interface NavItem {
@@ -57,10 +53,17 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 	navItems: [
 		// MAIN: Core workflow (always visible)
 		{
+			id: 'tasks',
+			label: 'Tasks',
+			href: '/tasks',
+			icon: 'tasks',
+			category: 'main'
+		},
+		{
 			id: 'work',
 			label: 'Work',
 			href: '/work',
-			icon: 'tasks',
+			icon: 'tmux',
 			category: 'main'
 		},
 		{

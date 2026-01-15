@@ -1096,9 +1096,11 @@
 	}
 
 	/* Three-column layout widths */
-	.th-task, .td-task { width: 15%; min-width: 120px; }
-	.th-agent, .td-agent { width: 65%; }
-	.th-status, .td-status { width: 20%; min-width: 140px; text-align: right; }
+	/* Note: table-layout: fixed ignores min-width, so use max() for columns needing minimums */
+	/* Task: compact badge ~200px, Agent: title/desc needs most space, Status: badge ~180px */
+	.th-task, .td-task { width: 200px; }
+	.th-agent, .td-agent { width: auto; }
+	.th-status, .td-status { width: 180px; text-align: right; }
 
 	/* Task column */
 	.task-cell-content {

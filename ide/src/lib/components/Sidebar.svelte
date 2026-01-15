@@ -21,7 +21,7 @@
 
 	import { page } from '$app/stores';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
-	import { isSidebarCollapsed, gitChangesCount, activeSessionsCount, runningServersCount } from '$lib/stores/drawerStore';
+	import { isSidebarCollapsed, gitChangesCount, activeSessionsCount, runningServersCount, activeAgentSessionsCount } from '$lib/stores/drawerStore';
 
 	// Helper to check if nav item is active
 	function isActive(href: string): boolean {
@@ -215,8 +215,23 @@
 							</span>
 						{/if}
 
+						<!-- Active agent sessions badge for Tasks (agents working on tasks) -->
+						{#if navItem.id === 'tasks' && $activeAgentSessionsCount > 0}
+							<span
+								class="font-mono text-[10px] px-1.5 py-0.5 rounded-full ml-auto"
+								style="
+									background: oklch(0.55 0.15 85 / 0.25);
+									color: oklch(0.80 0.15 85);
+									border: 1px solid oklch(0.55 0.15 85 / 0.4);
+								"
+								title="{$activeAgentSessionsCount} active agent{$activeAgentSessionsCount === 1 ? '' : 's'}"
+							>
+								{$activeAgentSessionsCount}
+							</span>
+						{/if}
+
 						<!-- Active indicator line (extended) -->
-						{#if active && !(navItem.id === 'source' && $gitChangesCount > 0) && !(navItem.id === 'sessions' && $activeSessionsCount > 0) && !(navItem.id === 'servers' && $runningServersCount > 0)}
+						{#if active && !(navItem.id === 'source' && $gitChangesCount > 0) && !(navItem.id === 'sessions' && $activeSessionsCount > 0) && !(navItem.id === 'servers' && $runningServersCount > 0) && !(navItem.id === 'tasks' && $activeAgentSessionsCount > 0)}
 							<div
 								class="flex-1 h-px"
 								style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.4), transparent);"
@@ -242,6 +257,13 @@
 							class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
 							style="background: oklch(0.65 0.02 250); box-shadow: 0 0 6px oklch(0.65 0.02 250 / 0.6);"
 							title="{$runningServersCount} running server{$runningServersCount === 1 ? '' : 's'}"
+						></span>
+					{:else if navItem.id === 'tasks' && $activeAgentSessionsCount > 0}
+						<!-- Tasks badge shown when sidebar is collapsed (as dot indicator for active agents) -->
+						<span
+							class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
+							style="background: oklch(0.75 0.15 85); box-shadow: 0 0 6px oklch(0.75 0.15 85 / 0.6);"
+							title="{$activeAgentSessionsCount} active agent{$activeAgentSessionsCount === 1 ? '' : 's'}"
 						></span>
 					{/if}
 				</a>
