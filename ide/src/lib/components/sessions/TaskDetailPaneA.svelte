@@ -523,20 +523,43 @@
 									<div class="attachments-thumbnails">
 										{#each details.attachments as attachment}
 											<div class="attachment-thumbnail-wrapper">
-												<a
-													href={attachment.url}
-													target="_blank"
-													rel="noopener noreferrer"
+												<div
 													class="attachment-thumbnail"
-													title={attachment.filename}
-													onclick={(e) => e.stopPropagation()}
+													title={`${attachment.filename} (click to open, drag to SessionCard to attach)`}
+													role="button"
+													tabindex="0"
+													onclick={(e) => {
+														e.stopPropagation();
+														window.open(attachment.url, '_blank');
+													}}
+													onkeydown={(e) => {
+														if (e.key === 'Enter' || e.key === ' ') {
+															e.preventDefault();
+															window.open(attachment.url, '_blank');
+														}
+													}}
+													draggable="true"
+													ondragstart={(e) => {
+														e.stopPropagation();
+														console.log('[TaskDetailPaneA] DragStart on thumbnail', attachment.path);
+														e.dataTransfer?.setData('text/plain', attachment.path);
+														e.dataTransfer?.setData('application/x-jat-image', JSON.stringify({
+															path: attachment.path,
+															filename: attachment.filename,
+															url: attachment.url
+														}));
+														if (e.dataTransfer) {
+															e.dataTransfer.effectAllowed = 'copy';
+														}
+													}}
 												>
 													<img
 														src={attachment.url}
 														alt={attachment.filename}
 														class="attachment-thumbnail-img"
+														draggable="false"
 													/>
-												</a>
+												</div>
 												<button
 													class="attachment-remove-btn"
 													onclick={(e) => { e.stopPropagation(); removeAttachment(attachment.id); }}
@@ -1294,6 +1317,7 @@
 		overflow: hidden;
 		border: 1px solid oklch(0.28 0.02 250);
 		transition: all 0.15s;
+		cursor: pointer;
 	}
 
 	.attachment-thumbnail:hover {

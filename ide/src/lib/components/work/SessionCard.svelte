@@ -1639,6 +1639,108 @@
 		}
 	}
 
+	// Track drag state for visual feedback
+	let inputDragOver = $state(false);
+
+	// Handle image drop onto input textarea
+	function handleInputDragEnter(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		console.log('[SessionCard] DragEnter on input area');
+		inputDragOver = true;
+	}
+
+	function handleInputDragOver(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = 'copy';
+		}
+		inputDragOver = true;
+	}
+
+	function handleInputDragLeave(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		// Only set to false if leaving the container entirely (not entering a child)
+		const relatedTarget = e.relatedTarget as HTMLElement | null;
+		const container = e.currentTarget as HTMLElement;
+		if (!relatedTarget || !container.contains(relatedTarget)) {
+			inputDragOver = false;
+		}
+	}
+
+	function handleInputDrop(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		inputDragOver = false;
+
+		console.log('[SessionCard] Drop event received', {
+			types: e.dataTransfer?.types,
+			plainText: e.dataTransfer?.getData('text/plain'),
+			jatImage: e.dataTransfer?.getData('application/x-jat-image')
+		});
+
+		// Check for JAT image data first (custom MIME type)
+		const jatImageData = e.dataTransfer?.getData('application/x-jat-image');
+		if (jatImageData) {
+			try {
+				const imageInfo = JSON.parse(jatImageData);
+				if (imageInfo.path) {
+					// Insert the image path at cursor position or append
+					const pathToInsert = imageInfo.path;
+					if (inputRef) {
+						const start = inputRef.selectionStart || 0;
+						const end = inputRef.selectionEnd || 0;
+						const before = inputText.slice(0, start);
+						const after = inputText.slice(end);
+						inputText = before + pathToInsert + after;
+						// Place cursor after inserted path
+						setTimeout(() => {
+							if (inputRef) {
+								inputRef.selectionStart = inputRef.selectionEnd = start + pathToInsert.length;
+								inputRef.focus();
+							}
+						}, 0);
+					} else {
+						inputText += pathToInsert;
+					}
+					// Visual feedback
+					attachFlash = true;
+					setTimeout(() => { attachFlash = false; }, 300);
+					// Trigger live streaming if enabled
+					setTimeout(handleInputChange, 0);
+					return;
+				}
+			} catch {
+				// Fall through to plain text handling
+			}
+		}
+
+		// Fall back to plain text (just the path)
+		const plainText = e.dataTransfer?.getData('text/plain');
+		if (plainText) {
+			if (inputRef) {
+				const start = inputRef.selectionStart || 0;
+				const end = inputRef.selectionEnd || 0;
+				const before = inputText.slice(0, start);
+				const after = inputText.slice(end);
+				inputText = before + plainText + after;
+				setTimeout(() => {
+					if (inputRef) {
+						inputRef.selectionStart = inputRef.selectionEnd = start + plainText.length;
+						inputRef.focus();
+					}
+				}, 0);
+			} else {
+				inputText += plainText;
+			}
+			attachFlash = true;
+			setTimeout(() => { attachFlash = false; }, 300);
+			setTimeout(handleInputChange, 0);
+		}
+	}
+
 	// Auto-resize textarea to fit content
 	function autoResizeTextarea() {
 		if (!inputRef) return;
@@ -6744,7 +6846,15 @@
 					</div>
 
 					<!-- MIDDLE: Text input (flexible width) with clear button and streaming indicator -->
-					<div class="relative flex-1 min-w-0">
+					<div
+						class="relative flex-1 min-w-0 {inputDragOver ? 'ring-2 ring-success/70 rounded' : ''}"
+						ondragenter={handleInputDragEnter}
+						ondragover={handleInputDragOver}
+						ondragleave={handleInputDragLeave}
+						ondrop={handleInputDrop}
+						role="textbox"
+						tabindex="-1"
+					>
 						<textarea
 							bind:this={inputRef}
 							bind:value={inputText}

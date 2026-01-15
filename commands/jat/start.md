@@ -52,7 +52,11 @@ bd show "$PARAM" --json >/dev/null 2>&1 && PARAM_TYPE="task-id"
 
 #### 2B: Check for Pre-Registered Agent (IDE-Spawned)
 
-**IDE-spawned agents are already registered.** The spawn API writes an identity file before launching Claude:
+**IDE-spawned agents are already registered.** The spawn API:
+- Generates the agent name
+- Registers it in the Agent Mail database
+- Creates the tmux session as `jat-{AgentName}`
+- Writes an identity file for the agent to read
 
 ```bash
 # Check if agent was pre-registered by IDE spawn API
@@ -61,38 +65,32 @@ PRE_REG_FILE=".claude/sessions/.tmux-agent-${TMUX_SESSION}"
 if [[ -f "$PRE_REG_FILE" ]]; then
     AGENT_NAME=$(cat "$PRE_REG_FILE")
     echo "✓ Using pre-registered agent: $AGENT_NAME"
-    # Skip registration - already done by spawn API
+    # Skip to Step 2D - registration and tmux naming already done
 fi
 ```
 
 If the pre-registration file exists:
-- Use that agent name (it's already in the Agent Mail database)
-- Skip `am-register` entirely
-- Proceed to Step 2D (write session file)
+- Use that agent name
+- Skip Step 2C entirely (no am-register needed)
+- tmux session is already named correctly
 
 #### 2C: Register Agent (Manual/CLI Only)
 
 **Only needed if NOT spawned by IDE** (no pre-registration file found):
 
 ```bash
-# If agent name was provided and exists, resume it
-am-agents | grep -q "^  ${REQUESTED_AGENT}$" && echo "Resuming: $REQUESTED_AGENT"
-
-# Otherwise create new
-am-register --name "$REQUESTED_AGENT" --program claude-code --model sonnet-4.5
+am-register --name "$AGENT_NAME" --program claude-code --model sonnet-4.5
+tmux rename-session "jat-${AGENT_NAME}"
 ```
 
 #### 2D: Write Session File
+
+**Always needed** - maps Claude session ID to agent name for hooks:
+
 ```bash
 mkdir -p .claude/sessions
 # Use Write tool: Write(.claude/sessions/agent-{session_id}.txt, "AgentName")
 ```
-
-#### 2E: Rename tmux Session (CRITICAL)
-```bash
-tmux rename-session "jat-{AgentName}"
-```
-Without this, the IDE can't track your session.
 
 ---
 
@@ -135,7 +133,7 @@ bd search "$SEARCH_TERM" --updated-after "$DATE_7_DAYS_AGO" --limit 20 --json
 ```
 
 **What to look for:**
-- **Duplicates**: Tasks with nearly identical titles or descriptions → may already be done
+- **Duplicates**: Tasks with nearly identical titles or descriptions → may already be complete
 - **Related work**: Tasks touching similar files/features → useful context or dependencies
 - **Recent completions**: Recently closed tasks in same area → learn from their approach
 
@@ -459,7 +457,7 @@ IDE spawns agent
        │ /jat:complete
        ▼
   ┌──────────┐
-  │   DONE   │  Task closed, session ends
+  │ COMPLETE │  Task closed, session ends
   └──────────┘
 
 To work on another task → spawn new agent
