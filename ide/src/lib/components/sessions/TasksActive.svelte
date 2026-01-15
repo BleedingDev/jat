@@ -752,16 +752,16 @@
 										<div class="agent-badge-row">
 											{#if derivedProject}
 												<span
-													class="project-badge"
-													style="background: {rowProjectColor ? `color-mix(in oklch, ${rowProjectColor} 25%, transparent)` : 'oklch(0.25 0.02 250)'}; border-color: {rowProjectColor || 'oklch(0.35 0.02 250)'}; color: {rowProjectColor || 'oklch(0.75 0.02 250)'};"
+													class="project-badge {isNew ? 'tracking-in-expand' : ''}"
+													style="background: {rowProjectColor ? `color-mix(in oklch, ${rowProjectColor} 25%, transparent)` : 'oklch(0.25 0.02 250)'}; border-color: {rowProjectColor || 'oklch(0.35 0.02 250)'}; color: {rowProjectColor || 'oklch(0.75 0.02 250)'};{isNew ? ' animation-delay: 100ms;' : ''}"
 												>
 													{derivedProject}
 												</span>
 											{:else}
-												<span class="session-name-pill">{session.name}</span>
+												<span class="session-name-pill {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>{session.name}</span>
 											{/if}
 											<AgentAvatar name={sessionAgentName} size={20} />
-											<span class="agent-name-inline">{sessionAgentName}</span>
+											<span class="agent-name-inline {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>{sessionAgentName}</span>
 										</div>
 									{/if}
 								</div>

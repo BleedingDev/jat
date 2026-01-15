@@ -523,6 +523,22 @@
 	let autoCloseTimer: ReturnType<typeof setInterval> | null = null;
 	let autoCloseHeld = $state(false); // User clicked "Hold for Review"
 	let autoCompleteTriggered = $state(false); // Track if auto-complete has been triggered for this review cycle
+	let autoCompleteDisabled = $state(false); // User manually disabled auto-complete for this session
+	let lastTaskIdForAutoComplete = $state<string | null>(null); // Track task ID to reset autoComplete default
+
+	// Initialize autoCompleteDisabled default when task changes
+	// Default: disabled for "review" tasks, enabled for "auto" tasks
+	// User can toggle either way after default is set
+	$effect(() => {
+		const currentTaskId = task?.id ?? null;
+		if (currentTaskId !== lastTaskIdForAutoComplete) {
+			lastTaskIdForAutoComplete = currentTaskId;
+			// Default based on review rules: disabled if action is NOT "auto"
+			autoCompleteDisabled = reviewStatus?.action !== "auto";
+			// Reset triggered flag for new task
+			autoCompleteTriggered = false;
+		}
+	});
 
 	// Track baseline commit across state transitions (working → review)
 	// When agent transitions from working to review, the working signal's baselineCommit
@@ -2408,8 +2424,9 @@
 			return;
 		}
 
-		// Check review rules - if 'auto', trigger completion automatically
-		if (reviewStatus?.action === "auto" && !autoCompleteTriggered) {
+		// Auto-complete if toggle is enabled (not disabled by user)
+		// Default based on review rules, but user can toggle either way
+		if (!autoCompleteTriggered && !autoCompleteDisabled) {
 			autoCompleteTriggered = true;
 			console.log(
 				`[SessionCard] Auto-completing ${sessionName} (review rules: auto for ${reviewStatus.reason})`,
@@ -7037,6 +7054,41 @@
 								/>
 							{/if}
 						{:else if sessionState === "ready-for-review" || sessionState === "idle" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}
+							<!-- Auto-complete toggle (visible for all tasks - default based on review rules) -->
+							{#if isAgentMode && task && sessionState !== "completed"}
+								<button
+									type="button"
+									onclick={() => autoCompleteDisabled = !autoCompleteDisabled}
+									class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-all hover:scale-105 mr-1"
+									style="
+										background: {autoCompleteDisabled
+											? 'oklch(0.35 0.08 45 / 0.5)'
+											: 'oklch(0.30 0.12 145 / 0.5)'};
+										color: {autoCompleteDisabled
+											? 'oklch(0.80 0.12 45)'
+											: 'oklch(0.85 0.15 145)'};
+										border: 1px solid {autoCompleteDisabled
+											? 'oklch(0.50 0.12 45 / 0.5)'
+											: 'oklch(0.50 0.15 145 / 0.5)'};
+									"
+									title={autoCompleteDisabled
+										? "Auto-complete disabled. Click to re-enable."
+										: `Auto-complete enabled (${reviewStatus.reason}). Click to disable.`}
+								>
+									{#if autoCompleteDisabled}
+										<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+										</svg>
+										<span>Manual</span>
+									{:else}
+										<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+										</svg>
+										<span>Auto</span>
+									{/if}
+								</button>
+							{/if}
 							<!-- Unified status badge with state-appropriate actions and all commands -->
 							<StatusActionBadge
 								{sessionState}

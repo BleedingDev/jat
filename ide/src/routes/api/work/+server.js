@@ -308,15 +308,10 @@ function detectSessionStateFromOutput(output, task, lastCompletedTask, sessionNa
 			return sorted[0].state;
 		}
 
-		// No markers found and no fresh signal - distinguish new vs stale agents
-		// Check if agent has EVER emitted a signal (timeline file exists)
-		const timelineFile = `/tmp/jat-timeline-${sessionName}.jsonl`;
-		if (sessionName && existsSync(timelineFile)) {
-			// Timeline exists = agent emitted signals before, but current signal is stale
-			return 'idle';
-		}
-		// No timeline = agent has never emitted signals = still starting up
-		return 'starting';
+		// No markers found and no fresh signal - but agent HAS an active task
+		// Since the task is in_progress, the agent is working even if signal is stale
+		// (Agents may work for extended periods without emitting new signals)
+		return 'working';
 	}
 
 	// No active task - check if we just completed something

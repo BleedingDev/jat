@@ -109,6 +109,8 @@
 		class?: string;
 		/** When true, displays elapsed time below the status label instead of inline (for compact table layouts) */
 		stacked?: boolean;
+		/** Apply entrance animation to text (tracking-in-expand) */
+		animate?: boolean;
 	}
 
 	let {
@@ -135,6 +137,7 @@
 		onViewEpic,
 		class: className = "",
 		stacked = false,
+		animate = false,
 	}: Props = $props();
 
 	// Dropdown state
@@ -752,7 +755,7 @@
 		{#if stacked}
 			<!-- Stacked layout: label on top, elapsed time below -->
 			<span class="flex items-center">
-				{variant === "integrated" ? displayShortLabel : displayLabel}
+				<span class={animate ? 'tracking-in-expand' : ''} style={animate ? 'animation-delay: 100ms;' : ''}>{variant === "integrated" ? displayShortLabel : displayLabel}</span>
 				<!-- Dropdown indicator -->
 				<svg
 					class="ml-1 inline-block w-2.5 h-2.5 ml-0.5 transition-transform"
@@ -790,7 +793,7 @@
 			{/if}
 		{:else}
 			<!-- Default inline layout -->
-			{variant === "integrated" ? displayShortLabel : displayLabel}
+			<span class={animate ? 'tracking-in-expand' : ''} style={animate ? 'animation-delay: 100ms;' : ''}>{variant === "integrated" ? displayShortLabel : displayLabel}</span>
 			{#if elapsed}
 				<span class="elapsed-time">
 					{#if elapsed.showHours}

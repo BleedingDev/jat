@@ -63,9 +63,11 @@
 		variant?: 'default' | 'projectPill' | 'agentPill';
 		/** Agent name for agentPill variant - displays avatar with status ring */
 		agentName?: string;
+		/** Apply entrance animation to text (tracking-in-expand) */
+		animate?: boolean;
 	}
 
-	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default', agentName }: Props = $props();
+	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default', agentName, animate = false }: Props = $props();
 
 	// Extract project prefix from task ID (e.g., "jat-abc" -> "jat")
 	const projectPrefix = $derived(task.id.split('-')[0] || task.id);
@@ -192,7 +194,7 @@
 		onclick={copyId}
 		title="Click to copy task ID"
 	>
-		<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'} style="color: {projectColor}">{task.id}</span>
+		<span class="{size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'} {animate ? 'tracking-in-expand' : ''}" style="color: {projectColor}{animate ? '; animation-delay: 100ms;' : ''}">{task.id}</span>
 		{#if copied}
 			<svg class="{iconSizes[size]} text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -219,7 +221,7 @@
 			style="background: {dotColor};"
 		></span>
 		<!-- Full task ID -->
-		<span>{task.id}</span>
+		<span class={animate ? 'tracking-in-expand' : ''} style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>
 		{#if showType && task.issue_type}
 			<span class="opacity-80">{typeVisual.icon}</span>
 		{/if}
@@ -264,7 +266,7 @@
 			{/if}
 		</div>
 		<!-- Task ID -->
-		<span>{task.id}</span>
+		<span class={animate ? 'tracking-in-expand' : ''} style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>
 		{#if showType && task.issue_type}
 			<span class="opacity-80">{typeVisual.icon}</span>
 		{/if}
@@ -320,7 +322,7 @@
 				>🧑</span>
 			{/if}
 
-			<span style="color: {projectColor}">{task.id}</span>
+			<span class={animate ? 'tracking-in-expand' : ''} style="color: {projectColor}{animate ? '; animation-delay: 100ms;' : ''}">{task.id}</span>
 
 			{#if showUnblocksCount && activeBlocks.length > 0}
 				<span
@@ -438,7 +440,7 @@
 					>🧑</span>
 				{/if}
 
-				<span style="color: {projectColor}">{task.id}</span>
+				<span class={animate ? 'tracking-in-expand' : ''} style="color: {projectColor}{animate ? '; animation-delay: 100ms;' : ''}">{task.id}</span>
 
 				{#if showUnblocksCount && activeBlocks.length > 0}
 					<span

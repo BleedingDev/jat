@@ -1037,6 +1037,24 @@
 	}
 }
 
+/* Letter tracking contraction - for text exit */
+.tracking-out-contract {
+	animation: tracking-out-contract 0.7s cubic-bezier(0.55, 0.085, 0.68, 0.53) both;
+}
+
+@keyframes tracking-out-contract {
+	0% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 1;
+	}
+	100% {
+		letter-spacing: -0.5em;
+		opacity: 0;
+	}
+}
+
 /* Puff-in center - for icon scaling effect */
 .puff-in-center {
 	animation: puff-in-center 0.7s cubic-bezier(0.47, 0, 0.745, 0.715) both;
@@ -1490,6 +1508,7 @@
 	.fade-in-left,
 	.fade-in,
 	.tracking-in-expand,
+	.tracking-out-contract,
 	.puff-in-center {
 		animation: none !important;
 		transition: none !important;
