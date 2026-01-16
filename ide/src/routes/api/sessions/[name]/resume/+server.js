@@ -11,8 +11,14 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
+import Database from 'better-sqlite3';
 
 const execAsync = promisify(exec);
+
+/**
+ * Agent Mail database path
+ */
+const AGENT_MAIL_DB_PATH = process.env.AGENT_MAIL_DB || `${process.env.HOME}/.agent-mail.db`;
 
 /**
  * Session name prefix for JAT agent sessions
@@ -44,6 +50,39 @@ function resolveSessionName(name) {
  */
 function getProjectSlug(projectPath) {
 	return projectPath.replace(/\//g, '-');
+}
+
+/**
+ * Look up agent's project path from Agent Mail database
+ * @param {string} agentName - Agent name to look up
+ * @returns {string | null} - Project path or null if not found
+ */
+function getAgentProjectFromDb(agentName) {
+	if (!existsSync(AGENT_MAIL_DB_PATH)) {
+		return null;
+	}
+
+	try {
+		const db = new Database(AGENT_MAIL_DB_PATH, { readonly: true });
+		const result = /** @type {{ project: string } | undefined} */ (
+			db.prepare(`
+				SELECT p.human_key as project
+				FROM agents a
+				JOIN projects p ON a.project_id = p.id
+				WHERE a.name = ?
+			`).get(agentName)
+		);
+		db.close();
+
+		if (result?.project) {
+			// The human_key is already the full path (e.g., /home/jw/code/steelbridge)
+			return result.project;
+		}
+	} catch (e) {
+		console.error(`Failed to query Agent Mail DB for ${agentName}:`, e);
+	}
+
+	return null;
 }
 
 /**
@@ -284,6 +323,13 @@ async function getProjectPath(agentName) {
 		} catch (e) {
 			// Continue to fallback
 		}
+	}
+
+	// Query Agent Mail database for agent's registered project
+	// This is the most reliable source when temp files don't exist (e.g., after reboot)
+	const dbProjectPath = getAgentProjectFromDb(agentName);
+	if (dbProjectPath && existsSync(dbProjectPath)) {
+		return dbProjectPath;
 	}
 
 	// Default to current working directory

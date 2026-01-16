@@ -9,6 +9,7 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import SortDropdown from '$lib/components/SortDropdown.svelte';
 	import TasksActive from '$lib/components/sessions/TasksActive.svelte';
 	import TasksOpen from '$lib/components/sessions/TasksOpen.svelte';
@@ -88,8 +89,9 @@
 	type SubsectionType = 'sessions' | 'tasks';
 	let collapsedSubsections = $state<Map<string, Set<SubsectionType>>>(new Map());
 
-	// Epic collapse state (accordion: only one expanded per project)
-	let expandedEpicByProject = $state<Map<string, string | null>>(new Map());
+	// Epic collapse state (independent: each group can be expanded/collapsed separately)
+	// Uses Set of epic keys per project. "standalone" key used for tasks without an epic.
+	let expandedEpicsByProject = $state<Map<string, Set<string>>>(new Map());
 
 	// Sort configuration for sessions
 	type SessionSortOption = 'state' | 'project' | 'created';
@@ -306,21 +308,25 @@
 	}
 
 	function toggleEpicCollapse(project: string, epicId: string | null) {
-		const current = expandedEpicByProject.get(project);
-		if (current === epicId) {
-			// Collapse (same epic clicked)
-			expandedEpicByProject.set(project, null);
+		const key = epicId ?? 'standalone';
+		const expanded = expandedEpicsByProject.get(project) ?? new Set<string>();
+
+		if (expanded.has(key)) {
+			// Collapse this group
+			expanded.delete(key);
 		} else {
-			// Expand this epic (accordion: collapse others)
-			expandedEpicByProject.set(project, epicId);
+			// Expand this group
+			expanded.add(key);
 		}
-		expandedEpicByProject = new Map(expandedEpicByProject);
+
+		expandedEpicsByProject.set(project, expanded);
+		expandedEpicsByProject = new Map(expandedEpicsByProject);
 	}
 
 	function isEpicExpanded(project: string, epicId: string | null): boolean {
-		// Standalone (no epic) is always expanded
-		if (epicId === null) return true;
-		return expandedEpicByProject.get(project) === epicId;
+		const key = epicId ?? 'standalone';
+		const expanded = expandedEpicsByProject.get(project);
+		return expanded?.has(key) ?? false;
 	}
 
 	// Subsection collapse handlers
@@ -736,8 +742,21 @@
 								</button>
 
 								{#if !isSubsectionCollapsed(project, 'sessions')}
-								<!-- Group by Epic -->
-								{#each Array.from(sessionsByEpic.entries()) as [epicId, epicSessions] (epicId ?? 'standalone')}
+								<!-- Group by Epic - sorted: epics by priority first, standalone last -->
+								{@const sortedSessionEntries = Array.from(sessionsByEpic.entries()).sort((a, b) => {
+									const [epicIdA] = a;
+									const [epicIdB] = b;
+									// Standalone (null) always goes last
+									if (epicIdA === null) return 1;
+									if (epicIdB === null) return -1;
+									// Sort epics by priority (lower = higher priority)
+									const epicA = getEpicTask(epicIdA);
+									const epicB = getEpicTask(epicIdB);
+									const priorityA = epicA?.priority ?? 99;
+									const priorityB = epicB?.priority ?? 99;
+									return priorityA - priorityB;
+								})}
+								{#each sortedSessionEntries as [epicId, epicSessions] (epicId ?? 'standalone')}
 									{@const epic = epicId ? getEpicTask(epicId) : null}
 									{@const isExpanded = isEpicExpanded(project, epicId)}
 
@@ -770,7 +789,7 @@
 											</button>
 
 											{#if isExpanded}
-												<div class="epic-content">
+												<div class="epic-content" transition:slide={{ duration: 200 }}>
 													<TasksActive
 														sessions={epicSessions}
 														{agentTasks}
@@ -785,18 +804,48 @@
 											{/if}
 										</div>
 									{:else if epicSessions.length > 0}
-										<!-- Standalone Sessions (no epic) - only render if there are sessions -->
-										<div class="standalone-group">
-											<TasksActive
-												sessions={epicSessions}
-												{agentTasks}
-												{agentSessionInfo}
-												{agentProjects}
-												{projectColors}
-												onKillSession={killSession}
-												onAttachSession={attachSession}
-												onViewTask={(taskId) => openTaskDetailDrawer(taskId)}
-											/>
+										<!-- Standalone Sessions (no epic) - collapsible group like epics -->
+										{@const isStandaloneExpanded = isEpicExpanded(project, null)}
+										<div class="epic-group standalone">
+											<button
+												class="epic-header"
+												onclick={() => toggleEpicCollapse(project, null)}
+												aria-expanded={isStandaloneExpanded}
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+													stroke="currentColor"
+													class="collapse-icon small"
+													class:collapsed={!isStandaloneExpanded}
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M19 9l-7 7-7-7"
+													/>
+												</svg>
+												<span class="standalone-icon">📋</span>
+												<span class="epic-title">Standalone Sessions</span>
+												<span class="epic-count">{epicSessions.length} active</span>
+											</button>
+
+											{#if isStandaloneExpanded}
+												<div class="epic-content" transition:slide={{ duration: 200 }}>
+													<TasksActive
+														sessions={epicSessions}
+														{agentTasks}
+														{agentSessionInfo}
+														{agentProjects}
+														{projectColors}
+														onKillSession={killSession}
+														onAttachSession={attachSession}
+														onViewTask={(taskId) => openTaskDetailDrawer(taskId)}
+													/>
+												</div>
+											{/if}
 										</div>
 									{/if}
 								{/each}
@@ -828,8 +877,21 @@
 								</button>
 
 								{#if !isSubsectionCollapsed(project, 'tasks')}
-								<!-- Group by Epic -->
-								{#each Array.from(tasksByEpic.entries()) as [epicId, epicTasks] (epicId ?? 'standalone')}
+								<!-- Group by Epic - sorted: epics by priority first, standalone last -->
+								{@const sortedTaskEntries = Array.from(tasksByEpic.entries()).sort((a, b) => {
+									const [epicIdA] = a;
+									const [epicIdB] = b;
+									// Standalone (null) always goes last
+									if (epicIdA === null) return 1;
+									if (epicIdB === null) return -1;
+									// Sort epics by priority (lower = higher priority)
+									const epicA = getEpicTask(epicIdA);
+									const epicB = getEpicTask(epicIdB);
+									const priorityA = epicA?.priority ?? 99;
+									const priorityB = epicB?.priority ?? 99;
+									return priorityA - priorityB;
+								})}
+								{#each sortedTaskEntries as [epicId, epicTasks] (epicId ?? 'standalone')}
 									{@const epic = epicId ? getEpicTask(epicId) : null}
 									{@const isExpanded = isEpicExpanded(project, epicId)}
 
@@ -862,7 +924,7 @@
 											</button>
 
 											{#if isExpanded}
-												<div class="epic-content">
+												<div class="epic-content" transition:slide={{ duration: 200 }}>
 													<TasksOpen
 														tasks={epicTasks as any[]}
 														loading={false}
@@ -878,19 +940,49 @@
 											{/if}
 										</div>
 									{:else if epicTasks.length > 0}
-										<!-- Standalone Tasks (no epic) - only render if there are tasks -->
-										<div class="standalone-group">
-											<TasksOpen
-												tasks={epicTasks as any[]}
-												loading={false}
-												error={null}
-												{spawningTaskId}
-												{projectColors}
-												onSpawnTask={spawnTask as any}
-												onRetry={fetchOpenTasks}
-												onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
-												showHeader={false}
-											/>
+										<!-- Standalone Tasks (no epic) - collapsible group like epics -->
+										{@const isStandaloneExpanded = isEpicExpanded(project, null)}
+										<div class="epic-group standalone">
+											<button
+												class="epic-header"
+												onclick={() => toggleEpicCollapse(project, null)}
+												aria-expanded={isStandaloneExpanded}
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+													stroke="currentColor"
+													class="collapse-icon small"
+													class:collapsed={!isStandaloneExpanded}
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M19 9l-7 7-7-7"
+													/>
+												</svg>
+												<span class="standalone-icon">📋</span>
+												<span class="epic-title">Standalone Tasks</span>
+												<span class="epic-count">{epicTasks.length} open</span>
+											</button>
+
+											{#if isStandaloneExpanded}
+												<div class="epic-content" transition:slide={{ duration: 200 }}>
+													<TasksOpen
+														tasks={epicTasks as any[]}
+														loading={false}
+														error={null}
+														{spawningTaskId}
+														{projectColors}
+														onSpawnTask={spawnTask as any}
+														onRetry={fetchOpenTasks}
+														onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
+														showHeader={false}
+													/>
+												</div>
+											{/if}
 										</div>
 									{/if}
 								{/each}
@@ -1146,9 +1238,19 @@
 		border-top: 1px solid oklch(0.23 0.02 250);
 	}
 
-	/* Standalone Group */
-	.standalone-group {
-		margin: 0.25rem 0;
+	/* Standalone Group (collapsible, same structure as epic) */
+	.epic-group.standalone {
+		border-color: oklch(0.28 0.02 250);
+		background: oklch(0.14 0.01 250);
+	}
+
+	.epic-group.standalone .epic-header:hover {
+		background: oklch(0.17 0.01 250);
+	}
+
+	.standalone-icon {
+		font-size: 0.875rem;
+		line-height: 1;
 	}
 
 	/* Loading Skeleton */

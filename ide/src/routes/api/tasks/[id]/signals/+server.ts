@@ -22,6 +22,7 @@ import { json } from '@sveltejs/kit';
 import { readFile, access } from 'fs/promises';
 import { join, resolve } from 'path';
 import type { RequestHandler } from './$types';
+import { getProjectPath } from '$lib/utils/projectUtils';
 
 interface TimelineEvent {
 	type: string;
@@ -43,8 +44,9 @@ export const GET: RequestHandler = async ({ params }) => {
 	}
 
 	try {
-		// Get the project root (parent of ide)
-		const projectRoot = resolve(process.cwd(), '..');
+		// Get the project root from the task ID prefix (e.g., "steelbridge-xyz" -> "/home/user/code/steelbridge")
+		// Falls back to parent of IDE if task ID doesn't have a recognizable project prefix
+		const projectRoot = getProjectPath(id) || resolve(process.cwd(), '..');
 		const signalsDir = join(projectRoot, '.beads', 'signals');
 		const signalFile = join(signalsDir, `${id}.jsonl`);
 
