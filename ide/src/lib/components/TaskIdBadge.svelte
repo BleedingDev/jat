@@ -125,6 +125,42 @@
 	let copied = $state(false);
 	let dropdownOpen = $state(false);
 
+	// Dropdown position tracking for fixed positioning (escapes stacking context - see jat-1xa13)
+	let dropdownRef: HTMLDivElement | null = $state(null);
+	let dropdownPosition = $state({ top: 0, left: 0 });
+	let isDropdownVisible = $state(false);
+
+	function updateDropdownPosition() {
+		if (!dropdownRef) return;
+		const rect = dropdownRef.getBoundingClientRect();
+		// Position dropdown below and aligned to trigger
+		dropdownPosition = {
+			top: rect.bottom + 4, // 4px gap below trigger
+			left: dropdownAlign === 'end' ? rect.right - 288 : rect.left // 288px = max-w-72 (18rem)
+		};
+		// Clamp to viewport bounds
+		const viewportWidth = window.innerWidth;
+		const viewportHeight = window.innerHeight;
+		if (dropdownPosition.left < 8) dropdownPosition.left = 8;
+		if (dropdownPosition.left + 288 > viewportWidth - 8) {
+			dropdownPosition.left = viewportWidth - 288 - 8;
+		}
+		// If dropdown would go below viewport, position above trigger instead
+		if (dropdownPosition.top + 200 > viewportHeight) { // estimate dropdown height ~200px
+			dropdownPosition.top = rect.top - 200 - 4;
+		}
+	}
+
+	function handleDropdownEnter() {
+		updateDropdownPosition();
+		isDropdownVisible = true;
+		fetchDepGraph();
+	}
+
+	function handleDropdownLeave() {
+		isDropdownVisible = false;
+	}
+
 	const sizeClasses: Record<string, string> = {
 		xs: 'text-xs px-1.5 py-0.5 gap-1',
 		sm: 'text-sm px-2 py-0.5 gap-1.5',
@@ -343,6 +379,27 @@
 			onclick={copyId}
 			title="Click to copy task ID"
 		>
+			<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-60' : ''}" style="color: {isClosed ? 'oklch(0.65 0.20 145)' : projectColor}{animate ? '; animation-delay: 100ms;' : ''}">{task.id}</span>
+		</button>
+
+		<!-- Icons row - outside button, below the badge -->
+		<div class="flex items-center gap-1 mt-0.5">
+			<!-- Priority badge -->
+			{#if task.priority !== undefined}
+				{@const priorityColors = {
+					0: { bg: 'oklch(0.55 0.20 25 / 0.25)', text: 'oklch(0.75 0.18 25)', border: 'oklch(0.55 0.20 25 / 0.5)' },
+					1: { bg: 'oklch(0.55 0.18 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.18 85 / 0.5)' },
+					2: { bg: 'oklch(0.55 0.15 200 / 0.20)', text: 'oklch(0.75 0.12 200)', border: 'oklch(0.55 0.15 200 / 0.4)' },
+					3: { bg: 'oklch(0.35 0.02 250 / 0.30)', text: 'oklch(0.65 0.02 250)', border: 'oklch(0.35 0.02 250 / 0.5)' },
+					4: { bg: 'oklch(0.30 0.02 250 / 0.25)', text: 'oklch(0.55 0.02 250)', border: 'oklch(0.30 0.02 250 / 0.4)' }
+				}}
+				{@const pColor = priorityColors[task.priority as keyof typeof priorityColors] || priorityColors[3]}
+				<span
+					class="text-xs font-semibold px-1 py-0.5 rounded"
+					style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
+				>P{task.priority}</span>
+			{/if}
+
 			{#if isClosed}
 				<!-- Checkmark for closed tasks -->
 				<svg class="{iconSizes[size]} text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -359,8 +416,6 @@
 					style="color: oklch(0.70 0.18 45);"
 				>🧑</span>
 			{/if}
-
-			<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-60' : ''}" style="color: {isClosed ? 'oklch(0.65 0.20 145)' : projectColor}{animate ? '; animation-delay: 100ms;' : ''}">{task.id}</span>
 
 			{#if showUnblocksCount && activeBlocks.length > 0 && !isClosed}
 				<span
@@ -396,7 +451,7 @@
 					<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
 				</svg>
 			{/if}
-		</button>
+		</div>
 
 		{#if shouldShowAssignee}
 			<WorkingAgentBadge
@@ -434,7 +489,7 @@
 		{/if}
 	</div>
 {:else}
-	<!-- Full mode: badge with type icon, project-colored ID, status icon, and dropdown -->
+	<!-- Full mode: badge with project-colored ID on first row, icons on second row -->
 	<div class="inline-flex flex-col items-start gap-0.5 relative">
 		<!-- Blocked by (ABOVE badge) - compact with wrapping and indent -->
 		{#if hasBlockers}
@@ -460,12 +515,38 @@
 			</div>
 		{/if}
 
-		<div class="dropdown dropdown-hover {dropdownAlign === 'end' ? 'dropdown-left' : 'dropdown-right'}" onmouseenter={fetchDepGraph}>
+		<div
+			class="dropdown {dropdownAlign === 'end' ? 'dropdown-left' : 'dropdown-right'}"
+			bind:this={dropdownRef}
+			onmouseenter={handleDropdownEnter}
+			onmouseleave={handleDropdownLeave}
+		>
 			<button
 				class="inline-flex items-center font-mono rounded cursor-pointer
 					   bg-base-100 hover:bg-base-200 transition-colors group border {isClosed ? 'border-success/40' : 'border-base-300'} {sizeClasses[size]}"
 				onclick={handleBadgeClick}
 			>
+				<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-60' : ''}" style="color: {isClosed ? 'oklch(0.65 0.20 145)' : projectColor}{animate ? '; animation-delay: 100ms;' : ''}">{task.id}</span>
+			</button>
+
+			<!-- Icons row - outside button, below the badge -->
+			<div class="flex items-center gap-1 mt-0.5 opacity-80">
+				<!-- Priority badge -->
+				{#if task.priority !== undefined}
+					{@const priorityColors = {
+						0: { bg: 'oklch(0.55 0.20 25 / 0.25)', text: 'oklch(0.75 0.18 25)', border: 'oklch(0.55 0.20 25 / 0.5)' },
+						1: { bg: 'oklch(0.55 0.18 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.18 85 / 0.5)' },
+						2: { bg: 'oklch(0.55 0.15 200 / 0.20)', text: 'oklch(0.75 0.12 200)', border: 'oklch(0.55 0.15 200 / 0.4)' },
+						3: { bg: 'oklch(0.35 0.02 250 / 0.30)', text: 'oklch(0.65 0.02 250)', border: 'oklch(0.35 0.02 250 / 0.5)' },
+						4: { bg: 'oklch(0.30 0.02 250 / 0.25)', text: 'oklch(0.55 0.02 250)', border: 'oklch(0.30 0.02 250 / 0.4)' }
+					}}
+					{@const pColor = priorityColors[task.priority as keyof typeof priorityColors] || priorityColors[3]}
+					<span
+						class="text-xs font-semibold px-1 py-0.5 rounded scale-70 ml-2"
+						style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
+					>P{task.priority}</span>
+				{/if}
+
 				{#if isClosed}
 					<svg class="{iconSizes[size]} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: oklch(0.65 0.20 145);">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -482,8 +563,6 @@
 					>🧑</span>
 				{/if}
 
-				<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-60' : ''}" style="color: {isClosed ? 'oklch(0.65 0.20 145)' : projectColor}{animate ? '; animation-delay: 100ms;' : ''}">{task.id}</span>
-
 				{#if showUnblocksCount && activeBlocks.length > 0 && !isClosed}
 					<span
 						class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
@@ -498,7 +577,6 @@
 				{/if}
 
 				{#if showStatus && !shouldShowAssignee && !isClosed}
-					<!-- Show status icon in badge only when not showing assignee (assignee row has its own gear) and not closed -->
 					<svg
 						class="{iconSizes[size]} {statusVisual.text} {statusVisual.animation || ''} shrink-0"
 						viewBox="0 0 24 24"
@@ -519,10 +597,16 @@
 						<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
 					</svg>
 				{/if}
-			</button>
+			</div>
 
-			<!-- Hover dropdown with task info and quick actions -->
-			<div class="dropdown-content z-[9999] mt-1 p-2 shadow-lg bg-base-100 rounded-lg border border-base-300 min-w-56 max-w-72">
+			<!-- Hover dropdown with task info and quick actions - uses fixed positioning to escape stacking context (jat-1xa13) -->
+			{#if isDropdownVisible}
+			<div
+				class="fixed z-[9999] p-2 shadow-lg bg-base-100 rounded-lg border border-base-300 min-w-56 max-w-72"
+				style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px;"
+				onmouseenter={() => isDropdownVisible = true}
+				onmouseleave={handleDropdownLeave}
+			>
 				<!-- Task title -->
 				{#if task.title}
 					<div class="px-2 py-1.5 border-b border-base-200 mb-1">
@@ -674,6 +758,7 @@
 					</div>
 				{/if}
 			</div>
+			{/if}
 		</div>
 
 		{#if shouldShowAssignee}

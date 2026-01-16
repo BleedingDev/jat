@@ -1104,12 +1104,12 @@
 	}
 
 	.project-tab-name {
-		font-size: 0.75rem;
+		font-size: 0.9375rem;
 		font-weight: 600;
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		padding: 0.25rem 0.625rem;
+		padding: 0.375rem 0.75rem;
 		border-radius: 0.375rem;
 		/* Use CSS custom property for project color */
 		background: color-mix(in oklch, var(--project-color) 15%, transparent);
@@ -1167,7 +1167,7 @@
 		border-radius: 0.75rem;
 		border: 1px solid oklch(0.25 0.02 250);
 		border-top: 3px solid var(--project-color);
-		overflow: hidden;
+		/* NOTE: overflow:hidden removed - it clips TaskIdBadge dropdowns that need to escape container (see jat-1xa13) */
 	}
 
 	/* Subsections */
@@ -1230,7 +1230,7 @@
 		background: oklch(0.16 0.01 250);
 		border-radius: 0.5rem;
 		border: 1px solid oklch(0.23 0.02 250);
-		overflow: hidden;
+		/* NOTE: Do NOT add overflow: hidden here - it clips TaskIdBadge dropdown menus */
 	}
 
 	.epic-header {
@@ -1268,8 +1268,8 @@
 	.epic-title {
 		flex: 1;
 		text-align: left;
-		font-size: 0.875rem;
-		font-weight: 500;
+		font-size: 0.9375rem;
+		font-weight: 600;
 		color: oklch(0.85 0.02 250);
 		white-space: nowrap;
 		overflow: hidden;
@@ -1322,6 +1322,48 @@
 	}
 
 	.epic-content :global(.sessions-table tbody tr:hover) {
+		background: oklch(0.18 0.01 250);
+	}
+
+	/* Make expanded session rows sticky within accordion */
+	.epic-content :global(.sessions-table tbody tr.expanded) {
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		background: oklch(0.18 0.02 250);
+	}
+
+	.epic-content :global(.sessions-table tbody tr.expanded-row) {
+		position: sticky;
+		top: 44px; /* Height of the header row */
+		z-index: 10;
+		background: oklch(0.16 0.01 250);
+		box-shadow: 0 4px 12px oklch(0 0 0 / 0.4);
+	}
+
+	/* Override TasksOpen table styles when inside accordion */
+	.epic-content :global(.tasks-table-wrapper) {
+		background: transparent;
+	}
+
+	.epic-content :global(.tasks-table th) {
+		display: none; /* Hide header row - parent accordion header is the context */
+	}
+
+	.epic-content :global(.tasks-table thead) {
+		display: none;
+	}
+
+	.epic-content :global(.tasks-table td) {
+		padding: 0.5rem 0.75rem;
+		border-bottom-color: oklch(0.20 0.02 250 / 0.5);
+	}
+
+	.epic-content :global(.task-row:last-child td) {
+		border-bottom: none;
+	}
+
+	.epic-content :global(.task-row:hover) {
 		background: oklch(0.18 0.01 250);
 	}
 

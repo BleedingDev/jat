@@ -1188,9 +1188,10 @@
 	}
 
 	.task-title {
-		font-size: 1rem;
-		font-weight: 500;
-		color: oklch(0.80 0.02 250);
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: oklch(0.85 0.02 250);
+		font-family: inherit; /* Override table's monospace */
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
