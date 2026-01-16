@@ -163,13 +163,72 @@ require_json() {
     local data="$2"
 
     if [[ -z "$data" ]]; then
-        echo "Error: $signal_type requires JSON payload"
-        echo "Example: jat-signal $signal_type '{\"taskId\":\"...\"}'"
+        echo "Error: $signal_type requires JSON payload" >&2
+        echo "" >&2
+        case "$signal_type" in
+            working)
+                echo "Required fields:" >&2
+                echo "  - taskId: The Beads task ID (e.g., \"jat-abc\")" >&2
+                echo "  - taskTitle: The task title" >&2
+                echo "" >&2
+                echo "Example:" >&2
+                echo "  jat-signal working '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Fix bug\"}'" >&2
+                ;;
+            review)
+                echo "Required fields:" >&2
+                echo "  - taskId: The Beads task ID" >&2
+                echo "  - taskTitle: The task title" >&2
+                echo "  - summary: Array of accomplishment strings" >&2
+                echo "" >&2
+                echo "Example:" >&2
+                echo "  jat-signal review '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Fix bug\",\"summary\":[\"Fixed the issue\"]}'" >&2
+                ;;
+            needs_input)
+                echo "Required fields:" >&2
+                echo "  - taskId: The Beads task ID" >&2
+                echo "  - question: The question being asked" >&2
+                echo "  - questionType: One of: choice, text, approval, clarification" >&2
+                echo "" >&2
+                echo "Example:" >&2
+                echo "  jat-signal needs_input '{\"taskId\":\"jat-abc\",\"question\":\"Which approach?\",\"questionType\":\"choice\"}'" >&2
+                ;;
+            starting)
+                echo "Required fields:" >&2
+                echo "  - agentName: Your agent name" >&2
+                echo "  - sessionId: Claude Code session ID" >&2
+                echo "  - project: Project name" >&2
+                echo "  - model: Full model ID" >&2
+                echo "  - gitBranch: Current git branch" >&2
+                echo "  - gitStatus: \"clean\" or \"dirty\"" >&2
+                echo "" >&2
+                echo "Example:" >&2
+                echo "  jat-signal starting '{\"agentName\":\"Agent\",\"sessionId\":\"...\",\"project\":\"jat\",...}'" >&2
+                ;;
+            *)
+                echo "Example: jat-signal $signal_type '{\"taskId\":\"...\"}'" >&2
+                ;;
+        esac
         exit 1
     fi
 
-    if ! echo "$data" | jq . >/dev/null 2>&1; then
-        echo "Error: Invalid JSON for $signal_type signal"
+    # Validate JSON syntax and provide detailed error message
+    local jq_error
+    if ! jq_error=$(echo "$data" | jq . 2>&1); then
+        echo "Error: Invalid JSON syntax for $signal_type signal" >&2
+        echo "" >&2
+        # Extract just the error message from jq output
+        local error_msg
+        error_msg=$(echo "$jq_error" | head -1)
+        echo "JSON parse error: $error_msg" >&2
+        echo "" >&2
+        echo "Common issues:" >&2
+        echo "  - Missing quotes around strings: use \"value\" not value" >&2
+        echo "  - Missing commas between fields" >&2
+        echo "  - Single quotes inside JSON: use double quotes only" >&2
+        echo "  - Unescaped special characters in strings" >&2
+        echo "" >&2
+        echo "Your input:" >&2
+        echo "  $data" >&2
         exit 1
     fi
 }

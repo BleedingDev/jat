@@ -83,6 +83,10 @@
 	// Project collapse state (persisted to localStorage)
 	let collapsedProjects = $state<Set<string>>(new Set());
 
+	// Subsection collapse state per project (sessions/tasks)
+	type SubsectionType = 'sessions' | 'tasks';
+	let collapsedSubsections = $state<Map<string, Set<SubsectionType>>>(new Map());
+
 	// Epic collapse state (accordion: only one expanded per project)
 	let expandedEpicByProject = $state<Map<string, string | null>>(new Map());
 
@@ -258,13 +262,18 @@
 		return grouped;
 	});
 
-	// Group tasks by epic within a project
+	// Group tasks by epic within a project (only open tasks)
 	function getTasksByEpic(projectTasks: Task[]): Map<string | null, Task[]> {
 		const grouped = new Map<string | null, Task[]>();
 
 		for (const task of projectTasks) {
 			// Don't include epics themselves in their own group
 			if (task.issue_type === 'epic') {
+				continue;
+			}
+
+			// Only include open tasks (not in_progress, blocked, or closed)
+			if (task.status !== 'open') {
 				continue;
 			}
 
@@ -313,6 +322,23 @@
 		return expandedEpicByProject.get(project) === epicId;
 	}
 
+	// Subsection collapse handlers
+	function toggleSubsectionCollapse(project: string, subsection: SubsectionType) {
+		const projectSubsections = collapsedSubsections.get(project) || new Set();
+		if (projectSubsections.has(subsection)) {
+			projectSubsections.delete(subsection);
+		} else {
+			projectSubsections.add(subsection);
+		}
+		collapsedSubsections.set(project, projectSubsections);
+		collapsedSubsections = new Map(collapsedSubsections);
+		saveCollapseState();
+	}
+
+	function isSubsectionCollapsed(project: string, subsection: SubsectionType): boolean {
+		return collapsedSubsections.get(project)?.has(subsection) ?? false;
+	}
+
 	// Persist collapse state
 	function saveCollapseState() {
 		try {
@@ -320,6 +346,12 @@
 				'tasks2-collapsed-projects',
 				JSON.stringify(Array.from(collapsedProjects))
 			);
+			// Save subsection collapse state
+			const subsectionData: Record<string, string[]> = {};
+			for (const [project, subsections] of collapsedSubsections) {
+				subsectionData[project] = Array.from(subsections);
+			}
+			localStorage.setItem('tasks2-collapsed-subsections', JSON.stringify(subsectionData));
 		} catch {
 			// Ignore storage errors
 		}
@@ -330,6 +362,16 @@
 			const saved = localStorage.getItem('tasks2-collapsed-projects');
 			if (saved) {
 				collapsedProjects = new Set(JSON.parse(saved));
+			}
+			// Load subsection collapse state
+			const subsectionSaved = localStorage.getItem('tasks2-collapsed-subsections');
+			if (subsectionSaved) {
+				const data = JSON.parse(subsectionSaved) as Record<string, string[]>;
+				const map = new Map<string, Set<SubsectionType>>();
+				for (const [project, subsections] of Object.entries(data)) {
+					map.set(project, new Set(subsections as SubsectionType[]));
+				}
+				collapsedSubsections = map;
 			}
 		} catch {
 			// Ignore storage errors
@@ -436,8 +478,8 @@
 
 	async function fetchAllTasks() {
 		try {
-			// Fetch all tasks including closed for epic mapping
-			const response = await fetch('/api/tasks?status=all');
+			// Fetch all tasks including closed for epic mapping (no status filter = all statuses)
+			const response = await fetch('/api/tasks');
 			if (!response.ok) return;
 			const data = await response.json();
 			allTasks = data.tasks || [];
@@ -534,7 +576,9 @@
 	}
 
 	function getProjectTaskCount(project: string): number {
-		return tasksByProject().get(project)?.length || 0;
+		const tasks = tasksByProject().get(project) || [];
+		// Only count open tasks (exclude epics and non-open status)
+		return tasks.filter(t => t.status === 'open' && t.issue_type !== 'epic').length;
 	}
 
 	onMount(() => {
@@ -670,8 +714,27 @@
 						<!-- Active Sessions Section -->
 						{#if projectSessions.length > 0}
 							<div class="subsection">
-								<h3 class="subsection-header">Active Sessions</h3>
+								<button
+									class="subsection-header"
+									onclick={() => toggleSubsectionCollapse(project, 'sessions')}
+									aria-expanded={!isSubsectionCollapsed(project, 'sessions')}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+										stroke="currentColor"
+										class="subsection-collapse-icon"
+										class:collapsed={isSubsectionCollapsed(project, 'sessions')}
+									>
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+									</svg>
+									<span>Active Sessions</span>
+									<span class="subsection-count">{projectSessions.length}</span>
+								</button>
 
+								{#if !isSubsectionCollapsed(project, 'sessions')}
 								<!-- Group by Epic -->
 								{#each Array.from(sessionsByEpic.entries()) as [epicId, epicSessions] (epicId ?? 'standalone')}
 									{@const epic = epicId ? getEpicTask(epicId) : null}
@@ -736,14 +799,34 @@
 										</div>
 									{/if}
 								{/each}
+								{/if}
 							</div>
 						{/if}
 
 						<!-- Open Tasks Section -->
-						{#if projectTasks.length > 0}
+						{#if tasksByEpic.size > 0}
 							<div class="subsection">
-								<h3 class="subsection-header">Open Tasks</h3>
+								<button
+									class="subsection-header"
+									onclick={() => toggleSubsectionCollapse(project, 'tasks')}
+									aria-expanded={!isSubsectionCollapsed(project, 'tasks')}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+										stroke="currentColor"
+										class="subsection-collapse-icon"
+										class:collapsed={isSubsectionCollapsed(project, 'tasks')}
+									>
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+									</svg>
+									<span>Open Tasks</span>
+									<span class="subsection-count">{Array.from(tasksByEpic.values()).reduce((sum, tasks) => sum + tasks.length, 0)}</span>
+								</button>
 
+								{#if !isSubsectionCollapsed(project, 'tasks')}
 								<!-- Group by Epic -->
 								{#each Array.from(tasksByEpic.entries()) as [epicId, epicTasks] (epicId ?? 'standalone')}
 									{@const epic = epicId ? getEpicTask(epicId) : null}
@@ -810,6 +893,7 @@
 										</div>
 									{/if}
 								{/each}
+								{/if}
 							</div>
 						{/if}
 					</div>
@@ -958,12 +1042,47 @@
 	}
 
 	.subsection-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.5rem 1rem;
+		background: transparent;
+		border: none;
+		cursor: pointer;
 		font-size: 0.8125rem;
 		font-weight: 600;
 		color: oklch(0.7 0.02 250);
-		margin: 0 0 0.5rem 1rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
+		transition: background-color 0.15s ease;
+	}
+
+	.subsection-header:hover {
+		background: oklch(0.2 0.01 250);
+	}
+
+	.subsection-collapse-icon {
+		width: 0.875rem;
+		height: 0.875rem;
+		color: oklch(0.55 0.02 250);
+		transition: transform 0.2s ease;
+	}
+
+	.subsection-collapse-icon.collapsed {
+		transform: rotate(-90deg);
+	}
+
+	.subsection-count {
+		margin-left: auto;
+		font-size: 0.75rem;
+		font-weight: 500;
+		padding: 0.125rem 0.375rem;
+		border-radius: 9999px;
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.65 0.02 250);
+		text-transform: none;
+		letter-spacing: normal;
 	}
 
 	/* Epic Groups */

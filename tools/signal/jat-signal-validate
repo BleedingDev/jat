@@ -26,6 +26,274 @@ SCHEMA_FILE="${SCRIPT_DIR}/jat-signal-schema.json"
 SIGNAL_TYPE="${1:-}"
 PAYLOAD="${2:-}"
 
+# =============================================================================
+# Actionable Error Helper Functions
+# =============================================================================
+
+# Generate an actionable error message with context and example
+# Usage: error_missing_field "signal_type" "field_name" ["example_value"]
+error_missing_field() {
+    local signal_type="$1"
+    local field="$2"
+    local example="${3:-}"
+
+    echo "Error: ${signal_type} signal missing required field '${field}'" >&2
+
+    # Show example based on signal type and field
+    case "${signal_type}:${field}" in
+        working:taskId)
+            echo "  Expected: \"taskId\": \"jat-abc\" (your task ID from Beads)" >&2
+            ;;
+        working:taskTitle)
+            echo "  Expected: \"taskTitle\": \"Fix authentication bug\"" >&2
+            ;;
+        review:taskId)
+            echo "  Expected: \"taskId\": \"jat-abc\" (the task you worked on)" >&2
+            ;;
+        review:taskTitle)
+            echo "  Expected: \"taskTitle\": \"Fix authentication bug\"" >&2
+            ;;
+        review:summary)
+            echo "  Expected: \"summary\": [\"Fixed login flow\", \"Added error handling\"]" >&2
+            ;;
+        needs_input:taskId)
+            echo "  Expected: \"taskId\": \"jat-abc\" (the task you're blocked on)" >&2
+            ;;
+        needs_input:question)
+            echo "  Expected: \"question\": \"Which authentication method should I use?\"" >&2
+            ;;
+        needs_input:questionType)
+            echo "  Expected: \"questionType\": \"choice\" (one of: choice, text, approval, clarification)" >&2
+            ;;
+        starting:agentName)
+            echo "  Expected: \"agentName\": \"FairBay\" (your agent name)" >&2
+            ;;
+        starting:sessionId)
+            echo "  Expected: \"sessionId\": \"abc123-def456-...\" (from get-current-session-id)" >&2
+            ;;
+        starting:project)
+            echo "  Expected: \"project\": \"jat\" (project directory name)" >&2
+            ;;
+        starting:model)
+            echo "  Expected: \"model\": \"claude-opus-4-5-20251101\" (full model ID)" >&2
+            ;;
+        starting:gitBranch)
+            echo "  Expected: \"gitBranch\": \"master\" (current git branch)" >&2
+            ;;
+        starting:gitStatus)
+            echo "  Expected: \"gitStatus\": \"clean\" (one of: clean, dirty)" >&2
+            ;;
+        completing:taskId)
+            echo "  Expected: \"taskId\": \"jat-abc\" (the task being completed)" >&2
+            ;;
+        completing:currentStep)
+            echo "  Expected: \"currentStep\": \"committing\" (one of: verifying, committing, closing, releasing, announcing)" >&2
+            ;;
+        compacting:reason)
+            echo "  Expected: \"reason\": \"Context window approaching limit\"" >&2
+            ;;
+        compacting:contextSizeBefore)
+            echo "  Expected: \"contextSizeBefore\": 180000 (token count before compaction)" >&2
+            ;;
+        idle:readyForWork)
+            echo "  Expected: \"readyForWork\": true (boolean)" >&2
+            ;;
+        question:question)
+            echo "  Expected: \"question\": \"Which option do you prefer?\"" >&2
+            ;;
+        question:questionType)
+            echo "  Expected: \"questionType\": \"choice\" (one of: choice, confirm, input)" >&2
+            ;;
+        *)
+            if [[ -n "$example" ]]; then
+                echo "  Expected: \"${field}\": ${example}" >&2
+            fi
+            ;;
+    esac
+
+    return 1
+}
+
+# Show required fields for a signal type
+show_required_fields() {
+    local signal_type="$1"
+
+    echo "" >&2
+    case "$signal_type" in
+        working)
+            echo "Required fields for 'working' signal:" >&2
+            echo "  - taskId: The Beads task ID (e.g., \"jat-abc\")" >&2
+            echo "  - taskTitle: The task title" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal working '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Fix bug\",\"approach\":\"...\"}'" >&2
+            ;;
+        review)
+            echo "Required fields for 'review' signal:" >&2
+            echo "  - taskId: The Beads task ID" >&2
+            echo "  - taskTitle: The task title" >&2
+            echo "  - summary: Array of accomplishment strings" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal review '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Fix bug\",\"summary\":[\"Fixed the issue\"]}'" >&2
+            ;;
+        needs_input)
+            echo "Required fields for 'needs_input' signal:" >&2
+            echo "  - taskId: The Beads task ID" >&2
+            echo "  - question: The question being asked" >&2
+            echo "  - questionType: One of: choice, text, approval, clarification" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal needs_input '{\"taskId\":\"jat-abc\",\"question\":\"Which approach?\",\"questionType\":\"choice\"}'" >&2
+            ;;
+        starting)
+            echo "Required fields for 'starting' signal:" >&2
+            echo "  - agentName: Your agent name" >&2
+            echo "  - sessionId: Claude Code session ID (from get-current-session-id)" >&2
+            echo "  - project: Project name (e.g., \"jat\")" >&2
+            echo "  - model: Full model ID (e.g., \"claude-opus-4-5-20251101\")" >&2
+            echo "  - gitBranch: Current git branch" >&2
+            echo "  - gitStatus: \"clean\" or \"dirty\"" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal starting '{\"agentName\":\"Agent\",\"sessionId\":\"...\",\"project\":\"jat\",\"model\":\"claude-opus-4-5-20251101\",\"gitBranch\":\"master\",\"gitStatus\":\"clean\",\"tools\":[],\"uncommittedFiles\":[]}'" >&2
+            ;;
+        completing)
+            echo "Required fields for 'completing' signal:" >&2
+            echo "  - taskId: The Beads task ID" >&2
+            echo "  - currentStep: One of: verifying, committing, closing, releasing, announcing" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal completing '{\"taskId\":\"jat-abc\",\"currentStep\":\"committing\"}'" >&2
+            ;;
+        compacting)
+            echo "Required fields for 'compacting' signal:" >&2
+            echo "  - reason: Why compaction is happening" >&2
+            echo "  - contextSizeBefore: Token count before compaction" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal compacting '{\"reason\":\"Approaching limit\",\"contextSizeBefore\":180000}'" >&2
+            ;;
+        idle)
+            echo "Required fields for 'idle' signal:" >&2
+            echo "  - readyForWork: Boolean (true/false)" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal idle '{\"readyForWork\":true}'" >&2
+            ;;
+        question)
+            echo "Required fields for 'question' signal:" >&2
+            echo "  - question: The question text" >&2
+            echo "  - questionType: One of: choice, confirm, input" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal question '{\"question\":\"Continue?\",\"questionType\":\"confirm\"}'" >&2
+            ;;
+    esac
+}
+
+# Helper to check a required string field exists and is non-empty
+# Returns 0 if valid, 1 if missing/empty (with error output)
+require_string_field() {
+    local payload="$1"
+    local signal_type="$2"
+    local field="$3"
+
+    if ! echo "$payload" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
+        error_missing_field "$signal_type" "$field"
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    local value
+    value=$(echo "$payload" | jq -r ".$field // \"\"")
+    if [[ -z "$value" ]]; then
+        echo "Error: ${signal_type}.${field} cannot be empty" >&2
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    return 0
+}
+
+# Helper to check a required array field exists
+require_array_field() {
+    local payload="$1"
+    local signal_type="$2"
+    local field="$3"
+
+    if ! echo "$payload" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
+        error_missing_field "$signal_type" "$field"
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    if ! echo "$payload" | jq -e ".$field | type == \"array\"" >/dev/null 2>&1; then
+        echo "Error: ${signal_type}.${field} must be an array" >&2
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    return 0
+}
+
+# Helper to check a required boolean field exists
+require_boolean_field() {
+    local payload="$1"
+    local signal_type="$2"
+    local field="$3"
+
+    if ! echo "$payload" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
+        error_missing_field "$signal_type" "$field"
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    if ! echo "$payload" | jq -e ".$field | type == \"boolean\"" >/dev/null 2>&1; then
+        echo "Error: ${signal_type}.${field} must be a boolean (true/false)" >&2
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    return 0
+}
+
+# Helper to check a required integer field exists
+require_integer_field() {
+    local payload="$1"
+    local signal_type="$2"
+    local field="$3"
+    local min="${4:-}"
+    local max="${5:-}"
+
+    if ! echo "$payload" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
+        error_missing_field "$signal_type" "$field"
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    local value
+    value=$(echo "$payload" | jq ".$field // null")
+
+    if [[ "$value" == "null" ]] || ! echo "$value" | grep -qE '^-?[0-9]+$'; then
+        echo "Error: ${signal_type}.${field} must be an integer" >&2
+        show_required_fields "$signal_type"
+        return 1
+    fi
+
+    if [[ -n "$min" ]] && [[ "$value" -lt "$min" ]]; then
+        echo "Error: ${signal_type}.${field} must be >= ${min}" >&2
+        return 1
+    fi
+
+    if [[ -n "$max" ]] && [[ "$value" -gt "$max" ]]; then
+        echo "Error: ${signal_type}.${field} must be <= ${max}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 show_usage() {
     echo "Usage: jat-signal-validate <signal-type> <json-payload>"
     echo ""
@@ -168,21 +436,15 @@ validate_working() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: working signal must be a JSON object" >&2
+        show_required_fields "working"
         return 1
     fi
 
-    # Required: taskId
-    if ! echo "$payload" | jq -e 'has("taskId")' >/dev/null 2>&1; then
-        echo "Error: working signal missing required field 'taskId'" >&2
-        return 1
-    fi
+    # Required: taskId (string, non-empty)
+    require_string_field "$payload" "working" "taskId" || return 1
 
-    local task_id
-    task_id=$(echo "$payload" | jq -r '.taskId // ""')
-    if [[ -z "$task_id" ]]; then
-        echo "Error: working.taskId cannot be empty" >&2
-        return 1
-    fi
+    # Required: taskTitle (string, non-empty) - per schema
+    require_string_field "$payload" "working" "taskTitle" || return 1
 
     # Validate taskPriority if present
     local priority
@@ -232,25 +494,24 @@ validate_review() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: review signal must be a JSON object" >&2
+        show_required_fields "review"
         return 1
     fi
 
-    # Required: taskId
-    if ! echo "$payload" | jq -e 'has("taskId")' >/dev/null 2>&1; then
-        echo "Error: review signal missing required field 'taskId'" >&2
-        return 1
-    fi
+    # Required: taskId (string, non-empty)
+    require_string_field "$payload" "review" "taskId" || return 1
 
-    # Validate summary is array of strings if present
-    if echo "$payload" | jq -e 'has("summary")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.summary | type == "array"' >/dev/null 2>&1; then
-            echo "Error: review.summary must be an array" >&2
-            return 1
-        fi
-        if ! echo "$payload" | jq -e '.summary | all(type == "string")' >/dev/null 2>&1; then
-            echo "Error: review.summary must contain only strings" >&2
-            return 1
-        fi
+    # Required: taskTitle (string, non-empty) - per schema
+    require_string_field "$payload" "review" "taskTitle" || return 1
+
+    # Required: summary (array) - per schema
+    require_array_field "$payload" "review" "summary" || return 1
+
+    # Additional validation: summary must contain only strings
+    if ! echo "$payload" | jq -e '.summary | all(type == "string")' >/dev/null 2>&1; then
+        echo "Error: review.summary must contain only strings" >&2
+        echo "  Expected: \"summary\": [\"Fixed bug\", \"Added tests\"]" >&2
+        return 1
     fi
 
     # Validate testsStatus if present
@@ -473,31 +734,20 @@ validate_needs_input() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: needs_input signal must be a JSON object" >&2
+        show_required_fields "needs_input"
         return 1
     fi
 
-    # Required: taskId
-    if ! echo "$payload" | jq -e 'has("taskId")' >/dev/null 2>&1; then
-        echo "Error: needs_input signal missing required field 'taskId'" >&2
-        return 1
-    fi
+    # Required: taskId (string, non-empty)
+    require_string_field "$payload" "needs_input" "taskId" || return 1
 
-    # Required: question
-    if ! echo "$payload" | jq -e 'has("question")' >/dev/null 2>&1; then
-        echo "Error: needs_input signal missing required field 'question'" >&2
-        return 1
-    fi
+    # Required: question (string, non-empty)
+    require_string_field "$payload" "needs_input" "question" || return 1
 
-    local question
-    question=$(echo "$payload" | jq -r '.question // ""')
-    if [[ -z "$question" ]]; then
-        echo "Error: needs_input.question cannot be empty" >&2
-        return 1
-    fi
-
-    # Required: questionType
+    # Required: questionType (must be valid enum value)
     if ! echo "$payload" | jq -e 'has("questionType")' >/dev/null 2>&1; then
-        echo "Error: needs_input signal missing required field 'questionType'" >&2
+        error_missing_field "needs_input" "questionType"
+        show_required_fields "needs_input"
         return 1
     fi
 
@@ -505,8 +755,15 @@ validate_needs_input() {
     question_type=$(echo "$payload" | jq -r '.questionType // ""')
     case "$question_type" in
         choice|text|approval|clarification) ;;
+        "")
+            echo "Error: needs_input.questionType cannot be empty" >&2
+            echo "  Expected: \"questionType\": \"choice\" (one of: choice, text, approval, clarification)" >&2
+            show_required_fields "needs_input"
+            return 1
+            ;;
         *)
             echo "Error: needs_input.questionType must be one of: choice, text, approval, clarification" >&2
+            echo "  Got: \"$question_type\"" >&2
             return 1
             ;;
     esac
@@ -528,18 +785,12 @@ validate_idle() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: idle signal must be a JSON object" >&2
+        show_required_fields "idle"
         return 1
     fi
 
     # Required: readyForWork (boolean)
-    if ! echo "$payload" | jq -e 'has("readyForWork")' >/dev/null 2>&1; then
-        echo "Error: idle signal missing required field 'readyForWork'" >&2
-        return 1
-    fi
-    if ! echo "$payload" | jq -e '.readyForWork | type == "boolean"' >/dev/null 2>&1; then
-        echo "Error: idle.readyForWork must be a boolean" >&2
-        return 1
-    fi
+    require_boolean_field "$payload" "idle" "readyForWork" || return 1
 
     # Validate sessionSummary if present
     if echo "$payload" | jq -e 'has("sessionSummary")' >/dev/null 2>&1; then
@@ -669,18 +920,17 @@ validate_completing() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: completing signal must be a JSON object" >&2
+        show_required_fields "completing"
         return 1
     fi
 
-    # Required: taskId
-    if ! echo "$payload" | jq -e 'has("taskId")' >/dev/null 2>&1; then
-        echo "Error: completing signal missing required field 'taskId'" >&2
-        return 1
-    fi
+    # Required: taskId (string, non-empty)
+    require_string_field "$payload" "completing" "taskId" || return 1
 
-    # Required: currentStep
+    # Required: currentStep (must be valid enum value)
     if ! echo "$payload" | jq -e 'has("currentStep")' >/dev/null 2>&1; then
-        echo "Error: completing signal missing required field 'currentStep'" >&2
+        error_missing_field "completing" "currentStep"
+        show_required_fields "completing"
         return 1
     fi
 
@@ -688,8 +938,15 @@ validate_completing() {
     current_step=$(echo "$payload" | jq -r '.currentStep // ""')
     case "$current_step" in
         verifying|committing|closing|releasing|announcing) ;;
+        "")
+            echo "Error: completing.currentStep cannot be empty" >&2
+            echo "  Expected: \"currentStep\": \"committing\" (one of: verifying, committing, closing, releasing, announcing)" >&2
+            show_required_fields "completing"
+            return 1
+            ;;
         *)
             echo "Error: completing.currentStep must be one of: verifying, committing, closing, releasing, announcing" >&2
+            echo "  Got: \"$current_step\"" >&2
             return 1
             ;;
     esac
@@ -713,33 +970,51 @@ validate_starting() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: starting signal must be a JSON object" >&2
+        show_required_fields "starting"
         return 1
     fi
 
-    # Required: agentName
-    if ! echo "$payload" | jq -e 'has("agentName")' >/dev/null 2>&1; then
-        echo "Error: starting signal missing required field 'agentName'" >&2
+    # Required: agentName (string, non-empty)
+    require_string_field "$payload" "starting" "agentName" || return 1
+
+    # Required: sessionId (string, non-empty) - per schema
+    require_string_field "$payload" "starting" "sessionId" || return 1
+
+    # Required: project (string, non-empty) - per schema
+    require_string_field "$payload" "starting" "project" || return 1
+
+    # Required: model (string, non-empty) - per schema
+    require_string_field "$payload" "starting" "model" || return 1
+
+    # Required: gitBranch (string, non-empty) - per schema
+    require_string_field "$payload" "starting" "gitBranch" || return 1
+
+    # Required: gitStatus (must be "clean" or "dirty") - per schema
+    if ! echo "$payload" | jq -e 'has("gitStatus")' >/dev/null 2>&1; then
+        error_missing_field "starting" "gitStatus"
+        show_required_fields "starting"
         return 1
     fi
 
-    local agent_name
-    agent_name=$(echo "$payload" | jq -r '.agentName // ""')
-    if [[ -z "$agent_name" ]]; then
-        echo "Error: starting.agentName cannot be empty" >&2
-        return 1
-    fi
-
-    # Validate sessionId if present (should be string, UUID format)
-    if echo "$payload" | jq -e 'has("sessionId")' >/dev/null 2>&1; then
-        local session_id
-        session_id=$(echo "$payload" | jq -r '.sessionId // ""')
-        if [[ -z "$session_id" ]]; then
-            echo "Error: starting.sessionId cannot be empty when provided" >&2
+    local git_status
+    git_status=$(echo "$payload" | jq -r '.gitStatus // ""')
+    case "$git_status" in
+        clean|dirty) ;;
+        "")
+            echo "Error: starting.gitStatus cannot be empty" >&2
+            echo "  Expected: \"gitStatus\": \"clean\" (one of: clean, dirty)" >&2
+            show_required_fields "starting"
             return 1
-        fi
-    fi
+            ;;
+        *)
+            echo "Error: starting.gitStatus must be one of: clean, dirty" >&2
+            echo "  Got: \"$git_status\"" >&2
+            echo "  Expected: \"gitStatus\": \"clean\" or \"gitStatus\": \"dirty\"" >&2
+            return 1
+            ;;
+    esac
 
-    # Validate taskId if present (should be non-empty string)
+    # Optional: taskId (if present, must be non-empty string)
     if echo "$payload" | jq -e 'has("taskId")' >/dev/null 2>&1; then
         local task_id
         task_id=$(echo "$payload" | jq -r '.taskId // ""')
@@ -749,7 +1024,7 @@ validate_starting() {
         fi
     fi
 
-    # Validate taskTitle if present (should be non-empty string)
+    # Optional: taskTitle (if present, must be non-empty string)
     if echo "$payload" | jq -e 'has("taskTitle")' >/dev/null 2>&1; then
         local task_title
         task_title=$(echo "$payload" | jq -r '.taskTitle // ""')
@@ -759,33 +1034,20 @@ validate_starting() {
         fi
     fi
 
-    # Validate project if present (should be non-empty string)
-    if echo "$payload" | jq -e 'has("project")' >/dev/null 2>&1; then
-        local project
-        project=$(echo "$payload" | jq -r '.project // ""')
-        if [[ -z "$project" ]]; then
-            echo "Error: starting.project cannot be empty when provided" >&2
+    # Optional: tools (if present, must be array)
+    if echo "$payload" | jq -e 'has("tools")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.tools | type == "array"' >/dev/null 2>&1; then
+            echo "Error: starting.tools must be an array" >&2
+            echo "  Expected: \"tools\": [\"Bash\", \"Read\", \"Write\", ...]" >&2
             return 1
         fi
     fi
 
-    # Validate gitStatus if present
-    local git_status
-    git_status=$(echo "$payload" | jq -r '.gitStatus // ""')
-    if [[ -n "$git_status" ]]; then
-        case "$git_status" in
-            clean|dirty) ;;
-            *)
-                echo "Error: starting.gitStatus must be one of: clean, dirty" >&2
-                return 1
-                ;;
-        esac
-    fi
-
-    # Validate tools is array if present
-    if echo "$payload" | jq -e 'has("tools")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.tools | type == "array"' >/dev/null 2>&1; then
-            echo "Error: starting.tools must be an array" >&2
+    # Optional: uncommittedFiles (if present, must be array)
+    if echo "$payload" | jq -e 'has("uncommittedFiles")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.uncommittedFiles | type == "array"' >/dev/null 2>&1; then
+            echo "Error: starting.uncommittedFiles must be an array" >&2
+            echo "  Expected: \"uncommittedFiles\": [\"path/to/file.ts\", ...]" >&2
             return 1
         fi
     fi
@@ -799,34 +1061,15 @@ validate_compacting() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: compacting signal must be a JSON object" >&2
+        show_required_fields "compacting"
         return 1
     fi
 
-    # Required: reason
-    if ! echo "$payload" | jq -e 'has("reason")' >/dev/null 2>&1; then
-        echo "Error: compacting signal missing required field 'reason'" >&2
-        return 1
-    fi
+    # Required: reason (string, non-empty)
+    require_string_field "$payload" "compacting" "reason" || return 1
 
-    local reason
-    reason=$(echo "$payload" | jq -r '.reason // ""')
-    if [[ -z "$reason" ]]; then
-        echo "Error: compacting.reason cannot be empty" >&2
-        return 1
-    fi
-
-    # Required: contextSizeBefore
-    if ! echo "$payload" | jq -e 'has("contextSizeBefore")' >/dev/null 2>&1; then
-        echo "Error: compacting signal missing required field 'contextSizeBefore'" >&2
-        return 1
-    fi
-
-    local context_size
-    context_size=$(echo "$payload" | jq '.contextSizeBefore // null')
-    if [[ "$context_size" == "null" ]] || ! echo "$context_size" | grep -qE '^[0-9]+$'; then
-        echo "Error: compacting.contextSizeBefore must be a positive integer" >&2
-        return 1
-    fi
+    # Required: contextSizeBefore (integer, non-negative)
+    require_integer_field "$payload" "compacting" "contextSizeBefore" 0 || return 1
 
     # Validate preserving is array if present
     if echo "$payload" | jq -e 'has("preserving")' >/dev/null 2>&1; then
@@ -845,25 +1088,17 @@ validate_question() {
     # Must be an object
     if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
         echo "Error: question signal must be a JSON object" >&2
+        show_required_fields "question"
         return 1
     fi
 
-    # Required: question (string)
-    if ! echo "$payload" | jq -e 'has("question")' >/dev/null 2>&1; then
-        echo "Error: question signal missing required field 'question'" >&2
-        return 1
-    fi
+    # Required: question (string, non-empty)
+    require_string_field "$payload" "question" "question" || return 1
 
-    local question
-    question=$(echo "$payload" | jq -r '.question // ""')
-    if [[ -z "$question" ]]; then
-        echo "Error: question.question cannot be empty" >&2
-        return 1
-    fi
-
-    # Required: questionType (must be one of: choice, confirm, input)
+    # Required: questionType (must be valid enum value)
     if ! echo "$payload" | jq -e 'has("questionType")' >/dev/null 2>&1; then
-        echo "Error: question signal missing required field 'questionType'" >&2
+        error_missing_field "question" "questionType"
+        show_required_fields "question"
         return 1
     fi
 
@@ -871,8 +1106,15 @@ validate_question() {
     question_type=$(echo "$payload" | jq -r '.questionType // ""')
     case "$question_type" in
         choice|confirm|input) ;;
+        "")
+            echo "Error: question.questionType cannot be empty" >&2
+            echo "  Expected: \"questionType\": \"choice\" (one of: choice, confirm, input)" >&2
+            show_required_fields "question"
+            return 1
+            ;;
         *)
             echo "Error: question.questionType must be one of: choice, confirm, input" >&2
+            echo "  Got: \"$question_type\"" >&2
             return 1
             ;;
     esac
