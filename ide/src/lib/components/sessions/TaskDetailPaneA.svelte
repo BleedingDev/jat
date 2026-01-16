@@ -340,6 +340,13 @@
 						{new Date(details.updated_at).toLocaleDateString()}
 					</span>
 				{/if}
+				<!-- View full details link - aligned right -->
+				<button class="task-panel-link-compact" onclick={() => onViewTask?.(task.id)}>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+					</svg>
+					Details
+				</button>
 			</div>
 
 			<!-- Tabs -->
@@ -784,15 +791,6 @@
 				{/if}
 			</div>
 
-			<!-- View full details link -->
-			<div class="task-panel-actions">
-				<button class="task-panel-link" onclick={() => onViewTask?.(task.id)}>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-					</svg>
-					View full details
-				</button>
-			</div>
 		{/if}
 	</div>
 </div>
@@ -1570,26 +1568,21 @@
 		line-height: 1.4;
 	}
 
-	/* Actions */
-	.task-panel-actions {
-		margin-top: auto;
-		padding-top: 0.5rem;
-		border-top: 1px solid oklch(0.22 0.02 250);
-	}
-
-	.task-panel-link {
+	/* Compact link in metadata bar */
+	.task-panel-link-compact {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.8rem;
-		color: oklch(0.70 0.15 200);
+		gap: 0.25rem;
+		margin-left: auto;
+		font-size: 0.7rem;
+		color: oklch(0.60 0.15 200);
 		background: transparent;
 		border: none;
 		cursor: pointer;
 		transition: color 0.15s;
 	}
 
-	.task-panel-link:hover {
-		color: oklch(0.80 0.18 200);
+	.task-panel-link-compact:hover {
+		color: oklch(0.75 0.18 200);
 	}
 </style>
