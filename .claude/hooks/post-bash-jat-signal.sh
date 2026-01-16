@@ -14,14 +14,43 @@
 
 set -euo pipefail
 
-# Debug logging (append to temp file)
-DEBUG_LOG="/tmp/jat-signal-hook-debug.log"
-
-# Read tool info from stdin
+# Read tool info from stdin (must do this before any exit)
 TOOL_INFO=$(cat)
 
-# Log incoming data
-echo "$(date -Iseconds) Hook triggered" >> "$DEBUG_LOG"
+# WORKAROUND: Claude Code calls hooks twice per tool use (bug)
+# Use atomic mkdir for locking - only one process can create a directory
+LOCK_DIR="/tmp/jat-signal-locks"
+mkdir -p "$LOCK_DIR" 2>/dev/null || true
+
+# Create a lock based on session_id + command hash (first 50 chars of command)
+SESSION_ID_EARLY=$(echo "$TOOL_INFO" | jq -r '.session_id // ""' 2>/dev/null || echo "")
+COMMAND_EARLY=$(echo "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
+COMMAND_HASH=$(echo "${SESSION_ID_EARLY}:${COMMAND_EARLY:0:50}" | md5sum | cut -c1-16)
+LOCK_FILE="${LOCK_DIR}/hook-${COMMAND_HASH}"
+
+# Try to atomically create lock directory - only first process succeeds
+if ! mkdir "$LOCK_FILE" 2>/dev/null; then
+    # Lock exists - check if it's stale (older than 5 seconds)
+    if [[ -d "$LOCK_FILE" ]]; then
+        # Get lock file mtime (cross-platform: Linux uses -c, macOS uses -f)
+        if [[ "$(uname)" == "Darwin" ]]; then
+            LOCK_MTIME=$(stat -f %m "$LOCK_FILE" 2>/dev/null || echo "0")
+        else
+            LOCK_MTIME=$(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo "0")
+        fi
+        LOCK_AGE=$(( $(date +%s) - LOCK_MTIME ))
+        if [[ $LOCK_AGE -lt 5 ]]; then
+            # Recent duplicate invocation, skip silently
+            exit 0
+        fi
+        # Stale lock, remove and recreate
+        rmdir "$LOCK_FILE" 2>/dev/null || true
+        mkdir "$LOCK_FILE" 2>/dev/null || exit 0
+    fi
+fi
+
+# Clean up lock on exit (after 1 second to ensure second invocation sees it)
+trap "sleep 1; rmdir '$LOCK_FILE' 2>/dev/null || true" EXIT
 
 # Only process Bash tool calls
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // ""' 2>/dev/null || echo "")
@@ -31,7 +60,6 @@ fi
 
 # Extract the command that was executed
 COMMAND=$(echo "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
-echo "$(date -Iseconds) Command: ${COMMAND:0:80}" >> "$DEBUG_LOG"
 
 # Extract the tool output first - check if it contains a signal marker
 OUTPUT=$(echo "$TOOL_INFO" | jq -r '.tool_response.stdout // ""' 2>/dev/null || echo "")
@@ -39,19 +67,12 @@ OUTPUT=$(echo "$TOOL_INFO" | jq -r '.tool_response.stdout // ""' 2>/dev/null || 
 # Check if output contains a jat-signal marker (regardless of what command was run)
 # This handles both direct jat-signal calls AND scripts that call jat-signal internally (like jat-step)
 if ! echo "$OUTPUT" | grep -qE '\[JAT-SIGNAL:[a-z_]+\]'; then
-    # No signal in output - check if it's a direct jat-signal command for debugging
-    if echo "$COMMAND" | grep -q 'jat-signal '; then
-        echo "$(date -Iseconds) jat-signal command but no marker in output" >> "$DEBUG_LOG"
-    fi
     exit 0
 fi
-echo "$(date -Iseconds) Found JAT-SIGNAL marker in output!" >> "$DEBUG_LOG"
 
 # Extract session ID
 SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.session_id // ""' 2>/dev/null || echo "")
-echo "$(date -Iseconds) Session ID: $SESSION_ID" >> "$DEBUG_LOG"
 if [[ -z "$SESSION_ID" ]]; then
-    echo "$(date -Iseconds) ERROR: No session ID" >> "$DEBUG_LOG"
     exit 0
 fi
 
@@ -94,7 +115,6 @@ if [[ -f "$JAT_CONFIG" ]]; then
     done
 fi
 
-echo "$(date -Iseconds) Searching for agent file in: $SEARCH_DIRS" >> "$DEBUG_LOG"
 for BASE_DIR in $SEARCH_DIRS; do
     for SUBDIR in "sessions" ""; do
         if [[ -n "$SUBDIR" ]]; then
@@ -102,18 +122,15 @@ for BASE_DIR in $SEARCH_DIRS; do
         else
             AGENT_FILE="${BASE_DIR}/.claude/agent-${SESSION_ID}.txt"
         fi
-        echo "$(date -Iseconds) Checking: $AGENT_FILE exists=$(test -f "$AGENT_FILE" && echo yes || echo no)" >> "$DEBUG_LOG"
         if [[ -f "$AGENT_FILE" ]]; then
             AGENT_NAME=$(cat "$AGENT_FILE" 2>/dev/null | tr -d '\n')
             if [[ -n "$AGENT_NAME" ]]; then
                 TMUX_SESSION="jat-${AGENT_NAME}"
-                echo "$(date -Iseconds) Found agent: $AGENT_NAME -> tmux: $TMUX_SESSION" >> "$DEBUG_LOG"
                 break 2
             fi
         fi
     done
 done
-echo "$(date -Iseconds) Final TMUX_SESSION: $TMUX_SESSION" >> "$DEBUG_LOG"
 
 # Parse signal data as JSON (validate first to avoid || echo appending extra output)
 if [[ -n "$SIGNAL_DATA" ]] && echo "$SIGNAL_DATA" | jq -e . >/dev/null 2>&1; then
@@ -125,7 +142,6 @@ fi
 # Extract task_id from payload if present
 TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
 TASK_ID="${TASK_ID:-}"
-echo "$(date -Iseconds) TASK_ID='$TASK_ID' from PARSED_DATA" >> "$DEBUG_LOG"
 
 # Determine if this is a state signal or data signal
 # State signals: working, review, needs_input, idle, completing, completed, starting, compacting, question
@@ -275,15 +291,12 @@ fi
 
 # Write per-task signal timeline for TaskDetailDrawer
 # Stored in .beads/signals/{taskId}.jsonl so it persists with the repo
-echo "$(date -Iseconds) Checking TASK_ID='$TASK_ID' for .beads/signals write" >> "$DEBUG_LOG"
 if [[ -n "$TASK_ID" ]]; then
-    echo "$(date -Iseconds) TASK_ID is set, searching for .beads/ in SEARCH_DIRS" >> "$DEBUG_LOG"
 
     # Extract project prefix from task ID (e.g., "jat-abc" -> "jat")
     TASK_PROJECT=""
     if [[ "$TASK_ID" =~ ^([a-zA-Z0-9_-]+)- ]]; then
         TASK_PROJECT="${BASH_REMATCH[1]}"
-        echo "$(date -Iseconds) Task project prefix: $TASK_PROJECT" >> "$DEBUG_LOG"
     fi
 
     # Find the project root - prioritize project matching task ID prefix
@@ -292,11 +305,9 @@ if [[ -n "$TASK_ID" ]]; then
     for BASE_DIR in $SEARCH_DIRS; do
         if [[ -d "${BASE_DIR}/.beads" ]]; then
             DIR_NAME=$(basename "$BASE_DIR")
-            echo "$(date -Iseconds) Found .beads/ at $BASE_DIR (dir name: $DIR_NAME)" >> "$DEBUG_LOG"
             # If directory name matches task project prefix, use it
             if [[ -n "$TASK_PROJECT" ]] && [[ "$DIR_NAME" == "$TASK_PROJECT" ]]; then
                 TARGET_DIR="$BASE_DIR"
-                echo "$(date -Iseconds) Matched project by task prefix!" >> "$DEBUG_LOG"
                 break
             fi
             # Otherwise save first match as fallback
@@ -310,7 +321,6 @@ if [[ -n "$TASK_ID" ]]; then
     CHOSEN_DIR="${TARGET_DIR:-$FALLBACK_DIR}"
 
     if [[ -n "$CHOSEN_DIR" ]]; then
-        echo "$(date -Iseconds) Using project dir: $CHOSEN_DIR" >> "$DEBUG_LOG"
         SIGNALS_DIR="${CHOSEN_DIR}/.beads/signals"
         mkdir -p "$SIGNALS_DIR" 2>/dev/null || true
 
@@ -329,7 +339,6 @@ if [[ -n "$TASK_ID" ]]; then
 
         # Append to task-specific timeline
         TASK_TIMELINE_FILE="${SIGNALS_DIR}/${TASK_ID}.jsonl"
-        echo "$(date -Iseconds) Writing to $TASK_TIMELINE_FILE" >> "$DEBUG_LOG"
         echo "$TASK_SIGNAL_JSON" >> "$TASK_TIMELINE_FILE" 2>/dev/null || true
     fi
 fi

@@ -70,11 +70,17 @@
             "command": "~/code/jat/.claude/hooks/post-bash-agent-state-refresh.sh",
             "statusMessage": "",
             "streamStdinJson": true
+          },
+          {
+            "type": "command",
+            "command": "~/code/jat/.claude/hooks/log-tool-activity.sh",
+            "statusMessage": "",
+            "streamStdinJson": true
           }
         ]
       },
       {
-        "matcher": ".*",
+        "matcher": "^(?!Bash$).*",
         "hooks": [
           {
             "type": "command",

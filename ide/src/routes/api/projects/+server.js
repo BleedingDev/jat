@@ -456,6 +456,10 @@ export async function GET({ url }) {
 				const beadsDir = join(project.path, '.beads');
 				const hasBeads = existsSync(beadsDir);
 
+				// Check if CLAUDE.md or AGENTS.md exists in project root
+				const hasClaudeMd = existsSync(join(project.path, 'CLAUDE.md')) ||
+					existsSync(join(project.path, 'AGENTS.md'));
+
 				const [tasks, agents, status, activityData] = await Promise.all([
 					getProjectTaskCounts(project.path),
 					getProjectAgentCount(project.path),
@@ -467,6 +471,7 @@ export async function GET({ url }) {
 					...project,
 					stats: {
 						hasBeads,
+						hasClaudeMd,
 						agentCount: agents.active,
 						taskCount: tasks.total,
 						openTaskCount: tasks.open,

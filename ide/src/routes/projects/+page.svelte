@@ -26,6 +26,7 @@
 		source?: string;
 		stats?: {
 			hasBeads: boolean;
+			hasClaudeMd: boolean;
 			agentCount: number;
 			taskCount: number;
 			openTaskCount: number;
@@ -284,6 +285,18 @@
 											No Beads
 										</button>
 									{/if}
+									<!-- Warning indicator for missing CLAUDE.md -->
+									{#if !project.stats?.hasClaudeMd}
+										<span
+											class="badge badge-error badge-outline badge-sm gap-1"
+											title="No CLAUDE.md or AGENTS.md found in project root"
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+												<path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+											</svg>
+											No CLAUDE.md
+										</span>
+									{/if}
 								</div>
 
 								<!-- Actions -->
@@ -342,6 +355,19 @@
 										</svg>
 									{/if}
 									Beads
+								</div>
+
+								<div class="badge {project.stats?.hasClaudeMd ? 'badge-success' : 'badge-ghost'} gap-1 font-mono text-xs" title={project.stats?.hasClaudeMd ? 'Has CLAUDE.md or AGENTS.md' : 'No CLAUDE.md found'}>
+									{#if project.stats?.hasClaudeMd}
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+											<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+										</svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+											<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+										</svg>
+									{/if}
+									CLAUDE.md
 								</div>
 
 								<div class="badge {(project.stats?.agentCount ?? 0) > 0 ? 'badge-info' : 'badge-ghost'} gap-1 font-mono text-xs">
