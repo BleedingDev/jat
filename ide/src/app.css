@@ -1291,7 +1291,7 @@
 		opacity: 1;
 	}
 	100% {
-		transform: perspective(1000px) translateZ(-1100px) translateY(-1000px);
+		transform: perspective(1000px) translateZ(-1400px) translateY(-500px);
 		opacity: 0;
 	}
 }
