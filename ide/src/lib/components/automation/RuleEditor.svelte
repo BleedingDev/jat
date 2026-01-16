@@ -1019,11 +1019,7 @@
 <style>
 	/* All styling converted to inline Tailwind/DaisyUI classes for Tailwind v4 compatibility */
 
-	/* Spinner animation for loading state */
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
+	/* Loading spinner uses global spin keyframe from app.css */
 	.loading-spinner {
 		animation: spin 0.8s linear infinite;
 	}

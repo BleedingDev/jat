@@ -1008,6 +1008,16 @@
 	}
 }
 
+/* Camel-case alias for fade-in (used by legacy components) */
+@keyframes fadeIn {
+	0% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+
 @keyframes fade-in-fast {
 	0% {
 		opacity: 0;
@@ -1129,11 +1139,17 @@
 	to { transform: rotate(360deg); }
 }
 
+.animate-spin {
+	animation: spin 1s linear infinite;
+}
+
 .animate-spin-fast {
 	animation: spin 0.5s linear infinite;
 }
 
-/* Default Tailwind animate-spin is 1s - this provides faster option */
+.animate-spin-slow {
+	animation: spin 1.5s linear infinite;
+}
 
 /* Subtle pulse for loading skeletons and placeholders */
 @keyframes skeleton-pulse {
@@ -1147,6 +1163,16 @@
 
 .skeleton-pulse {
 	animation: skeleton-pulse 2s ease-in-out infinite;
+}
+
+/* Generic pulse - legacy alias for skeleton-pulse, used by older components */
+@keyframes pulse {
+	0%, 100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
 }
 
 /* --------------------------------------------------------------------------
@@ -1166,12 +1192,36 @@
 	}
 }
 
+/* camelCase alias for slide-down (used by some components) */
+@keyframes slideDown {
+	from {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
 .animate-slide-down {
 	animation: slide-down 0.2s ease-out forwards;
 }
 
 /* Slide up from bottom - toasts, bottom sheets */
 @keyframes slide-up {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* camelCase alias for slide-up (used by some components) */
+@keyframes slideUp {
 	from {
 		opacity: 0;
 		transform: translateY(10px);

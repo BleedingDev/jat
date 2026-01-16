@@ -406,10 +406,6 @@
 		animation: spin 0.6s linear infinite;
 	}
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
 	.icon {
 		font-size: 0.875rem;
 		flex-shrink: 0;

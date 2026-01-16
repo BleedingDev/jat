@@ -1002,10 +1002,6 @@
 		animation: spin 1s linear infinite;
 	}
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
 	/* Error state */
 	.error-state {
 		display: flex;
@@ -1545,11 +1541,6 @@
 		background: oklch(0.30 0.08 200 / 0.5);
 		border-radius: 0.25rem;
 		animation: pulse 1s ease-in-out infinite;
-	}
-
-	@keyframes pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.5; }
 	}
 
 	.enabled-notice {

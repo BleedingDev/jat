@@ -283,10 +283,6 @@
 		animation: spin 0.8s linear infinite;
 	}
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
 	.matrix-grid {
 		display: grid;
 		grid-template-columns: 2.5rem 1fr 1fr;

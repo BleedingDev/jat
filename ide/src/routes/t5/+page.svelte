@@ -524,10 +524,6 @@
 		animation: spin 0.8s linear infinite;
 	}
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
 	.task-list {
 		flex: 1;
 		overflow-y: auto;

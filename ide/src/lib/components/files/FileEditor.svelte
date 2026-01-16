@@ -672,10 +672,6 @@
 		flex-shrink: 0;
 	}
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
 	.editor-area {
 		flex: 1;
 		min-height: 0;
@@ -730,10 +726,7 @@
 		animation: fadeIn 0.15s ease;
 	}
 
-	@keyframes fadeIn {
-		from { opacity: 0; }
-		to { opacity: 1; }
-	}
+	/* Uses global @keyframes fadeIn from app.css */
 
 	.confirm-dialog {
 		background: oklch(0.18 0.02 250);
@@ -746,16 +739,7 @@
 		animation: slideUp 0.2s ease;
 	}
 
-	@keyframes slideUp {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
+	/* Uses global @keyframes slideUp from app.css */
 
 	.confirm-icon {
 		display: flex;

@@ -1318,10 +1318,6 @@
 		animation: spin 0.6s linear infinite;
 	}
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
 	.loading-text {
 		font-size: 0.75rem;
 		color: oklch(0.50 0.02 250);
@@ -1392,10 +1388,7 @@
 		animation: fadeIn 0.15s ease;
 	}
 
-	@keyframes fadeIn {
-		from { opacity: 0; }
-		to { opacity: 1; }
-	}
+	/* Uses global @keyframes fadeIn from app.css */
 
 	.modal-dialog {
 		background: oklch(0.18 0.02 250);
@@ -1409,16 +1402,7 @@
 		animation: slideUp 0.2s ease;
 	}
 
-	@keyframes slideUp {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
+	/* Uses global @keyframes slideUp from app.css */
 
 	.modal-header {
 		display: flex;

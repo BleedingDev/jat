@@ -272,10 +272,6 @@
 		animation: spin 0.8s linear infinite;
 	}
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
 	.error button {
 		padding: 0.5rem 1rem;
 		background: oklch(0.25 0.02 250);

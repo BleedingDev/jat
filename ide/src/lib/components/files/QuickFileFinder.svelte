@@ -299,10 +299,7 @@
 		animation: fadeIn 0.1s ease;
 	}
 
-	@keyframes fadeIn {
-		from { opacity: 0; }
-		to { opacity: 1; }
-	}
+	/* Uses global @keyframes fadeIn from app.css */
 
 	.finder-container {
 		background: oklch(0.18 0.02 250);
@@ -318,16 +315,7 @@
 		overflow: hidden;
 	}
 
-	@keyframes slideDown {
-		from {
-			opacity: 0;
-			transform: translateY(-20px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
+	/* Uses global @keyframes slideDown from app.css */
 
 	/* Search Input */
 	.finder-input-container {
@@ -366,10 +354,6 @@
 		border-radius: 50%;
 		animation: spin 0.6s linear infinite;
 		flex-shrink: 0;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
 	}
 
 	.escape-hint {

@@ -813,16 +813,7 @@
 		border-top: 1px solid oklch(0.24 0.02 250);
 	}
 
-	/* Animations */
-	@keyframes fade-in {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
+	/* Animations - uses global fade-in from app.css */
 	@keyframes slide-down {
 		from {
 			opacity: 0;

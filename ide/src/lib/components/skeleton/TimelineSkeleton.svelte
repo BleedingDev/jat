@@ -103,12 +103,5 @@
 </div>
 
 <style>
-	@keyframes pulse {
-		0%, 100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.6;
-		}
-	}
+	/* Uses global @keyframes pulse from app.css */
 </style>
