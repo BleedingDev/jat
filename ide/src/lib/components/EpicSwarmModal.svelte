@@ -243,9 +243,9 @@
 			const results = await Promise.all(childPromises);
 			const epicsWithInfo: EpicInfo[] = results.filter((r): r is EpicInfo => r !== null);
 
-			// Filter out epics with nothing to launch (0 ready tasks)
-			// These are either completed or have no actionable children
-			let actionableEpics = epicsWithInfo.filter(e => e.ready > 0);
+			// Include ALL open epics, not just those with ready tasks
+			// Epics with 0 ready tasks should still appear (user can see status)
+			let actionableEpics = [...epicsWithInfo];
 
 			// Sort by ready tasks (most ready first), then by total
 			actionableEpics.sort((a, b) => {
@@ -510,7 +510,7 @@
 					>
 						{#each availableEpics as epic}
 							<option value={epic.id} selected={epic.id === selectedEpicId}>
-								{epic.id} - {epic.title} ({epic.ready} ready / {epic.total} total)
+								{epic.id} - {epic.title} ({epic.ready} ready / {epic.total} total){epic.ready === 0 ? ' - no ready tasks' : ''}
 							</option>
 						{/each}
 					</select>
@@ -723,6 +723,29 @@
 						</div>
 					</div>
 				</div>
+
+				<!-- No Ready Tasks Warning -->
+				{#if summary.ready === 0 && summary.total > 0}
+					<div class="alert alert-warning mb-4">
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+						</svg>
+						<div>
+							<p class="font-semibold">No tasks ready to launch</p>
+							<p class="text-sm opacity-80">
+								{#if summary.inProgress > 0}
+									{summary.inProgress} task{summary.inProgress === 1 ? ' is' : 's are'} already in progress.
+								{/if}
+								{#if summary.blocked > 0}
+									{summary.blocked} task{summary.blocked === 1 ? ' is' : 's are'} blocked by dependencies.
+								{/if}
+								{#if summary.closed === summary.total}
+									All tasks are completed.
+								{/if}
+							</p>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Execution Settings -->
 				<div
