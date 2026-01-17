@@ -598,17 +598,17 @@
 	function selectProject(project: string) {
 		selectedProject = project;
 
-		// Only apply default expand logic if this project doesn't have saved collapse state
+		const projectSessions = sessionsByProject().get(project) || [];
+		const projectTasks = tasksByProject().get(project) || [];
+		const hasActiveSessions = projectSessions.length > 0;
+		const hasOpenTasks = projectTasks.filter(t => t.status === 'open' && t.issue_type !== 'epic').length > 0;
+
+		// Only apply default subsection collapse logic if this project doesn't have saved state
 		// This preserves user's manual collapse/expand choices
 		if (!collapsedSubsections.has(project)) {
 			// Auto-expand appropriate subsection based on what's available
 			// If project has active sessions, expand Active Tasks (collapse Open Tasks)
 			// Otherwise if it has open tasks, expand Open Tasks
-			const projectSessions = sessionsByProject().get(project) || [];
-			const projectTasks = tasksByProject().get(project) || [];
-			const hasActiveSessions = projectSessions.length > 0;
-			const hasOpenTasks = projectTasks.filter(t => t.status === 'open' && t.issue_type !== 'epic').length > 0;
-
 			const projectSubsections = new Set<SubsectionType>();
 
 			if (hasActiveSessions) {
@@ -623,6 +623,21 @@
 
 			collapsedSubsections.set(project, projectSubsections);
 			collapsedSubsections = new Map(collapsedSubsections);
+		}
+
+		// Also expand the standalone group within the appropriate subsection
+		// (expandedEpicsByProject is not persisted, so always apply defaults)
+		if (!expandedEpicsByProject.has(project)) {
+			const epicExpanded = new Set<string>();
+			if (hasActiveSessions) {
+				// Expand standalone tasks in Active Tasks section
+				epicExpanded.add('sessions-standalone');
+			} else if (hasOpenTasks) {
+				// Expand standalone tasks in Open Tasks section
+				epicExpanded.add('tasks-standalone');
+			}
+			expandedEpicsByProject.set(project, epicExpanded);
+			expandedEpicsByProject = new Map(expandedEpicsByProject);
 		}
 
 		saveCollapseState();
