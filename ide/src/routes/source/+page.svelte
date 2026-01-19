@@ -1,15 +1,16 @@
 <script lang="ts">
 	/**
-	 * Git Page - Source Control View
+	 * Source Control Page - Git and Supabase Migrations
 	 *
 	 * Layout (emulates VSCode source control):
-	 * - Header: 'Source Control' title + project selector dropdown
-	 * - Left panel: Git changes panel (staged/unstaged files)
-	 * - Right panel: Side-by-side diff viewer for selected file
+	 * - Header: Project selector + mode toggle (Git | Supabase)
+	 * - Left panel: Git changes panel OR Supabase migrations panel
+	 * - Right panel: Diff viewer OR Migration SQL viewer
 	 *
 	 * State:
 	 * - selectedProject: synced with URL param ?project=<name>
-	 * - selectedFile: currently selected file for diff viewing
+	 * - activeMode: 'git' | 'supabase' - controls which panel to show
+	 * - selectedFile: currently selected file for diff viewing (Git mode)
 	 */
 
 	import { onMount } from 'svelte';
@@ -18,6 +19,8 @@
 	import { fade } from 'svelte/transition';
 	import GitPanel from '$lib/components/files/GitPanel.svelte';
 	import DiffViewer from '$lib/components/files/DiffViewer.svelte';
+	import SupabasePanel from '$lib/components/files/SupabasePanel.svelte';
+	import MigrationViewer from '$lib/components/files/MigrationViewer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
@@ -39,9 +42,22 @@
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
 
-	// Selected file for diff view
+	// Mode toggle: 'git' or 'supabase'
+	type SourceMode = 'git' | 'supabase';
+	let activeMode = $state<SourceMode>('git');
+
+	// Git mode state: selected file for diff view
 	let selectedFilePath = $state<string | null>(null);
 	let selectedFileIsStaged = $state(false);
+
+	// Supabase mode state: selected migration for viewing
+	let selectedMigrationContent = $state<string>('');
+	let selectedMigrationTitle = $state<string>('');
+	let selectedMigrationFilename = $state<string>('');
+	let isDiff = $state(false);
+
+	// Supabase project detection
+	let hasSupabase = $state(false);
 
 	// Derived: project names for the ProjectSelector (sorted by last activity from API)
 	const projectNames = $derived(projects.map(p => p.name));
@@ -219,6 +235,59 @@
 		selectedFilePath = null;
 	}
 
+	// Clear Supabase migration selection
+	function handleClearMigration() {
+		selectedMigrationContent = '';
+		selectedMigrationTitle = '';
+		selectedMigrationFilename = '';
+		isDiff = false;
+	}
+
+	// Handle migration selection from SupabasePanel
+	function handleMigrationSelect(content: string, title: string, filename: string, isSchDiff: boolean) {
+		selectedMigrationContent = content;
+		selectedMigrationTitle = title;
+		selectedMigrationFilename = filename;
+		isDiff = isSchDiff;
+	}
+
+	// Check if project has Supabase
+	async function checkSupabase(projectName: string) {
+		try {
+			const response = await fetch(`/api/supabase/status?project=${encodeURIComponent(projectName)}`);
+			if (response.ok) {
+				const data = await response.json();
+				hasSupabase = data.hasSupabase || false;
+			} else {
+				hasSupabase = false;
+			}
+		} catch {
+			hasSupabase = false;
+		}
+	}
+
+	// Switch mode
+	function switchMode(mode: SourceMode) {
+		activeMode = mode;
+		// Clear selections when switching
+		if (mode === 'git') {
+			handleClearMigration();
+		} else {
+			handleClearSelection();
+		}
+	}
+
+	// Effect: Check supabase when project changes
+	$effect(() => {
+		if (selectedProject) {
+			checkSupabase(selectedProject);
+			// Reset mode to git when project changes
+			activeMode = 'git';
+			handleClearSelection();
+			handleClearMigration();
+		}
+	});
+
 	onMount(() => {
 		fetchProjects();
 
@@ -289,12 +358,47 @@
 						/>
 					</div>
 
-					<!-- Page Title -->
+					<!-- Page Title with Mode Toggle -->
 					<div class="panel-title-header">
-						<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-							<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-						</svg>
-						<span>Source Control</span>
+						<div class="title-left">
+							{#if activeMode === 'git'}
+								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+									<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+								</svg>
+								<span>Source Control</span>
+							{:else}
+								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+								</svg>
+								<span>Migrations</span>
+							{/if}
+						</div>
+						{#if hasSupabase}
+							<div class="mode-toggle">
+								<button
+									class="mode-btn"
+									class:active={activeMode === 'git'}
+									onclick={() => switchMode('git')}
+									title="Git Source Control"
+								>
+									<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+										<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77" />
+									</svg>
+									Git
+								</button>
+								<button
+									class="mode-btn"
+									class:active={activeMode === 'supabase'}
+									onclick={() => switchMode('supabase')}
+									title="Supabase Migrations"
+								>
+									<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375" />
+									</svg>
+									Supabase
+								</button>
+							</div>
+						{/if}
 					</div>
 
 					<div class="panel-content git-panel-content">
@@ -302,10 +406,15 @@
 							<div class="panel-empty">
 								<p>Select a project to view changes</p>
 							</div>
-						{:else}
+						{:else if activeMode === 'git'}
 							<GitPanel
 								project={selectedProject}
 								onFileClick={handleFileClick}
+							/>
+						{:else}
+							<SupabasePanel
+								project={selectedProject}
+								onMigrationSelect={handleMigrationSelect}
 							/>
 						{/if}
 					</div>
@@ -330,31 +439,57 @@
 					</div>
 				{/if}
 
-				<!-- Right Panel: Diff Viewer -->
+				<!-- Right Panel: Diff Viewer (Git) or Migration Viewer (Supabase) -->
 				<div class="git-panel-right">
-					{#if selectedProject && selectedFilePath}
-						<DiffViewer
-							filePath={selectedFilePath}
-							projectName={selectedProject}
-							isStaged={selectedFileIsStaged}
-							onStage={handleStageFile}
-							onUnstage={handleUnstageFile}
-							onClose={handleClearSelection}
-						/>
-					{:else}
-						<div class="diff-placeholder">
-							<div class="diff-placeholder-content">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="diff-placeholder-icon">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-								</svg>
-								<p class="diff-placeholder-text">
-									{selectedProject ? 'Select a file to view diff' : 'Select a project to start'}
-								</p>
-								<p class="diff-placeholder-hint">
-									Click on a modified file in the left panel to see changes
-								</p>
+					{#if activeMode === 'git'}
+						{#if selectedProject && selectedFilePath}
+							<DiffViewer
+								filePath={selectedFilePath}
+								projectName={selectedProject}
+								isStaged={selectedFileIsStaged}
+								onStage={handleStageFile}
+								onUnstage={handleUnstageFile}
+								onClose={handleClearSelection}
+							/>
+						{:else}
+							<div class="diff-placeholder">
+								<div class="diff-placeholder-content">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="diff-placeholder-icon">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+									</svg>
+									<p class="diff-placeholder-text">
+										{selectedProject ? 'Select a file to view diff' : 'Select a project to start'}
+									</p>
+									<p class="diff-placeholder-hint">
+										Click on a modified file in the left panel to see changes
+									</p>
+								</div>
 							</div>
-						</div>
+						{/if}
+					{:else}
+						{#if selectedMigrationContent}
+							<MigrationViewer
+								content={selectedMigrationContent}
+								title={selectedMigrationTitle}
+								isDiff={isDiff}
+								filename={selectedMigrationFilename}
+								onClose={handleClearMigration}
+							/>
+						{:else}
+							<div class="diff-placeholder">
+								<div class="diff-placeholder-content">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="diff-placeholder-icon">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+									</svg>
+									<p class="diff-placeholder-text">
+										{selectedProject ? 'Select a migration to view SQL' : 'Select a project to start'}
+									</p>
+									<p class="diff-placeholder-hint">
+										Click on a migration or check schema diff in the left panel
+									</p>
+								</div>
+							</div>
+						{/if}
 					{/if}
 				</div>
 			</div>
@@ -431,6 +566,7 @@
 	.panel-title-header {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 0.5rem;
 		padding: 0.5rem 0.75rem;
 		background: oklch(0.16 0.01 250);
@@ -443,9 +579,56 @@
 		color: oklch(0.55 0.02 250);
 	}
 
+	.title-left {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
 	.panel-title-icon {
 		width: 1rem;
 		height: 1rem;
+	}
+
+	/* Mode Toggle */
+	.mode-toggle {
+		display: flex;
+		gap: 0.25rem;
+		background: oklch(0.13 0.01 250);
+		border-radius: 0.375rem;
+		padding: 0.125rem;
+	}
+
+	.mode-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: oklch(0.50 0.02 250);
+		background: transparent;
+		border: none;
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.mode-btn:hover {
+		color: oklch(0.70 0.02 250);
+		background: oklch(0.18 0.01 250);
+	}
+
+	.mode-btn.active {
+		color: oklch(0.90 0.02 250);
+		background: oklch(0.22 0.02 250);
+	}
+
+	.mode-icon {
+		width: 0.75rem;
+		height: 0.75rem;
 	}
 
 	/* Panel Content */
