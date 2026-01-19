@@ -42,6 +42,8 @@
 		};
 		hint?: string;
 		error?: string;
+		projectPath?: string;
+		supabasePath?: string;
 	}
 
 	let { project, onMigrationSelect }: Props = $props();
@@ -253,11 +255,21 @@
 	 * Handle migration click - fetch content and emit to parent
 	 */
 	async function handleMigrationClick(migration: MigrationStatus) {
-		if (!migration.local || !onMigrationSelect) return;
+		if (!migration.local || !onMigrationSelect || !status) return;
 
 		try {
-			// Fetch migration file content
-			const migrationPath = `supabase/migrations/${migration.filename}`;
+			// Calculate relative path from project root to migration file
+			// For monorepos, supabasePath may be in a subdirectory (e.g., marketing/supabase)
+			let migrationPath = `supabase/migrations/${migration.filename}`;
+
+			if (status.projectPath && status.supabasePath) {
+				// Get relative path from project to supabase folder
+				const relativePath = status.supabasePath.replace(status.projectPath, '').replace(/^\//, '');
+				if (relativePath) {
+					migrationPath = `${relativePath}/migrations/${migration.filename}`;
+				}
+			}
+
 			const response = await fetch(`/api/files/content?project=${encodeURIComponent(project)}&path=${encodeURIComponent(migrationPath)}`);
 
 			if (!response.ok) {
