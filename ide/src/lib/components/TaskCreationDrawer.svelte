@@ -424,11 +424,9 @@
 		suggestionError = null;
 
 		try {
-			// Convert project descriptions Map to object for JSON
-			const projectContextObj: Record<string, string> = {};
-			for (const [name, desc] of projectDescriptions) {
-				projectContextObj[name] = desc;
-			}
+			// Only send the selected project's description (not all projects)
+			// User has already selected the project before opening the drawer
+			const selectedProjectDesc = projectDescriptions.get(formData.project) || '';
 
 			const response = await fetch('/api/tasks/suggest', {
 				method: 'POST',
@@ -437,7 +435,8 @@
 					title: formData.title.trim(),
 					description: formData.description.trim(),
 					openTasks: prefetchedOpenTasks, // Pass pre-fetched tasks
-					projectDescriptions: projectContextObj // Pass project descriptions for AI context
+					selectedProject: formData.project, // The user's selected project
+					projectDescription: selectedProjectDesc // Only this project's description
 				})
 			});
 

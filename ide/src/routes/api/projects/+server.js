@@ -300,9 +300,10 @@ async function getServerStatus(projectName, port) {
 /**
  * Get last activity time for a project
  * Checks multiple sources and returns the most recent:
- * 1. Agent session files (.claude/agent-*.txt and .claude/sessions/agent-*.txt)
- * 2. Git commit time
- * 3. Directory mtime (fallback)
+ * 1. Beads task file (.beads/issues.jsonl) - task creation/updates
+ * 2. Agent session files (.claude/sessions/agent-*.txt) - agent activity
+ * 3. Git commit time
+ * 4. Directory mtime (fallback)
  * @param {string} projectPath
  * @returns {Promise<{formatted: string|null, agentActivityMs: number}>}
  */
@@ -310,32 +311,39 @@ async function getLastActivity(projectPath) {
 	let mostRecentMs = 0;
 	let agentActivityMs = 0;
 
-	// Check .claude/agent-*.txt files (most reliable indicator of recent activity)
-	// Also check .claude/sessions/agent-*.txt (new location)
-	const claudeDirs = [
-		join(projectPath, '.claude'),
-		join(projectPath, '.claude', 'sessions')
-	];
+	// Check .beads/issues.jsonl first (most meaningful for task activity)
+	try {
+		const beadsFile = join(projectPath, '.beads', 'issues.jsonl');
+		if (existsSync(beadsFile)) {
+			const stats = await stat(beadsFile);
+			if (stats.mtimeMs > mostRecentMs) {
+				mostRecentMs = stats.mtimeMs;
+			}
+		}
+	} catch {
+		// Ignore errors checking beads file
+	}
 
-	for (const claudeDir of claudeDirs) {
-		try {
-			if (existsSync(claudeDir)) {
-				const entries = await readdir(claudeDir);
-				const agentFiles = entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
-				for (const file of agentFiles) {
-					const stats = await stat(join(claudeDir, file));
-					if (stats.mtimeMs > mostRecentMs) {
-						mostRecentMs = stats.mtimeMs;
-					}
-					// Track agent activity separately (for sorting when servers are running)
-					if (stats.mtimeMs > agentActivityMs) {
-						agentActivityMs = stats.mtimeMs;
-					}
+	// Check .claude/sessions/agent-*.txt files (agent session activity)
+	// Only check sessions/ subdirectory (legacy .claude/agent-*.txt is deprecated)
+	const sessionsDir = join(projectPath, '.claude', 'sessions');
+	try {
+		if (existsSync(sessionsDir)) {
+			const entries = await readdir(sessionsDir);
+			const agentFiles = entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
+			for (const file of agentFiles) {
+				const stats = await stat(join(sessionsDir, file));
+				if (stats.mtimeMs > mostRecentMs) {
+					mostRecentMs = stats.mtimeMs;
+				}
+				// Track agent activity separately (for sorting when servers are running)
+				if (stats.mtimeMs > agentActivityMs) {
+					agentActivityMs = stats.mtimeMs;
 				}
 			}
-		} catch {
-			// Ignore errors checking agent files
 		}
+	} catch {
+		// Ignore errors checking agent files
 	}
 
 	// Check git commit time
@@ -499,7 +507,7 @@ export async function GET({ url }) {
 				const order = { 'now': 0, 'm': 1, 'h': 2, 'd': 3 };
 				/** @param {string|null|undefined} t */
 				const getScore = (t) => {
-					if (!t) return 999;
+					if (!t) return 999999; // Unknown/null sorts to end (after "999d")
 					if (t === 'now') return 0;
 					const unit = t.slice(-1);
 					const num = parseInt(t.slice(0, -1), 10);

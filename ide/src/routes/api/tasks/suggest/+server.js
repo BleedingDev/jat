@@ -4,13 +4,17 @@
  * Analyzes task title and description to suggest:
  * - Priority (P0-P4)
  * - Type (task, bug, feature, epic, chore)
- * - Project (jat, chimaro, jomarchy, etc.)
  * - Labels (relevant tags)
  * - Dependencies (related open tasks)
+ *
+ * NOTE: Project is NOT suggested - user must select project before opening
+ * the task creation drawer. Only the selected project's context is sent
+ * to the AI to avoid cross-project confusion.
  *
  * Uses Claude Haiku for fast, cost-effective suggestions.
  *
  * Task: jat-3qgk - Auto prioritize and type a task
+ * Fix: jat-6z5ix - Only send selected project context (not all projects)
  */
 
 import { json } from '@sveltejs/kit';
@@ -33,40 +37,25 @@ function formatOpenTasks(tasks) {
 	return tasks.slice(0, 30); // Limit to 30 tasks
 }
 
-// Default projects (fallback if no descriptions provided)
-const DEFAULT_PROJECTS = ['jat', 'chimaro', 'jomarchy'];
-
 /**
  * Build the prompt for Claude
  * @param {string} title
  * @param {string} description
  * @param {Array<{ id?: string, title?: string, priority?: number, issue_type?: string }>} openTasks
- * @param {Record<string, string>} projectDescriptions
+ * @param {string} selectedProject - The user's pre-selected project
+ * @param {string} projectDescription - Description of the selected project
  * @returns {string}
  */
-function buildPrompt(title, description, openTasks, projectDescriptions = {}) {
+function buildPrompt(title, description, openTasks, selectedProject, projectDescription = '') {
 	const taskList = openTasks
 		.map((/** @type {{ id?: string, title?: string, priority?: number, issue_type?: string }} */ t) => `- ${t.id}: ${t.title} (P${t.priority}, ${t.issue_type})`)
 		.join('\n');
 
-	// Build project list with descriptions if available
-	const projectNames = Object.keys(projectDescriptions).length > 0
-		? Object.keys(projectDescriptions)
-		: DEFAULT_PROJECTS;
-
-	let projectSection;
-	if (Object.keys(projectDescriptions).length > 0) {
-		// Include project descriptions for better context
-		const projectList = Object.entries(projectDescriptions)
-			.map(([name, desc]) => `- ${name}: ${desc}`)
-			.join('\n');
-		projectSection = `AVAILABLE PROJECTS (with descriptions):
-${projectList}
-
-Projects without descriptions: ${projectNames.filter((/** @type {string} */ p) => !projectDescriptions[p]).join(', ') || 'none'}`;
-	} else {
-		projectSection = `AVAILABLE PROJECTS: ${projectNames.join(', ')}`;
-	}
+	// Project context - user has already selected this project
+	const projectSection = projectDescription
+		? `PROJECT: ${selectedProject}
+Description: ${projectDescription}`
+		: `PROJECT: ${selectedProject}`;
 
 	return `You are a task triage assistant. Analyze this new task and suggest appropriate metadata.
 
@@ -83,7 +72,6 @@ Based on the task title and description, provide your suggestions in this exact 
 {
   "priority": <number 0-4>,
   "type": "<task|bug|feature|epic|chore>",
-  "project": "<project name or null>",
   "labels": ["<label1>", "<label2>"],
   "dependencies": ["<task-id1>", "<task-id2>"],
   "reasoning": "<brief explanation of your choices>"
@@ -92,7 +80,6 @@ Based on the task title and description, provide your suggestions in this exact 
 Guidelines:
 - Priority: P0=critical/blocking, P1=high/important, P2=medium/normal, P3=low, P4=backlog
 - Type: bug=defect/error, feature=new functionality, task=general work, epic=large multi-part, chore=maintenance
-- Project: Match to the most relevant project based on descriptions and keywords. Use null if no clear match.
 - Labels: 2-4 relevant tags (e.g., "frontend", "api", "urgent", "documentation")
 - Dependencies: Only include task IDs that this new task clearly depends on
 
@@ -102,7 +89,7 @@ Respond with ONLY the JSON object, no other text.`;
 export async function POST({ request }) {
 	try {
 		const body = await request.json();
-		const { title, description, openTasks: clientOpenTasks, projectDescriptions } = body;
+		const { title, description, openTasks: clientOpenTasks, selectedProject, projectDescription } = body;
 
 		// Validate input
 		if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -124,12 +111,13 @@ export async function POST({ request }) {
 		// Use client-provided open tasks (pre-fetched when drawer opened)
 		const openTasks = formatOpenTasks(clientOpenTasks || []);
 
-		// Build prompt with project descriptions for better context
+		// Build prompt with selected project context only
 		const prompt = buildPrompt(
 			title.trim(),
 			description?.trim() || '',
 			openTasks,
-			projectDescriptions || {}
+			selectedProject || 'unknown',
+			projectDescription || ''
 		);
 
 		// Call Claude API
@@ -201,17 +189,13 @@ export async function POST({ request }) {
 		}
 
 		// Validate and sanitize suggestions
-		// Use dynamic project names if descriptions provided, otherwise fallback to defaults
-		const validProjects = Object.keys(projectDescriptions || {}).length > 0
-			? Object.keys(projectDescriptions)
-			: DEFAULT_PROJECTS;
-
+		// Note: We no longer suggest projects - user has already selected one
 		const sanitized = {
 			priority: Math.max(0, Math.min(4, parseInt(suggestions.priority) || 2)),
 			type: ['task', 'bug', 'feature', 'epic', 'chore'].includes(suggestions.type)
 				? suggestions.type
 				: 'task',
-			project: validProjects.includes(suggestions.project) ? suggestions.project : null,
+			// Project is no longer suggested - user's selection is respected
 			labels: Array.isArray(suggestions.labels)
 				? suggestions.labels.filter((/** @type {unknown} */ l) => typeof l === 'string').slice(0, 5)
 				: [],

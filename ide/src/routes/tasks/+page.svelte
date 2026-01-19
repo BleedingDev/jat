@@ -199,6 +199,8 @@
 	});
 
 	// Auto-select first project when projects change
+	// NOTE: All smart defaults for subsections are handled in selectProject() to avoid
+	// infinite effect loops. Do NOT add a separate effect for subsection defaults.
 	$effect(() => {
 		const projects = allProjects();
 		if (projects.length > 0 && !selectedProject) {
@@ -206,25 +208,6 @@
 		} else if (projects.length > 0 && selectedProject && !projects.includes(selectedProject)) {
 			// Selected project no longer exists, select first
 			selectProject(projects[0]);
-		}
-	});
-
-	// Set smart subsection defaults when data loads on page refresh
-	// Standalone tasks expansion is now handled by default in isEpicExpanded()
-	$effect(() => {
-		if (!selectedProject) return;
-
-		const projectSessions = sessionsByProject().get(selectedProject) || [];
-		const hasActiveSessions = projectSessions.length > 0;
-
-		// Only set subsection defaults on first load for this project
-		// (expandedEpicsByProject not being set serves as "first load" marker)
-		if (!expandedEpicsByProject.has(selectedProject) && hasActiveSessions) {
-			// If active sessions exist, collapse Open Tasks to focus on active work
-			const projectSubsections = collapsedSubsections.get(selectedProject) || new Set<SubsectionType>();
-			projectSubsections.add('tasks');
-			collapsedSubsections.set(selectedProject, projectSubsections);
-			collapsedSubsections = new Map(collapsedSubsections);
 		}
 	});
 

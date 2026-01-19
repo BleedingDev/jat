@@ -442,6 +442,57 @@ Did you add/change/remove something that affects usage?
 
 ---
 
+### STEP 3.6: Update Changelog (If Notable)
+
+**Most tasks do NOT need changelog entries.** Only add entries for changes users/stakeholders would care about.
+
+#### When to Add Entry
+
+| Add Entry | Skip Entry |
+|-----------|------------|
+| New user-facing feature | Internal refactors |
+| Bug fix users would notice | Test additions |
+| API endpoint added/changed | Code cleanup |
+| Breaking change | CI/CD changes |
+| Security fix | Documentation updates |
+| Performance improvement users feel | Dependency bumps (minor) |
+
+#### How to Add
+
+1. Check if `CHANGELOG.md` exists - if not, skip
+2. Find the `## [Unreleased]` section
+3. Add one-liner under appropriate category: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`
+
+**Format:** One line, starts with verb, includes component context if helpful
+
+```markdown
+### Added
+- Add minimap navigation to TmuxTerminal for quick scrolling
+
+### Fixed
+- Fix file upload failing when quote record doesn't exist
+
+### Changed
+- Project status endpoint now validates against allowed values
+```
+
+#### Decision Flow
+
+```
+Is this change visible to users/stakeholders?
+  ├─ No → Skip
+  └─ Yes → Which category?
+        ├─ New capability → Added
+        ├─ Behavior change → Changed
+        ├─ Bug fix → Fixed
+        ├─ Security issue → Security
+        └─ Going away → Deprecated/Removed
+```
+
+**When in doubt, skip.** Changelogs aggregate at release time anyway.
+
+---
+
 ### STEP 4: Commit Changes
 
 ```bash
@@ -701,6 +752,7 @@ Or run /jat:verify to see detailed error report
 | 2 | Read & Respond to Mail | `am-inbox`, `am-ack` |
 | 3 | Verify Task | `jat-step verifying` (0%) |
 | 3.5 | Update Documentation | *(if appropriate - most tasks skip)* |
+| 3.6 | Update Changelog | *(if notable - most tasks skip)* |
 | 4 | Commit Changes | `jat-step committing` (20%) |
 | 5 | Mark Task Complete | `jat-step closing` (40%) |
 | 5.5 | Auto-Close Eligible Epics | `bd epic close-eligible` |
