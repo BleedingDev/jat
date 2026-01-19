@@ -13,12 +13,13 @@
 
 	import { tick, onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects, projectColorsStore } from '$lib/stores/drawerStore';
+	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects } from '$lib/stores/drawerStore';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { broadcastSessionEvent } from '$lib/stores/sessionEvents';
 	import { playSuccessChime, playErrorSound, playAttachmentSound } from '$lib/utils/soundEffects';
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 	import { getFileTypeInfo, formatFileSize, getAcceptAttribute, type FileCategory } from '$lib/utils/fileUtils';
+	import { getProjectColor } from '$lib/utils/projectColors';
 	import VoiceInput from './VoiceInput.svelte';
 
 	// Type for pending attachments (before upload)
@@ -348,11 +349,8 @@
 	// Dynamic projects list from store (populated by layout from tasks)
 	let dynamicProjects = $state<string[]>([]);
 
-	// Project colors from store (populated by layout from sparkline API)
-	let projectColors = $state<Record<string, string>>({});
-
-	// Computed selected project color (derived for reactivity)
-	const selectedProjectColor = $derived(formData.project ? projectColors[formData.project] || null : null);
+	// Computed selected project color (uses projectColors utility for consistent colors)
+	const selectedProjectColor = $derived(formData.project ? getProjectColor(formData.project) : null);
 
 	// Project descriptions for AI context (fetched from /api/projects)
 	interface ProjectInfo {
@@ -368,14 +366,6 @@
 	$effect(() => {
 		const unsubscribe = availableProjects.subscribe(projects => {
 			dynamicProjects = projects;
-		});
-		return unsubscribe;
-	});
-
-	// Subscribe to projectColorsStore
-	$effect(() => {
-		const unsubscribe = projectColorsStore.subscribe(colors => {
-			projectColors = colors;
 		});
 		return unsubscribe;
 	});
@@ -1195,7 +1185,7 @@
 										>
 											<span
 												class="w-2 h-2 rounded-full flex-shrink-0"
-												style="background: {projectColors[project] || 'oklch(0.60 0.15 145)'};"
+												style="background: {getProjectColor(project)};"
 											></span>
 											{project}
 											{#if formData.project === project}
