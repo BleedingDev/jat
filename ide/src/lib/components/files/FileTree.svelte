@@ -225,6 +225,7 @@
 	let createName = $state('');
 	let createError = $state<string | null>(null);
 	let isCreating = $state(false);
+	let createNameInputRef = $state<HTMLInputElement | null>(null);
 
 	// Context menu state
 	let contextMenu = $state<{ x: number; y: number; entry: DirectoryEntry } | null>(null);
@@ -602,11 +603,14 @@
 	}
 
 	// Open create modal
-	function openCreateModal(type: 'file' | 'folder', parentPath: string) {
+	async function openCreateModal(type: 'file' | 'folder', parentPath: string) {
 		createModal = { parentPath, type };
 		createName = '';
 		createError = null;
 		closeContextMenu();
+		// Focus the input after the modal renders
+		await tick();
+		createNameInputRef?.focus();
 	}
 
 	// Close create modal
@@ -1082,12 +1086,12 @@
 						type="text"
 						class="modal-input"
 						bind:value={createName}
+						bind:this={createNameInputRef}
 						onkeydown={(e) => {
 							if (e.key === 'Enter') performCreate();
 							if (e.key === 'Escape') closeCreateModal();
 						}}
 						placeholder={createModal.type === 'folder' ? 'folder-name' : 'filename.ts'}
-						autofocus
 					/>
 				</label>
 				{#if createModal.parentPath}
