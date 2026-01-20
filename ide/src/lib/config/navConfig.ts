@@ -6,13 +6,13 @@
  *
  * MAIN (core workflow - always visible):
  *   /tasks    - Tasks (active sessions + open tasks with spawn)
- *   /dash     - Dash (multi-project sessions view with terminal output)
  *   /files    - Files (project file browser)
  *   /source   - Source Control (git changes, diff viewer)
  *   /servers  - Servers (project server sessions)
  *   /config   - Config (JAT configuration, includes Projects tab)
  *
  * VIEWS (alternative visualizations):
+ *   /dash     - Dash (multi-project sessions view with terminal output)
  *   /sessions - Sessions (all tmux sessions: agents, servers, other)
  *   /history  - History (completed task history with streak calendar)
  *   /graph    - Dependency visualization
@@ -59,13 +59,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		{
-			id: 'dash',
-			label: 'Dash',
-			href: '/dash',
-			icon: 'dashboard',
-			category: 'main'
-		},
-		{
 			id: 'files',
 			label: 'Files',
 			href: '/files',
@@ -78,13 +71,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			href: '/source',
 			icon: 'source',
 			category: 'main'
-		},
-		{
-			id: 'sessions',
-			label: 'Sessions',
-			href: '/sessions',
-			icon: 'tmux',
-			category: 'views'
 		},
 		{
 			id: 'servers',
@@ -101,6 +87,20 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		// VIEWS: Alternative visualizations
+		{
+			id: 'dash',
+			label: 'Dash',
+			href: '/dash',
+			icon: 'dashboard',
+			category: 'views'
+		},
+		{
+			id: 'sessions',
+			label: 'Sessions',
+			href: '/sessions',
+			icon: 'tmux',
+			category: 'views'
+		},
 		{
 			id: 'history',
 			label: 'History',
