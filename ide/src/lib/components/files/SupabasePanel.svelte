@@ -67,6 +67,7 @@
 	// Push/Pull state
 	let isPushing = $state(false);
 	let isPulling = $state(false);
+	let includeSeed = $state(false);
 
 	// Delete migration state
 	let deletingMigration = $state<string | null>(null);
@@ -211,7 +212,11 @@
 		isPushing = true;
 
 		try {
-			const response = await fetch(`/api/supabase/push?project=${encodeURIComponent(project)}`, {
+			let url = `/api/supabase/push?project=${encodeURIComponent(project)}`;
+			if (includeSeed) {
+				url += '&includeSeed=true';
+			}
+			const response = await fetch(url, {
 				method: 'POST'
 			});
 
@@ -221,7 +226,10 @@
 				throw new Error(data.error || 'Push failed');
 			}
 
-			showToast('Migrations pushed successfully');
+			const message = includeSeed
+				? 'Migrations and seed data pushed successfully'
+				: 'Migrations pushed successfully';
+			showToast(message);
 			await fetchStatus();
 		} catch (err) {
 			showToast(err instanceof Error ? err.message : 'Push failed', 'error');
@@ -541,6 +549,14 @@
 							Push
 						</button>
 					</div>
+					<label class="include-seed-label">
+						<input
+							type="checkbox"
+							class="checkbox checkbox-xs checkbox-primary"
+							bind:checked={includeSeed}
+						/>
+						<span>Include seed data (seed.sql)</span>
+					</label>
 				</div>
 			</div>
 		{/if}
@@ -971,6 +987,25 @@
 	.action-icon {
 		width: 1rem;
 		height: 1rem;
+	}
+
+	.include-seed-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+		font-size: 0.75rem;
+		color: oklch(0.60 0.02 250);
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.include-seed-label:hover {
+		color: oklch(0.75 0.02 250);
+	}
+
+	.include-seed-label span {
+		line-height: 1;
 	}
 
 	/* Migrations List */

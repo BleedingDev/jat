@@ -6,6 +6,7 @@
  * Query parameters:
  * - project: Project name (required)
  * - dryRun: If "true", only show what would be done (optional)
+ * - includeSeed: If "true", also run seed.sql on the remote database (optional)
  *
  * Response:
  * - success: Whether push succeeded
@@ -75,6 +76,7 @@ function getProjectPaths(projectName: string): ProjectPaths {
 export const POST: RequestHandler = async ({ url }) => {
 	const projectName = url.searchParams.get('project');
 	const dryRun = url.searchParams.get('dryRun') === 'true';
+	const includeSeed = url.searchParams.get('includeSeed') === 'true';
 
 	if (!projectName) {
 		return json({ error: 'Missing required parameter: project' }, { status: 400 });
@@ -117,14 +119,15 @@ export const POST: RequestHandler = async ({ url }) => {
 	}
 
 	// Push migrations (use effectivePath for monorepos)
-	const result = await pushMigrations(effectivePath, dryRun);
+	const result = await pushMigrations(effectivePath, dryRun, includeSeed);
 
 	if (result.exitCode !== 0) {
 		return json({
 			success: false,
 			output: result.stdout,
 			error: result.stderr || 'Push failed',
-			dryRun
+			dryRun,
+			includeSeed
 		}, { status: 500 });
 	}
 
@@ -132,6 +135,7 @@ export const POST: RequestHandler = async ({ url }) => {
 		success: true,
 		output: result.stdout,
 		dryRun,
+		includeSeed,
 		projectRef: config.projectRef
 	});
 };

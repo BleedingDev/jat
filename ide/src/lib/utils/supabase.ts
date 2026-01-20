@@ -314,15 +314,20 @@ export async function createMigration(projectPath: string, name: string): Promis
  *
  * @param projectPath - Path to the project root
  * @param dryRun - If true, only show what would be done
+ * @param includeSeed - If true, also run seed.sql on the remote database
  * @returns Result of the push operation
  */
 export async function pushMigrations(
 	projectPath: string,
-	dryRun: boolean = false
+	dryRun: boolean = false,
+	includeSeed: boolean = false
 ): Promise<SupabaseCommandResult> {
 	const args = ['db', 'push'];
 	if (dryRun) {
 		args.push('--dry-run');
+	}
+	if (includeSeed) {
+		args.push('--include-seed');
 	}
 
 	return runSupabaseCommand(projectPath, args, 120000);
