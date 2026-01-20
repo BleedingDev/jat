@@ -116,6 +116,11 @@
 	let gitBranch = $state<string | null>(null);
 	let isGitClean = $state(true);
 
+	// Tree change detection state
+	let hasTreeChanges = $state(false);
+	let lastKnownFingerprint = $state<string>('');
+	let treeChangePollingInterval: ReturnType<typeof setInterval> | null = null;
+
 	/**
 	 * Fetch git status for the project and build a path → status map
 	 */
@@ -183,6 +188,69 @@
 		} catch (err) {
 			console.debug('[FileTree] Failed to fetch git status:', err);
 		}
+	}
+
+	/**
+	 * Generate a fingerprint of directory entries for change detection
+	 * Uses entry names, types, and modification times to detect changes
+	 */
+	function generateFingerprint(entries: DirectoryEntry[]): string {
+		// Sort entries by path for consistent comparison
+		const sortedEntries = [...entries].sort((a, b) => a.path.localeCompare(b.path));
+		// Create a simple fingerprint from paths and modification times
+		return sortedEntries.map(e => `${e.path}:${e.type}:${e.modified || ''}`).join('|');
+	}
+
+	/**
+	 * Check if the file tree has changed on disk
+	 * Compares current root entries fingerprint with a fresh fetch
+	 */
+	async function checkForTreeChanges() {
+		if (!project || isLoadingRoot) return;
+
+		try {
+			const freshEntries = await fetchDirectory('');
+			const freshFingerprint = generateFingerprint(freshEntries);
+
+			// Only compare if we have a known fingerprint (skip first check)
+			if (lastKnownFingerprint && freshFingerprint !== lastKnownFingerprint) {
+				hasTreeChanges = true;
+			}
+		} catch (err) {
+			// Silently ignore errors during polling
+			console.debug('[FileTree] Tree change check failed:', err);
+		}
+	}
+
+	/**
+	 * Start polling for tree changes
+	 */
+	function startTreeChangePolling() {
+		if (treeChangePollingInterval) return;
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+		// Poll every 3 seconds (same as disk change detection for open files)
+		treeChangePollingInterval = setInterval(checkForTreeChanges, 3000);
+	}
+
+	/**
+	 * Stop polling for tree changes
+	 */
+	function stopTreeChangePolling() {
+		if (treeChangePollingInterval) {
+			clearInterval(treeChangePollingInterval);
+			treeChangePollingInterval = null;
+		}
+	}
+
+	/**
+	 * Handle clicking the "Update" button - refresh the tree
+	 */
+	async function handleTreeUpdate() {
+		hasTreeChanges = false;
+		await loadRoot();
+		// Also refresh git status
+		await fetchGitStatus();
 	}
 
 	// Debounce filter updates for performance
@@ -265,9 +333,12 @@
 	async function loadRoot() {
 		isLoadingRoot = true;
 		rootError = null;
-		
+
 		try {
 			rootEntries = await fetchDirectory('');
+			// Update fingerprint for change detection
+			lastKnownFingerprint = generateFingerprint(rootEntries);
+			hasTreeChanges = false;
 		} catch (err) {
 			rootError = err instanceof Error ? err.message : 'Failed to load directory';
 			console.error('[FileTree] Failed to load root:', err);
@@ -754,6 +825,10 @@
 			loadedFolders = new Map();
 			loadingFolders = new Set();
 			filterTerm = '';
+			// Reset tree change detection state
+			hasTreeChanges = false;
+			lastKnownFingerprint = '';
+			stopTreeChangePolling();
 			loadRoot();
 		}
 	});
@@ -762,7 +837,29 @@
 		if (project) {
 			loadRoot();
 			fetchGitStatus();
+			// Start tree change detection polling
+			startTreeChangePolling();
 		}
+
+		// Handle visibility changes to pause/resume polling
+		function handleVisibilityChange() {
+			if (document.visibilityState === 'visible') {
+				// Resume polling and check immediately
+				checkForTreeChanges();
+				startTreeChangePolling();
+			} else {
+				// Pause polling when tab is hidden
+				stopTreeChangePolling();
+			}
+		}
+
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+
+		// Cleanup on unmount
+		return () => {
+			stopTreeChangePolling();
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+		};
 	});
 
 	// Reference to tree content for scrolling
@@ -857,6 +954,25 @@
 				</button>
 			</div>
 		</div>
+
+		<!-- Tree Changes Indicator -->
+		{#if hasTreeChanges}
+			<div class="tree-changes-bar">
+				<span class="tree-changes-text">Files changed on disk</span>
+				<button
+					class="tree-update-btn"
+					onclick={handleTreeUpdate}
+					title="Refresh file tree"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="update-icon">
+						<path d="M23 4v6h-6" />
+						<path d="M1 20v-6h6" />
+						<path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+					</svg>
+					Update
+				</button>
+			</div>
+		{/if}
 
 		<!-- Git Status Bar -->
 		{#if gitBranch || gitAhead > 0 || gitBehind > 0 || gitStatusMap.size > 0}
@@ -1196,6 +1312,52 @@
 		border-radius: 0.25rem;
 		font-weight: 500;
 		margin-left: auto;
+	}
+
+	/* Tree Changes Bar */
+	.tree-changes-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.375rem 0.5rem;
+		margin-top: 0.375rem;
+		background: linear-gradient(90deg, oklch(0.65 0.15 200 / 0.15) 0%, oklch(0.16 0.02 250) 100%);
+		border: 1px solid oklch(0.65 0.15 200 / 0.3);
+		border-radius: 0.25rem;
+		font-size: 0.75rem;
+	}
+
+	.tree-changes-text {
+		color: oklch(0.75 0.12 200);
+		font-weight: 500;
+	}
+
+	.tree-update-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		background: oklch(0.65 0.15 200 / 0.2);
+		color: oklch(0.85 0.12 200);
+		border: 1px solid oklch(0.65 0.15 200 / 0.4);
+		border-radius: 0.25rem;
+		cursor: pointer;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		transition: all 0.15s ease;
+	}
+
+	.tree-update-btn:hover {
+		background: oklch(0.65 0.15 200 / 0.35);
+		border-color: oklch(0.65 0.15 200 / 0.6);
+	}
+
+	.tree-update-btn .update-icon {
+		width: 12px;
+		height: 12px;
 	}
 
 	.filter-actions {
