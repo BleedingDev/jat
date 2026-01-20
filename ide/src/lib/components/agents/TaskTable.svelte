@@ -3083,7 +3083,7 @@
 													/>
 												{/each}
 												{#if projectAssignedAgents.length > 5}
-													<div class="avatar placeholder w-5">
+													<div class="avatar-placeholder w-5">
 														<div class="bg-neutral text-neutral-content w-5 rounded-full text-[9px] font-mono">
 															+{projectAssignedAgents.length - 5}
 														</div>
@@ -3637,7 +3637,7 @@
 													/>
 												{/each}
 												{#if assignedAgents.length > 4}
-													<div class="avatar placeholder w-5">
+													<div class="avatar-placeholder w-5">
 														<div class="bg-neutral text-neutral-content w-5 rounded-full text-[9px] font-mono">
 															+{assignedAgents.length - 4}
 														</div>
