@@ -506,7 +506,7 @@
 						<div class="migrations-empty">No migrations yet</div>
 					{:else}
 						<div class="migrations-list">
-							{#each status.migrations as migration, index (migration.filename || `${migration.version}-${index}`)}
+							{#each status.migrations as migration, index (`${migration.version}-${migration.status}-${index}`)}
 								{@const indicator = getStatusIndicator(migration)}
 								<!-- svelte-ignore a11y_click_events_have_key_events -->
 								<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
