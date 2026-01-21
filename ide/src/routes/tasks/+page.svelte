@@ -1605,6 +1605,34 @@
 		background: oklch(0.18 0.01 250);
 	}
 
+	/* Override TasksPaused table styles to match TasksActive and TasksOpen */
+	.paused-content :global(.paused-sessions-table) {
+		background: transparent;
+		border: none;
+		border-radius: 0;
+	}
+
+	.paused-content :global(.paused-table thead) {
+		display: none; /* Hide header row - parent subsection header is the context */
+	}
+
+	.paused-content :global(.paused-table tbody tr) {
+		border-bottom: 1px solid oklch(0.20 0.02 250 / 0.5);
+	}
+
+	.paused-content :global(.paused-table tbody tr:last-child) {
+		border-bottom: none;
+	}
+
+	.paused-content :global(.paused-table td) {
+		padding: 0.5rem 0.75rem;
+		font-size: 0.8rem;
+	}
+
+	.paused-content :global(.paused-row:hover) {
+		background: oklch(0.18 0.01 250);
+	}
+
 	/* Standalone Group (collapsible, same structure as epic) */
 	.epic-group.standalone {
 		border-color: oklch(0.28 0.02 250);
