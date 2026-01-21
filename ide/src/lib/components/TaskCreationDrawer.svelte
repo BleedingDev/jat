@@ -1043,7 +1043,16 @@
 			const project = dynamicProjects[index];
 			formData.project = project;
 			setActiveProject(project);
-			closeProjectDropdown();
+			projectDropdownOpen = false;
+
+			// If project selection was required, focus the title input after selection
+			// Otherwise focus back on the dropdown button
+			if (projectSelectionRequired && titleInput) {
+				// Small delay to let the dropdown close animation complete
+				setTimeout(() => titleInput?.focus(), 50);
+			} else {
+				projectDropdownBtn?.focus();
+			}
 		}
 	}
 
@@ -1188,7 +1197,7 @@
 										<button
 											type="button"
 											class="font-mono {formData.project === project ? 'active' : ''} {projectDropdownOpen && projectDropdownIndex === i ? 'focus' : ''}"
-											onclick={() => { formData.project = project; setActiveProject(project); closeProjectDropdown(); }}
+											onclick={() => { selectProjectByIndex(i); }}
 											onmouseenter={() => projectDropdownIndex = i}
 										>
 											<span
