@@ -74,8 +74,19 @@
 
 					// If project selection is required, focus and open the project dropdown
 					if (projectSelectionRequired && projectDropdownBtn) {
-						projectDropdownBtn.focus();
 						openProjectDropdown();
+						// Focus the first menu item directly so arrow keys work immediately
+						// Use setTimeout to ensure DOM has rendered the dropdown menu
+						setTimeout(() => {
+							const dropdown = projectDropdownBtn?.closest('.dropdown');
+							const firstMenuItem = dropdown?.querySelector('.dropdown-content button') as HTMLButtonElement;
+							if (firstMenuItem) {
+								firstMenuItem.focus();
+							} else {
+								// Fallback to button if menu not rendered yet
+								projectDropdownBtn?.focus();
+							}
+						}, 50);
 					} else if (titleInput) {
 						// Otherwise focus the title input as usual
 						titleInput.focus();
@@ -1191,14 +1202,43 @@
 									<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
 								</svg>
 							</button>
-							<ul class="dropdown-content menu bg-base-200 rounded-box z-50 w-52 p-2 shadow-lg border border-base-content/20 mt-1">
+							<ul
+								class="dropdown-content menu bg-base-200 rounded-box z-50 w-52 p-2 shadow-lg border border-base-content/20 mt-1"
+								role="listbox"
+							>
 								{#each dynamicProjects as project, i}
-									<li>
+									<li role="presentation">
 										<button
 											type="button"
-											class="font-mono {formData.project === project ? 'active' : ''} {projectDropdownOpen && projectDropdownIndex === i ? 'focus' : ''}"
+											role="option"
+											aria-selected={formData.project === project}
+											class="font-mono {formData.project === project ? 'active' : ''} {projectDropdownOpen && projectDropdownIndex === i ? 'focus bg-base-300' : ''}"
 											onclick={() => { selectProjectByIndex(i); }}
 											onmouseenter={() => projectDropdownIndex = i}
+											onkeydown={(e) => {
+												if (e.key === 'ArrowDown') {
+													e.preventDefault();
+													const nextIndex = (i + 1) % dynamicProjects.length;
+													projectDropdownIndex = nextIndex;
+													// Focus the next item
+													const nextItem = e.currentTarget.closest('ul')?.querySelectorAll('button')[nextIndex];
+													(nextItem as HTMLButtonElement)?.focus();
+												} else if (e.key === 'ArrowUp') {
+													e.preventDefault();
+													const prevIndex = i <= 0 ? dynamicProjects.length - 1 : i - 1;
+													projectDropdownIndex = prevIndex;
+													// Focus the previous item
+													const prevItem = e.currentTarget.closest('ul')?.querySelectorAll('button')[prevIndex];
+													(prevItem as HTMLButtonElement)?.focus();
+												} else if (e.key === 'Enter' || e.key === ' ') {
+													e.preventDefault();
+													selectProjectByIndex(i);
+												} else if (e.key === 'Escape') {
+													e.preventDefault();
+													closeProjectDropdown();
+													projectDropdownBtn?.focus();
+												}
+											}}
 										>
 											<span
 												class="w-2 h-2 rounded-full flex-shrink-0"

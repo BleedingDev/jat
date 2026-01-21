@@ -882,10 +882,32 @@
 												await handleKillSession(session.name);
 											} else if (actionId === 'view-task' && sessionTask) {
 												onViewTask?.(sessionTask.id);
-											} else if (actionId === 'complete') {
-												await sendWorkflowCommand(session.name, '/jat:complete');
-											} else if (actionId === 'complete-kill') {
-												await sendWorkflowCommand(session.name, '/jat:complete --kill');
+											} else if (actionId === 'complete' || actionId === 'complete-kill') {
+												// Instant completing signal - write BEFORE calling command
+												if (sessionTask) {
+													try {
+														await fetch(`/api/sessions/${encodeURIComponent(session.name)}/signal`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({
+																type: 'completing',
+																data: {
+																	taskId: sessionTask.id,
+																	taskTitle: sessionTask.title,
+																	currentStep: 'verifying',
+																	progress: 0,
+																	stepsCompleted: [],
+																	stepsRemaining: ['verifying', 'committing', 'closing', 'releasing', 'announcing']
+																}
+															})
+														});
+													} catch (e) {
+														console.warn('[TasksActive] Failed to write instant completing signal:', e);
+													}
+												}
+												// Now call the actual command
+												const cmd = actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete';
+												await sendWorkflowCommand(session.name, cmd);
 											} else if (actionId === 'interrupt') {
 												await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
 													method: 'POST',

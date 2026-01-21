@@ -691,9 +691,9 @@
 			if (action.command && onCommand) {
 				// Custom command - use onCommand callback to send the slash command
 				await onCommand(action.command);
-			} else {
+			} else if (onAction) {
 				// Built-in action - use onAction callback
-				await onAction?.(action.id);
+				await onAction(action.id);
 			}
 		} finally {
 			isExecuting = false;
