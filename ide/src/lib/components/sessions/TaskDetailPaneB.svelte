@@ -151,34 +151,18 @@
 	});
 
 	async function saveDescription() {
-		console.log('[TaskDetailPaneB] saveDescription called', {
-			taskId: task?.id,
-			descriptionSaving,
-			descriptionValue,
-			taskDescription: task?.description,
-			hasCallback: !!onSaveDescription
-		});
-
-		if (!task?.id || descriptionSaving) {
-			console.log('[TaskDetailPaneB] Early return - no task id or already saving');
-			return;
-		}
+		if (!task?.id || descriptionSaving) return;
 
 		const currentDescription = task?.description || '';
 		if (descriptionValue === currentDescription) {
-			console.log('[TaskDetailPaneB] No change detected, just closing edit mode');
 			descriptionEditing = false;
 			return;
 		}
 
-		console.log('[TaskDetailPaneB] Saving description...', { from: currentDescription, to: descriptionValue });
 		descriptionSaving = true;
 		try {
 			if (onSaveDescription) {
 				await onSaveDescription(task.id, descriptionValue);
-				console.log('[TaskDetailPaneB] Save callback completed');
-			} else {
-				console.log('[TaskDetailPaneB] No onSaveDescription callback provided');
 			}
 		} finally {
 			descriptionSaving = false;
@@ -238,6 +222,16 @@
 		} finally {
 			labelSaving = false;
 		}
+	}
+
+	// Svelte action to auto-resize textarea on mount
+	function autoResizeTextarea(node: HTMLTextAreaElement) {
+		// Use requestAnimationFrame to ensure the DOM is ready
+		requestAnimationFrame(() => {
+			node.style.height = 'auto';
+			node.style.height = node.scrollHeight + 'px';
+			node.focus(); // Also focus the textarea
+		});
 	}
 
 	function handleLabelKeydown(e: KeyboardEvent) {
@@ -465,8 +459,9 @@
 									class="task-panel-description-input"
 									bind:value={descriptionValue}
 									onblur={saveDescription}
+									use:autoResizeTextarea
 									oninput={(e) => {
-										// Auto-resize textarea (fallback for browsers without field-sizing: content)
+										// Auto-resize textarea on input
 										const target = e.target as HTMLTextAreaElement;
 										target.style.height = 'auto';
 										target.style.height = target.scrollHeight + 'px';
@@ -478,10 +473,18 @@
 									<span class="task-panel-saving">Saving...</span>
 								{/if}
 							{:else}
-								<button
-									type="button"
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
 									class="task-panel-description-display" class:draggable-field={task.description}
 									onclick={() => descriptionEditing = true}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											descriptionEditing = true;
+										}
+									}}
+									role="button"
+									tabindex="0"
 									draggable={task.description ? "true" : "false"}
 									ondragstart={(e) => {
 										if (task.description) {
@@ -501,7 +504,7 @@
 									{:else}
 										<span class="text-base-content/40 italic">Click to add description...</span>
 									{/if}
-								</button>
+								</div>
 							{/if}
 						</div>
 
@@ -1144,6 +1147,8 @@
 		transition: border-color 0.15s, box-shadow 0.15s;
 		field-sizing: content;
 		min-height: calc(4 * 1.5em + 1rem);
+		max-height: 200px;
+		overflow-y: auto;
 	}
 
 	.task-panel-description-input:focus {

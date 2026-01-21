@@ -579,6 +579,33 @@
 		}
 	}
 
+	// Save description on blur
+	async function saveDescription(taskId: string, description: string) {
+		if (!taskId) return;
+
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ description })
+			});
+
+			if (response.ok) {
+				// Update local state by finding the task in agentTasks map
+				for (const [agentName, task] of agentTasks) {
+					if (task.id === taskId) {
+						task.description = description;
+						break;
+					}
+				}
+			} else {
+				console.error('Failed to save description:', await response.text());
+			}
+		} catch (err) {
+			console.error('Error saving description:', err);
+		}
+	}
+
 	// Input handling for expanded session
 	async function sendExpandedInput(text: string, type: 'text' | 'key' | 'raw' = 'text'): Promise<boolean> {
 		if (!expandedSession) return false;
@@ -957,9 +984,32 @@
 													}
 												}}
 												onCtrlEnterSubmit={() => {
-													// Collapse just this session row (not the whole section)
-													expandedSession = null;
-													expandedOutput = '';
+													// Collapse just this session row with proper animation
+													// (same pattern as toggleExpanded)
+													collapsingSession = session.name;
+													if (outputPollInterval) {
+														clearInterval(outputPollInterval);
+														outputPollInterval = null;
+													}
+													setTimeout(() => {
+														expandedSession = null;
+														expandedOutput = '';
+														collapsingSession = null;
+
+														// Find and expand the next session in the list
+														const sessions = orderedSessions();
+														const currentIndex = sessions.findIndex(s => s.session.name === session.name);
+														if (currentIndex >= 0) {
+															// Look for the next non-exiting session
+															for (let i = currentIndex + 1; i < sessions.length; i++) {
+																if (!sessions[i].isExiting) {
+																	expandInline(sessions[i].session.name);
+																	break;
+																}
+															}
+														}
+														// If no next session found, just stay collapsed (you're done!)
+													}, 200);
 												}}
 											/>
 										</div>
@@ -985,6 +1035,9 @@
 											loading={taskDetailsLoading}
 											height={expandedHeight}
 											onViewTask={(taskId) => onViewTask?.(taskId)}
+											onSaveDescription={async (taskId, description) => {
+												await saveDescription(taskId, description);
+											}}
 											onSaveNotes={async (taskId, notes) => {
 												notesValue = notes;
 												await saveNotes(taskId);
