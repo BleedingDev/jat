@@ -4069,23 +4069,28 @@
 			e.preventDefault();
 			const hasText = inputText.trim().length > 0;
 			const hasFiles = attachedFiles.length > 0;
-			if (!hasText && !hasFiles && onSendInput) {
-				onSendInput("enter", "key");
-			} else {
-				sendTextInput();
-			}
-			// Trigger visual flash feedback
-			submitFlash = true;
-			setTimeout(() => {
-				submitFlash = false;
-			}, 300);
-			// Call collapse callback after flash completes
-			// This lets user see the green success flash before row collapses
-			if (onCtrlEnterSubmit) {
+
+			// Send the input and wait for it to complete
+			const sendPromise = (!hasText && !hasFiles && onSendInput)
+				? onSendInput("enter", "key")
+				: sendTextInput();
+
+			// Wait for send to complete, then show flash and collapse
+			Promise.resolve(sendPromise).then(() => {
+				// Trigger visual flash feedback after send completes
+				submitFlash = true;
 				setTimeout(() => {
-					onCtrlEnterSubmit();
-				}, 1400);
-			}
+					submitFlash = false;
+				}, 300);
+
+				// Call collapse callback after flash completes
+				// This lets user see the green success flash before row collapses
+				if (onCtrlEnterSubmit) {
+					setTimeout(() => {
+						onCtrlEnterSubmit();
+					}, 1400);
+				}
+			});
 		} else if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
 			// Enter without modifiers submits the input
 			e.preventDefault();

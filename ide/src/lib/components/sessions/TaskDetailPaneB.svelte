@@ -151,18 +151,34 @@
 	});
 
 	async function saveDescription() {
-		if (!task?.id || descriptionSaving) return;
+		console.log('[TaskDetailPaneB] saveDescription called', {
+			taskId: task?.id,
+			descriptionSaving,
+			descriptionValue,
+			taskDescription: task?.description,
+			hasCallback: !!onSaveDescription
+		});
+
+		if (!task?.id || descriptionSaving) {
+			console.log('[TaskDetailPaneB] Early return - no task id or already saving');
+			return;
+		}
 
 		const currentDescription = task?.description || '';
 		if (descriptionValue === currentDescription) {
+			console.log('[TaskDetailPaneB] No change detected, just closing edit mode');
 			descriptionEditing = false;
 			return;
 		}
 
+		console.log('[TaskDetailPaneB] Saving description...', { from: currentDescription, to: descriptionValue });
 		descriptionSaving = true;
 		try {
 			if (onSaveDescription) {
 				await onSaveDescription(task.id, descriptionValue);
+				console.log('[TaskDetailPaneB] Save callback completed');
+			} else {
+				console.log('[TaskDetailPaneB] No onSaveDescription callback provided');
 			}
 		} finally {
 			descriptionSaving = false;
@@ -449,6 +465,12 @@
 									class="task-panel-description-input"
 									bind:value={descriptionValue}
 									onblur={saveDescription}
+									oninput={(e) => {
+										// Auto-resize textarea (fallback for browsers without field-sizing: content)
+										const target = e.target as HTMLTextAreaElement;
+										target.style.height = 'auto';
+										target.style.height = target.scrollHeight + 'px';
+									}}
 									placeholder="Add description..."
 									disabled={descriptionSaving}
 								></textarea>
