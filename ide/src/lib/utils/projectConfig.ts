@@ -134,6 +134,11 @@ export function clearProjectConfigCache(): void {
  * rgbToHex('oklch(0.65 0.18 10)') // → 'oklch(0.65 0.18 10)'
  */
 export function rgbToHex(rgbColor: string): string {
+	// Handle null/undefined input - return a default color
+	if (!rgbColor) {
+		return '#6b7280'; // gray-500 - safe default for missing colors
+	}
+
 	// Match rgb(xxxxxx) pattern
 	const match = rgbColor.match(/^rgb\(([0-9a-fA-F]{6})\)$/);
 	if (match) {
