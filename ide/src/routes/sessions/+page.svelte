@@ -458,7 +458,11 @@
 	}
 
 	// Fetch output for expanded session
-	async function fetchExpandedOutput(sessionName: string) {
+	async function fetchExpandedOutput(sessionName: string | null) {
+		// Guard against null/undefined session names to prevent /api/work/null/output calls
+		if (!sessionName) {
+			return;
+		}
 		try {
 			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output`);
 			if (response.ok) {

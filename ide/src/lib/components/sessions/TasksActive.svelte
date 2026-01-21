@@ -12,7 +12,7 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import ServerSessionBadge from '$lib/components/ServerSessionBadge.svelte';
 	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
-	import TaskDetailPaneA from '$lib/components/sessions/TaskDetailPaneA.svelte';
+	import TaskDetailPaneB from '$lib/components/sessions/TaskDetailPaneB.svelte';
 
 	// Types
 	interface TmuxSession {
@@ -296,7 +296,11 @@
 	}
 
 	// Session expansion
-	async function fetchExpandedOutput(sessionName: string) {
+	async function fetchExpandedOutput(sessionName: string | null) {
+		// Guard against null/undefined session names to prevent /api/work/null/output calls
+		if (!sessionName) {
+			return;
+		}
 		try {
 			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output`);
 			if (response.ok) {
@@ -968,9 +972,9 @@
 										</div>
 									{/if}
 
-									<!-- Inline Task Detail Panel (Concept A: Tabbed) -->
+									<!-- Inline Task Detail Panel (Concept B: Notes Tab) -->
 									{#if expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id}
-										<TaskDetailPaneA
+										<TaskDetailPaneB
 											task={expandedTask}
 											details={expandedTaskDetails}
 											loading={taskDetailsLoading}

@@ -3,7 +3,7 @@
 	 * Tasks A - Demo page for Concept A (Tabbed Detail Pane)
 	 */
 
-	import TaskDetailPaneA from '$lib/components/sessions/TaskDetailPaneA.svelte';
+	import TaskDetailPaneB from '$lib/components/sessions/TaskDetailPaneB.svelte';
 
 	// Sample task data
 	const sampleTask = {
@@ -78,7 +78,7 @@ Requirements:
 		<h2 class="task-title">{sampleTask.title}</h2>
 
 		<div class="pane-wrapper">
-			<TaskDetailPaneA
+			<TaskDetailPaneB
 				task={sampleTask}
 				details={sampleDetails}
 				loading={false}
