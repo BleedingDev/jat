@@ -87,12 +87,16 @@
 	let searchQuery = $state('');
 	let debouncedSearchQuery = $state('');
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let searchInputRef = $state<HTMLInputElement | null>(null);
 
 	// Debounce search query to avoid filtering on every keystroke
+	// Note: We must read searchQuery in the effect body (not just in the setTimeout callback)
+	// so that Svelte 5's effect tracking sees it as a dependency and re-runs the effect on changes
 	$effect(() => {
+		const query = searchQuery; // Read to establish dependency tracking
 		if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
 		searchDebounceTimer = setTimeout(() => {
-			debouncedSearchQuery = searchQuery;
+			debouncedSearchQuery = query;
 		}, 150); // 150ms debounce delay
 		return () => {
 			if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
@@ -231,6 +235,16 @@
 		fetchCompletedToday();
 		const interval = setInterval(fetchCompletedToday, 30000);
 		return () => clearInterval(interval);
+	});
+
+	// Focus search input when dropdown opens
+	$effect(() => {
+		if (showDropdown && searchInputRef) {
+			// Small delay to ensure the dropdown is rendered
+			requestAnimationFrame(() => {
+				searchInputRef?.focus();
+			});
+		}
 	});
 
 	// Dropdown handlers
@@ -540,6 +554,7 @@
 					class="search-input"
 					placeholder="Search tasks..."
 					bind:value={searchQuery}
+					bind:this={searchInputRef}
 					onclick={(e) => e.stopPropagation()}
 					onkeydown={(e) => e.stopPropagation()}
 				/>
