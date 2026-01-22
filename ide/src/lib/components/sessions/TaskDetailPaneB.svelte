@@ -96,8 +96,46 @@
 		'blocked': 'badge-error'
 	};
 
-	// Active tab - now includes 'notes' as a separate tab
-	let activeTab = $state<'details' | 'notes' | 'activity' | 'deps'>('details');
+	// Active tab - now includes 'notes' and 'summary' as separate tabs
+	let activeTab = $state<'details' | 'notes' | 'activity' | 'deps' | 'summary'>('details');
+
+	// Summary state
+	interface TaskSummary {
+		taskId: string;
+		title: string;
+		summary: string[];
+		outcome: 'completed' | 'incomplete' | 'blocked';
+		duration?: string;
+		agent?: string;
+		keyChanges: string[];
+		quality?: {
+			tests?: string;
+			build?: string;
+		};
+		suggestedTasks?: Array<{
+			type: string;
+			title: string;
+			description: string;
+			priority: number;
+		}>;
+		humanActions?: Array<{
+			title: string;
+			description: string;
+		}>;
+		crossAgentIntel?: {
+			files?: string[];
+			patterns?: string[];
+			gotchas?: string[];
+		};
+		riskLevel?: 'low' | 'medium' | 'high';
+		breakingChanges?: string[];
+		generatedAt: string;
+	}
+
+	let summaryData = $state<TaskSummary | null>(null);
+	let summaryLoading = $state(false);
+	let summaryError = $state<string | null>(null);
+	let previousSummaryTaskId = $state<string | null>(null);
 
 	// Description editing state
 	let descriptionEditing = $state(false);
@@ -108,6 +146,7 @@
 	let notesEditing = $state(false);
 	let notesValue = $state('');
 	let notesSaving = $state(false);
+	let notesEditorRef: { focus: () => void } | undefined;
 
 	// Attachment management state
 	let isDragOver = $state(false);
@@ -135,7 +174,7 @@
 	});
 
 	// Track previous tab to save notes when leaving notes tab
-	let previousTab = $state<'details' | 'notes' | 'activity' | 'deps'>('details');
+	let previousTab = $state<'details' | 'notes' | 'activity' | 'deps' | 'summary'>('details');
 
 	// Save notes when switching away from notes tab
 	$effect(() => {
@@ -337,6 +376,49 @@
 	// Computed counts
 	const depsCount = $derived((details?.depends_on?.length || 0) + (details?.blocked_by?.length || 0));
 	const activityCount = $derived(details?.timelineCounts?.total || 0);
+
+	// Fetch summary when switching to summary tab or when task changes
+	async function fetchSummary(regenerate = false) {
+		if (!task?.id) return;
+
+		summaryLoading = true;
+		summaryError = null;
+
+		try {
+			const url = `/api/tasks/${encodeURIComponent(task.id)}/summary${regenerate ? '?regenerate=true' : ''}`;
+			const response = await fetch(url);
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || data.message || 'Failed to fetch summary');
+			}
+
+			summaryData = data.summary;
+		} catch (err) {
+			summaryError = err instanceof Error ? err.message : 'Failed to fetch summary';
+			summaryData = null;
+		} finally {
+			summaryLoading = false;
+		}
+	}
+
+	// Fetch summary automatically when tab is activated for closed tasks
+	// (in_progress tasks require manual generation via button)
+	$effect(() => {
+		if (activeTab === 'summary' && task?.status === 'closed' && !summaryData && !summaryLoading) {
+			fetchSummary();
+		}
+	});
+
+	// Clear summary when task changes (only when task ID actually changes)
+	$effect(() => {
+		const currentTaskId = task?.id;
+		if (currentTaskId && currentTaskId !== previousSummaryTaskId) {
+			summaryData = null;
+			summaryError = null;
+			previousSummaryTaskId = currentTaskId;
+		}
+	});
 </script>
 
 <div class="task-detail-panel" style="height: {height}px;">
@@ -384,6 +466,18 @@
 						<span class="tab-count">{depsCount}</span>
 					{/if}
 				</button>
+				{#if task?.status === 'closed' || task?.status === 'in_progress'}
+					<button
+						class="pane-tab"
+						class:active={activeTab === 'summary'}
+						onclick={() => activeTab = 'summary'}
+					>
+						Summary
+						{#if summaryData}
+							<span class="tab-count tab-count-success">✓</span>
+						{/if}
+					</button>
+				{/if}
 			</div>
 
 			<!-- Tab content -->
@@ -689,7 +783,8 @@
 
 				{:else if activeTab === 'notes'}
 					<!-- Notes tab: Always-edit Monaco editor (Sublime-style) -->
-					<div class="notes-editor-container">
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div class="notes-editor-container" onmouseenter={() => notesEditorRef?.focus()}>
 						{#if notesSaving}
 							<div class="notes-saving-indicator">
 								<span class="loading loading-spinner loading-xs"></span>
@@ -697,6 +792,7 @@
 							</div>
 						{/if}
 						<MonacoWrapper
+							bind:this={notesEditorRef}
 							bind:value={notesValue}
 							language="markdown"
 						/>
@@ -780,6 +876,284 @@
 					{:else}
 						<div class="empty-tab">No dependencies</div>
 					{/if}
+
+				{:else if activeTab === 'summary'}
+					<!-- Task Completion Summary - Rich Visual Report -->
+					<div class="summary-container">
+						{#if summaryLoading}
+							<div class="summary-loading">
+								<span class="loading loading-spinner loading-sm"></span>
+								<span>Generating summary...</span>
+							</div>
+						{:else if summaryError}
+							<div class="summary-error">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+								</svg>
+								<span>{summaryError}</span>
+								<button class="btn btn-xs btn-ghost" onclick={() => fetchSummary(true)}>Retry</button>
+							</div>
+						{:else if summaryData}
+							<!-- Header Card with Task ID, Outcome, Agent -->
+							<div class="report-header-card" class:completed={summaryData.outcome === 'completed'} class:incomplete={summaryData.outcome === 'incomplete'} class:blocked={summaryData.outcome === 'blocked'}>
+								<div class="report-header-top">
+									<span class="report-task-id">{summaryData.taskId}</span>
+									<div class="report-outcome-badge" class:completed={summaryData.outcome === 'completed'} class:incomplete={summaryData.outcome === 'incomplete'} class:blocked={summaryData.outcome === 'blocked'}>
+										{#if summaryData.outcome === 'completed'}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+											</svg>
+										{:else if summaryData.outcome === 'blocked'}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+											</svg>
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+											</svg>
+										{/if}
+										<span>{summaryData.outcome.toUpperCase()}</span>
+									</div>
+									<button class="summary-refresh-btn" onclick={() => fetchSummary(true)} title="Regenerate summary">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+										</svg>
+									</button>
+								</div>
+								<div class="report-header-meta">
+									{#if summaryData.agent}
+										<span class="report-agent">
+											<AgentAvatar name={summaryData.agent} size={16} />
+											<span>{summaryData.agent}</span>
+										</span>
+									{/if}
+									{#if summaryData.duration}
+										<span class="report-duration">
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+											</svg>
+											{summaryData.duration}
+										</span>
+									{/if}
+									{#if summaryData.riskLevel}
+										<span class="report-risk" class:low={summaryData.riskLevel === 'low'} class:medium={summaryData.riskLevel === 'medium'} class:high={summaryData.riskLevel === 'high'}>
+											{#if summaryData.riskLevel === 'high'}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+												</svg>
+											{/if}
+											{summaryData.riskLevel.toUpperCase()} RISK
+										</span>
+									{/if}
+								</div>
+							</div>
+
+							<!-- What Was Accomplished -->
+							{#if summaryData.summary && summaryData.summary.length > 0}
+								<div class="report-card">
+									<div class="report-card-header">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+										</svg>
+										<span>What Was Accomplished</span>
+									</div>
+									<ul class="report-bullets">
+										{#each summaryData.summary as bullet}
+											<li>{bullet}</li>
+										{/each}
+									</ul>
+								</div>
+							{/if}
+
+							<!-- Files Changed / Key Changes -->
+							{#if summaryData.keyChanges && summaryData.keyChanges.length > 0}
+								<div class="report-card">
+									<div class="report-card-header">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+										</svg>
+										<span>Files Changed</span>
+										<span class="report-count">{summaryData.keyChanges.length}</span>
+									</div>
+									<div class="report-files">
+										{#each summaryData.keyChanges as file}
+											<span class="file-badge">{file}</span>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Quality Status -->
+							{#if summaryData.quality}
+								<div class="report-card">
+									<div class="report-card-header">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+										</svg>
+										<span>Quality Status</span>
+									</div>
+									<div class="report-quality">
+										{#if summaryData.quality.tests}
+											<div class="quality-item" class:passing={summaryData.quality.tests === 'passing'} class:failing={summaryData.quality.tests === 'failing'} class:none={summaryData.quality.tests === 'none'}>
+												<span class="quality-icon">
+													{#if summaryData.quality.tests === 'passing'}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+														</svg>
+													{:else if summaryData.quality.tests === 'failing'}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+														</svg>
+													{:else}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
+														</svg>
+													{/if}
+												</span>
+												<span class="quality-label">Tests</span>
+												<span class="quality-value">{summaryData.quality.tests}</span>
+											</div>
+										{/if}
+										{#if summaryData.quality.build}
+											<div class="quality-item" class:clean={summaryData.quality.build === 'clean'} class:warnings={summaryData.quality.build === 'warnings'} class:errors={summaryData.quality.build === 'errors'}>
+												<span class="quality-icon">
+													{#if summaryData.quality.build === 'clean'}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+														</svg>
+													{:else if summaryData.quality.build === 'errors'}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+														</svg>
+													{:else}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+														</svg>
+													{/if}
+												</span>
+												<span class="quality-label">Build</span>
+												<span class="quality-value">{summaryData.quality.build}</span>
+											</div>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Breaking Changes -->
+							{#if summaryData.breakingChanges && summaryData.breakingChanges.length > 0}
+								<div class="report-card report-card-warning">
+									<div class="report-card-header report-card-header-warning">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+										</svg>
+										<span>Breaking Changes</span>
+									</div>
+									<ul class="report-bullets report-bullets-warning">
+										{#each summaryData.breakingChanges as change}
+											<li>{change}</li>
+										{/each}
+									</ul>
+								</div>
+							{/if}
+
+							<!-- Human Actions Needed -->
+							{#if summaryData.humanActions && summaryData.humanActions.length > 0}
+								<div class="report-card report-card-action">
+									<div class="report-card-header report-card-header-action">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+										</svg>
+										<span>Human Actions Required</span>
+									</div>
+									<div class="report-actions">
+										{#each summaryData.humanActions as action}
+											<div class="action-card">
+												<span class="action-card-title">{action.title}</span>
+												<span class="action-card-desc">{action.description}</span>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Cross-Agent Intel -->
+							{#if summaryData.crossAgentIntel && (summaryData.crossAgentIntel.patterns?.length || summaryData.crossAgentIntel.gotchas?.length)}
+								<div class="report-card report-card-intel">
+									<div class="report-card-header report-card-header-intel">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+										</svg>
+										<span>Cross-Agent Intel</span>
+									</div>
+									<div class="intel-content">
+										{#if summaryData.crossAgentIntel.patterns && summaryData.crossAgentIntel.patterns.length > 0}
+											<div class="intel-section">
+												<span class="intel-label">Patterns</span>
+												<ul class="intel-list">
+													{#each summaryData.crossAgentIntel.patterns as pattern}
+														<li>{pattern}</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+										{#if summaryData.crossAgentIntel.gotchas && summaryData.crossAgentIntel.gotchas.length > 0}
+											<div class="intel-section">
+												<span class="intel-label">Gotchas</span>
+												<ul class="intel-list intel-list-warning">
+													{#each summaryData.crossAgentIntel.gotchas as gotcha}
+														<li>{gotcha}</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Suggested Tasks -->
+							{#if summaryData.suggestedTasks && summaryData.suggestedTasks.length > 0}
+								<div class="report-card">
+									<div class="report-card-header">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+										</svg>
+										<span>Follow-up Tasks</span>
+										<span class="report-count">{summaryData.suggestedTasks.length}</span>
+									</div>
+									<div class="report-tasks">
+										{#each summaryData.suggestedTasks as suggestedTask}
+											<div class="task-card">
+												<div class="task-card-badges">
+													<span class="task-type-badge">{suggestedTask.type}</span>
+													<span class="task-priority-badge">P{suggestedTask.priority}</span>
+												</div>
+												<span class="task-card-title">{suggestedTask.title}</span>
+												{#if suggestedTask.description}
+													<span class="task-card-desc">{suggestedTask.description}</span>
+												{/if}
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Generated Footer -->
+							<div class="report-footer">
+								<span class="report-generated">
+									Generated {new Date(summaryData.generatedAt).toLocaleString()}
+								</span>
+							</div>
+						{:else}
+							<div class="empty-tab">
+								<button class="btn btn-sm btn-ghost" onclick={() => fetchSummary()}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+									</svg>
+									Generate Summary
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 
@@ -1669,5 +2043,509 @@
 
 	.task-panel-link-compact:hover {
 		color: oklch(0.75 0.18 200);
+	}
+
+	/* Summary tab count badge - success variant */
+	.tab-count-success {
+		background: oklch(0.55 0.15 145 / 0.3);
+		color: oklch(0.75 0.15 145);
+	}
+
+	/* Summary tab styles */
+	.summary-container {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		height: 100%;
+		overflow-y: auto;
+	}
+
+	.summary-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 2rem;
+		color: oklch(0.60 0.02 250);
+		font-size: 0.8rem;
+	}
+
+	.summary-error {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 1.5rem;
+		color: oklch(0.70 0.15 30);
+		font-size: 0.8rem;
+		background: oklch(0.55 0.15 30 / 0.1);
+		border-radius: 0.375rem;
+	}
+
+	.summary-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem;
+		background: oklch(0.16 0.01 250);
+		border-radius: 0.375rem;
+		border: 1px solid oklch(0.22 0.02 250);
+	}
+
+	/* Report Header Card */
+	.report-header-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.75rem;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.22 0.02 250);
+		border-radius: 8px;
+		margin-bottom: 0.75rem;
+	}
+
+	.report-header-card.completed {
+		background: linear-gradient(135deg, oklch(0.55 0.15 145 / 0.1), oklch(0.16 0.01 250));
+		border-color: oklch(0.55 0.15 145 / 0.4);
+	}
+
+	.report-header-card.incomplete {
+		background: linear-gradient(135deg, oklch(0.65 0.12 85 / 0.1), oklch(0.16 0.01 250));
+		border-color: oklch(0.65 0.15 85 / 0.4);
+	}
+
+	.report-header-card.blocked {
+		background: linear-gradient(135deg, oklch(0.55 0.15 30 / 0.1), oklch(0.16 0.01 250));
+		border-color: oklch(0.55 0.15 30 / 0.4);
+	}
+
+	.report-header-top {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.report-task-id {
+		font-family: ui-monospace, monospace;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: oklch(0.80 0.02 250);
+	}
+
+	.report-outcome-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.125rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+	}
+
+	.report-outcome-badge.completed {
+		background: oklch(0.55 0.15 145 / 0.25);
+		color: oklch(0.75 0.15 145);
+	}
+
+	.report-outcome-badge.incomplete {
+		background: oklch(0.65 0.15 85 / 0.25);
+		color: oklch(0.78 0.15 85);
+	}
+
+	.report-outcome-badge.blocked {
+		background: oklch(0.55 0.15 30 / 0.25);
+		color: oklch(0.72 0.15 30);
+	}
+
+	.summary-refresh-btn {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem;
+		background: transparent;
+		border: none;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		border-radius: 4px;
+		transition: all 0.15s;
+	}
+
+	.summary-refresh-btn:hover {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.report-header-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+		font-size: 0.75rem;
+	}
+
+	.report-agent {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		color: oklch(0.72 0.02 250);
+	}
+
+	.report-duration {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.report-risk {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.125rem 0.375rem;
+		border-radius: 4px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+
+	.report-risk.low {
+		background: oklch(0.55 0.15 145 / 0.15);
+		color: oklch(0.70 0.15 145);
+	}
+
+	.report-risk.medium {
+		background: oklch(0.65 0.15 85 / 0.15);
+		color: oklch(0.75 0.15 85);
+	}
+
+	.report-risk.high {
+		background: oklch(0.55 0.15 30 / 0.2);
+		color: oklch(0.72 0.15 30);
+	}
+
+	/* Report Cards */
+	.report-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.625rem;
+		background: oklch(0.15 0.01 250);
+		border: 1px solid oklch(0.20 0.02 250);
+		border-radius: 6px;
+		margin-bottom: 0.5rem;
+	}
+
+	.report-card-header {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.60 0.02 250);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.report-card-header svg {
+		color: oklch(0.55 0.12 200);
+	}
+
+	.report-count {
+		margin-left: auto;
+		padding: 0 0.375rem;
+		background: oklch(0.20 0.02 250);
+		border-radius: 10px;
+		font-size: 0.65rem;
+		color: oklch(0.65 0.02 250);
+	}
+
+	/* Bullets list */
+	.report-bullets {
+		margin: 0;
+		padding-left: 1.25rem;
+		font-size: 0.8rem;
+		color: oklch(0.78 0.02 250);
+		line-height: 1.6;
+	}
+
+	.report-bullets li {
+		margin-bottom: 0.25rem;
+	}
+
+	.report-bullets li::marker {
+		color: oklch(0.55 0.12 145);
+	}
+
+	.report-bullets-warning li::marker {
+		color: oklch(0.70 0.15 30);
+	}
+
+	/* Files list */
+	.report-files {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+	}
+
+	.file-badge {
+		display: inline-flex;
+		padding: 0.125rem 0.5rem;
+		font-size: 0.7rem;
+		font-family: ui-monospace, monospace;
+		background: oklch(0.18 0.04 200);
+		color: oklch(0.72 0.12 200);
+		border-radius: 4px;
+		border: 1px solid oklch(0.25 0.04 200);
+	}
+
+	/* Quality Status */
+	.report-quality {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.quality-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		background: oklch(0.18 0.02 250);
+		border-radius: 6px;
+		border: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.quality-item.passing,
+	.quality-item.clean {
+		background: oklch(0.55 0.15 145 / 0.12);
+		border-color: oklch(0.55 0.15 145 / 0.3);
+	}
+
+	.quality-item.passing .quality-icon,
+	.quality-item.clean .quality-icon {
+		color: oklch(0.70 0.15 145);
+	}
+
+	.quality-item.failing,
+	.quality-item.errors {
+		background: oklch(0.55 0.15 30 / 0.12);
+		border-color: oklch(0.55 0.15 30 / 0.3);
+	}
+
+	.quality-item.failing .quality-icon,
+	.quality-item.errors .quality-icon {
+		color: oklch(0.70 0.15 30);
+	}
+
+	.quality-item.warnings {
+		background: oklch(0.65 0.15 85 / 0.12);
+		border-color: oklch(0.65 0.15 85 / 0.3);
+	}
+
+	.quality-item.warnings .quality-icon {
+		color: oklch(0.75 0.15 85);
+	}
+
+	.quality-item.none .quality-icon {
+		color: oklch(0.50 0.02 250);
+	}
+
+	.quality-icon {
+		display: flex;
+		align-items: center;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.quality-label {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: oklch(0.65 0.02 250);
+	}
+
+	.quality-value {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.80 0.02 250);
+		text-transform: capitalize;
+	}
+
+	/* Warning card variant */
+	.report-card-warning {
+		background: oklch(0.55 0.15 30 / 0.08);
+		border-color: oklch(0.55 0.15 30 / 0.3);
+	}
+
+	.report-card-header-warning {
+		color: oklch(0.72 0.15 30);
+	}
+
+	.report-card-header-warning svg {
+		color: oklch(0.70 0.15 30);
+	}
+
+	/* Action card variant */
+	.report-card-action {
+		background: oklch(0.65 0.15 85 / 0.08);
+		border-color: oklch(0.65 0.15 85 / 0.3);
+	}
+
+	.report-card-header-action {
+		color: oklch(0.78 0.15 85);
+	}
+
+	.report-card-header-action svg {
+		color: oklch(0.75 0.15 85);
+	}
+
+	.report-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.action-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		padding: 0.5rem 0.625rem;
+		background: oklch(0.65 0.15 85 / 0.1);
+		border-left: 3px solid oklch(0.70 0.15 85);
+		border-radius: 0 4px 4px 0;
+	}
+
+	.action-card-title {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: oklch(0.82 0.02 250);
+	}
+
+	.action-card-desc {
+		font-size: 0.75rem;
+		color: oklch(0.65 0.02 250);
+		line-height: 1.4;
+	}
+
+	/* Intel card variant */
+	.report-card-intel {
+		background: oklch(0.55 0.12 280 / 0.08);
+		border-color: oklch(0.55 0.12 280 / 0.3);
+	}
+
+	.report-card-header-intel {
+		color: oklch(0.72 0.12 280);
+	}
+
+	.report-card-header-intel svg {
+		color: oklch(0.68 0.15 280);
+	}
+
+	.intel-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+	}
+
+	.intel-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.intel-label {
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: oklch(0.60 0.08 280);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.intel-list {
+		margin: 0;
+		padding-left: 1.125rem;
+		font-size: 0.75rem;
+		color: oklch(0.75 0.02 250);
+		line-height: 1.5;
+	}
+
+	.intel-list li {
+		margin-bottom: 0.125rem;
+	}
+
+	.intel-list li::marker {
+		color: oklch(0.55 0.12 280);
+	}
+
+	.intel-list-warning li::marker {
+		color: oklch(0.70 0.15 85);
+	}
+
+	/* Suggested Tasks */
+	.report-tasks {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.task-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.5rem 0.625rem;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.22 0.02 250);
+		border-radius: 6px;
+	}
+
+	.task-card-badges {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.task-type-badge {
+		padding: 0.0625rem 0.375rem;
+		font-size: 0.6rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		background: oklch(0.20 0.02 250);
+		color: oklch(0.65 0.02 250);
+		border-radius: 3px;
+	}
+
+	.task-priority-badge {
+		padding: 0.0625rem 0.25rem;
+		font-size: 0.6rem;
+		font-weight: 700;
+		background: oklch(0.55 0.15 200 / 0.15);
+		color: oklch(0.72 0.15 200);
+		border-radius: 3px;
+	}
+
+	.task-card-title {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: oklch(0.82 0.02 250);
+	}
+
+	.task-card-desc {
+		font-size: 0.72rem;
+		color: oklch(0.60 0.02 250);
+		line-height: 1.4;
+	}
+
+	/* Report Footer */
+	.report-footer {
+		margin-top: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid oklch(0.20 0.02 250);
+	}
+
+	.report-generated {
+		font-size: 0.65rem;
+		color: oklch(0.45 0.02 250);
+		font-style: italic;
 	}
 </style>
