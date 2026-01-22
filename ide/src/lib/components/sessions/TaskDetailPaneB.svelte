@@ -13,6 +13,7 @@
 
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
+	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 
 	// Types
 	interface AgentTask {
@@ -136,6 +137,11 @@
 	let summaryLoading = $state(false);
 	let summaryError = $state<string | null>(null);
 	let previousSummaryTaskId = $state<string | null>(null);
+
+	// Suggested task creation state
+	let creatingTaskIndex = $state<number | null>(null);
+	let createdTaskIds = $state<Map<number, string>>(new Map());
+	let taskCreationError = $state<string | null>(null);
 
 	// Description editing state
 	let descriptionEditing = $state(false);
@@ -417,8 +423,80 @@
 			summaryData = null;
 			summaryError = null;
 			previousSummaryTaskId = currentTaskId;
+			// Reset creation state when task changes
+			createdTaskIds = new Map();
+			taskCreationError = null;
 		}
 	});
+
+	// Extract project from task ID (e.g., "jat-abc" -> "jat")
+	function getProjectFromTaskId(taskId: string): string {
+		const match = taskId.match(/^([a-z0-9_-]+)-[a-z0-9]+$/i);
+		return match ? match[1].toLowerCase() : 'jat';
+	}
+
+	// Create a suggested task in Beads
+	async function createSuggestedTask(index: number, andStart = false) {
+		if (!summaryData?.suggestedTasks?.[index]) return;
+
+		const suggestedTask = summaryData.suggestedTasks[index];
+		const project = getProjectFromTaskId(task.id);
+
+		creatingTaskIndex = index;
+		taskCreationError = null;
+
+		try {
+			// Create the task via API
+			const response = await fetch('/api/tasks', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					title: suggestedTask.title,
+					type: suggestedTask.type || 'task',
+					priority: suggestedTask.priority ?? 2,
+					description: suggestedTask.description || '',
+					project
+				})
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || 'Failed to create task');
+			}
+
+			const data = await response.json();
+			const newTaskId = data.task?.id;
+
+			if (newTaskId) {
+				// Track that this task was created
+				createdTaskIds.set(index, newTaskId);
+				createdTaskIds = new Map(createdTaskIds); // trigger reactivity
+
+				// If "Add & Start", spawn an agent for the task
+				if (andStart) {
+					const spawnResponse = await fetch('/api/work/spawn', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							taskId: newTaskId,
+							project
+						})
+					});
+
+					if (!spawnResponse.ok) {
+						const spawnError = await spawnResponse.json();
+						console.error('Failed to spawn agent:', spawnError);
+						// Task was created, but spawn failed - still show as created
+					}
+				}
+			}
+		} catch (err) {
+			taskCreationError = err instanceof Error ? err.message : 'Failed to create task';
+			console.error('Task creation error:', err);
+		} finally {
+			creatingTaskIndex = null;
+		}
+	}
 </script>
 
 <div class="task-detail-panel" style="height: {height}px;">
@@ -1121,11 +1199,37 @@
 										<span class="report-count">{summaryData.suggestedTasks.length}</span>
 									</div>
 									<div class="report-tasks">
-										{#each summaryData.suggestedTasks as suggestedTask}
-											<div class="task-card">
-												<div class="task-card-badges">
-													<span class="task-type-badge">{suggestedTask.type}</span>
-													<span class="task-priority-badge">P{suggestedTask.priority}</span>
+										{#each summaryData.suggestedTasks as suggestedTask, index}
+											{@const isCreating = creatingTaskIndex === index}
+											{@const createdId = createdTaskIds.get(index)}
+											<div class="task-card" class:task-card-created={!!createdId}>
+												<div class="task-card-header">
+													<div class="task-card-badges">
+														<span class="task-type-badge">{suggestedTask.type}</span>
+														<span class="task-priority-badge">P{suggestedTask.priority}</span>
+													</div>
+													{#if createdId}
+														<!-- Task was created - show the ID -->
+														<span class="task-created-badge" title="Task created">
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+															</svg>
+															{createdId}
+														</span>
+													{:else}
+														<!-- Action buttons -->
+														<div class="task-card-actions">
+															<SlideOpenButton
+																primaryLabel="Add"
+																primaryLoadingLabel="Adding..."
+																secondaryLabel="& Start"
+																loading={isCreating}
+																disabled={isCreating}
+																onprimary={() => createSuggestedTask(index, false)}
+																onsecondary={() => createSuggestedTask(index, true)}
+															/>
+														</div>
+													{/if}
 												</div>
 												<span class="task-card-title">{suggestedTask.title}</span>
 												{#if suggestedTask.description}
@@ -1133,6 +1237,14 @@
 												{/if}
 											</div>
 										{/each}
+										{#if taskCreationError}
+											<div class="task-creation-error">
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+												</svg>
+												{taskCreationError}
+											</div>
+										{/if}
 									</div>
 								</div>
 							{/if}
@@ -2534,6 +2646,56 @@
 		font-size: 0.72rem;
 		color: oklch(0.60 0.02 250);
 		line-height: 1.4;
+	}
+
+	.task-card-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.task-card-actions {
+		flex-shrink: 0;
+	}
+
+	.task-card-created {
+		border-color: oklch(0.45 0.12 145 / 0.4);
+		background: oklch(0.18 0.02 145 / 0.3);
+	}
+
+	.task-created-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.125rem 0.375rem;
+		font-size: 0.65rem;
+		font-weight: 600;
+		font-family: ui-monospace, monospace;
+		background: oklch(0.45 0.12 145 / 0.2);
+		color: oklch(0.72 0.15 145);
+		border-radius: 4px;
+	}
+
+	.task-created-badge svg {
+		color: oklch(0.65 0.18 145);
+	}
+
+	.task-creation-error {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.5rem 0.625rem;
+		font-size: 0.72rem;
+		color: oklch(0.72 0.15 30);
+		background: oklch(0.22 0.04 30 / 0.3);
+		border: 1px solid oklch(0.45 0.12 30 / 0.4);
+		border-radius: 6px;
+	}
+
+	.task-creation-error svg {
+		flex-shrink: 0;
+		color: oklch(0.65 0.18 30);
 	}
 
 	/* Report Footer */

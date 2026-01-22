@@ -620,6 +620,22 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		dormantGlow: 'oklch(0.50 0.05 145 / 0.2)',
 		icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
 	},
+	polishing: {
+		label: '✨ POLISHING',
+		shortLabel: '✨ Polishing',
+		iconType: 'gear',
+		description: 'Task complete - handling minor follow-up tweaks',
+		// StatusActionBadge colors - teal/cyan to indicate post-completion refinement
+		bgColor: 'oklch(0.50 0.15 185 / 0.3)',
+		textColor: 'oklch(0.85 0.12 185)',
+		borderColor: 'oklch(0.50 0.15 185 / 0.5)',
+		// SessionCard accent colors - sparkly teal
+		accent: 'oklch(0.70 0.18 185)',
+		bgTint: 'oklch(0.70 0.18 185 / 0.08)',
+		glow: 'oklch(0.70 0.18 185 / 0.4)',
+		// Sparkle/star icon
+		icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z'
+	},
 	'auto-proceeding': {
 		label: '🚀 SPAWNING NEXT',
 		shortLabel: '🚀 Spawning',
@@ -725,6 +741,31 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			description: 'Open session in terminal'
 		}
 	],
+	// POLISHING: Post-completion follow-up work - task is done, handling minor tweaks
+	// Primary action is Kill - when polishing is done, user just closes the session
+	polishing: [
+		{
+			id: 'kill',
+			label: 'Done Polishing',
+			icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'success',
+			description: 'Finish polishing and close session'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
+		},
+		{
+			id: 'interrupt',
+			label: 'Interrupt',
+			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
+			variant: 'warning',
+			description: 'Send Ctrl+C to interrupt'
+		}
+	],
 	'auto-proceeding': [
 		{
 			id: 'attach',
@@ -755,6 +796,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'warning',
 			description: 'Complete task and self-destruct session'
+		},
+		{
+			id: 'close-kill',
+			label: 'Close & Kill',
+			icon: 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'error',
+			description: 'Close task immediately and kill session (skip completion)'
 		},
 		{
 			id: 'pause',
@@ -831,6 +879,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'warning',
 			description: 'Complete task and self-destruct session'
+		},
+		{
+			id: 'close-kill',
+			label: 'Close & Kill',
+			icon: 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'error',
+			description: 'Close task immediately and kill session (skip completion)'
 		},
 		{
 			id: 'pause',

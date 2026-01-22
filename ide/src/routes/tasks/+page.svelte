@@ -818,7 +818,11 @@
 	onMount(() => {
 		loadCollapseState();
 		fetchAllData();
-		pollInterval = setInterval(fetchAllData, 5000);
+		pollInterval = setInterval(() => {
+			// Skip fetch when page is hidden to avoid Content-Length mismatch errors
+			if (document.visibilityState === 'hidden') return;
+			fetchAllData();
+		}, 5000);
 	});
 
 	onDestroy(() => {
@@ -1003,7 +1007,7 @@
 
 				<!-- Active Sessions Section -->
 				{#if projectSessions.length > 0}
-					<div class="subsection">
+					<div class="subsection subsection-active">
 						<button
 							class="subsection-header"
 							onclick={() =>
@@ -1722,6 +1726,13 @@
 	.subsection {
 		padding: 0.75rem 0;
 		border-bottom: 1px solid oklch(0.22 0.02 250);
+		/* Create stacking context for proper z-index layering */
+		position: relative;
+	}
+
+	/* Active Tasks subsection needs higher z-index so expanded content stays above other sections */
+	.subsection-active {
+		z-index: 10;
 	}
 
 	.subsection:last-child {
@@ -1868,6 +1879,10 @@
 
 	.epic-content {
 		border-top: 1px solid oklch(0.23 0.02 250);
+		/* Ensure expanded SessionCard content stays above other page sections */
+		position: relative;
+		z-index: 20;
+		background: oklch(0.16 0.01 250);
 	}
 
 	/* Override TasksActive table styles when inside accordion to reduce visual prominence */
@@ -1898,19 +1913,12 @@
 		background: oklch(0.18 0.01 250);
 	}
 
-	/* Make expanded session rows sticky within accordion */
-	/* top: 160px accounts for sticky project-tabs bar (~80px) + subsection header + accordion header */
+	/* Expanded session row styling (non-sticky - allows other tasks to remain visible) */
 	.epic-content :global(.sessions-table tbody tr.expanded) {
-		position: sticky;
-		top: 160px;
-		z-index: 5;
 		background: oklch(0.18 0.02 250);
 	}
 
 	.epic-content :global(.sessions-table tbody tr.expanded-row) {
-		position: sticky;
-		top: 204px; /* 160px (header row top) + 44px (header row height) */
-		z-index: 5;
 		background: oklch(0.16 0.01 250);
 		box-shadow: 0 4px 12px oklch(0 0 0 / 0.4);
 	}

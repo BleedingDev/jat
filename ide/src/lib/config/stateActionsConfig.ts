@@ -129,7 +129,7 @@ export const BUILTIN_ACTIONS_CATALOG: AvailableBuiltinAction[] = [
 		description: 'Open session in terminal',
 		icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 		variant: 'info',
-		defaultStates: ['working', 'needs-input', 'ready-for-review', 'completing', 'completed', 'starting', 'idle']
+		defaultStates: ['working', 'needs-input', 'ready-for-review', 'completing', 'completed', 'starting', 'idle', 'polishing']
 	},
 	{
 		id: 'view-task',
@@ -145,7 +145,7 @@ export const BUILTIN_ACTIONS_CATALOG: AvailableBuiltinAction[] = [
 		description: 'Send Ctrl+C to interrupt',
 		icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
 		variant: 'warning',
-		defaultStates: ['working', 'starting']
+		defaultStates: ['working', 'starting', 'polishing']
 	},
 	{
 		id: 'escape',
@@ -161,7 +161,7 @@ export const BUILTIN_ACTIONS_CATALOG: AvailableBuiltinAction[] = [
 		description: 'Terminate tmux session',
 		icon: 'M6 18L18 6M6 6l12 12',
 		variant: 'error',
-		defaultStates: ['working', 'needs-input', 'ready-for-review', 'completing', 'starting']
+		defaultStates: ['working', 'needs-input', 'ready-for-review', 'completing', 'starting', 'polishing']
 	}
 ];
 

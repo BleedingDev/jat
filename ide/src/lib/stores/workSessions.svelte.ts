@@ -756,6 +756,10 @@ export function startPolling(intervalMs: number = 5000, useWebSocket: boolean = 
 	// Without WebSocket, this is the only update mechanism
 	const safeInterval = Math.max(intervalMs, useWebSocket ? 2000 : 1000);
 	pollingInterval = setInterval(() => {
+		// Skip fetch when page is hidden to avoid Content-Length mismatch errors
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+			return;
+		}
 		// Catch errors silently - backoff handles retries, we don't need unhandled rejections
 		fetch().catch(() => {});
 	}, safeInterval);
@@ -937,6 +941,10 @@ export function startActivityPolling(intervalMs: number = 200): void {
 
 	// Set up polling
 	activityPollingInterval = setInterval(() => {
+		// Skip fetch when page is hidden to avoid Content-Length mismatch errors
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+			return;
+		}
 		fetchActivityStates().catch(() => {});
 	}, intervalMs);
 }

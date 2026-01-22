@@ -204,6 +204,10 @@ class AgentsStore {
 		const pollInterval = this.data.meta.poll_interval_ms || 3000;
 
 		this.pollInterval = setInterval(() => {
+			// Skip fetch when page is hidden to avoid Content-Length mismatch errors
+			if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+				return;
+			}
 			this.fetch(options);
 		}, pollInterval);
 

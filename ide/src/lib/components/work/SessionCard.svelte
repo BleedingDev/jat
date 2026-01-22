@@ -3716,6 +3716,31 @@
 				await onKillSession?.();
 				break;
 
+			case "close-kill":
+				// Close task immediately (skip completion) and kill session
+				// Used when task is no longer relevant and user wants to abandon it quickly
+				{
+					const taskId = displayTask?.id || richSignalPayload?.taskId as string || '';
+					if (taskId) {
+						try {
+							// Close task via API
+							const closeResponse = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/close`, {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({ reason: 'Abandoned via Close & Kill' })
+							});
+							if (!closeResponse.ok) {
+								console.warn('[SessionCard] Failed to close task:', await closeResponse.text());
+							}
+						} catch (e) {
+							console.warn('[SessionCard] Error closing task:', e);
+						}
+					}
+					// Kill session regardless of close result
+					await onKillSession?.();
+				}
+				break;
+
 			case "pause":
 				// Pause session - write signal directly for instant UX
 				if (sessionName && displayTask?.id) {
@@ -4018,6 +4043,32 @@
 				if (liveStreamEnabled) {
 					await onSendInput("ctrl-u", "key");
 					await new Promise((r) => setTimeout(r, 30));
+				}
+
+					// Write IDE-initiated signal if transitioning from input-waiting states
+				// This provides instant UI feedback before the agent processes the input
+				// Use 'polishing' for completed sessions (post-task follow-up), 'working' for others
+				const waitingStates = ['ready-for-review', 'needs-input', 'completed', 'idle'];
+				if (sessionName && waitingStates.includes(sessionState)) {
+					const signalType = sessionState === 'completed' ? 'polishing' : 'working';
+					try {
+						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								type: signalType,
+								data: {
+									taskId: displayTask?.id || richSignalPayload?.taskId || '',
+									taskTitle: displayTask?.title || richSignalPayload?.taskTitle || '',
+									agentName,
+									approach: sessionState === 'completed' ? 'Post-completion follow-up' : 'Processing user input'
+								}
+							})
+						});
+						console.log('[SessionCard] Wrote IDE-initiated working signal after user input');
+					} catch (e) {
+						console.warn('[SessionCard] Failed to write working signal:', e);
+					}
 				}
 
 				// STEP 2: Send the complete message and submit

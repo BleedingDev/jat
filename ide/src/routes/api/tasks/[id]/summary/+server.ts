@@ -265,11 +265,25 @@ Generate a JSON object with:
 {
   "taskId": "${id}",
   "title": "${taskData.title}",
-  "summary": ["2-4 bullet points describing what was accomplished"],
+  "summary": ["2-4 bullet points describing what was accomplished based on the task title and description"],
   "outcome": "completed" | "incomplete" | "blocked",
-  "keyChanges": ["key files or areas modified"],
-  "quality": { "tests": "passing|failing|none", "build": "clean|warnings|errors" }
+  "keyChanges": ["key files or areas that were likely modified based on the task"],
+  "quality": { "tests": "passing|failing|none", "build": "clean|warnings|errors" },
+  "suggestedTasks": [
+    {
+      "type": "task|bug|feature|chore",
+      "title": "Short descriptive title",
+      "description": "What needs to be done and why",
+      "priority": 2
+    }
+  ],
+  "crossAgentIntel": {
+    "patterns": ["useful patterns discovered"],
+    "gotchas": ["things to watch out for"]
+  }
 }
+
+For suggestedTasks: Include 0-3 follow-up tasks if the work naturally leads to additional improvements, tests, documentation, or related features. Leave empty array if the task is self-contained.
 
 Output ONLY the JSON object.`;
 
@@ -304,6 +318,8 @@ Output ONLY the JSON object.`;
 				agent,
 				keyChanges: llmSummary.keyChanges || [],
 				quality: llmSummary.quality,
+				suggestedTasks: llmSummary.suggestedTasks || [],
+				crossAgentIntel: llmSummary.crossAgentIntel,
 				generatedAt: new Date().toISOString()
 			};
 

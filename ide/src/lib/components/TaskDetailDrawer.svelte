@@ -146,6 +146,35 @@
 	let reopenReason = $state('');
 	let isReopening = $state(false);
 
+	// Summary state (for closed tasks)
+	interface TaskSummary {
+		taskId: string;
+		title: string;
+		summary: string[];
+		outcome: 'completed' | 'incomplete' | 'blocked';
+		duration?: string;
+		agent?: string;
+		keyChanges: string[];
+		quality?: {
+			tests?: string;
+			build?: string;
+		};
+		suggestedTasks?: Array<{
+			type: string;
+			title: string;
+			description: string;
+			priority: number;
+		}>;
+		humanActions?: Array<{
+			title: string;
+			description: string;
+		}>;
+		generatedAt: string;
+	}
+	let summaryData = $state<TaskSummary | null>(null);
+	let summaryLoading = $state(false);
+	let summaryError = $state<string | null>(null);
+
 	// Update timer for elapsed time display (every 30s)
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -405,6 +434,11 @@
 			fetchTaskSignals(id, signal);  // New structured signals (primary)
 			fetchSessionLogs(id, signal);   // Legacy logs (fallback)
 			fetchAvailableTasks(id, signal);
+
+			// Fetch summary for closed tasks
+			if (data.task?.status === 'closed') {
+				fetchSummary(id, signal);
+			}
 		} catch (err: any) {
 			// Ignore abort errors (expected when switching tasks or closing drawer)
 			if (err.name === 'AbortError') {
@@ -640,6 +674,34 @@
 			sessionLogs = [];
 		} finally {
 			logsLoading = false;
+		}
+	}
+
+	// Fetch task summary (for closed tasks)
+	async function fetchSummary(id: string, signal?: AbortSignal, regenerate = false) {
+		if (!id) return;
+
+		summaryLoading = true;
+		summaryError = null;
+
+		try {
+			const url = `/api/tasks/${id}/summary${regenerate ? '?regenerate=true' : ''}`;
+			const response = await fetch(url, { signal });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch task summary: ${response.statusText}`);
+			}
+			const data = await response.json();
+			summaryData = data.summary || null;
+		} catch (err: any) {
+			// Ignore abort errors
+			if (err.name === 'AbortError') {
+				return;
+			}
+			console.error('Error fetching task summary:', err);
+			summaryError = err.message;
+			summaryData = null;
+		} finally {
+			summaryLoading = false;
 		}
 	}
 
@@ -2107,6 +2169,168 @@
 								class="text-sm"
 							/>
 						</div>
+
+						<!-- Task Summary - Industrial -->
+						{#if task.status === 'closed' || summaryData}
+							<!-- Full summary section for closed tasks or when summary has been generated -->
+							<div class="rounded-lg p-4 bg-base-200 border border-base-300">
+								<div class="flex items-center justify-between mb-3">
+									<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
+										{task.status === 'closed' ? 'Completion Summary' : 'Progress Summary'}
+									</h4>
+									{#if summaryData}
+										<button
+											class="btn btn-xs btn-ghost"
+											onclick={() => taskId && fetchSummary(taskId, undefined, true)}
+											disabled={summaryLoading}
+											title="Regenerate summary"
+										>
+											{#if summaryLoading}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+												</svg>
+											{/if}
+										</button>
+									{/if}
+								</div>
+
+								{#if summaryLoading}
+									<div class="flex items-center gap-2 text-sm text-base-content/60">
+										<span class="loading loading-spinner loading-sm"></span>
+										<span>Generating summary...</span>
+									</div>
+								{:else if summaryError}
+									<div class="text-sm text-error">{summaryError}</div>
+								{:else if summaryData}
+									<!-- Outcome Badge -->
+									<div class="flex items-center gap-2 mb-3">
+										<span class="badge {summaryData.outcome === 'completed' ? 'badge-success' : summaryData.outcome === 'blocked' ? 'badge-error' : 'badge-warning'}">
+											{summaryData.outcome === 'completed' ? '✓ Completed' : summaryData.outcome === 'blocked' ? '⚠ Blocked' : '○ Incomplete'}
+										</span>
+										{#if summaryData.duration}
+											<span class="text-xs text-base-content/50">
+												{summaryData.duration}
+											</span>
+										{/if}
+										{#if summaryData.agent}
+											<span class="text-xs text-base-content/50">
+												by {summaryData.agent}
+											</span>
+										{/if}
+									</div>
+
+									<!-- Summary Bullets -->
+									{#if summaryData.summary && summaryData.summary.length > 0}
+										<div class="mb-3">
+											<ul class="list-disc list-inside text-sm space-y-1">
+												{#each summaryData.summary as item}
+													<li class="text-base-content/80">{item}</li>
+												{/each}
+											</ul>
+										</div>
+									{/if}
+
+									<!-- Key Changes -->
+									{#if summaryData.keyChanges && summaryData.keyChanges.length > 0}
+										<div class="mb-3">
+											<h5 class="text-xs font-semibold mb-1 text-base-content/60">Files Modified</h5>
+											<div class="flex flex-wrap gap-1">
+												{#each summaryData.keyChanges as file}
+													<span class="badge badge-xs badge-outline font-mono">{file}</span>
+												{/each}
+											</div>
+										</div>
+									{/if}
+
+									<!-- Quality -->
+									{#if summaryData.quality}
+										<div class="flex gap-3 mb-3">
+											{#if summaryData.quality.tests}
+												<div class="flex items-center gap-1 text-xs">
+													<span class="text-base-content/50">Tests:</span>
+													<span class="badge badge-xs {summaryData.quality.tests === 'passing' ? 'badge-success' : summaryData.quality.tests === 'failing' ? 'badge-error' : 'badge-ghost'}">
+														{summaryData.quality.tests}
+													</span>
+												</div>
+											{/if}
+											{#if summaryData.quality.build}
+												<div class="flex items-center gap-1 text-xs">
+													<span class="text-base-content/50">Build:</span>
+													<span class="badge badge-xs {summaryData.quality.build === 'clean' ? 'badge-success' : summaryData.quality.build === 'errors' ? 'badge-error' : 'badge-warning'}">
+														{summaryData.quality.build}
+													</span>
+												</div>
+											{/if}
+										</div>
+									{/if}
+
+									<!-- Human Actions -->
+									{#if summaryData.humanActions && summaryData.humanActions.length > 0}
+										<div class="mb-3">
+											<h5 class="text-xs font-semibold mb-1 text-warning">Human Actions Required</h5>
+											<div class="space-y-1">
+												{#each summaryData.humanActions as action}
+													<div class="text-sm p-2 rounded bg-warning/10 border border-warning/20">
+														<div class="font-medium text-warning">{action.title}</div>
+														<div class="text-xs text-base-content/60">{action.description}</div>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+
+									<!-- Suggested Tasks -->
+									{#if summaryData.suggestedTasks && summaryData.suggestedTasks.length > 0}
+										<div>
+											<h5 class="text-xs font-semibold mb-1 text-base-content/60">Suggested Follow-up Tasks</h5>
+											<div class="space-y-1">
+												{#each summaryData.suggestedTasks as suggestion}
+													<div class="text-sm p-2 rounded bg-info/10 border border-info/20">
+														<div class="flex items-center gap-2">
+															<span class="badge badge-xs">{suggestion.type}</span>
+															<span class="badge badge-xs badge-outline">P{suggestion.priority}</span>
+															<span class="font-medium">{suggestion.title}</span>
+														</div>
+														<div class="text-xs text-base-content/60 mt-0.5">{suggestion.description}</div>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+								{:else}
+									<div class="text-sm text-base-content/50 italic">No summary available</div>
+								{/if}
+							</div>
+						{:else if task.status === 'in_progress'}
+							<!-- Generate Preview button for in-progress tasks -->
+							<div class="rounded-lg p-4 bg-base-200 border border-base-300 border-dashed">
+								<div class="flex items-center justify-between">
+									<div>
+										<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60 mb-1">
+											Progress Summary
+										</h4>
+										<p class="text-xs text-base-content/50">Generate a summary of work done so far</p>
+									</div>
+									<button
+										class="btn btn-sm btn-outline btn-info"
+										onclick={() => taskId && fetchSummary(taskId)}
+										disabled={summaryLoading}
+									>
+										{#if summaryLoading}
+											<span class="loading loading-spinner loading-xs"></span>
+											Generating...
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+											</svg>
+											Generate Preview
+										{/if}
+									</button>
+								</div>
+							</div>
+						{/if}
 
 						<!-- Attachments - Industrial with Drag-Drop -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->

@@ -24,7 +24,6 @@
 	import ServersBadge from "./ServersBadge.svelte";
 	import UserProfile from "./UserProfile.svelte";
 	import CommandPalette from "./CommandPalette.svelte";
-	import RecoveryWidget from "./RecoveryWidget.svelte";
 	import {
 		openTaskDrawer,
 		toggleSidebar,
@@ -542,9 +541,6 @@
 			onStart={handleSpawnSingle}
 			onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 		/>
-
-		<!-- Recovery Widget - shows crashed sessions that can be recovered -->
-		<RecoveryWidget />
 	</div>
 
 	<!-- Agent Sort Dropdown (on /agents page) -->

@@ -331,6 +331,10 @@ export function startPolling(intervalMs: number = 2000): void {
 
 	// Set up polling - servers don't need as frequent updates as work sessions
 	pollingInterval = setInterval(() => {
+		// Skip fetch when page is hidden to avoid Content-Length mismatch errors
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+			return;
+		}
 		fetch();
 	}, intervalMs);
 }

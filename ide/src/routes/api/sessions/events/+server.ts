@@ -223,6 +223,7 @@ const SIGNAL_STATE_MAP: Record<string, string> = {
 	'starting': 'starting',
 	'compacting': 'compacting',
 	'completing': 'completing',
+	'polishing': 'polishing',  // Post-completion follow-up tweaks
 };
 
 /**
@@ -260,6 +261,12 @@ function readSignalState(sessionName: string): string | null {
 		// Handle completion bundles - these should show as "completed" state
 		if (signal.type === 'complete') {
 			return 'completed';
+		}
+
+		// Handle IDE-initiated signals with direct type (e.g., { type: 'working', data: {...} })
+		// These are written by the IDE for instant UI feedback
+		if (signal.type && SIGNAL_STATE_MAP[signal.type]) {
+			return SIGNAL_STATE_MAP[signal.type];
 		}
 
 		return null;

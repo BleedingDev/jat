@@ -660,6 +660,34 @@
 				}
 			}
 
+			// Write IDE-initiated signal if transitioning from input-waiting states
+			// Use 'polishing' for completed sessions (post-task follow-up), 'working' for others
+			const agentName = getAgentName(expandedSession);
+			const sessionState = agentSessionInfo.get(agentName)?.activityState;
+			const waitingStates = ['ready-for-review', 'needs-input', 'completed', 'idle'];
+			if (waitingStates.includes(sessionState || '')) {
+				const task = agentTasks.get(agentName);
+				const signalType = sessionState === 'completed' ? 'polishing' : 'working';
+				try {
+					await fetch(`/api/sessions/${encodeURIComponent(expandedSession)}/signal`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							type: signalType,
+							data: {
+								taskId: task?.id || '',
+								taskTitle: task?.title || '',
+								agentName,
+								approach: sessionState === 'completed' ? 'Post-completion follow-up' : 'Processing user input'
+							}
+						})
+					});
+					console.log(`[TasksActive] Wrote IDE-initiated ${signalType} signal after user input`);
+				} catch (e) {
+					console.warn(`[TasksActive] Failed to write ${signalType} signal:`, e);
+				}
+			}
+
 			const response = await fetch(`/api/work/${encodeURIComponent(expandedSession)}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -953,6 +981,20 @@
 													headers: { 'Content-Type': 'application/json' },
 													body: JSON.stringify({ type: 'escape' })
 												});
+											} else if (actionId === 'close-kill') {
+												// Close task immediately and kill session (skip completion)
+												if (sessionTask) {
+													try {
+														await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({ reason: 'Abandoned via Close & Kill' })
+														});
+													} catch (e) {
+														console.warn('[TasksActive] Failed to close task:', e);
+													}
+												}
+												await handleKillSession(session.name);
 											}
 										}}
 										task={sessionTask ? { id: sessionTask.id, issue_type: sessionTask.issue_type, priority: sessionTask.priority } : null}
@@ -1518,6 +1560,9 @@
 	.session-row.expanded {
 		background: oklch(0.65 0.15 200 / 0.12);
 		border-bottom: none;
+		/* Ensure expanded header row stays above other rows when scrolling */
+		position: relative;
+		z-index: 6;
 	}
 
 	.session-row.expanded:hover {
@@ -1528,6 +1573,9 @@
 	.expanded-row {
 		background: oklch(0.12 0.01 250);
 		border-bottom: 1px solid oklch(0.22 0.02 250);
+		/* Ensure expanded content stays above other rows when scrolling */
+		position: relative;
+		z-index: 5;
 	}
 
 	.expanded-row:hover {
@@ -1537,11 +1585,15 @@
 	.expanded-content {
 		padding: 0 !important;
 		border-top: 1px solid oklch(0.25 0.02 250);
+		position: relative;
+		z-index: 10;
 	}
 
 	.expanded-session-card {
 		overflow-y: auto;
 		width: 100%;
+		position: relative;
+		z-index: 10;
 	}
 
 	@keyframes expand-slide-down {
@@ -1573,6 +1625,7 @@
 	/* Wrapper for expanded session with horizontal resize */
 	.expanded-session-wrapper {
 		position: relative;
+		z-index: 10;
 		padding: 1rem;
 		display: flex;
 		gap: 1rem;
@@ -1586,6 +1639,7 @@
 	/* SessionCard takes all space when no task panel */
 	.session-card-section {
 		position: relative;
+		z-index: 10;
 		flex: 1;
 		min-width: 0;
 	}

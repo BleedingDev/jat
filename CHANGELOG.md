@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Task Summary tab in task detail pane showing completion report, suggested tasks, and cross-agent intel
+- Add/Add & Start buttons for creating follow-up tasks directly from Summary tab
 - Initial public release of JAT
 - Beads Task IDE (SvelteKit 5)
 - Agent Mail coordination system

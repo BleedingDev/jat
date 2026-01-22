@@ -163,6 +163,18 @@
 		editor?.focus();
 	}
 
+	// Focus and move cursor to end of content
+	export function focusEnd() {
+		if (!editor) return;
+		const model = editor.getModel();
+		if (model) {
+			const lastLine = model.getLineCount();
+			const lastColumn = model.getLineMaxColumn(lastLine);
+			editor.setPosition({ lineNumber: lastLine, column: lastColumn });
+		}
+		editor.focus();
+	}
+
 	// Expose layout method for manual resize triggers
 	export function layout() {
 		editor?.layout();

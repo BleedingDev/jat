@@ -134,7 +134,7 @@ export async function POST({ params, request }) {
 		if (!type) {
 			return json({
 				error: 'Missing signal type',
-				message: 'Signal type is required (e.g., "working", "review", "completing", "completed")'
+				message: 'Signal type is required (e.g., "working", "polishing", "review", "completing", "completed")'
 			}, { status: 400 });
 		}
 

@@ -77,6 +77,7 @@ export type ActivityState =
 	| 'ready-for-review' // Asking to mark complete
 	| 'completing' // Running /jat:complete
 	| 'completed' // Task finished
+	| 'polishing' // Post-completion follow-up tweaks
 	| 'idle'; // No active task
 
 // =============================================================================

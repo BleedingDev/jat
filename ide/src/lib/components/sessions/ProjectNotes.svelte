@@ -27,7 +27,7 @@
 	let saveError = $state<string | null>(null);
 	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 	let copySuccess = $state(false);
-	let monacoRef: { focus: () => void; layout: () => void; getSelection: () => string; deleteSelection: () => boolean } | undefined;
+	let monacoRef: { focus: () => void; focusEnd: () => void; layout: () => void; getSelection: () => string; deleteSelection: () => boolean } | undefined;
 
 	// Auto-size constants
 	const MIN_HEIGHT = 100;
@@ -180,10 +180,11 @@
 	// Toggle collapse
 	function toggleCollapse() {
 		internalCollapsed = !internalCollapsed;
-		// Trigger Monaco layout after animation
+		// Trigger Monaco layout and focus at end after animation when expanding
 		if (!internalCollapsed) {
 			setTimeout(() => {
 				monacoRef?.layout();
+				monacoRef?.focusEnd();
 			}, 300);
 		}
 	}
@@ -229,6 +230,13 @@
 				/>
 			</svg>
 			<span class="notes-title">Project Notes</span>
+			{#if internalCollapsed && localNotes && localNotes.trim()}
+				<span class="has-notes-indicator" title="Has notes">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="none">
+						<circle cx="12" cy="12" r="4" />
+					</svg>
+				</span>
+			{/if}
 			{#if isDirty}
 				<span class="dirty-indicator" title="Unsaved changes"></span>
 			{/if}
@@ -412,6 +420,19 @@
 	.notes-title {
 		flex: 1;
 		color: oklch(0.85 0.02 250);
+	}
+
+	.has-notes-indicator {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--project-color);
+		opacity: 0.8;
+	}
+
+	.has-notes-indicator svg {
+		width: 0.5rem;
+		height: 0.5rem;
 	}
 
 	.dirty-indicator {
