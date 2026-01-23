@@ -2698,6 +2698,28 @@
 										</button>
 									{/if}
 								</div>
+							{:else if recoverableSession}
+								<!-- Show recoverable session info when no logs but session exists -->
+								<div class="p-3 rounded bg-base-200 border border-secondary/20">
+									<div class="flex items-center gap-2 mb-2">
+										<span class="badge badge-secondary badge-sm">Paused Session</span>
+									</div>
+									<div class="text-sm space-y-1">
+										<div class="flex items-center gap-2">
+											<span class="text-base-content/50">Agent:</span>
+											<span class="font-medium">{recoverableSession.agentName}</span>
+										</div>
+										{#if recoverableSession.lastActivity}
+											<div class="flex items-center gap-2">
+												<span class="text-base-content/50">Last active:</span>
+												<span class="text-base-content/70">{new Date(recoverableSession.lastActivity).toLocaleString()}</span>
+											</div>
+										{/if}
+										<div class="text-xs text-base-content/40 mt-2">
+											Session can be resumed using the Resume button above
+										</div>
+									</div>
+								</div>
 							{:else}
 								<div class="p-3 rounded text-center bg-base-200">
 									<span class="text-sm text-base-content/50">No session logs found</span>
