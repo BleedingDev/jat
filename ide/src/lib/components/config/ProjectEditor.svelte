@@ -20,6 +20,13 @@
 	let isDeleting = $state(false);
 	let deleteError = $state<string | null>(null);
 
+	// Rename state
+	let showRenameModal = $state(false);
+	let isRenaming = $state(false);
+	let renameError = $state<string | null>(null);
+	let newProjectKey = $state('');
+	let renameResult = $state<{ killedAgents: string[] } | null>(null);
+
 	// Color picker state
 	let editingActiveColor = $state(false);
 	let editingInactiveColor = $state(false);
@@ -128,6 +135,12 @@
 			showDeleteConfirm = false;
 			isDeleting = false;
 			deleteError = null;
+			// Reset rename state
+			showRenameModal = false;
+			isRenaming = false;
+			renameError = null;
+			newProjectKey = '';
+			renameResult = null;
 			// Reset color picker state
 			editingActiveColor = false;
 			editingInactiveColor = false;
@@ -302,6 +315,79 @@
 			isDeleting = false;
 		}
 	}
+
+	function validateNewKey(value: string): string | null {
+		if (!value.trim()) return 'New project key is required';
+		if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]{1,2}$/.test(value)) {
+			return 'Key must be lowercase letters, numbers, and hyphens only';
+		}
+		if (value.length < 2) return 'Key must be at least 2 characters';
+		if (value.length > 50) return 'Key must be 50 characters or less';
+		if (value === project?.key) return 'New key must be different from current key';
+		return null;
+	}
+
+	async function handleRename() {
+		if (!project?.key) return;
+
+		const validation = validateNewKey(newProjectKey);
+		if (validation) {
+			renameError = validation;
+			return;
+		}
+
+		isRenaming = true;
+		renameError = null;
+		renameResult = null;
+
+		try {
+			const response = await fetch('/api/projects/rename', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					oldKey: project.key,
+					newKey: newProjectKey.trim().toLowerCase()
+				})
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to rename project');
+			}
+
+			// Store result for display
+			renameResult = { killedAgents: data.killedAgents || [] };
+
+			// Build success message
+			let message = `Project renamed to "${data.newKey}"`;
+			if (data.killedAgents?.length > 0) {
+				message += `. Stopped ${data.killedAgents.length} agent(s): ${data.killedAgents.join(', ')}`;
+			}
+
+			// Close modals and drawer
+			showRenameModal = false;
+			isOpen = false;
+
+			// Notify parent about the rename (triggers refresh)
+			onDelete?.(project.key);
+
+			successToast('Project renamed', message);
+		} catch (error) {
+			renameError = error instanceof Error ? error.message : 'Failed to rename project';
+			errorToast('Failed to rename project', renameError);
+		} finally {
+			isRenaming = false;
+		}
+	}
+
+	// Compute the preview path for rename
+	let renamePreviewPath = $derived(() => {
+		if (!path || !newProjectKey) return '';
+		const parts = path.split('/');
+		parts[parts.length - 1] = newProjectKey.trim().toLowerCase();
+		return parts.join('/');
+	});
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -665,13 +751,23 @@
 
 		<!-- Footer -->
 		<div class="flex justify-between p-4 border-t border-base-300">
-			<!-- Delete button (only for existing projects) -->
-			<div>
+			<!-- Rename and Delete buttons (only for existing projects) -->
+			<div class="flex gap-2">
 				{#if !isNewProject}
+					<button
+						class="btn btn-warning btn-outline"
+						onclick={() => { showRenameModal = true; newProjectKey = ''; renameError = null; }}
+						disabled={isRenaming || isDeleting}
+					>
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+						</svg>
+						Rename
+					</button>
 					<button
 						class="btn btn-error btn-outline"
 						onclick={() => showDeleteConfirm = true}
-						disabled={isDeleting}
+						disabled={isDeleting || isRenaming}
 					>
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -756,6 +852,120 @@
 								Deleting...
 							{:else}
 								Delete Project
+							{/if}
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Rename Confirmation Modal -->
+	{#if showRenameModal}
+		<div
+			class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4"
+			transition:fade={{ duration: 150 }}
+			onclick={(e) => e.target === e.currentTarget && !isRenaming && (showRenameModal = false)}
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="rename-modal-title"
+		>
+			<div
+				class="bg-base-100 rounded-xl shadow-2xl max-w-md w-full"
+				transition:fly={{ y: 20, duration: 200 }}
+			>
+				<div class="p-6">
+					<div class="flex items-center gap-3 mb-4">
+						<div class="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
+							<svg class="w-6 h-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+							</svg>
+						</div>
+						<div>
+							<h3 id="rename-modal-title" class="text-lg font-semibold">Rename Project</h3>
+							<p class="text-sm text-base-content/70">Change the project folder name and key</p>
+						</div>
+					</div>
+
+					<p class="mb-4">
+						Rename <span class="font-semibold text-warning">{project?.key}</span> to a new name.
+					</p>
+
+					<!-- Current path display -->
+					<div class="bg-base-200 rounded-lg p-3 mb-4 text-sm font-mono">
+						<div class="text-base-content/50 text-xs mb-1">Current path:</div>
+						<div class="text-base-content/70">{path}</div>
+					</div>
+
+					<!-- New key input -->
+					<div class="form-control mb-4">
+						<label class="label" for="new-project-key">
+							<span class="label-text font-medium">New Project Key</span>
+						</label>
+						<input
+							id="new-project-key"
+							type="text"
+							class="input input-bordered w-full"
+							class:input-error={renameError}
+							placeholder="new-project-name"
+							bind:value={newProjectKey}
+							oninput={() => renameError = null}
+							disabled={isRenaming}
+						/>
+						<label class="label">
+							<span class="label-text-alt text-base-content/50">
+								Lowercase letters, numbers, and hyphens only
+							</span>
+						</label>
+					</div>
+
+					<!-- Preview new path -->
+					{#if newProjectKey.trim()}
+						<div class="bg-base-200 rounded-lg p-3 mb-4 text-sm font-mono">
+							<div class="text-base-content/50 text-xs mb-1">New path:</div>
+							<div class="text-success">{renamePreviewPath()}</div>
+						</div>
+					{/if}
+
+					<!-- Warning about agents -->
+					<div class="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4 text-sm">
+						<div class="flex items-start gap-2">
+							<svg class="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+							</svg>
+							<div class="text-warning">
+								<strong>Running agents will be stopped.</strong> Any active agent sessions on this project will be terminated before renaming.
+							</div>
+						</div>
+					</div>
+
+					{#if renameError}
+						<div class="alert alert-error mb-4">
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+							</svg>
+							<span>{renameError}</span>
+						</div>
+					{/if}
+
+					<div class="flex justify-end gap-2">
+						<button
+							class="btn btn-ghost"
+							onclick={() => showRenameModal = false}
+							disabled={isRenaming}
+						>
+							Cancel
+						</button>
+						<button
+							class="btn btn-warning"
+							onclick={handleRename}
+							disabled={isRenaming || !newProjectKey.trim()}
+						>
+							{#if isRenaming}
+								<span class="loading loading-spinner loading-sm"></span>
+								Renaming...
+							{:else}
+								Rename Project
 							{/if}
 						</button>
 					</div>
