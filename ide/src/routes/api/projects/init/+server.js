@@ -3,16 +3,21 @@
  * POST /api/projects/init - Initialize a new project with Beads
  *
  * Request body:
- *   { path: string }  - Path to the project directory (must be under home directory)
+ *   { path: string, createIfMissing?: boolean }  - Path to the project directory
  *
  * Response:
- *   { success: true, project: { name, path, prefix }, message: string }
+ *   { success: true, project: { name, path, prefix }, message: string, steps: string[] }
  *   or { error: true, message: string, type: string }
+ *
+ * Behavior (unified onboarding flow):
+ *   1. Creates directory if it doesn't exist (when createIfMissing=true or path is in ~/code/)
+ *   2. Initializes git if not already a git repository
+ *   3. Runs bd init to set up Beads
+ *   4. Adds project to ~/.config/jat/projects.json
  *
  * Security:
  *   - Only allows paths under user's home directory
- *   - Validates path exists and is a directory
- *   - Validates path is a git repository
+ *   - Directory creation restricted to ~/code/
  */
 
 import { json } from '@sveltejs/kit';
@@ -109,13 +114,15 @@ function addProjectToConfig(projectKey, absolutePath) {
 	}
 }
 
+
 /**
  * POST /api/projects/init
- * Initialize a new project with Beads (bd init)
+ * Unified project onboarding - creates directory, inits git, inits beads, adds to config
  */
 export async function POST({ request }) {
 	try {
 		const body = await request.json();
+		const steps = []; // Track what actions were taken
 
 		// Validate path is provided
 		if (!body.path || typeof body.path !== 'string') {
@@ -148,19 +155,24 @@ export async function POST({ request }) {
 			);
 		}
 
-		// Check path exists
+		// STEP 1: Create directory if it doesn't exist (anywhere under home directory)
 		if (!existsSync(absolutePath)) {
-			return json(
-				{
-					error: true,
-					message: `Path does not exist: ${absolutePath}`,
-					type: 'not_found'
-				},
-				{ status: 404 }
-			);
+			try {
+				mkdirSync(absolutePath, { recursive: true });
+				steps.push(`Created directory: ${inputPath}`);
+			} catch (mkdirError) {
+				return json(
+					{
+						error: true,
+						message: `Failed to create directory: ${mkdirError instanceof Error ? mkdirError.message : 'Unknown error'}`,
+						type: 'mkdir_failed'
+					},
+					{ status: 500 }
+				);
+			}
 		}
 
-		// Check path is a directory
+		// Check path is a directory (in case a file exists at that path)
 		const stats = statSync(absolutePath);
 		if (!stats.isDirectory()) {
 			return json(
@@ -173,45 +185,36 @@ export async function POST({ request }) {
 			);
 		}
 
-		// Check path is a git repository
+		// STEP 2: Initialize git if not a git repo
 		const isGit = await isGitRepo(absolutePath);
 		if (!isGit) {
-			return json(
-				{
-					error: true,
-					message: `Path is not a git repository: ${absolutePath}. Run 'git init' first.`,
-					type: 'not_git_repo'
-				},
-				{ status: 400 }
-			);
+			try {
+				await execAsync('git init', { cwd: absolutePath, timeout: 10000 });
+				steps.push('Initialized git repository');
+
+				// Create a basic .gitignore
+				const gitignorePath = join(absolutePath, '.gitignore');
+				if (!existsSync(gitignorePath)) {
+					writeFileSync(gitignorePath, 'node_modules/\n.env\n.DS_Store\n*.log\n');
+					steps.push('Created .gitignore');
+				}
+			} catch (gitError) {
+				return json(
+					{
+						error: true,
+						message: `Failed to initialize git: ${gitError instanceof Error ? gitError.message : 'Unknown error'}`,
+						type: 'git_init_failed'
+					},
+					{ status: 500 }
+				);
+			}
 		}
 
-		// Check if already initialized
+		// STEP 3: Check if Beads is already initialized
 		if (hasBeadsInit(absolutePath)) {
-			return json(
-				{
-					error: true,
-					message: `Beads already initialized in: ${absolutePath}`,
-					type: 'already_initialized'
-				},
-				{ status: 409 }
-			);
-		}
-
-		// Get project name from directory name
-		const projectName = basename(absolutePath);
-
-		// Run bd init
-		try {
-			const { stdout, stderr } = await execAsync('bd init --quiet', {
-				cwd: absolutePath,
-				timeout: 30000 // 30 second timeout
-			});
-
-			// Add project to projects.json
+			// Already initialized - just add to config if not already there
+			const projectName = basename(absolutePath);
 			addProjectToConfig(projectName, absolutePath);
-
-			// Invalidate projects cache so the new project appears in the IDE
 			invalidateCache.projects();
 
 			return json({
@@ -221,7 +224,39 @@ export async function POST({ request }) {
 					path: absolutePath,
 					prefix: projectName.toLowerCase()
 				},
-				message: `Successfully initialized Beads in ${projectName}`,
+				message: steps.length > 0
+					? `Project setup complete (Beads was already initialized)`
+					: `Beads already initialized in ${projectName}`,
+				steps,
+				alreadyInitialized: true
+			}, { status: 200 });
+		}
+
+		// STEP 4: Run bd init
+		const projectName = basename(absolutePath);
+		try {
+			const { stdout, stderr } = await execAsync('bd init --quiet', {
+				cwd: absolutePath,
+				timeout: 30000
+			});
+			steps.push('Initialized Beads task management');
+
+			// Add project to projects.json
+			addProjectToConfig(projectName, absolutePath);
+			steps.push('Added to JAT configuration');
+
+			// Invalidate projects cache
+			invalidateCache.projects();
+
+			return json({
+				success: true,
+				project: {
+					name: projectName,
+					path: absolutePath,
+					prefix: projectName.toLowerCase()
+				},
+				message: `Successfully set up project: ${projectName}`,
+				steps,
 				stdout: stdout || undefined,
 				stderr: stderr || undefined
 			}, { status: 201 });
@@ -234,7 +269,8 @@ export async function POST({ request }) {
 				{
 					error: true,
 					message: `Failed to initialize Beads: ${err.stderr || err.message}`,
-					type: 'init_failed'
+					type: 'init_failed',
+					steps // Include steps taken before failure
 				},
 				{ status: 500 }
 			);

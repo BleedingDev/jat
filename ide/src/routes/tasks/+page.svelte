@@ -19,7 +19,7 @@
 	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
-	import { openTaskDetailDrawer } from "$lib/stores/drawerStore";
+	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal } from "$lib/stores/drawerStore";
 	import {
 		getProjectFromTaskId,
 		buildEpicChildMap,
@@ -86,6 +86,9 @@
 	// Project notes
 	let projectNotes = $state<Record<string, string>>({});
 	let projectNotesHeight = $state<Record<string, number>>({});
+
+	// Configured projects (from projects.json - includes empty projects)
+	let configuredProjects = $state<string[]>([]);
 
 	// Recoverable sessions state
 	interface RecoverableSession {
@@ -190,9 +193,14 @@
 	// Build epic-child map from all tasks
 	const epicChildMap = $derived(buildEpicChildMap(allTasks));
 
-	// Get all unique projects from sessions and tasks
+	// Get all unique projects from sessions, tasks, and configured projects
 	const allProjects = $derived(() => {
 		const projects = new Set<string>();
+
+		// Add configured projects (includes empty projects)
+		for (const project of configuredProjects) {
+			projects.add(project);
+		}
 
 		// Add projects from sessions
 		for (const session of sessions) {
@@ -599,9 +607,14 @@
 			const data = await response.json();
 			const notes: Record<string, string> = {};
 			const heights: Record<string, number> = {};
+			const projectKeys: string[] = [];
 			for (const project of data.projects || []) {
+				// Skip hidden projects
+				if (project.hidden) continue;
+
 				const projectKey = project.key || project.name;
 				if (projectKey) {
+					projectKeys.push(projectKey);
 					if (project.notes) {
 						notes[projectKey] = project.notes;
 					}
@@ -612,6 +625,7 @@
 			}
 			projectNotes = notes;
 			projectNotesHeight = heights;
+			configuredProjects = projectKeys;
 		} catch (err) {
 			console.warn("Failed to fetch project notes:", err);
 		}
@@ -830,6 +844,14 @@
 			clearInterval(pollInterval);
 		}
 	});
+
+	// Refresh data when a new project is created via CreateProjectDrawer
+	$effect(() => {
+		const unsubscribe = projectCreatedSignal.subscribe(() => {
+			fetchAllData();
+		});
+		return unsubscribe;
+	});
 </script>
 
 <svelte:head>
@@ -979,6 +1001,27 @@
 					</div>
 				</button>
 			{/each}
+			<!-- Add Project Button -->
+			<button
+				class="add-project-tab"
+				onclick={() => openProjectDrawer()}
+				title="Add new project"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="2"
+					stroke="currentColor"
+					class="add-project-icon"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M12 4.5v15m7.5-7.5h-15"
+					/>
+				</svg>
+			</button>
 		</div>
 
 		<!-- Selected Project Content -->
@@ -1711,6 +1754,37 @@
 		background: oklch(0.55 0.18 55 / 0.25);
 		color: oklch(0.8 0.15 55);
 		border: 1px solid oklch(0.55 0.18 55 / 0.4);
+	}
+
+	/* Add Project Button */
+	.add-project-tab {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.625rem 1rem;
+		min-width: 60px;
+		background: oklch(0.16 0.01 250);
+		border: 2px dashed oklch(0.30 0.02 250);
+		border-radius: 0.5rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.add-project-tab:hover {
+		background: oklch(0.20 0.01 250);
+		border-color: oklch(0.45 0.02 250);
+	}
+
+	.add-project-tab:hover .add-project-icon {
+		color: oklch(0.75 0.15 200);
+	}
+
+	.add-project-icon {
+		width: 1.5rem;
+		height: 1.5rem;
+		color: oklch(0.45 0.02 250);
+		transition: color 0.15s ease;
 	}
 
 	/* Project Content Area */

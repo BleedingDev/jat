@@ -83,8 +83,10 @@ export async function GET({ url }) {
 			return json({
 				directories: [],
 				basePath: scanDir,
+				homeDir: homedir(),
+				error: 'Path not found',
 				message: `Directory does not exist: ${scanDir}`
-			});
+			}, { status: 404 });
 		}
 
 		// Read all entries in the directory

@@ -111,6 +111,29 @@
 		}
 	});
 
+	// Auto-open project editor if edit param is present
+	let editParamHandled = $state(false);
+	$effect(() => {
+		const editParam = $page.url.searchParams.get('edit');
+		if (editParam && !editParamHandled && projects && projects.length > 0) {
+			// Find project by key extracted from path (like handleEditProject does)
+			const projectToEdit = projects.find(
+				(p: ProjectConfig) => {
+					const key = p.path.split('/').pop() || p.name.toLowerCase();
+					return key.toLowerCase() === editParam.toLowerCase() ||
+						p.name?.toLowerCase() === editParam.toLowerCase();
+				}
+			);
+			if (projectToEdit) {
+				editParamHandled = true;
+				// Use setTimeout to avoid effect loop
+				setTimeout(() => {
+					handleEditProject(projectToEdit);
+				}, 100);
+			}
+		}
+	});
+
 	// Handle tab change - update URL
 	function handleTabChange(tabId: string) {
 		activeTab = tabId;
@@ -157,11 +180,26 @@
 		isProjectEditorOpen = true;
 	}
 
-	// Handle delete project - reload projects after deletion
-	function handleDeleteProject(project: ProjectConfig) {
-		// Delete is handled inside ProjectEditor via onDelete callback
-		// Just reload projects to reflect the change
-		loadProjects();
+	// Handle delete project - call API then reload
+	async function handleDeleteProject(project: ProjectConfig) {
+		try {
+			const response = await fetch('/api/projects', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: project.name })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || 'Failed to delete project');
+			}
+
+			successToast(`Project "${project.name}" deleted`, 'Removed from configuration');
+			loadProjects();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Failed to delete project';
+			errorToast('Delete failed', message);
+		}
 	}
 
 	// Handle project editor save

@@ -20,6 +20,29 @@
 	let isDeleting = $state(false);
 	let deleteError = $state<string | null>(null);
 
+	// Color picker state
+	let editingActiveColor = $state(false);
+	let editingInactiveColor = $state(false);
+
+	// Predefined color palette for quick selection - using oklch for perceptual uniformity
+	const COLOR_PALETTE = [
+		'oklch(0.70 0.18 220)', // Blue
+		'oklch(0.75 0.18 160)', // Cyan
+		'oklch(0.65 0.20 30)',  // Red
+		'oklch(0.80 0.18 90)',  // Yellow
+		'oklch(0.70 0.18 145)', // Green
+		'oklch(0.65 0.18 280)', // Purple
+		'oklch(0.75 0.18 60)',  // Orange
+		'oklch(0.70 0.18 200)', // Sky blue
+		'oklch(0.60 0.18 300)', // Violet
+		'oklch(0.55 0.25 25)',  // Dark red
+		'oklch(0.80 0.20 150)', // Mint green
+		'oklch(0.75 0.12 220)', // Light blue
+		'oklch(0.70 0.22 15)',  // Bright red
+		'oklch(0.75 0.20 120)', // Lime
+		'oklch(0.85 0.18 85)'   // Bright yellow
+	];
+
 	// Form state
 	let key = $state('');
 	let name = $state('');
@@ -105,6 +128,9 @@
 			showDeleteConfirm = false;
 			isDeleting = false;
 			deleteError = null;
+			// Reset color picker state
+			editingActiveColor = false;
+			editingInactiveColor = false;
 		}
 	});
 
@@ -478,29 +504,80 @@
 					<label class="label" for="project-active-color">
 						<span class="label-text">Active Badge Color</span>
 					</label>
-					<div class="flex gap-2">
-						<input
-							id="project-active-color"
-							type="text"
-							class="input input-bordered flex-1 font-mono text-sm"
-							class:input-error={touched['activeColor'] && errors['activeColor']}
-							placeholder="oklch(0.7 0.15 150)"
-							bind:value={activeColor}
-							onfocus={() => touched['activeColor'] = true}
-							onblur={() => validateField('activeColor', activeColor)}
-						/>
-						{#if activeColor}
-							<div
-								class="w-10 h-10 rounded border border-base-300"
-								style="background-color: {activeColor}"
-							></div>
-						{/if}
+					<div class="flex gap-2 items-start">
+						<div class="relative">
+							{#if editingActiveColor}
+								<!-- Color picker dropdown -->
+								<div class="absolute top-0 left-0 z-50 p-3 rounded-lg shadow-xl bg-base-200 border border-base-content/25 w-64">
+									<!-- Palette grid -->
+									<div class="grid grid-cols-5 gap-1.5 mb-3">
+										{#each COLOR_PALETTE as color}
+											<button
+												type="button"
+												class="w-8 h-8 rounded-full transition-transform hover:scale-110 {activeColor === color ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200' : ''}"
+												style="background: {color};"
+												onclick={() => { activeColor = color; validateField('activeColor', color); }}
+												title={color}
+											></button>
+										{/each}
+									</div>
+									<!-- Custom color input -->
+									<div class="flex items-center gap-2 mb-3">
+										<input
+											type="color"
+											class="w-8 h-8 rounded cursor-pointer border-0 p-0"
+											value={activeColor.startsWith('#') ? activeColor : '#6688cc'}
+											oninput={(e) => { activeColor = e.currentTarget.value; validateField('activeColor', e.currentTarget.value); }}
+										/>
+										<input
+											type="text"
+											class="flex-1 px-2 py-1.5 rounded font-mono text-xs bg-base-300 border border-base-content/20 text-base-content/90"
+											class:border-error={touched['activeColor'] && errors['activeColor']}
+											bind:value={activeColor}
+											placeholder="oklch(0.7 0.15 150)"
+											onfocus={() => touched['activeColor'] = true}
+											onblur={() => validateField('activeColor', activeColor)}
+										/>
+									</div>
+									<!-- Close button -->
+									<div class="flex justify-end">
+										<button
+											type="button"
+											class="btn btn-xs btn-ghost"
+											onclick={() => editingActiveColor = false}
+										>
+											Done
+										</button>
+									</div>
+								</div>
+							{/if}
+							<!-- Color swatch button -->
+							<button
+								type="button"
+								class="w-10 h-10 rounded-lg transition-all hover:scale-105 border-2 {editingActiveColor ? 'border-primary ring-2 ring-primary/30' : 'border-base-content/20 hover:border-base-content/40'}"
+								style="background: {activeColor || 'oklch(0.50 0.05 250)'};"
+								onclick={() => { editingActiveColor = !editingActiveColor; editingInactiveColor = false; }}
+								title="Click to change color"
+							></button>
+						</div>
+						<div class="flex-1">
+							<input
+								id="project-active-color"
+								type="text"
+								class="input input-bordered w-full font-mono text-sm"
+								class:input-error={touched['activeColor'] && errors['activeColor']}
+								placeholder="oklch(0.7 0.15 150)"
+								bind:value={activeColor}
+								onfocus={() => touched['activeColor'] = true}
+								onblur={() => validateField('activeColor', activeColor)}
+							/>
+							{#if touched['activeColor'] && errors['activeColor']}
+								<label class="label py-1">
+									<span class="label-text-alt text-error">{errors['activeColor']}</span>
+								</label>
+							{/if}
+						</div>
 					</div>
-					{#if touched['activeColor'] && errors['activeColor']}
-						<label class="label">
-							<span class="label-text-alt text-error">{errors['activeColor']}</span>
-						</label>
-					{/if}
 				</div>
 
 				<!-- Inactive Color -->
@@ -508,29 +585,80 @@
 					<label class="label" for="project-inactive-color">
 						<span class="label-text">Inactive Badge Color</span>
 					</label>
-					<div class="flex gap-2">
-						<input
-							id="project-inactive-color"
-							type="text"
-							class="input input-bordered flex-1 font-mono text-sm"
-							class:input-error={touched['inactiveColor'] && errors['inactiveColor']}
-							placeholder="oklch(0.5 0.1 150)"
-							bind:value={inactiveColor}
-							onfocus={() => touched['inactiveColor'] = true}
-							onblur={() => validateField('inactiveColor', inactiveColor)}
-						/>
-						{#if inactiveColor}
-							<div
-								class="w-10 h-10 rounded border border-base-300"
-								style="background-color: {inactiveColor}"
-							></div>
-						{/if}
+					<div class="flex gap-2 items-start">
+						<div class="relative">
+							{#if editingInactiveColor}
+								<!-- Color picker dropdown -->
+								<div class="absolute top-0 left-0 z-50 p-3 rounded-lg shadow-xl bg-base-200 border border-base-content/25 w-64">
+									<!-- Palette grid -->
+									<div class="grid grid-cols-5 gap-1.5 mb-3">
+										{#each COLOR_PALETTE as color}
+											<button
+												type="button"
+												class="w-8 h-8 rounded-full transition-transform hover:scale-110 {inactiveColor === color ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200' : ''}"
+												style="background: {color};"
+												onclick={() => { inactiveColor = color; validateField('inactiveColor', color); }}
+												title={color}
+											></button>
+										{/each}
+									</div>
+									<!-- Custom color input -->
+									<div class="flex items-center gap-2 mb-3">
+										<input
+											type="color"
+											class="w-8 h-8 rounded cursor-pointer border-0 p-0"
+											value={inactiveColor.startsWith('#') ? inactiveColor : '#445566'}
+											oninput={(e) => { inactiveColor = e.currentTarget.value; validateField('inactiveColor', e.currentTarget.value); }}
+										/>
+										<input
+											type="text"
+											class="flex-1 px-2 py-1.5 rounded font-mono text-xs bg-base-300 border border-base-content/20 text-base-content/90"
+											class:border-error={touched['inactiveColor'] && errors['inactiveColor']}
+											bind:value={inactiveColor}
+											placeholder="oklch(0.5 0.1 150)"
+											onfocus={() => touched['inactiveColor'] = true}
+											onblur={() => validateField('inactiveColor', inactiveColor)}
+										/>
+									</div>
+									<!-- Close button -->
+									<div class="flex justify-end">
+										<button
+											type="button"
+											class="btn btn-xs btn-ghost"
+											onclick={() => editingInactiveColor = false}
+										>
+											Done
+										</button>
+									</div>
+								</div>
+							{/if}
+							<!-- Color swatch button -->
+							<button
+								type="button"
+								class="w-10 h-10 rounded-lg transition-all hover:scale-105 border-2 {editingInactiveColor ? 'border-primary ring-2 ring-primary/30' : 'border-base-content/20 hover:border-base-content/40'}"
+								style="background: {inactiveColor || 'oklch(0.35 0.03 250)'};"
+								onclick={() => { editingInactiveColor = !editingInactiveColor; editingActiveColor = false; }}
+								title="Click to change color"
+							></button>
+						</div>
+						<div class="flex-1">
+							<input
+								id="project-inactive-color"
+								type="text"
+								class="input input-bordered w-full font-mono text-sm"
+								class:input-error={touched['inactiveColor'] && errors['inactiveColor']}
+								placeholder="oklch(0.5 0.1 150)"
+								bind:value={inactiveColor}
+								onfocus={() => touched['inactiveColor'] = true}
+								onblur={() => validateField('inactiveColor', inactiveColor)}
+							/>
+							{#if touched['inactiveColor'] && errors['inactiveColor']}
+								<label class="label py-1">
+									<span class="label-text-alt text-error">{errors['inactiveColor']}</span>
+								</label>
+							{/if}
+						</div>
 					</div>
-					{#if touched['inactiveColor'] && errors['inactiveColor']}
-						<label class="label">
-							<span class="label-text-alt text-error">{errors['inactiveColor']}</span>
-						</label>
-					{/if}
 				</div>
 			</div>
 		</div>

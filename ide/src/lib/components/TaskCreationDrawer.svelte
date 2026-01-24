@@ -2039,7 +2039,7 @@
 											{:else}
 												<span class="w-4"></span>
 											{/if}
-											Save
+											Save & Close
 											<span class="ml-auto text-xs text-base-content/60">⌥↵</span>
 										</button>
 									</li>

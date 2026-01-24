@@ -420,7 +420,8 @@ export async function GET({ url }) {
 		// Read JAT config
 		const jatConfig = await readJatConfig();
 		const ideSettings = await readIdeSettings();
-		const hiddenProjects = new Set(ideSettings.hiddenProjects || []);
+		// Normalize hidden projects to lowercase for case-insensitive comparison
+		const hiddenProjects = new Set((ideSettings.hiddenProjects || []).map(p => p.toLowerCase()));
 
 		let projects = [];
 
@@ -445,7 +446,7 @@ export async function GET({ url }) {
 					description: config.description || null,
 					notes: config.notes || null,
 					notesHeight: config.notes_height || null,
-					hidden: hiddenProjects.has(key),
+					hidden: hiddenProjects.has(key.toLowerCase()),
 					source: 'jat-config'
 				});
 			}
