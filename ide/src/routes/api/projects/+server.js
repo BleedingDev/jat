@@ -714,7 +714,7 @@ export async function POST({ request }) {
 
 		// Handle create action
 		if (body.action === 'create') {
-			const { key, path: projectPath, name, port, description } = body;
+			const { key, path: projectPath, name, port, description, active_color, inactive_color, createDirectory } = body;
 
 			// Validate key format
 			const keyValidation = validateProjectKey(key);
@@ -727,9 +727,27 @@ export async function POST({ request }) {
 				? projectPath.replace(/^~/, homedir())
 				: join(homedir(), 'code', key);
 
-			// Verify directory exists
+			// Verify directory exists (or create it if requested)
 			if (!existsSync(resolvedPath)) {
-				return json({ error: `Directory does not exist: ${resolvedPath}` }, { status: 400 });
+				if (createDirectory) {
+					// User requested to create the directory
+					try {
+						const { mkdirSync } = await import('fs');
+						mkdirSync(resolvedPath, { recursive: true });
+					} catch (mkdirError) {
+						return json({
+							error: `Failed to create directory: ${mkdirError instanceof Error ? mkdirError.message : String(mkdirError)}`,
+							path: resolvedPath
+						}, { status: 500 });
+					}
+				} else {
+					// Return error with flag indicating directory can be created
+					return json({
+						error: `Directory does not exist: ${resolvedPath}`,
+						directoryNotFound: true,
+						path: resolvedPath
+					}, { status: 400 });
+				}
 			}
 
 			// Read current config
@@ -758,6 +776,12 @@ export async function POST({ request }) {
 			}
 			if (description) {
 				jatConfig.projects[key].description = description;
+			}
+			if (active_color) {
+				jatConfig.projects[key].active_color = active_color;
+			}
+			if (inactive_color) {
+				jatConfig.projects[key].inactive_color = inactive_color;
 			}
 
 			// Save config

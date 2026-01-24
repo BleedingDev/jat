@@ -17,7 +17,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { fade } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
 
 	// Store imports
 	import {
@@ -205,8 +205,14 @@
 		}
 	}
 
+	// Directory creation confirmation state
+	let showCreateDirectoryConfirm = $state(false);
+	let pendingProjectKey = $state('');
+	let pendingProjectConfig = $state<ProjectConfig | null>(null);
+	let pendingDirectoryPath = $state('');
+
 	// Handle project editor save
-	async function handleProjectSave(key: string, config: ProjectConfig) {
+	async function handleProjectSave(key: string, config: ProjectConfig, createDirectory = false) {
 		try {
 			const isNewProject = !editingProject; // null means create mode
 
@@ -221,15 +227,28 @@
 						path: config.path,
 						name: config.name,
 						port: config.port,
-						description: config.description
+						description: config.description,
+						active_color: config.colors?.active,
+						inactive_color: config.colors?.inactive,
+						createDirectory
 					})
 				});
 
 				if (!response.ok) {
 					const data = await response.json();
+
+					// Check if directory doesn't exist and offer to create it
+					if (data.directoryNotFound && !createDirectory) {
+						pendingProjectKey = key;
+						pendingProjectConfig = config;
+						pendingDirectoryPath = data.path || config.path;
+						showCreateDirectoryConfirm = true;
+						return; // Don't throw, wait for user confirmation
+					}
+
 					throw new Error(data.error || 'Failed to create project');
 				}
-				successToast(`Project "${key}" created`, 'Added to configuration');
+				successToast(`Project "${key}" created`, createDirectory ? 'Directory created and added to configuration' : 'Added to configuration');
 			} else {
 				// Update existing project
 				const response = await fetch('/api/projects', {
@@ -273,6 +292,33 @@
 	function handleProjectDelete(key: string) {
 		// Reload projects to reflect the deletion
 		loadProjects();
+	}
+
+	// Handle directory creation confirmation
+	async function handleCreateDirectoryConfirm() {
+		if (!pendingProjectConfig) return;
+
+		showCreateDirectoryConfirm = false;
+
+		// Retry the save with createDirectory flag
+		await handleProjectSave(pendingProjectKey, pendingProjectConfig, true);
+
+		// Close the project editor on success
+		isProjectEditorOpen = false;
+		editingProject = null;
+
+		// Clear pending state
+		pendingProjectKey = '';
+		pendingProjectConfig = null;
+		pendingDirectoryPath = '';
+	}
+
+	// Cancel directory creation
+	function handleCreateDirectoryCancel() {
+		showCreateDirectoryConfirm = false;
+		pendingProjectKey = '';
+		pendingProjectConfig = null;
+		pendingDirectoryPath = '';
 	}
 
 	// Load hooks configuration
@@ -565,6 +611,69 @@
 	onCancel={handleProjectCancel}
 	onDelete={handleProjectDelete}
 />
+
+<!-- Create Directory Confirmation Modal -->
+{#if showCreateDirectoryConfirm}
+	<div
+		class="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4"
+		transition:fade={{ duration: 150 }}
+		onclick={(e) => e.target === e.currentTarget && handleCreateDirectoryCancel()}
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="create-dir-title"
+	>
+		<div
+			class="bg-base-100 rounded-xl shadow-2xl max-w-md w-full"
+			transition:fly={{ y: 20, duration: 200 }}
+		>
+			<div class="p-6">
+				<div class="flex items-center gap-3 mb-4">
+					<div class="w-12 h-12 rounded-full bg-info/10 flex items-center justify-center">
+						<svg class="w-6 h-6 text-info" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+						</svg>
+					</div>
+					<div>
+						<h3 id="create-dir-title" class="text-lg font-semibold">Create Directory?</h3>
+						<p class="text-sm text-base-content/70">The directory doesn't exist yet</p>
+					</div>
+				</div>
+
+				<p class="mb-4">
+					The path <span class="font-mono text-sm bg-base-200 px-2 py-1 rounded">{pendingDirectoryPath}</span> doesn't exist.
+				</p>
+
+				<p class="mb-4 text-base-content/80">
+					Would you like to create this directory and add the project?
+				</p>
+
+				<div class="bg-base-200 rounded-lg p-3 mb-4 text-sm">
+					<p class="text-base-content/70">
+						<strong>Note:</strong> This will create the directory and any parent directories needed.
+					</p>
+				</div>
+
+				<div class="flex justify-end gap-2">
+					<button
+						class="btn btn-ghost"
+						onclick={handleCreateDirectoryCancel}
+					>
+						Cancel
+					</button>
+					<button
+						class="btn btn-info"
+						onclick={handleCreateDirectoryConfirm}
+					>
+						<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+						</svg>
+						Create Directory
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.config-page {
