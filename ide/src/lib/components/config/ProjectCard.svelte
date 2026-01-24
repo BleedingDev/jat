@@ -40,6 +40,9 @@
 	// Extract project key from path for display
 	const projectKey = $derived(project.path.split('/').pop() || project.name);
 
+	// Get project color for badge styling
+	const projectColor = $derived(project.colors?.active || 'oklch(0.70 0.15 200)');
+
 	// Handle edit click
 	function handleEdit() {
 		onEdit(project);
@@ -61,13 +64,14 @@
 <div
 	class="project-card {className}"
 	class:hidden-project={project.hidden}
+	style="--project-color: {projectColor}"
 	transition:fade={{ duration: 150 }}
 >
 	<!-- Header with project name and actions -->
 	<div class="card-header">
 		<div class="project-info">
 			<div class="project-name-row">
-				<span class="project-name">{project.name}</span>
+				<span class="project-name-badge">{project.name}</span>
 				{#if project.hidden}
 					<span class="hidden-badge">Hidden</span>
 				{/if}
@@ -251,13 +255,25 @@
 		gap: 0.5rem;
 	}
 
-	.project-name {
-		font-size: 0.95rem;
+	.project-name-badge {
+		font-size: 0.85rem;
 		font-weight: 600;
-		color: oklch(0.90 0.02 250);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		padding: 0.25rem 0.625rem;
+		border-radius: 6px;
+		background: color-mix(in oklch, var(--project-color) 20%, transparent);
+		border: 1px solid color-mix(in oklch, var(--project-color) 35%, transparent);
+		color: var(--project-color);
 		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		transition: all 0.15s ease;
+	}
+
+	.project-card:hover .project-name-badge {
+		background: color-mix(in oklch, var(--project-color) 28%, transparent);
+		border-color: color-mix(in oklch, var(--project-color) 50%, transparent);
+		box-shadow: 0 0 8px color-mix(in oklch, var(--project-color) 25%, transparent);
 	}
 
 	.project-key {
