@@ -3,16 +3,21 @@
  * POST /api/work/spawn
  *
  * Creates a NEW agent + tmux session:
- * 1. Generate agent name via am-register
- * 2. Create tmux session jat-{AgentName}
- * 3. If taskId provided: Assign task to agent in Beads (bd update)
- * 4. Run Claude Code with /jat:start (with agent name, optionally with task)
- * 5. Return new WorkSession
+ * 1. Evaluate routing rules (or use explicit agentId/model)
+ * 2. Validate agent is enabled and auth is available
+ * 3. Generate agent name and register in Agent Mail
+ * 4. Create tmux session jat-{AgentName}
+ * 5. If taskId provided: Assign task to agent in Beads (bd update)
+ * 6. Run agent CLI with /jat:start (with agent name, optionally with task)
+ * 7. Return new WorkSession with agent selection info
  *
  * Body:
  * - taskId: Task ID to assign (optional - if omitted, creates planning session)
- * - model: Model to use (default from spawnConfig)
+ * - agentId: Agent program to use (optional - if omitted, uses routing rules or fallback)
+ * - model: Model to use (optional - if omitted, uses agent default or routing rule override)
  * - attach: If true, immediately open terminal attached to session (default: false)
+ * - project: Project name (optional - inferred from taskId if not provided)
+ * - imagePath: Path to image to send after startup (optional)
  */
 
 import { json } from '@sveltejs/kit';
@@ -29,6 +34,14 @@ import { getTaskById } from '$lib/server/beads.js';
 import { getProjectPath, getJatDefaults } from '$lib/server/projectPaths.js';
 import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS, isYoloWarningDialog } from '$lib/server/shellPatterns.js';
 import { stripAnsi } from '$lib/utils/ansiToHtml.js';
+import {
+	evaluateRouting,
+	getAgentProgram,
+	getAgentStatus,
+	getAgentConfig
+} from '$lib/utils/agentConfig.js';
+import { getAgentModel } from '$lib/types/agentProgram.js';
+import { getApiKey, getCustomApiKey, getCustomApiKeyMeta } from '$lib/utils/credentials.js';
 
 const DB_PATH = process.env.AGENT_MAIL_DB || `${process.env.HOME}/.agent-mail.db`;
 
@@ -141,9 +154,10 @@ function getOrCreateProject(db, projectPath) {
  * @param {string} agentName - Agent name
  * @param {string} projectPath - Project path
  * @param {string} model - Model name (e.g., "opus", "sonnet")
+ * @param {string} program - Agent program ID (e.g., "claude-code", "codex-cli")
  * @returns {{ success: boolean, agentId?: number, error?: string }}
  */
-function registerAgentInDb(agentName, projectPath, model) {
+function registerAgentInDb(agentName, projectPath, model, program = 'claude-code') {
 	try {
 		const db = new Database(DB_PATH);
 
@@ -158,18 +172,18 @@ function registerAgentInDb(agentName, projectPath, model) {
 			);
 
 			if (existing) {
-				// Update last_active_ts for existing agent
+				// Update last_active_ts, model, and program for existing agent
 				db.prepare(
-					"UPDATE agents SET last_active_ts = datetime('now'), model = ? WHERE id = ?"
-				).run(model, existing.id);
+					"UPDATE agents SET last_active_ts = datetime('now'), model = ?, program = ? WHERE id = ?"
+				).run(model, program, existing.id);
 				return { success: true, agentId: existing.id };
 			}
 
-			// Insert new agent
+			// Insert new agent with selected program
 			const result = db.prepare(`
 				INSERT INTO agents (project_id, name, program, model, task_description)
-				VALUES (?, ?, 'claude-code', ?, '')
-			`).run(projectId, agentName, model);
+				VALUES (?, ?, ?, ?, '')
+			`).run(projectId, agentName, program, model);
 
 			return { success: true, agentId: /** @type {number} */ (result.lastInsertRowid) };
 		} finally {
@@ -185,13 +199,257 @@ function registerAgentInDb(agentName, projectPath, model) {
 
 const execAsync = promisify(exec);
 
+/**
+ * @typedef {Object} TaskForRouting
+ * @property {string} id
+ * @property {string} [issue_type]
+ * @property {string[]} [labels]
+ * @property {number} [priority]
+ * @property {string} [title]
+ * @property {string} [description]
+ * @property {string} [status]
+ */
+
+/**
+ * Select agent and model based on request parameters and routing rules.
+ *
+ * @param {object} params
+ * @param {string | undefined} params.agentId - Explicit agent ID (optional)
+ * @param {string | undefined} params.model - Explicit model shortName (optional)
+ * @param {TaskForRouting | null} params.task - Task object for routing evaluation
+ * @returns {{ agent: import('$lib/types/agentProgram.js').AgentProgram, model: import('$lib/types/agentProgram.js').AgentModel, matchedRule: import('$lib/types/agentProgram.js').AgentRoutingRule | null, reason: string } | { error: string, status: number }}
+ */
+function selectAgentAndModel({ agentId, model, task }) {
+	const config = getAgentConfig();
+
+	// If explicit agentId provided, use it
+	if (agentId) {
+		const agent = getAgentProgram(agentId);
+		if (!agent) {
+			return { error: `Agent program '${agentId}' not found`, status: 400 };
+		}
+
+		// Check agent is enabled
+		const status = getAgentStatus(agent);
+		if (!status.available) {
+			return {
+				error: `Agent '${agentId}' is not available: ${status.statusMessage}`,
+				status: 400
+			};
+		}
+
+		// Get the model (explicit or default)
+		const modelShortName = model || agent.defaultModel;
+		const selectedModel = getAgentModel(agent, modelShortName);
+		if (!selectedModel) {
+			return {
+				error: `Model '${modelShortName}' not found for agent '${agentId}'`,
+				status: 400
+			};
+		}
+
+		return {
+			agent,
+			model: selectedModel,
+			matchedRule: null,
+			reason: `Explicit selection: ${agent.name} with ${selectedModel.name}`
+		};
+	}
+
+	// No explicit agent - evaluate routing rules
+	// Build task object for routing evaluation
+	const taskForRouting = task
+		? {
+				id: task.id,
+				type: task.issue_type,
+				labels: task.labels || [],
+				priority: task.priority,
+				project: task.id?.split('-')[0] // Extract project from task ID prefix
+			}
+		: null;
+
+	if (taskForRouting) {
+		try {
+			const routingResult = evaluateRouting(taskForRouting);
+
+			// If explicit model override provided, use it instead of routing result
+			if (model) {
+				const overrideModel = getAgentModel(routingResult.agent, model);
+				if (overrideModel) {
+					return {
+						agent: routingResult.agent,
+						model: overrideModel,
+						matchedRule: routingResult.matchedRule,
+						reason: `${routingResult.reason} (model overridden to ${overrideModel.name})`
+					};
+				}
+			}
+
+			// Check agent is available
+			const status = getAgentStatus(routingResult.agent);
+			if (!status.available) {
+				// Fall through to fallback agent
+				console.warn(
+					`[spawn] Routing selected ${routingResult.agent.id} but it's unavailable: ${status.statusMessage}`
+				);
+			} else {
+				return routingResult;
+			}
+		} catch (err) {
+			console.warn('[spawn] Routing evaluation failed:', err);
+		}
+	}
+
+	// Use fallback agent
+	const fallbackAgent = config.programs[config.defaults.fallbackAgent];
+	if (!fallbackAgent) {
+		return {
+			error: `Fallback agent '${config.defaults.fallbackAgent}' not configured`,
+			status: 500
+		};
+	}
+
+	// Check fallback is available
+	const fallbackStatus = getAgentStatus(fallbackAgent);
+	if (!fallbackStatus.available) {
+		return {
+			error: `Fallback agent '${fallbackAgent.id}' is not available: ${fallbackStatus.statusMessage}`,
+			status: 500
+		};
+	}
+
+	// Get model (explicit override or configured fallback)
+	const fallbackModelName = model || config.defaults.fallbackModel;
+	const fallbackModel = getAgentModel(fallbackAgent, fallbackModelName);
+	if (!fallbackModel) {
+		return {
+			error: `Fallback model '${fallbackModelName}' not found for agent '${fallbackAgent.id}'`,
+			status: 500
+		};
+	}
+
+	return {
+		agent: fallbackAgent,
+		model: fallbackModel,
+		matchedRule: null,
+		reason: 'Using fallback agent (no routing rules matched)'
+	};
+}
+
+/**
+ * @typedef {Object} JatDefaults
+ * @property {boolean} [skip_permissions]
+ * @property {number} [claude_startup_timeout]
+ * @property {string} [model]
+ * @property {number} [agent_stagger]
+ */
+
+/**
+ * Build the CLI command for starting an agent session.
+ *
+ * @param {object} params
+ * @param {import('$lib/types/agentProgram.js').AgentProgram} params.agent
+ * @param {import('$lib/types/agentProgram.js').AgentModel} params.model
+ * @param {string} params.projectPath
+ * @param {JatDefaults} params.jatDefaults
+ * @returns {{ command: string, env: Record<string, string> }}
+ */
+function buildAgentCommand({ agent, model, projectPath, jatDefaults }) {
+	// Build environment variables
+	/** @type {Record<string, string>} */
+	const env = { AGENT_MAIL_URL };
+
+	// For API key auth, inject the key as environment variable
+	if (agent.authType === 'api_key' && agent.apiKeyEnvVar && agent.apiKeyProvider) {
+		// Try built-in providers first
+		let apiKey = getApiKey(agent.apiKeyProvider);
+
+		// Try custom API keys
+		if (!apiKey) {
+			apiKey = getCustomApiKey(agent.apiKeyProvider);
+		}
+
+		if (apiKey) {
+			env[agent.apiKeyEnvVar] = apiKey;
+		}
+	}
+
+	// Build command based on agent configuration
+	// Default pattern: {command} --model {model} {flags}
+	let cmdParts = [`cd "${projectPath}"`];
+
+	// Add environment variables
+	for (const [key, value] of Object.entries(env)) {
+		cmdParts.push(`${key}="${value}"`);
+	}
+
+	// Use custom startup pattern if defined, otherwise build default
+	if (agent.startupPattern) {
+		// Replace placeholders in custom pattern
+		let customCmd = agent.startupPattern
+			.replace('{command}', agent.command)
+			.replace('{model}', model.id)
+			.replace('{flags}', agent.flags.join(' '));
+
+		cmdParts.push(customCmd);
+	} else {
+		// Default command construction
+		let agentCmd = agent.command;
+
+		// Add model flag (agent-specific)
+		if (agent.command === 'claude') {
+			agentCmd += ` --model ${model.shortName}`;
+		} else if (agent.command === 'codex' || agent.command === 'gemini') {
+			agentCmd += ` --model ${model.id}`;
+		} else {
+			// Generic: try --model with full ID
+			agentCmd += ` --model ${model.id}`;
+		}
+
+		// Add configured flags
+		if (agent.flags && agent.flags.length > 0) {
+			agentCmd += ' ' + agent.flags.join(' ');
+		}
+
+		// For Claude Code specifically, handle skip_permissions from JAT config
+		if (agent.command === 'claude' && jatDefaults.skip_permissions) {
+			// Only add if not already in flags
+			if (!agent.flags.includes('--dangerously-skip-permissions')) {
+				agentCmd += ' --dangerously-skip-permissions';
+			}
+		}
+
+		// Add JAT bootstrap prompt for Claude Code
+		if (agent.command === 'claude') {
+			const jatBootstrap = `You are a JAT agent. Run /jat:start to begin work.`;
+			agentCmd += ` --append-system-prompt '${jatBootstrap}'`;
+		}
+
+		cmdParts.push(agentCmd);
+	}
+
+	return {
+		command: cmdParts.join(' && '),
+		env
+	};
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ request }) {
 	try {
 		const body = await request.json();
-		const { taskId, model = DEFAULT_MODEL, attach = false, imagePath = null, project = null } = body;
+		const {
+			taskId,
+			agentId = null,
+			model = null,
+			attach = false,
+			imagePath = null,
+			project = null
+		} = body;
 
-		// taskId is now optional - if not provided, creates a planning session
+		// agentId is optional - if omitted, uses routing rules or fallback
+		// model is optional - if omitted, uses agent default or routing rule override
+		// taskId is optional - if not provided, creates a planning session
 		// imagePath is optional - if provided, will be sent to the session after startup
 		// project is optional - if provided, use that path; otherwise infer from task ID prefix
 
@@ -253,15 +511,41 @@ export async function POST({ request }) {
 
 		console.log('[spawn] Project path:', projectPath, inferredFromTaskId ? '(inferred from task ID)' : '');
 
+		// Extract project name from path early (needed for signal and response)
+		// e.g., "/home/jw/code/jat" -> "jat"
+		const projectName = projectPath.split('/').filter(Boolean).pop() || null;
+
 		// Get JAT config defaults (used for skip_permissions, timeout, etc.)
 		const jatDefaults = await getJatDefaults();
+
+		// Step 0: Fetch task data early (needed for routing rule evaluation)
+		let task = null;
+		if (taskId) {
+			try {
+				task = getTaskById(taskId);
+			} catch (err) {
+				console.warn(`[spawn] Could not fetch task ${taskId} for routing:`, err);
+			}
+		}
+
+		// Step 0b: Select agent and model based on routing rules or explicit params
+		const agentSelection = selectAgentAndModel({ agentId, model, task });
+		if ('error' in agentSelection) {
+			return json({
+				error: agentSelection.error
+			}, { status: agentSelection.status });
+		}
+
+		const { agent: selectedAgent, model: selectedModel, matchedRule, reason: selectionReason } = agentSelection;
+		console.log(`[spawn] Agent selection: ${selectedAgent.name} (${selectedModel.name}) - ${selectionReason}`);
 
 		// Step 1: Generate unique agent name and register in Agent Mail database
 		const existingNames = getExistingAgentNames();
 		const agentName = generateUniqueName(existingNames);
 
 		// Register agent in Agent Mail SQLite database
-		const registerResult = registerAgentInDb(agentName, projectPath, model);
+		// Use selected model's shortName and agent program ID for storage
+		const registerResult = registerAgentInDb(agentName, projectPath, selectedModel.shortName, selectedAgent.id);
 		if (!registerResult.success) {
 			console.error('Failed to register agent:', registerResult.error);
 			return json({
@@ -327,28 +611,21 @@ export async function POST({ request }) {
 		const TMUX_INITIAL_WIDTH = 80;
 		const TMUX_INITIAL_HEIGHT = 40;
 
-		// Build the claude command
-		let claudeCmd = `cd "${projectPath}"`;
-		claudeCmd += ` && AGENT_MAIL_URL="${AGENT_MAIL_URL}"`;
-		claudeCmd += ` claude --model ${model}`;
+		// Build the agent command dynamically based on selected agent program
+		const { command: agentCmd } = buildAgentCommand({
+			agent: selectedAgent,
+			model: selectedModel,
+			projectPath,
+			jatDefaults
+		});
 
-		// Only pass --dangerously-skip-permissions if user has explicitly enabled it
-		// User must accept the YOLO warning manually first, then set skip_permissions: true in config
-		if (jatDefaults.skip_permissions) {
-			claudeCmd += ' --dangerously-skip-permissions';
-		}
-
-		// JAT bootstrap prompt - minimal identity, commands load full docs on-demand
-		// This is added via --append-system-prompt so only IDE-spawned agents get it
-		const jatBootstrap = `You are a JAT agent. Run /jat:start to begin work.`;
-		claudeCmd += ` --append-system-prompt '${jatBootstrap}'`;
-
+		console.log(`[spawn] Agent command: ${agentCmd.substring(0, 100)}...`);
 
 		// Create session with explicit dimensions to ensure proper terminal width from the start
 		// Without -x and -y, tmux uses default 80x24 which may not match IDE card width
 		// Use sleep to allow shell to initialize before sending keys - without this delay,
 		// the shell may not be ready and keys are lost (race condition)
-		const createSessionCmd = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && sleep 0.3 && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
+		const createSessionCmd = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && sleep 0.3 && tmux send-keys -t "${sessionName}" "${agentCmd}" Enter`;
 
 		try {
 			await execAsync(createSessionCmd);
@@ -381,8 +658,9 @@ export async function POST({ request }) {
 				type: 'starting',
 				agentName,
 				sessionId: sessionName,
-				project: resolvedProject,
-				model,
+				project: projectName,
+				model: selectedModel.shortName,
+				agentProgram: selectedAgent.id,
 				taskId: taskId || null,
 				taskTitle: task?.title || null,
 				timestamp: new Date().toISOString()
@@ -636,40 +914,31 @@ export async function POST({ request }) {
 			// Silent - Hyprland coloring is optional
 		}
 
-		// Step 5: Get full task data from Beads (if taskId provided)
-		// This ensures the response has complete task info (title, description, etc.)
-		// which allows the SessionCard to display immediately without waiting for cache refresh
+		// Step 5: Build full task response from already-fetched task data
+		// We already fetched task in Step 0 for routing evaluation
 		let fullTask = null;
-		if (taskId) {
-			try {
-				const foundTask = getTaskById(taskId);
-				if (foundTask) {
-					fullTask = {
-						id: foundTask.id,
-						title: foundTask.title,
-						description: foundTask.description,
-						status: foundTask.status,
-						priority: foundTask.priority,
-						issue_type: foundTask.issue_type
-					};
-				}
-			} catch (err) {
-				// Non-fatal - fall back to minimal task data
-				console.warn('[spawn] Could not fetch full task data:', err);
-				fullTask = { id: taskId };
-			}
+		if (task) {
+			fullTask = {
+				id: task.id,
+				title: task.title,
+				description: task.description,
+				status: task.status,
+				priority: task.priority,
+				issue_type: task.issue_type
+			};
+		} else if (taskId) {
+			// Minimal fallback if task wasn't fetched
+			fullTask = { id: taskId };
 		}
 
-		// Step 6: Determine project name from projectPath for session grouping
-		// Extract project name from path (e.g., "/home/jw/code/jat" -> "jat")
-		const projectName = projectPath.split('/').filter(Boolean).pop() || null;
-
-		// Step 7: Return WorkSession
+		// Step 6: Return WorkSession with agent selection info
 		return json({
 			success: true,
 			session: {
 				sessionName,
 				agentName,
+				agentProgram: selectedAgent.id,
+				model: selectedModel.shortName,
 				task: fullTask,
 				project: projectName,  // Include project for session grouping on /work page
 				imagePath: imagePath || null,
@@ -678,11 +947,14 @@ export async function POST({ request }) {
 				tokens: 0,
 				cost: 0,
 				created: new Date().toISOString(),
-				attached: attach
+				attached: attach,
+				// Agent selection info
+				matchedRule: matchedRule?.id || null,
+				selectionReason
 			},
 			message: taskId
-				? `Spawned agent ${agentName} for task ${taskId}${imagePath ? ' (with attached image)' : ''}`
-				: `Spawned planning session for agent ${agentName}`,
+				? `Spawned ${selectedAgent.name} agent ${agentName} (${selectedModel.name}) for task ${taskId}${imagePath ? ' (with attached image)' : ''}`
+				: `Spawned ${selectedAgent.name} planning session for agent ${agentName} (${selectedModel.name})`,
 			timestamp: new Date().toISOString()
 		});
 	} catch (error) {
