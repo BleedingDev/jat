@@ -38,6 +38,39 @@
 	// Action loading state
 	let actionLoading = $state<string | null>(null);
 
+	// Timer tick for elapsed time updates
+	let tick = $state(0);
+
+	// Update elapsed time every second
+	$effect(() => {
+		if (sessions.length === 0) return;
+		const interval = setInterval(() => {
+			tick++;
+		}, 1000);
+		return () => clearInterval(interval);
+	});
+
+	// Calculate elapsed time since lastActivity (how long the task has been paused/aging)
+	function getElapsedFormatted(lastActivityISO: string | undefined): { hours: string; minutes: string; seconds: string; showHours: boolean } | null {
+		// Use tick to trigger reactivity
+		void tick;
+		if (!lastActivityISO) return null;
+		const lastActivity = new Date(lastActivityISO).getTime();
+		const now = Date.now();
+		const elapsedMs = now - lastActivity;
+		if (elapsedMs < 0) return { hours: '00', minutes: '00', seconds: '00', showHours: false };
+		const totalSeconds = Math.floor(elapsedMs / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+		return {
+			hours: hours.toString().padStart(2, '0'),
+			minutes: minutes.toString().padStart(2, '0'),
+			seconds: seconds.toString().padStart(2, '0'),
+			showHours: hours > 0
+		};
+	}
+
 	async function handleAction(actionId: string, session: PausedSession) {
 		if (actionLoading) return;
 		actionLoading = session.agentName;
@@ -103,6 +136,8 @@
 								disabled={actionLoading === session.agentName}
 								onAction={(actionId) => handleAction(actionId, session)}
 								alignRight={true}
+								elapsed={getElapsedFormatted(session.lastActivity)}
+								stacked={true}
 							/>
 						</td>
 					</tr>
@@ -173,10 +208,10 @@
 		background: linear-gradient(90deg, oklch(0.65 0.18 300 / 0.12), oklch(0.20 0.01 250 / 0.3) 50%);
 	}
 
-	/* Column widths matching TasksActive */
+	/* Column widths matching TasksActive - wider action column for stacked elapsed time */
 	.th-task, .td-task { width: min-content; white-space: nowrap; }
 	.th-title, .td-title { width: auto; padding-right: 2rem; }
-	.th-action, .td-action { width: 160px; text-align: right; overflow: hidden; }
+	.th-action, .td-action { width: 200px; text-align: right; overflow: hidden; }
 
 	/* Task cell content - matches TasksActive structure exactly */
 	.task-cell-content {
