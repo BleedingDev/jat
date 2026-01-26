@@ -22,6 +22,32 @@ export const CLAUDE_READY_PATTERNS = [
 ];
 
 /**
+ * Patterns indicating OpenCode TUI is running and ready for input.
+ * OpenCode has a different UI than Claude Code.
+ */
+export const OPENCODE_READY_PATTERNS = [
+	'opencode',
+	'opencode>',
+	'Type a message',
+	'Assistant',
+	'Model:',
+	'Session:',
+	'▄',	// Part of OpenCode ASCII art banner
+	'█▀▀█'  // Part of OpenCode ASCII art banner
+];
+
+/**
+ * Get ready patterns for a specific agent command.
+ */
+export function getReadyPatternsForAgent(command: string): string[] {
+	if (command === 'opencode') {
+		return OPENCODE_READY_PATTERNS;
+	}
+	// Default to Claude patterns
+	return CLAUDE_READY_PATTERNS;
+}
+
+/**
  * Patterns indicating we're at a shell prompt (Claude hasn't started).
  * Used to detect when Claude Code failed to start and we're stuck at bash/zsh.
  *
