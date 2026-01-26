@@ -3,13 +3,15 @@
 	 * ConfigTabs Component
 	 *
 	 * Tab-based navigation for the config page with grouped categories.
-	 * Displays tabs in two rows with visual category grouping to reduce horizontal width.
+	 * Displays tabs in rows with visual category grouping by domain.
 	 * Syncs active tab state with URL query parameter (?tab=commands|projects).
 	 *
-	 * Categories (ordered by importance):
-	 * - Settings: Projects, Defaults, Autopilot, Shortcuts, Actions, Commit
-	 * - Agent: Commands, Templates, Tools
-	 * - Extensions: Docs, CLAUDE.md, MCP, Hooks
+	 * Categories (organized by domain):
+	 * - Projects: Project configuration (standalone, most used)
+	 * - Agents: Programs, Actions, Autopilot (agent behavior)
+	 * - Workflow: Commands, Templates, Tools (how agents work)
+	 * - System: Defaults, Secrets, LLM, Shortcuts, Commit (system-wide)
+	 * - Extensions: Docs, CLAUDE.md, MCP, Hooks (integrations)
 	 *
 	 * @see ide/src/routes/config/+page.svelte for usage
 	 */
@@ -18,7 +20,7 @@
 		id: string;
 		label: string;
 		icon: string; // SVG path
-		category: 'agent' | 'settings' | 'extensions';
+		category: 'projects' | 'agents' | 'workflow' | 'system' | 'extensions';
 	}
 
 	interface TabGroup {
@@ -42,83 +44,85 @@
 		class: className = ''
 	}: Props = $props();
 
-	// Tab definitions with categories (ordered by importance within each category)
+	// Tab definitions with categories (organized by domain)
 	const tabs: Tab[] = [
-		// Settings category - environment and configuration (Projects first)
+		// Projects category - standalone, most important
 		{
 			id: 'projects',
 			label: 'Projects',
-			category: 'settings',
+			category: 'projects',
 			icon: 'M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z'
 		},
-		{
-			id: 'defaults',
-			label: 'Defaults',
-			category: 'settings',
-			icon: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z'
-		},
-		{
-			id: 'credentials',
-			label: 'Secrets',
-			category: 'settings',
-			icon: 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z'
-		},
-		{
-			id: 'llm',
-			label: 'LLM',
-			category: 'settings',
-			icon: 'M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5M4.5 15.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z'
-		},
+		// Agents category - agent programs, behavior, and automation
 		{
 			id: 'agents',
-			label: 'Agents',
-			category: 'settings',
+			label: 'Programs',
+			category: 'agents',
 			icon: 'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z'
-		},
-		{
-			id: 'swarm',
-			label: 'Autopilot',
-			category: 'settings',
-			icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z'
-		},
-		{
-			id: 'shortcuts',
-			label: 'Shortcuts',
-			category: 'settings',
-			icon: 'M3.75 6A2.25 2.25 0 016 3.75h12A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6zM6 7.5h.01M6 12h.01M6 16.5h.01M9.75 7.5h4.5M9.75 12h4.5M9.75 16.5h4.5M17.25 7.5h.01M17.25 12h.01M17.25 16.5h.01'
 		},
 		{
 			id: 'actions',
 			label: 'Actions',
-			category: 'settings',
+			category: 'agents',
 			icon: 'M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59'
 		},
 		{
-			id: 'commit',
-			label: 'Commit',
-			category: 'settings',
-			icon: 'M7.5 3.75a.75.75 0 00-.75.75v6a.75.75 0 001.5 0v-6a.75.75 0 00-.75-.75zm9 0a.75.75 0 00-.75.75v6c0 1.243-.601 2.342-1.528 3.028A4.5 4.5 0 0112 18a4.5 4.5 0 01-2.222-4.472A3.744 3.744 0 018.25 10.5v-6a.75.75 0 00-1.5 0v6a5.25 5.25 0 002.558 4.51A3 3 0 0012 19.5a3 3 0 002.692-4.49A5.25 5.25 0 0017.25 10.5v-6a.75.75 0 00-.75-.75z'
+			id: 'swarm',
+			label: 'Autopilot',
+			category: 'agents',
+			icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z'
 		},
-		// Agent category - workflow tools
+		// Workflow category - how agents work
 		{
 			id: 'commands',
 			label: 'Commands',
-			category: 'agent',
+			category: 'workflow',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z'
 		},
 		{
 			id: 'templates',
 			label: 'Templates',
-			category: 'agent',
+			category: 'workflow',
 			icon: 'M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75'
 		},
 		{
 			id: 'tools',
 			label: 'Tools',
-			category: 'agent',
+			category: 'workflow',
 			icon: 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z'
 		},
-		// Extensions category - integrations and documentation (reversed: Docs first)
+		// System category - system-wide settings
+		{
+			id: 'defaults',
+			label: 'Defaults',
+			category: 'system',
+			icon: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z'
+		},
+		{
+			id: 'credentials',
+			label: 'Secrets',
+			category: 'system',
+			icon: 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z'
+		},
+		{
+			id: 'llm',
+			label: 'LLM',
+			category: 'system',
+			icon: 'M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5M4.5 15.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z'
+		},
+		{
+			id: 'shortcuts',
+			label: 'Shortcuts',
+			category: 'system',
+			icon: 'M3.75 6A2.25 2.25 0 016 3.75h12A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6zM6 7.5h.01M6 12h.01M6 16.5h.01M9.75 7.5h4.5M9.75 12h4.5M9.75 16.5h4.5M17.25 7.5h.01M17.25 12h.01M17.25 16.5h.01'
+		},
+		{
+			id: 'commit',
+			label: 'Commit',
+			category: 'system',
+			icon: 'M7.5 3.75a.75.75 0 00-.75.75v6a.75.75 0 001.5 0v-6a.75.75 0 00-.75-.75zm9 0a.75.75 0 00-.75.75v6c0 1.243-.601 2.342-1.528 3.028A4.5 4.5 0 0112 18a4.5 4.5 0 01-2.222-4.472A3.744 3.744 0 018.25 10.5v-6a.75.75 0 00-1.5 0v6a5.25 5.25 0 002.558 4.51A3 3 0 0012 19.5a3 3 0 002.692-4.49A5.25 5.25 0 0017.25 10.5v-6a.75.75 0 00-.75-.75z'
+		},
+		// Extensions category - integrations and documentation
 		{
 			id: 'docs',
 			label: 'Docs',
@@ -145,17 +149,27 @@
 		}
 	];
 
-	// Group tabs by category - Settings first, then Agent | Extensions
+	// Group tabs by domain - logical groupings that match user mental models
 	const tabGroups: TabGroup[] = [
 		{
-			id: 'settings',
-			label: 'Settings',
-			tabs: tabs.filter((t) => t.category === 'settings')
+			id: 'projects',
+			label: 'Projects',
+			tabs: tabs.filter((t) => t.category === 'projects')
 		},
 		{
-			id: 'agent',
-			label: 'Agent',
-			tabs: tabs.filter((t) => t.category === 'agent')
+			id: 'agents',
+			label: 'Agents',
+			tabs: tabs.filter((t) => t.category === 'agents')
+		},
+		{
+			id: 'workflow',
+			label: 'Workflow',
+			tabs: tabs.filter((t) => t.category === 'workflow')
+		},
+		{
+			id: 'system',
+			label: 'System',
+			tabs: tabs.filter((t) => t.category === 'system')
 		},
 		{
 			id: 'extensions',
