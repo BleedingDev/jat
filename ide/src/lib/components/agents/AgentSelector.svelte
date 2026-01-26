@@ -66,6 +66,14 @@
 	let showAgentDropdown = $state(false);
 	let showModelDropdown = $state(false);
 
+	// Keyboard navigation state
+	let highlightedAgentIndex = $state(-1);
+	let highlightedModelIndex = $state(-1);
+
+	// Refs for dropdown containers
+	let agentDropdownRef = $state<HTMLDivElement | null>(null);
+	let modelDropdownRef = $state<HTMLDivElement | null>(null);
+
 	// Derived: currently selected agent object
 	const selectedAgent = $derived(
 		selectedAgentId ? programs.find((p) => p.id === selectedAgentId) : null
@@ -192,6 +200,7 @@
 		useAutoSelection = false;
 		selectedModel = program.defaultModel ?? null;
 		showAgentDropdown = false;
+		highlightedAgentIndex = -1;
 	}
 
 	// Select model from dropdown
@@ -199,6 +208,134 @@
 		selectedModel = model.shortName;
 		useAutoSelection = false;
 		showModelDropdown = false;
+		highlightedModelIndex = -1;
+	}
+
+	// Open/close agent dropdown with keyboard reset
+	function toggleAgentDropdown() {
+		showAgentDropdown = !showAgentDropdown;
+		if (showAgentDropdown) {
+			// Reset to current selection or first available
+			const currentIndex = programs.findIndex((p) => p.id === selectedAgentId);
+			highlightedAgentIndex = currentIndex >= 0 ? currentIndex : 0;
+			showModelDropdown = false;
+		} else {
+			highlightedAgentIndex = -1;
+		}
+	}
+
+	// Open/close model dropdown with keyboard reset
+	function toggleModelDropdown() {
+		if (!selectedAgent) return;
+		showModelDropdown = !showModelDropdown;
+		if (showModelDropdown) {
+			// Reset to current selection or first available
+			const currentIndex = availableModels.findIndex((m) => m.shortName === selectedModel);
+			highlightedModelIndex = currentIndex >= 0 ? currentIndex : 0;
+			showAgentDropdown = false;
+		} else {
+			highlightedModelIndex = -1;
+		}
+	}
+
+	// Get available (non-disabled) agents for keyboard navigation
+	function getAvailableAgentIndexes(): number[] {
+		return programs
+			.map((p, i) => ({ index: i, available: getAgentStatus(p.id)?.available }))
+			.filter((item) => item.available)
+			.map((item) => item.index);
+	}
+
+	// Keyboard handler for agent dropdown
+	function handleAgentKeydown(event: KeyboardEvent) {
+		if (!showAgentDropdown) return;
+
+		const availableIndexes = getAvailableAgentIndexes();
+		if (availableIndexes.length === 0) return;
+
+		switch (event.key) {
+			case 'ArrowDown':
+				event.preventDefault();
+				// Find next available index after current
+				const nextDown = availableIndexes.find((i) => i > highlightedAgentIndex);
+				highlightedAgentIndex = nextDown !== undefined ? nextDown : availableIndexes[0];
+				scrollHighlightedIntoView(agentDropdownRef, highlightedAgentIndex);
+				break;
+			case 'ArrowUp':
+				event.preventDefault();
+				// Find previous available index before current
+				const nextUp = [...availableIndexes].reverse().find((i) => i < highlightedAgentIndex);
+				highlightedAgentIndex =
+					nextUp !== undefined ? nextUp : availableIndexes[availableIndexes.length - 1];
+				scrollHighlightedIntoView(agentDropdownRef, highlightedAgentIndex);
+				break;
+			case 'Enter':
+				event.preventDefault();
+				if (highlightedAgentIndex >= 0 && highlightedAgentIndex < programs.length) {
+					const program = programs[highlightedAgentIndex];
+					if (getAgentStatus(program.id)?.available) {
+						selectAgent(program);
+					}
+				}
+				break;
+			case 'Escape':
+				event.preventDefault();
+				showAgentDropdown = false;
+				highlightedAgentIndex = -1;
+				break;
+		}
+	}
+
+	// Keyboard handler for model dropdown
+	function handleModelKeydown(event: KeyboardEvent) {
+		if (!showModelDropdown || !selectedAgent) return;
+
+		switch (event.key) {
+			case 'ArrowDown':
+				event.preventDefault();
+				highlightedModelIndex = Math.min(highlightedModelIndex + 1, availableModels.length - 1);
+				scrollHighlightedIntoView(modelDropdownRef, highlightedModelIndex);
+				break;
+			case 'ArrowUp':
+				event.preventDefault();
+				highlightedModelIndex = Math.max(highlightedModelIndex - 1, 0);
+				scrollHighlightedIntoView(modelDropdownRef, highlightedModelIndex);
+				break;
+			case 'Enter':
+				event.preventDefault();
+				if (highlightedModelIndex >= 0 && highlightedModelIndex < availableModels.length) {
+					selectModel(availableModels[highlightedModelIndex]);
+				}
+				break;
+			case 'Escape':
+				event.preventDefault();
+				showModelDropdown = false;
+				highlightedModelIndex = -1;
+				break;
+		}
+	}
+
+	// Scroll highlighted item into view
+	function scrollHighlightedIntoView(container: HTMLDivElement | null, index: number) {
+		if (!container) return;
+		const items = container.querySelectorAll('[data-dropdown-item]');
+		const item = items[index] as HTMLElement;
+		if (item) {
+			item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		}
+	}
+
+	// Check if agent has API key configured (for status indicator)
+	function getApiKeyStatus(program: AgentProgram): 'configured' | 'missing' | 'not-required' {
+		const status = getAgentStatus(program.id);
+		if (program.authType === 'subscription' || program.authType === 'none') {
+			return 'not-required';
+		}
+		// If authType is api_key, check availability
+		if (program.authType === 'api_key') {
+			return status?.available ? 'configured' : 'missing';
+		}
+		return status?.available ? 'configured' : 'missing';
 	}
 </script>
 
@@ -351,12 +488,13 @@
 				<label class="label py-1">
 					<span class="label-text text-xs font-medium">Agent Program</span>
 				</label>
-				<div class="relative">
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="relative" onkeydown={handleAgentKeydown}>
 					<button
 						type="button"
 						class="w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all duration-200 hover:border-primary/50"
 						style="background: oklch(0.22 0.02 250); border-color: oklch(0.35 0.03 250);"
-						onclick={() => (showAgentDropdown = !showAgentDropdown)}
+						onclick={toggleAgentDropdown}
 					>
 						{#if selectedAgent}
 							{@const agentStatus = getAgentStatus(selectedAgent.id)}
@@ -381,37 +519,68 @@
 					{#if showAgentDropdown}
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<div class="fixed inset-0 z-40" onclick={() => (showAgentDropdown = false)}></div>
-						<div class="absolute z-50 mt-1 w-full rounded-lg border shadow-xl overflow-hidden"
-							style="background: oklch(0.20 0.02 250); border-color: oklch(0.35 0.03 250);">
-							{#each programs as program}
-								{@const status = getAgentStatus(program.id)}
-								{@const isSelected = selectedAgentId === program.id}
-								<button
-									type="button"
-									class="w-full flex items-center gap-3 p-2.5 transition-colors duration-150 hover:bg-base-300"
-									style={isSelected ? 'background: oklch(0.55 0.15 240 / 0.1);' : ''}
-									class:opacity-50={!status?.available}
-									disabled={!status?.available}
-									onclick={() => selectAgent(program)}
-								>
-									<div class="w-8 h-8 rounded-full flex items-center justify-center" style="background: oklch(0.28 0.04 250);">
-										<ProviderLogo agentId={program.id} apiKeyProvider={program.apiKeyProvider} size={20} />
-									</div>
-									<div class="flex-1 min-w-0 text-left">
-										<div class="font-medium text-sm">{program.name}</div>
-										<div class="text-xs" style="color: {status?.available ? 'oklch(0.65 0.10 145)' : 'oklch(0.60 0.10 30)'};">
-											{status?.available ? 'Ready' : status?.statusMessage ?? 'Unavailable'}
+						<div class="fixed inset-0 z-40" onclick={() => { showAgentDropdown = false; highlightedAgentIndex = -1; }}></div>
+						<div
+							bind:this={agentDropdownRef}
+							class="absolute z-50 mt-1 w-full rounded-lg border shadow-xl overflow-hidden animate-dropdown"
+							style="background: oklch(0.20 0.02 250); border-color: oklch(0.35 0.03 250); transform-origin: top;">
+							<div class="max-h-64 overflow-y-auto">
+								{#each programs as program, index}
+									{@const status = getAgentStatus(program.id)}
+									{@const isSelected = selectedAgentId === program.id}
+									{@const isHighlighted = highlightedAgentIndex === index}
+									{@const apiKeyStatus = getApiKeyStatus(program)}
+									<button
+										type="button"
+										data-dropdown-item
+										class="w-full flex items-center gap-3 p-2.5 transition-colors duration-150"
+										style="background: {isHighlighted ? 'oklch(0.30 0.05 250)' : isSelected ? 'oklch(0.55 0.15 240 / 0.1)' : 'transparent'};"
+										class:opacity-50={!status?.available}
+										disabled={!status?.available}
+										onclick={() => selectAgent(program)}
+										onmouseenter={() => { if (status?.available) highlightedAgentIndex = index; }}
+									>
+										<div class="w-8 h-8 rounded-full flex items-center justify-center relative" style="background: oklch(0.28 0.04 250);">
+											<ProviderLogo agentId={program.id} apiKeyProvider={program.apiKeyProvider} size={20} />
+											<!-- API Key status indicator -->
+											{#if apiKeyStatus === 'configured'}
+												<div class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style="background: oklch(0.70 0.18 145); border: 2px solid oklch(0.20 0.02 250);" title="API key configured"></div>
+											{:else if apiKeyStatus === 'missing'}
+												<div class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style="background: oklch(0.65 0.20 30); border: 2px solid oklch(0.20 0.02 250);" title="API key missing"></div>
+											{/if}
 										</div>
-									</div>
-									{#if isSelected}
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-											class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
-											<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-										</svg>
-									{/if}
-								</button>
-							{/each}
+										<div class="flex-1 min-w-0 text-left">
+											<div class="font-medium text-sm flex items-center gap-1.5">
+												{program.name}
+												{#if apiKeyStatus === 'missing'}
+													<span class="text-xs px-1.5 py-0.5 rounded" style="background: oklch(0.65 0.20 30 / 0.15); color: oklch(0.75 0.15 30);">No API Key</span>
+												{/if}
+											</div>
+											<div class="text-xs" style="color: {status?.available ? 'oklch(0.65 0.10 145)' : 'oklch(0.60 0.10 30)'};">
+												{status?.available ? 'Ready' : status?.statusMessage ?? 'Unavailable'}
+											</div>
+										</div>
+										{#if isSelected}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+												class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
+												<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+											</svg>
+										{/if}
+									</button>
+								{/each}
+							</div>
+							<!-- Settings link -->
+							<a
+								href="/config?tab=agents"
+								class="flex items-center gap-2 p-2.5 text-xs transition-colors duration-150 hover:bg-base-300 border-t"
+								style="border-color: oklch(0.30 0.03 250); color: oklch(0.65 0.10 240);"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+								</svg>
+								Configure agents...
+							</a>
 						</div>
 					{/if}
 				</div>
@@ -422,14 +591,15 @@
 				<label class="label py-1">
 					<span class="label-text text-xs font-medium">Model</span>
 				</label>
-				<div class="relative">
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="relative" onkeydown={handleModelKeydown}>
 					<button
 						type="button"
 						class="w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all duration-200"
 						class:opacity-50={!selectedAgent}
 						style="background: {selectedAgent ? 'oklch(0.22 0.02 250)' : 'oklch(0.18 0.01 250)'}; border-color: oklch(0.35 0.03 250);"
 						disabled={!selectedAgent}
-						onclick={() => selectedAgent && (showModelDropdown = !showModelDropdown)}
+						onclick={toggleModelDropdown}
 					>
 						{#if selectedModel && selectedAgent}
 							{@const currentModel = availableModels.find(m => m.shortName === selectedModel)}
@@ -458,36 +628,43 @@
 					{#if showModelDropdown && selectedAgent}
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<div class="fixed inset-0 z-40" onclick={() => (showModelDropdown = false)}></div>
-						<div class="absolute z-50 mt-1 w-full rounded-lg border shadow-xl overflow-hidden"
-							style="background: oklch(0.20 0.02 250); border-color: oklch(0.35 0.03 250);">
-							{#each availableModels as model}
-								{@const isSelected = selectedModel === model.shortName}
-								<button
-									type="button"
-									class="w-full flex items-center gap-3 p-2.5 transition-colors duration-150 hover:bg-base-300"
-									style={isSelected ? 'background: oklch(0.55 0.15 240 / 0.1);' : ''}
-									onclick={() => selectModel(model)}
-								>
-									<div class="w-8 h-8 rounded-full flex items-center justify-center" style="background: oklch(0.28 0.04 250);">
-										<span class="text-xs font-bold" style="color: oklch(0.80 0.10 250);">
-											{model.shortName?.slice(0, 2).toUpperCase()}
-										</span>
-									</div>
-									<div class="flex-1 min-w-0 text-left">
-										<div class="font-medium text-sm">{model.name}</div>
-										<div class="text-xs" style="color: oklch(0.60 0.02 250);">
-											{model.costTier ? `Cost tier: ${model.costTier}` : 'Standard'}
+						<div class="fixed inset-0 z-40" onclick={() => { showModelDropdown = false; highlightedModelIndex = -1; }}></div>
+						<div
+							bind:this={modelDropdownRef}
+							class="absolute z-50 mt-1 w-full rounded-lg border shadow-xl overflow-hidden animate-dropdown"
+							style="background: oklch(0.20 0.02 250); border-color: oklch(0.35 0.03 250); transform-origin: top;">
+							<div class="max-h-64 overflow-y-auto">
+								{#each availableModels as model, index}
+									{@const isSelected = selectedModel === model.shortName}
+									{@const isHighlighted = highlightedModelIndex === index}
+									<button
+										type="button"
+										data-dropdown-item
+										class="w-full flex items-center gap-3 p-2.5 transition-colors duration-150"
+										style="background: {isHighlighted ? 'oklch(0.30 0.05 250)' : isSelected ? 'oklch(0.55 0.15 240 / 0.1)' : 'transparent'};"
+										onclick={() => selectModel(model)}
+										onmouseenter={() => { highlightedModelIndex = index; }}
+									>
+										<div class="w-8 h-8 rounded-full flex items-center justify-center" style="background: oklch(0.28 0.04 250);">
+											<span class="text-xs font-bold" style="color: oklch(0.80 0.10 250);">
+												{model.shortName?.slice(0, 2).toUpperCase()}
+											</span>
 										</div>
-									</div>
-									{#if isSelected}
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-											class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
-											<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-										</svg>
-									{/if}
-								</button>
-							{/each}
+										<div class="flex-1 min-w-0 text-left">
+											<div class="font-medium text-sm">{model.name}</div>
+											<div class="text-xs" style="color: oklch(0.60 0.02 250);">
+												{model.costTier ? `Cost tier: ${model.costTier}` : 'Standard'}
+											</div>
+										</div>
+										{#if isSelected}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+												class="w-4 h-4" style="color: oklch(0.75 0.15 145);">
+												<path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+											</svg>
+										{/if}
+									</button>
+								{/each}
+							</div>
 						</div>
 					{/if}
 				</div>
