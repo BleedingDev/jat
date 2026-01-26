@@ -1,0 +1,29 @@
+{
+  "name": "jat-browser-extension",
+  "version": "1.0.0",
+  "description": "JAT Browser Extension for Bug Reporting",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist/*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.254",
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10"
+  },
+  "dependencies": {},
+  "keywords": [
+    "chrome-extension",
+    "manifest-v3",
+    "typescript",
+    "vite",
+    "bug-reporting"
+  ],
+  "author": "JAT Team",
+  "license": "MIT"
+}

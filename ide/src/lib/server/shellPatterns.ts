@@ -37,11 +37,30 @@ export const OPENCODE_READY_PATTERNS = [
 ];
 
 /**
+ * Patterns indicating Codex CLI is running and ready for input.
+ * Codex CLI is OpenAI's terminal coding agent.
+ */
+export const CODEX_READY_PATTERNS = [
+	'codex>',
+	'Codex',
+	'gpt-',           // Model names like gpt-5.1-codex
+	'o3',             // O3 model
+	'o4-mini',        // O4-mini model
+	'[sandbox]',      // Sandbox mode indicator
+	'What can I help', // Welcome prompt
+	'Enter a prompt',  // Input prompt
+	'Type your',       // Generic input prompt
+];
+
+/**
  * Get ready patterns for a specific agent command.
  */
 export function getReadyPatternsForAgent(command: string): string[] {
 	if (command === 'opencode') {
 		return OPENCODE_READY_PATTERNS;
+	}
+	if (command === 'codex') {
+		return CODEX_READY_PATTERNS;
 	}
 	// Default to Claude patterns
 	return CLAUDE_READY_PATTERNS;

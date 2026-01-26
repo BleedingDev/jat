@@ -313,6 +313,103 @@ export function isAuthConfigured(agent: AgentProgram): boolean {
 	}
 }
 
+// Path to OpenCode's auth file
+const OPENCODE_AUTH_FILE = join(homedir(), '.local', 'share', 'opencode', 'auth.json');
+
+// Path to Codex CLI's auth file
+const CODEX_AUTH_FILE = join(homedir(), '.codex', 'auth.json');
+
+/**
+ * Check if Codex CLI has valid authentication configured.
+ * Codex uses auth stored in ~/.codex/auth.json or OPENAI_API_KEY env var.
+ */
+export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boolean; message?: string } {
+	// Check if Codex auth file exists
+	if (!existsSync(CODEX_AUTH_FILE)) {
+		// Fall back to checking for OPENAI_API_KEY in credentials vault
+		if (hasApiKey('openai')) {
+			return {
+				configured: true,
+				hasApiKey: true
+			};
+		}
+		return {
+			configured: false,
+			hasApiKey: false,
+			message: 'Run "codex auth" to authenticate or add OpenAI API key'
+		};
+	}
+
+	try {
+		const content = readFileSync(CODEX_AUTH_FILE, 'utf-8');
+		const auth = JSON.parse(content);
+
+		// Codex auth.json can have api_key or oauth tokens
+		if (auth.api_key || auth.access_token) {
+			return {
+				configured: true,
+				hasApiKey: !!auth.api_key
+			};
+		}
+
+		// No valid auth found in file
+		return {
+			configured: false,
+			hasApiKey: false,
+			message: 'Codex auth file exists but is invalid. Run "codex auth"'
+		};
+	} catch {
+		return {
+			configured: false,
+			hasApiKey: false,
+			message: 'Codex auth file is invalid. Run "codex auth"'
+		};
+	}
+}
+
+/**
+ * Check if OpenCode has valid authentication configured.
+ * OpenCode uses OAuth auth stored in ~/.local/share/opencode/auth.json
+ * OAuth takes precedence over API keys passed via environment.
+ */
+export function isOpenCodeAuthConfigured(provider: string): { configured: boolean; hasOAuth: boolean; message?: string } {
+	// Check if OpenCode auth file exists
+	if (!existsSync(OPENCODE_AUTH_FILE)) {
+		return {
+			configured: false,
+			hasOAuth: false,
+			message: 'Run "opencode auth login" to authenticate'
+		};
+	}
+
+	try {
+		const content = readFileSync(OPENCODE_AUTH_FILE, 'utf-8');
+		const auth = JSON.parse(content);
+
+		// Check if the requested provider has OAuth credentials
+		const providerKey = provider.toLowerCase();
+		if (auth[providerKey]) {
+			return {
+				configured: true,
+				hasOAuth: true
+			};
+		}
+
+		// Provider not in OAuth, but might work via API key env var
+		return {
+			configured: false,
+			hasOAuth: false,
+			message: `Run "opencode auth login" to authenticate with ${provider}`
+		};
+	} catch {
+		return {
+			configured: false,
+			hasOAuth: false,
+			message: 'OpenCode auth file is invalid. Run "opencode auth login"'
+		};
+	}
+}
+
 /**
  * Check if an API key exists in the credentials vault.
  */
@@ -346,23 +443,61 @@ function hasApiKey(provider: string): boolean {
  */
 export function getAgentStatus(agent: AgentProgram): AgentStatus {
 	const commandAvailable = isCommandAvailable(agent.command);
-	const authConfigured = isAuthConfigured(agent);
-	const available = agent.enabled && commandAvailable && authConfigured;
 
+	// Special handling for agents with custom auth mechanisms
+	let authConfigured: boolean;
 	let statusMessage: string;
-	if (!agent.enabled) {
-		statusMessage = 'Disabled';
-	} else if (!commandAvailable) {
-		statusMessage = `Command '${agent.command}' not found`;
-	} else if (!authConfigured) {
-		if (agent.authType === 'api_key') {
-			statusMessage = `API key not configured for ${agent.apiKeyProvider}`;
+
+	if (agent.command === 'opencode') {
+		// OpenCode uses OAuth auth via 'opencode auth login'
+		const provider = agent.apiKeyProvider || 'anthropic';
+		const openCodeAuth = isOpenCodeAuthConfigured(provider);
+
+		authConfigured = openCodeAuth.configured;
+
+		if (!agent.enabled) {
+			statusMessage = 'Disabled';
+		} else if (!commandAvailable) {
+			statusMessage = `Command '${agent.command}' not found`;
+		} else if (!authConfigured) {
+			statusMessage = openCodeAuth.message || 'Run "opencode auth login" to authenticate';
 		} else {
-			statusMessage = 'Authentication not configured';
+			statusMessage = 'Available';
+		}
+	} else if (agent.command === 'codex') {
+		// Codex uses ~/.codex/auth.json or OPENAI_API_KEY
+		const codexAuth = isCodexAuthConfigured();
+
+		authConfigured = codexAuth.configured;
+
+		if (!agent.enabled) {
+			statusMessage = 'Disabled';
+		} else if (!commandAvailable) {
+			statusMessage = `Command '${agent.command}' not found`;
+		} else if (!authConfigured) {
+			statusMessage = codexAuth.message || 'Run "codex auth" to authenticate';
+		} else {
+			statusMessage = 'Available';
 		}
 	} else {
-		statusMessage = 'Available';
+		authConfigured = isAuthConfigured(agent);
+
+		if (!agent.enabled) {
+			statusMessage = 'Disabled';
+		} else if (!commandAvailable) {
+			statusMessage = `Command '${agent.command}' not found`;
+		} else if (!authConfigured) {
+			if (agent.authType === 'api_key') {
+				statusMessage = `API key not configured for ${agent.apiKeyProvider}`;
+			} else {
+				statusMessage = 'Authentication not configured';
+			}
+		} else {
+			statusMessage = 'Available';
+		}
 	}
+
+	const available = agent.enabled && commandAvailable && authConfigured;
 
 	return {
 		agentId: agent.id,

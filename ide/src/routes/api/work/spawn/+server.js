@@ -404,6 +404,10 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 			agentCmd += ` --model ${model.shortName}`;
 		} else if (agent.command === 'codex' || agent.command === 'gemini') {
 			agentCmd += ` --model ${model.id}`;
+		} else if (agent.command === 'opencode') {
+			// OpenCode uses provider/model format (e.g., anthropic/claude-sonnet-4-20250514)
+			const provider = agent.apiKeyProvider || 'anthropic';
+			agentCmd += ` --model ${provider}/${model.id}`;
 		} else {
 			// Generic: try --model with full ID
 			agentCmd += ` --model ${model.id}`;
@@ -426,13 +430,33 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 		// taskInjection modes:
 		// - 'stdin' (default for Claude Code): Send /jat:start command after agent starts
 		// - 'prompt': Pass initial prompt via --prompt flag (e.g., OpenCode)
-		// - 'argument': Pass as command argument
+		// - 'argument': Pass as positional command argument (e.g., Codex)
 		const taskInjectionMode = agent.taskInjection || 'stdin';
 
 		if (agent.command === 'claude') {
 			// Claude Code uses JAT bootstrap + /jat:start after startup
 			const jatBootstrap = `You are a JAT agent. Run /jat:start to begin work.`;
 			agentCmd += ` --append-system-prompt '${jatBootstrap}'`;
+		} else if (taskInjectionMode === 'argument' && (agentName || taskId)) {
+			// Agents with argument injection (like Codex) - pass task as positional argument
+			const promptParts = [];
+			promptParts.push('You are a JAT agent working on a software development task.');
+			if (taskId) {
+				promptParts.push(`Task ID: ${taskId}`);
+			}
+			if (taskTitle) {
+				promptParts.push(`Task: ${taskTitle}`);
+			}
+			if (agentName) {
+				promptParts.push(`Your agent name is: ${agentName}`);
+			}
+			promptParts.push('Read the CLAUDE.md file in the project root for JAT workflow instructions.');
+			promptParts.push('Start by understanding the task and implementing it.');
+
+			const prompt = promptParts.join(' ');
+			// Escape double quotes for shell argument
+			const escapedPrompt = prompt.replace(/"/g, '\\"');
+			agentCmd += ` "${escapedPrompt}"`;
 		} else if (taskInjectionMode === 'prompt' && (agentName || taskId)) {
 			// Agents with prompt injection (like OpenCode) - pass task via --prompt
 			const promptParts = [];

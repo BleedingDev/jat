@@ -451,14 +451,15 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 			command: 'codex',
 			models: [
 				{ id: 'o3', name: 'O3', shortName: 'o3', costTier: 'high' },
-				{ id: 'o4-mini', name: 'O4 Mini', shortName: 'o4-mini', costTier: 'medium' }
+				{ id: 'o4-mini', name: 'O4 Mini', shortName: 'o4-mini', costTier: 'medium' },
+				{ id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', shortName: 'gpt5-codex', costTier: 'high' },
+				{ id: 'gpt-4.1', name: 'GPT-4.1', shortName: 'gpt4.1', costTier: 'high' },
+				{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', shortName: 'gpt4.1-mini', costTier: 'low' }
 			],
 			defaultModel: 'o4-mini',
-			authType: 'api_key',
-			apiKeyProvider: 'openai',
-			apiKeyEnvVar: 'OPENAI_API_KEY',
-			flags: [],
-			taskInjection: 'prompt'
+			authType: 'subscription',  // Codex has its own auth via 'codex auth'
+			flags: ['--full-auto'],
+			taskInjection: 'argument'  // Codex takes prompt as positional argument
 		}
 	},
 	{

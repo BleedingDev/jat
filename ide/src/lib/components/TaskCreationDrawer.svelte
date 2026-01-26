@@ -1995,8 +1995,9 @@
 						<!-- Split button with dropdown -->
 						<div class="join">
 							<!-- Main action: Uses stored preference -->
+							<!-- Note: type="button" prevents double-submit (onclick already calls submitWithAction) -->
 							<button
-								type="submit"
+								type="button"
 								class="btn btn-primary font-mono join-item"
 								onclick={() => submitWithAction(defaultSaveAction)}
 								disabled={formDisabled || isSubmitting}
