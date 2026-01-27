@@ -563,31 +563,23 @@
 		}
 	}
 
-	async function fetchOpenTasks() {
+	async function fetchTasks() {
 		try {
+			// Single fetch for all tasks - used for both display (openTasks) and epic mapping (allTasks)
 			const response = await fetch("/api/tasks");
 			if (!response.ok) {
 				throw new Error("Failed to fetch tasks");
 			}
 			const data = await response.json();
-			openTasks = data.tasks || [];
+			const tasks = data.tasks || [];
+			// Set both variables from the same data to avoid duplicate fetches
+			openTasks = tasks;
+			allTasks = tasks;
 			tasksError = null;
 		} catch (err) {
 			tasksError = err instanceof Error ? err.message : "Unknown error";
 		} finally {
 			tasksLoading = false;
-		}
-	}
-
-	async function fetchAllTasks() {
-		try {
-			// Fetch all tasks including closed for epic mapping (no status filter = all statuses)
-			const response = await fetch("/api/tasks");
-			if (!response.ok) return;
-			const data = await response.json();
-			allTasks = data.tasks || [];
-		} catch {
-			// Silent fail - epic mapping is optional
 		}
 	}
 
@@ -662,10 +654,10 @@
 			fetchAgentProjects(),
 			fetchProjectColors(),
 			fetchProjectNotes(),
-			fetchAllTasks(),
+			fetchTasks(),
 			fetchRecoverableSessions(),
+			fetchSessions(),
 		]);
-		await Promise.all([fetchSessions(), fetchOpenTasks()]);
 	}
 
 	// Actions
@@ -1482,7 +1474,7 @@
 													{spawningTaskId}
 													{projectColors}
 													onSpawnTask={spawnTask as any}
-													onRetry={fetchOpenTasks}
+													onRetry={fetchTasks}
 													onTaskClick={(taskId) =>
 														openTaskDetailDrawer(
 															taskId,
@@ -1547,7 +1539,7 @@
 													{spawningTaskId}
 													{projectColors}
 													onSpawnTask={spawnTask as any}
-													onRetry={fetchOpenTasks}
+													onRetry={fetchTasks}
 													onTaskClick={(taskId) =>
 														openTaskDetailDrawer(
 															taskId,
