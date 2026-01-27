@@ -1,82 +1,296 @@
 // Content script for JAT Browser Extension
+import {
+  captureFullPage,
+  captureElement,
+  compressImage,
+  annotationEditor,
+  type ScreenshotResult,
+  type ScreenshotOptions
+} from '../lib/screenshot'
+
 console.log('JAT Browser Extension Content Script loaded on:', window.location.href)
 
 // State management
 let isElementPickerActive = false
+let isElementScreenshotMode = false
 let originalCursor = ''
 let elementPickerOverlay: HTMLElement | null = null
+let lastScreenshot: ScreenshotResult | null = null
+
+// Console log capture configuration
+interface ConsoleLogConfig {
+  maxEntries: number
+  captureStackTraces: boolean
+  filterSensitiveData: boolean
+}
+
+const consoleConfig: ConsoleLogConfig = {
+  maxEntries: 50,           // Default buffer size
+  captureStackTraces: true, // Capture stack traces for errors/warnings
+  filterSensitiveData: true // Filter sensitive data like tokens, passwords
+}
+
+// Patterns for sensitive data detection
+const SENSITIVE_PATTERNS: RegExp[] = [
+  // API keys and tokens
+  /\b(api[_-]?key|apikey|api[_-]?token|access[_-]?token|auth[_-]?token|bearer)\s*[:=]\s*["']?[\w\-\.]+["']?/gi,
+  /\bBearer\s+[\w\-\.]+/gi,
+  /\b(sk|pk|rk)[_-][a-zA-Z0-9]{20,}/gi, // Stripe-style keys
+  /\bghp_[a-zA-Z0-9]{36,}/gi, // GitHub tokens
+  /\bsk-[a-zA-Z0-9]{20,}/gi, // OpenAI-style keys
+
+  // Passwords and secrets
+  /\b(password|passwd|pwd|secret|credential)\s*[:=]\s*["']?[^"'\s,}{]+["']?/gi,
+
+  // JWT tokens (header.payload.signature format)
+  /\beyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*/gi,
+
+  // Credit card numbers (basic pattern)
+  /\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g,
+
+  // Email addresses in sensitive contexts
+  /\b(email|e-mail)\s*[:=]\s*["']?[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}["']?/gi,
+
+  // Private keys
+  /-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(RSA\s+)?PRIVATE\s+KEY-----/gi,
+
+  // AWS-style credentials
+  /\b(AKIA|ABIA|ACCA|AGPA|AIDA|AIPA|AKIA|ANPA|ANVA|AROA|APKA|ASCA|ASIA)[A-Z0-9]{16}\b/g,
+  /\b(aws[_-]?secret[_-]?access[_-]?key|aws[_-]?access[_-]?key[_-]?id)\s*[:=]\s*["']?[\w\/\+]+["']?/gi,
+]
+
+// Replacement text for filtered content
+const REDACTED = '[REDACTED]'
 
 // Console log capture setup
 const originalConsole = {
   log: console.log,
   error: console.error,
   warn: console.warn,
-  info: console.info
+  info: console.info,
+  debug: console.debug,
+  trace: console.trace
 }
 
-const capturedLogs: any[] = []
+interface CapturedLogEntry {
+  type: 'log' | 'error' | 'warn' | 'info' | 'debug' | 'trace'
+  message: string
+  timestamp: string
+  timestampMs: number
+  url: string
+  stackTrace?: string
+  lineNumber?: number
+  columnNumber?: number
+  fileName?: string
+}
+
+const capturedLogs: CapturedLogEntry[] = []
+
+/**
+ * Filter sensitive data from a string
+ */
+function filterSensitiveData(input: string): string {
+  if (!consoleConfig.filterSensitiveData) return input
+
+  let filtered = input
+  for (const pattern of SENSITIVE_PATTERNS) {
+    // Reset lastIndex for global patterns
+    pattern.lastIndex = 0
+    filtered = filtered.replace(pattern, REDACTED)
+  }
+  return filtered
+}
+
+/**
+ * Safely stringify a value, handling circular references and special types
+ */
+function safeStringify(arg: unknown): string {
+  if (arg === null) return 'null'
+  if (arg === undefined) return 'undefined'
+
+  if (typeof arg === 'string') return arg
+  if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg)
+  if (typeof arg === 'symbol') return arg.toString()
+  if (typeof arg === 'function') return `[Function: ${arg.name || 'anonymous'}]`
+
+  if (arg instanceof Error) {
+    return `${arg.name}: ${arg.message}${arg.stack ? '\n' + arg.stack : ''}`
+  }
+
+  if (typeof arg === 'object') {
+    try {
+      const seen = new WeakSet()
+      return JSON.stringify(arg, (_key, value) => {
+        if (typeof value === 'object' && value !== null) {
+          if (seen.has(value)) return '[Circular]'
+          seen.add(value)
+        }
+        if (typeof value === 'function') return `[Function: ${value.name || 'anonymous'}]`
+        if (value instanceof Error) return `${value.name}: ${value.message}`
+        return value
+      }, 2)
+    } catch {
+      return '[Object - stringify failed]'
+    }
+  }
+
+  return String(arg)
+}
+
+/**
+ * Capture stack trace information
+ */
+function captureStackInfo(): { stackTrace?: string; lineNumber?: number; columnNumber?: number; fileName?: string } {
+  if (!consoleConfig.captureStackTraces) return {}
+
+  const stack = new Error().stack
+  if (!stack) return {}
+
+  const lines = stack.split('\n')
+  // Skip the first few lines (Error, captureStackInfo, createLogEntry, console override)
+  const relevantLines = lines.slice(4)
+  const stackTrace = relevantLines.join('\n')
+
+  // Parse the first relevant line for location info
+  // Format: "    at functionName (file:line:col)" or "    at file:line:col"
+  const firstLine = relevantLines[0] || ''
+  const locationMatch = firstLine.match(/(?:at\s+(?:\S+\s+)?\()?([^()]+):(\d+):(\d+)\)?/)
+
+  if (locationMatch) {
+    return {
+      stackTrace,
+      fileName: locationMatch[1],
+      lineNumber: parseInt(locationMatch[2], 10),
+      columnNumber: parseInt(locationMatch[3], 10)
+    }
+  }
+
+  return { stackTrace }
+}
+
+/**
+ * Create a log entry with all metadata
+ */
+function createLogEntry(type: CapturedLogEntry['type'], args: unknown[], includeStack: boolean): CapturedLogEntry {
+  const now = new Date()
+  const message = filterSensitiveData(
+    args.map(safeStringify).join(' ')
+  )
+
+  const entry: CapturedLogEntry = {
+    type,
+    message,
+    timestamp: now.toISOString(),
+    timestampMs: now.getTime(),
+    url: window.location.href
+  }
+
+  // Include stack trace for errors and warnings, or when explicitly requested
+  if (includeStack || type === 'error' || type === 'warn' || type === 'trace') {
+    const stackInfo = captureStackInfo()
+    Object.assign(entry, stackInfo)
+  }
+
+  return entry
+}
+
+/**
+ * Add a log entry to the buffer, maintaining max size
+ */
+function addLogEntry(entry: CapturedLogEntry) {
+  capturedLogs.push(entry)
+
+  // Maintain buffer size limit
+  while (capturedLogs.length > consoleConfig.maxEntries) {
+    capturedLogs.shift()
+  }
+}
 
 // Override console methods to capture logs
 function setupConsoleCapture() {
   console.log = (...args) => {
     originalConsole.log(...args)
-    capturedLogs.push({
-      type: 'log',
-      message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '),
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    })
+    addLogEntry(createLogEntry('log', args, false))
   }
-  
+
   console.error = (...args) => {
     originalConsole.error(...args)
-    capturedLogs.push({
-      type: 'error',
-      message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '),
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    })
+    addLogEntry(createLogEntry('error', args, true))
   }
-  
+
   console.warn = (...args) => {
     originalConsole.warn(...args)
-    capturedLogs.push({
-      type: 'warn',
-      message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '),
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    })
+    addLogEntry(createLogEntry('warn', args, true))
   }
-  
+
   console.info = (...args) => {
     originalConsole.info(...args)
-    capturedLogs.push({
-      type: 'info',
-      message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '),
-      timestamp: new Date().toISOString(),
-      url: window.location.href
-    })
+    addLogEntry(createLogEntry('info', args, false))
   }
+
+  console.debug = (...args) => {
+    originalConsole.debug(...args)
+    addLogEntry(createLogEntry('debug', args, false))
+  }
+
+  console.trace = (...args) => {
+    originalConsole.trace(...args)
+    addLogEntry(createLogEntry('trace', args, true))
+  }
+}
+
+/**
+ * Update console capture configuration
+ */
+function updateConsoleConfig(config: Partial<ConsoleLogConfig>) {
+  if (config.maxEntries !== undefined) {
+    consoleConfig.maxEntries = Math.max(1, Math.min(500, config.maxEntries))
+    // Trim buffer if new size is smaller
+    while (capturedLogs.length > consoleConfig.maxEntries) {
+      capturedLogs.shift()
+    }
+  }
+  if (config.captureStackTraces !== undefined) {
+    consoleConfig.captureStackTraces = config.captureStackTraces
+  }
+  if (config.filterSensitiveData !== undefined) {
+    consoleConfig.filterSensitiveData = config.filterSensitiveData
+  }
+}
+
+/**
+ * Get current console capture configuration
+ */
+function getConsoleConfig(): ConsoleLogConfig {
+  return { ...consoleConfig }
+}
+
+/**
+ * Get captured logs, optionally filtered by type
+ */
+function getCapturedLogs(filter?: { types?: CapturedLogEntry['type'][]; since?: number }): CapturedLogEntry[] {
+  let logs = [...capturedLogs]
+
+  if (filter?.types && filter.types.length > 0) {
+    logs = logs.filter(log => filter.types!.includes(log.type))
+  }
+
+  if (filter?.since) {
+    logs = logs.filter(log => log.timestampMs >= filter.since!)
+  }
+
+  return logs
+}
+
+/**
+ * Clear captured logs
+ */
+function clearCapturedLogs() {
+  capturedLogs.length = 0
 }
 
 // Initialize console capture
 setupConsoleCapture()
-
-// Screenshot capture function
-async function captureScreenshot(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Use Chrome's captureVisibleTab API via background script
-    chrome.runtime.sendMessage({
-      type: 'REQUEST_SCREENSHOT_CAPTURE'
-    }, (response) => {
-      if (response?.success) {
-        resolve(response.data)
-      } else {
-        reject(new Error(response?.error || 'Screenshot capture failed'))
-      }
-    })
-  })
-}
 
 // Element picker functionality
 function createElementPickerOverlay() {
@@ -148,14 +362,29 @@ function handleElementHover(event: MouseEvent) {
   elementPickerOverlay.style.height = `${rect.height}px`
 }
 
-function handleElementClick(event: MouseEvent) {
+async function handleElementClick(event: MouseEvent) {
   if (!isElementPickerActive) return
-  
+
   event.preventDefault()
   event.stopPropagation()
-  
+
   const target = event.target as HTMLElement
-  
+  const rect = target.getBoundingClientRect()
+
+  // Stop the picker first to remove overlay before screenshot
+  stopElementPicker()
+
+  // Small delay to ensure overlay is fully removed before screenshot
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  // Capture element-specific screenshot
+  let elementScreenshot: string | null = null
+  try {
+    elementScreenshot = await captureElementScreenshot(rect)
+  } catch (error) {
+    originalConsole.error('Element screenshot capture failed:', error)
+  }
+
   // Capture element information
   const elementData = {
     tagName: target.tagName,
@@ -168,25 +397,99 @@ function handleElementClick(event: MouseEvent) {
     }, {} as Record<string, string>),
     xpath: getXPath(target),
     selector: generateSelector(target),
-    boundingRect: target.getBoundingClientRect(),
+    boundingRect: {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      left: rect.left,
+      bottom: rect.bottom,
+      right: rect.right
+    },
+    screenshot: elementScreenshot,
     timestamp: new Date().toISOString(),
     url: window.location.href
   }
-  
+
   // Store element data
   chrome.runtime.sendMessage({
     type: 'STORE_ELEMENT_DATA',
     data: elementData
   })
-  
+
   // Notify popup
   chrome.runtime.sendMessage({
     type: 'ELEMENT_SELECTED',
     tagName: target.tagName,
     data: elementData
   })
-  
-  stopElementPicker()
+}
+
+/**
+ * Capture a screenshot of a specific element by cropping from the full page screenshot
+ */
+async function captureElementScreenshot(rect: DOMRect): Promise<string | null> {
+  return new Promise((resolve) => {
+    // Request full page screenshot from background
+    chrome.runtime.sendMessage({
+      type: 'CAPTURE_VISIBLE_TAB'
+    }, async (response) => {
+      if (!response?.success || !response.data) {
+        resolve(null)
+        return
+      }
+
+      try {
+        // Create an image from the full screenshot
+        const img = new Image()
+        img.onload = () => {
+          // Calculate device pixel ratio for accurate cropping
+          const dpr = window.devicePixelRatio || 1
+
+          // Create canvas for cropping
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+
+          if (!ctx) {
+            resolve(null)
+            return
+          }
+
+          // Add padding around the element (10px on each side)
+          const padding = 10
+          const x = Math.max(0, (rect.left - padding) * dpr)
+          const y = Math.max(0, (rect.top - padding) * dpr)
+          const width = Math.min((rect.width + padding * 2) * dpr, img.width - x)
+          const height = Math.min((rect.height + padding * 2) * dpr, img.height - y)
+
+          // Set canvas size
+          canvas.width = width
+          canvas.height = height
+
+          // Draw cropped region
+          ctx.drawImage(
+            img,
+            x, y, width, height,  // Source rectangle
+            0, 0, width, height   // Destination rectangle
+          )
+
+          // Convert to data URL
+          const croppedDataUrl = canvas.toDataURL('image/png')
+          resolve(croppedDataUrl)
+        }
+
+        img.onerror = () => {
+          resolve(null)
+        }
+
+        img.src = response.data
+      } catch (error) {
+        originalConsole.error('Error cropping screenshot:', error)
+        resolve(null)
+      }
+    })
+  })
 }
 
 function handleElementPickerEscape(event: KeyboardEvent) {
@@ -219,27 +522,106 @@ function getXPath(element: Element): string {
 }
 
 function generateSelector(element: Element): string {
+  // If element has a unique ID, use it directly
   if (element.id) {
-    return '#' + element.id
+    return '#' + CSS.escape(element.id)
   }
-  
-  let selector = element.tagName.toLowerCase()
-  
-  if (element.className) {
-    selector += '.' + element.className.split(' ').join('.')
+
+  // Build a unique selector by walking up the DOM tree
+  const parts: string[] = []
+  let current: Element | null = element
+
+  while (current && current !== document.body && current !== document.documentElement) {
+    let selector = current.tagName.toLowerCase()
+
+    // Check if element has unique ID
+    if (current.id) {
+      selector = '#' + CSS.escape(current.id)
+      parts.unshift(selector)
+      break // ID is unique, no need to go further up
+    }
+
+    // Add classes that help identify the element (filter out dynamic/utility classes)
+    if (current.className && typeof current.className === 'string') {
+      const classes = current.className.split(/\s+/).filter(cls => {
+        // Filter out common dynamic class patterns
+        return cls &&
+          !cls.match(/^(ng-|v-|svelte-|css-|_|js-|is-|has-)/) &&
+          !cls.match(/^\d/) &&
+          cls.length > 1
+      })
+      if (classes.length > 0) {
+        selector += '.' + classes.slice(0, 2).map(c => CSS.escape(c)).join('.')
+      }
+    }
+
+    // Add data attributes that might help identify the element
+    const dataAttrs = ['data-testid', 'data-id', 'data-name', 'name', 'role', 'aria-label']
+    for (const attr of dataAttrs) {
+      const value = current.getAttribute(attr)
+      if (value) {
+        selector += `[${attr}="${CSS.escape(value)}"]`
+        break
+      }
+    }
+
+    // Add nth-of-type if there are siblings with same tag
+    const parent = current.parentElement
+    if (parent) {
+      const siblings = Array.from(parent.children).filter(el => el.tagName === current!.tagName)
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(current) + 1
+        selector += `:nth-of-type(${index})`
+      }
+    }
+
+    parts.unshift(selector)
+
+    // Check if current selector is already unique
+    const testSelector = parts.join(' > ')
+    try {
+      if (document.querySelectorAll(testSelector).length === 1) {
+        break
+      }
+    } catch {
+      // Invalid selector, continue building
+    }
+
+    current = current.parentElement
   }
-  
-  // Add nth-child if needed for uniqueness
-  const parent = element.parentElement
-  if (parent) {
-    const siblings = Array.from(parent.children).filter(el => el.tagName === element.tagName)
-    if (siblings.length > 1) {
-      const index = siblings.indexOf(element) + 1
-      selector += `:nth-child(${index})`
+
+  // Build the final selector
+  const fullSelector = parts.join(' > ')
+
+  // Verify uniqueness and simplify if possible
+  try {
+    if (document.querySelectorAll(fullSelector).length === 1) {
+      return fullSelector
+    }
+  } catch {
+    // Fall back to a simpler approach
+  }
+
+  // Fallback: use nth-child from body
+  return generateFallbackSelector(element)
+}
+
+function generateFallbackSelector(element: Element): string {
+  const path: string[] = []
+  let current: Element | null = element
+
+  while (current && current !== document.body) {
+    const parentEl: Element | null = current.parentElement
+    if (parentEl) {
+      const index = Array.from(parentEl.children).indexOf(current) + 1
+      path.unshift(`*:nth-child(${index})`)
+      current = parentEl
+    } else {
+      break
     }
   }
-  
-  return selector
+
+  return 'body > ' + path.join(' > ')
 }
 
 function showInstructionTooltip() {
@@ -432,90 +814,429 @@ async function handleBugReportSubmit(event: Event) {
 
 // Message listener for communication with popup and background
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  console.log('Content script received message:', message)
-  
+  // Use original console to avoid capturing our own debug messages
+  originalConsole.log('Content script received message:', message)
+
   switch (message.type) {
     case 'CAPTURE_SCREENSHOT':
       handleScreenshotRequest(sendResponse)
       return true
-      
+
     case 'CAPTURE_CONSOLE_LOGS':
-      handleConsoleLogsRequest(sendResponse)
+      handleConsoleLogsRequest(sendResponse, message.options)
       return true
-      
+
+    case 'GET_CONSOLE_LOGS':
+      // Get logs without storing to background (for popup display)
+      try {
+        const logs = getCapturedLogs(message.options)
+        sendResponse({
+          success: true,
+          logsCount: logs.length,
+          logs: logs,
+          config: getConsoleConfig()
+        })
+      } catch (error) {
+        sendResponse({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+      break
+
+    case 'UPDATE_CONSOLE_CONFIG':
+      // Update console capture configuration
+      try {
+        updateConsoleConfig(message.config)
+        sendResponse({
+          success: true,
+          config: getConsoleConfig()
+        })
+      } catch (error) {
+        sendResponse({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+      break
+
+    case 'GET_CONSOLE_CONFIG':
+      // Get current console capture configuration
+      sendResponse({
+        success: true,
+        config: getConsoleConfig()
+      })
+      break
+
+    case 'CLEAR_CONSOLE_LOGS':
+      // Clear captured logs without storing
+      clearCapturedLogs()
+      sendResponse({ success: true })
+      break
+
     case 'START_ELEMENT_PICKER':
       startElementPicker()
       sendResponse({ success: true })
       break
-      
+
+    case 'START_ELEMENT_SCREENSHOT':
+      startElementScreenshotPicker()
+      sendResponse({ success: true })
+      break
+
+    case 'OPEN_ANNOTATION_EDITOR':
+      handleOpenAnnotationEditor(sendResponse)
+      return true
+
     case 'OPEN_BUG_REPORT_FORM':
       createBugReportForm()
       sendResponse({ success: true })
       break
-      
+
     default:
-      console.log('Unknown message type:', message.type)
+      originalConsole.log('Unknown message type:', message.type)
       sendResponse({ success: false, error: 'Unknown message type' })
   }
 })
 
-// Handle screenshot request
-async function handleScreenshotRequest(sendResponse: Function) {
+// Handle screenshot request with options for different capture types
+async function handleScreenshotRequest(sendResponse: Function, options?: ScreenshotOptions) {
   try {
-    // For full page screenshot, we need to capture via background script
-    chrome.runtime.sendMessage({
-      type: 'CAPTURE_VISIBLE_TAB'
-    }, (response) => {
-      if (response?.success) {
-        // Store screenshot
-        chrome.runtime.sendMessage({
-          type: 'STORE_SCREENSHOT',
-          data: response.data
-        })
-        sendResponse({ success: true })
-      } else {
-        sendResponse({ 
-          success: false, 
-          error: response?.error || 'Screenshot capture failed' 
-        })
-      }
-    })
+    const captureType = options?.type || 'visible'
+
+    if (captureType === 'fullpage') {
+      // Full page capture using scroll + stitch
+      const result = await captureFullPage({
+        format: options?.format || 'png',
+        quality: options?.quality || 0.92,
+        maxWidth: options?.maxWidth
+      })
+
+      lastScreenshot = result
+
+      // Store screenshot
+      chrome.runtime.sendMessage({
+        type: 'STORE_SCREENSHOT',
+        data: result.dataUrl
+      })
+
+      sendResponse({
+        success: true,
+        width: result.width,
+        height: result.height,
+        size: result.size
+      })
+    } else if (captureType === 'element' && options?.elementSelector) {
+      // Element capture
+      const result = await captureElement(options.elementSelector, {
+        format: options?.format || 'png',
+        quality: options?.quality || 0.92,
+        maxWidth: options?.maxWidth
+      })
+
+      lastScreenshot = result
+
+      // Store screenshot
+      chrome.runtime.sendMessage({
+        type: 'STORE_SCREENSHOT',
+        data: result.dataUrl
+      })
+
+      sendResponse({
+        success: true,
+        width: result.width,
+        height: result.height,
+        size: result.size
+      })
+    } else {
+      // Visible area capture (default)
+      chrome.runtime.sendMessage({
+        type: 'CAPTURE_VISIBLE_TAB'
+      }, (response) => {
+        if (response?.success) {
+          // Create result object
+          const img = new Image()
+          img.onload = async () => {
+            let dataUrl = response.data
+            let width = img.width
+            let height = img.height
+
+            // Apply compression if needed
+            if (options?.maxWidth && width > options.maxWidth) {
+              dataUrl = await compressImage(dataUrl, options.maxWidth, options?.format || 'jpeg', options?.quality || 0.8)
+              // Update dimensions
+              const compressed = new Image()
+              compressed.src = dataUrl
+              await new Promise(resolve => compressed.onload = resolve)
+              width = compressed.width
+              height = compressed.height
+            }
+
+            lastScreenshot = {
+              dataUrl,
+              width,
+              height,
+              format: options?.format || 'png',
+              size: Math.round((dataUrl.split(',')[1]?.length || 0) * 0.75),
+              capturedAt: new Date().toISOString(),
+              pageUrl: window.location.href
+            }
+
+            // Store screenshot
+            chrome.runtime.sendMessage({
+              type: 'STORE_SCREENSHOT',
+              data: dataUrl
+            })
+
+            sendResponse({
+              success: true,
+              width,
+              height,
+              size: lastScreenshot.size
+            })
+          }
+          img.onerror = () => {
+            sendResponse({
+              success: false,
+              error: 'Failed to process screenshot'
+            })
+          }
+          img.src = response.data
+        } else {
+          sendResponse({
+            success: false,
+            error: response?.error || 'Screenshot capture failed'
+          })
+        }
+      })
+    }
   } catch (error) {
-    console.error('Screenshot error:', error)
-    sendResponse({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    originalConsole.error('Screenshot error:', error)
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     })
   }
 }
 
 // Handle console logs request
-function handleConsoleLogsRequest(sendResponse: Function) {
+function handleConsoleLogsRequest(sendResponse: Function, options?: { types?: CapturedLogEntry['type'][]; since?: number; clearAfter?: boolean }) {
   try {
+    const logs = getCapturedLogs(options)
+
     // Store console logs in background
     chrome.runtime.sendMessage({
       type: 'STORE_CONSOLE_LOGS',
-      data: capturedLogs
+      data: logs
     }, (response) => {
       if (response?.success) {
-        sendResponse({ 
-          success: true, 
-          logsCount: capturedLogs.length 
+        sendResponse({
+          success: true,
+          logsCount: logs.length,
+          logs: logs // Also return logs directly for immediate use
         })
-        // Clear captured logs after storing
-        capturedLogs.length = 0
+        // Clear captured logs after storing if requested (default: true for backward compatibility)
+        if (options?.clearAfter !== false) {
+          clearCapturedLogs()
+        }
       } else {
-        sendResponse({ 
-          success: false, 
-          error: response?.error || 'Console log storage failed' 
+        sendResponse({
+          success: false,
+          error: response?.error || 'Console log storage failed'
         })
       }
     })
   } catch (error) {
-    console.error('Console logs error:', error)
-    sendResponse({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    originalConsole.error('Console logs error:', error)
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+}
+
+// Element screenshot picker - captures screenshot of clicked element
+function startElementScreenshotPicker() {
+  if (isElementScreenshotMode) return
+
+  isElementScreenshotMode = true
+  originalCursor = document.body.style.cursor
+  document.body.style.cursor = 'crosshair'
+
+  elementPickerOverlay = createElementPickerOverlay()
+
+  document.addEventListener('mousemove', handleElementHover)
+  document.addEventListener('click', handleElementScreenshotClick)
+  document.addEventListener('keydown', handleElementScreenshotEscape)
+
+  // Show instruction tooltip
+  showScreenshotTooltip()
+}
+
+function stopElementScreenshotPicker() {
+  if (!isElementScreenshotMode) return
+
+  isElementScreenshotMode = false
+  document.body.style.cursor = originalCursor
+
+  if (elementPickerOverlay) {
+    elementPickerOverlay.remove()
+    elementPickerOverlay = null
+  }
+
+  document.removeEventListener('mousemove', handleElementHover)
+  document.removeEventListener('click', handleElementScreenshotClick)
+  document.removeEventListener('keydown', handleElementScreenshotEscape)
+
+  hideScreenshotTooltip()
+}
+
+async function handleElementScreenshotClick(event: MouseEvent) {
+  if (!isElementScreenshotMode) return
+
+  event.preventDefault()
+  event.stopPropagation()
+
+  const target = event.target as HTMLElement
+
+  // Generate selector for the element
+  const selector = generateSelector(target)
+
+  // Stop the picker first to remove overlay before screenshot
+  stopElementScreenshotPicker()
+
+  // Small delay to ensure overlay is fully removed before screenshot
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  try {
+    // Capture element screenshot
+    const result = await captureElement(selector)
+    lastScreenshot = result
+
+    // Store screenshot
+    chrome.runtime.sendMessage({
+      type: 'STORE_SCREENSHOT',
+      data: result.dataUrl
+    })
+
+    // Notify that element was captured
+    chrome.runtime.sendMessage({
+      type: 'STATUS_UPDATE',
+      message: `Element captured (${result.width}x${result.height})`,
+      isError: false
+    })
+  } catch (error) {
+    originalConsole.error('Element screenshot error:', error)
+    chrome.runtime.sendMessage({
+      type: 'STATUS_UPDATE',
+      message: `Screenshot failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      isError: true
+    })
+  }
+}
+
+function handleElementScreenshotEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    stopElementScreenshotPicker()
+  }
+}
+
+function showScreenshotTooltip() {
+  const tooltip = document.createElement('div')
+  tooltip.id = 'jat-screenshot-tooltip'
+  tooltip.innerHTML = 'Click on any element to capture it • Press <strong>ESC</strong> to cancel'
+  tooltip.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #059669;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    z-index: 1000000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+  `
+  document.body.appendChild(tooltip)
+}
+
+function hideScreenshotTooltip() {
+  const tooltip = document.getElementById('jat-screenshot-tooltip')
+  if (tooltip) {
+    tooltip.remove()
+  }
+}
+
+// Handle opening annotation editor for last screenshot
+async function handleOpenAnnotationEditor(sendResponse: Function) {
+  try {
+    if (!lastScreenshot) {
+      // Try to get the last screenshot from storage
+      chrome.runtime.sendMessage({
+        type: 'GET_ALL_CAPTURED_DATA'
+      }, async (response) => {
+        if (response?.success && response.data?.screenshots?.length > 0) {
+          const latestScreenshot = response.data.screenshots[response.data.screenshots.length - 1]
+          try {
+            const annotated = await annotationEditor.open(latestScreenshot)
+
+            // Store the annotated screenshot
+            chrome.runtime.sendMessage({
+              type: 'STORE_SCREENSHOT',
+              data: annotated
+            })
+
+            sendResponse({ success: true })
+          } catch (error) {
+            if ((error as Error).message === 'Annotation cancelled') {
+              sendResponse({ success: true, cancelled: true })
+            } else {
+              sendResponse({
+                success: false,
+                error: error instanceof Error ? error.message : 'Annotation failed'
+              })
+            }
+          }
+        } else {
+          sendResponse({
+            success: false,
+            error: 'No screenshot available. Capture a screenshot first.'
+          })
+        }
+      })
+    } else {
+      try {
+        const annotated = await annotationEditor.open(lastScreenshot.dataUrl)
+
+        // Update last screenshot with annotated version
+        lastScreenshot.dataUrl = annotated
+
+        // Store the annotated screenshot
+        chrome.runtime.sendMessage({
+          type: 'STORE_SCREENSHOT',
+          data: annotated
+        })
+
+        sendResponse({ success: true })
+      } catch (error) {
+        if ((error as Error).message === 'Annotation cancelled') {
+          sendResponse({ success: true, cancelled: true })
+        } else {
+          sendResponse({
+            success: false,
+            error: error instanceof Error ? error.message : 'Annotation failed'
+          })
+        }
+      }
+    }
+  } catch (error) {
+    originalConsole.error('Annotation editor error:', error)
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     })
   }
 }
