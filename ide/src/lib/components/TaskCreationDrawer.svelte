@@ -1219,7 +1219,7 @@
 								type="button"
 								tabindex="0"
 								bind:this={projectDropdownBtn}
-								class="ml-8 badge badge-lg gap-1.5 px-2.5 py-2 font-mono text-sm transition-colors cursor-pointer"
+								class="ml-8 badge badge-lg gap-1.5 px-2.5 pt-1 font-mono text-sm transition-colors cursor-pointer"
 								style={formData.project && selectedProjectColor
 									? `background: color-mix(in oklch, ${selectedProjectColor} 20%, transparent); border-color: color-mix(in oklch, ${selectedProjectColor} 50%, transparent); color: ${selectedProjectColor};`
 									: formData.project
@@ -1237,18 +1237,12 @@
 									}
 								}}
 							>
-								<!-- Project color dot -->
-								{#if formData.project}
-									<span
-										class="w-2 h-2 rounded-full flex-shrink-0"
-										style="background: {selectedProjectColor || 'oklch(0.60 0.15 145)'};"
-									></span>
-								{:else}
+								{#if !formData.project}
 									<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 									</svg>
 								{/if}
-								{formData.project || 'Select project'}
+								{formData.project?.toUpperCase() || 'Select project'}
 								<svg class="w-2.5 h-2.5 opacity-60 transition-transform {projectDropdownOpen ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
 								</svg>
@@ -1295,7 +1289,7 @@
 												class="w-2 h-2 rounded-full flex-shrink-0"
 												style="background: {getProjectColor(project)};"
 											></span>
-											{project}
+											{project.toUpperCase()}
 											{#if formData.project === project}
 												<svg class="w-4 h-4 ml-auto text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
