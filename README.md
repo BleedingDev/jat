@@ -380,7 +380,7 @@ Open a PR against `master`. All contributions are licensed under MIT.
 
 ## Credits
 
-- **[@joewinke](https://github.com/joewinke)** — Creator
+- **[Joe Winke](https://x.com/joewinke)** — Creator [Github](https://github.com/joewinke)
 - **Agent Mail** — Agent Comms ([Dicklesworthstone/mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail))
 - **Beads** — Task management ([steveyegge/beads](https://github.com/steveyegge/beads))
 - **Mario Zechner** — Think different about Agents ([What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/))
