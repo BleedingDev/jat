@@ -56,7 +56,7 @@
 
 	// Page state
 	let isLoading = $state(true);
-	let activeTab = $state('commands');
+	let activeTab = $state('projects');
 
 	// Hooks state
 	let hooksLoading = $state(false);

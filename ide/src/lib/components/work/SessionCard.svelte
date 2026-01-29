@@ -72,6 +72,7 @@
 		completingSessionFlash,
 		highlightedSessionName,
 		jumpToSession,
+		hoveredSessionName,
 	} from "$lib/stores/hoveredSession";
 	import type {
 		SuggestedTask,
@@ -1569,6 +1570,7 @@
 	// Input state
 	let inputText = $state("");
 	let inputRef: HTMLTextAreaElement | null = null;
+	let sendToLLMRef: { open: () => void } | null = null;
 
 	// Derived check for whether input has content (for Send button visibility)
 	// Using $derived ensures reactivity when inputText changes
@@ -1794,6 +1796,24 @@
 
 	function handleCardMouseLeave() {
 		setHoveredSession(null);
+	}
+
+	// Handle Alt+L shortcut to open LLM popover (only when this session is hovered)
+	function handleGlobalKeydown(event: KeyboardEvent) {
+		if (event.altKey && event.key.toLowerCase() === 'l') {
+			// Only trigger for the hovered session
+			if ($hoveredSessionName !== sessionName) return;
+
+			// Don't trigger when typing in inputs (except our own)
+			const target = event.target as HTMLElement;
+			const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+			const isOurInput = target === inputRef;
+
+			if (!isInput || isOurInput) {
+				event.preventDefault();
+				sendToLLMRef?.open();
+			}
+		}
 	}
 
 	// Handle click anywhere in the card to center it and focus input
@@ -4708,6 +4728,9 @@
 	const renderedOutput = $derived(ansiToHtmlWithLinks(output));
 </script>
 
+<!-- Global keyboard handler for Alt+L shortcut -->
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 <!-- ═══════════════════════════════════════════════════════════════════════════
      REUSABLE SNIPPETS - Consistent UI elements across compact and full modes
      ═══════════════════════════════════════════════════════════════════════════ -->
@@ -7297,6 +7320,7 @@
 						</button>
 						<!-- Send to LLM button -->
 						<SendToLLM
+							bind:this={sendToLLMRef}
 							content={output ? stripAnsi(output) : ''}
 							taskId={task?.id}
 							project={defaultProject}

@@ -54,6 +54,11 @@
 	let showRouteMenu = $state(false);
 	let successFlash = $state(false);
 
+	// Refs
+	let textareaRef = $state<HTMLTextAreaElement | null>(null);
+	let notesButtonRef = $state<HTMLButtonElement | null>(null);
+	let fileButtonRef = $state<HTMLButtonElement | null>(null);
+
 	// Derived
 	const textToProcess = $derived(selectedText || content);
 	const hasTask = $derived(!!taskId);
@@ -66,6 +71,9 @@
 		isOpen = !isOpen;
 		if (!isOpen) {
 			showRouteMenu = false;
+		} else {
+			// Focus textarea when popover opens (after render)
+			setTimeout(() => textareaRef?.focus(), 50);
 		}
 	}
 
@@ -186,6 +194,17 @@
 			closePopover();
 		}
 	}
+
+	// Exported function to open popover from parent (e.g., keyboard shortcut)
+	export function open() {
+		if (disabled) return;
+		if (!isOpen) {
+			isOpen = true;
+			setTimeout(() => textareaRef?.focus(), 50);
+		} else {
+			textareaRef?.focus();
+		}
+	}
 </script>
 
 <svelte:window onclick={handleClickOutside} />
@@ -277,6 +296,7 @@
 
 					<!-- Instructions textarea -->
 					<textarea
+						bind:this={textareaRef}
 						bind:value={instructions}
 						placeholder="Enter instructions for the LLM..."
 						class="textarea textarea-bordered textarea-sm w-full font-mono text-xs"
@@ -292,7 +312,18 @@
 							<button
 								type="button"
 								class="btn btn-sm btn-primary flex-1"
-								onclick={() => showRouteMenu = !showRouteMenu}
+								onclick={() => {
+									showRouteMenu = !showRouteMenu;
+									if (!showRouteMenu) return;
+									// Focus first route option when menu opens
+									setTimeout(() => {
+										if (hasTask && notesButtonRef) {
+											notesButtonRef.focus();
+										} else if (fileButtonRef) {
+											fileButtonRef.focus();
+										}
+									}, 50);
+								}}
 								disabled={isProcessing || !instructions.trim()}
 							>
 								{#if isProcessing}
@@ -312,11 +343,27 @@
 							<div
 								class="absolute left-0 right-0 bottom-full mb-1 z-10"
 								transition:fade={{ duration: 100 }}
+								onkeydown={(e) => {
+									if (e.key === 'Escape') {
+										showRouteMenu = false;
+									} else if (e.key === 'ArrowDown') {
+										e.preventDefault();
+										if (document.activeElement === notesButtonRef && fileButtonRef) {
+											fileButtonRef.focus();
+										}
+									} else if (e.key === 'ArrowUp') {
+										e.preventDefault();
+										if (document.activeElement === fileButtonRef && hasTask && notesButtonRef) {
+											notesButtonRef.focus();
+										}
+									}
+								}}
 							>
 								<ul class="menu bg-base-200 rounded-box shadow-lg border border-base-content/10 p-1">
 									{#if hasTask}
 										<li>
 											<button
+												bind:this={notesButtonRef}
 												type="button"
 												class="text-xs"
 												onclick={() => handleSubmit('notes')}
@@ -330,6 +377,7 @@
 									{/if}
 									<li>
 										<button
+											bind:this={fileButtonRef}
 											type="button"
 											class="text-xs"
 											onclick={() => handleSubmit('file')}

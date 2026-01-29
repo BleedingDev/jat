@@ -46,25 +46,34 @@
 	// Get project color for badge styling
 	const projectColor = $derived(project.colors?.active || 'oklch(0.70 0.15 200)');
 
+	// Handle card click (opens edit drawer)
+	function handleCardClick() {
+		onEdit(project);
+	}
+
 	// Handle edit click
-	function handleEdit() {
+	function handleEdit(event: MouseEvent) {
+		event.stopPropagation();
 		onEdit(project);
 	}
 
 	// Handle delete click
-	function handleDelete() {
+	function handleDelete(event: MouseEvent) {
+		event.stopPropagation();
 		if (confirm(`Delete project "${project.name}"? This will remove it from the configuration.`)) {
 			onDelete(project);
 		}
 	}
 
 	// Handle visibility toggle
-	function handleToggleVisibility() {
+	function handleToggleVisibility(event: MouseEvent) {
+		event.stopPropagation();
 		onToggleVisibility(project);
 	}
 
 	// Handle open folder
-	function handleOpenFolder() {
+	function handleOpenFolder(event: MouseEvent) {
+		event.stopPropagation();
 		onOpenFolder(project);
 	}
 </script>
@@ -74,6 +83,10 @@
 	class:hidden-project={project.hidden}
 	style="--project-color: {projectColor}"
 	transition:fade={{ duration: 150 }}
+	onclick={handleCardClick}
+	onkeydown={(e) => e.key === 'Enter' && handleCardClick()}
+	role="button"
+	tabindex="0"
 >
 	<!-- Header with project name and actions -->
 	<div class="card-header">
@@ -243,11 +256,18 @@
 		border: 1px solid oklch(0.28 0.02 250);
 		border-radius: 10px;
 		transition: all 0.15s ease;
+		cursor: pointer;
 	}
 
-	.project-card:hover {
+	.project-card:hover,
+	.project-card:focus {
 		background: oklch(0.18 0.02 250);
 		border-color: oklch(0.32 0.02 250);
+		outline: none;
+	}
+
+	.project-card:focus-visible {
+		box-shadow: 0 0 0 2px oklch(0.60 0.15 200);
 	}
 
 	.project-card.hidden-project {
