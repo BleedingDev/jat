@@ -1,12 +1,13 @@
 #!/bin/bash
-# Pre-compact hook: Save current agent identity and workflow state before compaction
-# This ensures we can restore both identity AND workflow context after compaction
+# Pre-compact hook: Save current agent identity, workflow state, and terminal scrollback before compaction
+# This ensures we can restore identity, workflow context, AND terminal history after compaction
 #
 # Uses WINDOWID-based file - stable across /clear (unlike PPID which changes)
 # Each terminal window has unique WINDOWID, avoiding race conditions
 
 PROJECT_DIR="$(pwd)"
 CLAUDE_DIR="$PROJECT_DIR/.claude"
+BEADS_LOGS_DIR="$PROJECT_DIR/.beads/logs"
 
 # Use WINDOWID for persistence (stable across /clear, unique per terminal)
 # Falls back to PPID if WINDOWID not available
@@ -19,10 +20,49 @@ SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt 2>/dev/null | tr -d '\n')
 # Use sessions/ subdirectory to keep .claude/ clean
 AGENT_FILE="$CLAUDE_DIR/sessions/agent-${SESSION_ID}.txt"
 
-# Get tmux session name for signal file lookup
+# Get tmux session name for signal file lookup and scrollback capture
 TMUX_SESSION=""
 if [[ -n "${TMUX:-}" ]]; then
     TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null)
+fi
+
+# ============================================================================
+# CAPTURE TERMINAL SCROLLBACK BEFORE COMPACTION
+# This preserves the pre-compaction terminal history that would otherwise be lost
+# ============================================================================
+if [[ -n "$TMUX_SESSION" ]]; then
+    # Ensure logs directory exists
+    mkdir -p "$BEADS_LOGS_DIR" 2>/dev/null
+
+    # Generate timestamp for filename
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+
+    # Capture full scrollback from tmux
+    # -p: print to stdout, -S -: start from beginning of scrollback, -E -: end at bottom
+    SCROLLBACK_FILE="$BEADS_LOGS_DIR/scrollback-pre-compact-${TMUX_SESSION}-${TIMESTAMP}.log"
+
+    if tmux capture-pane -t "$TMUX_SESSION" -p -S - -E - > "$SCROLLBACK_FILE" 2>/dev/null; then
+        # Only keep the file if it has content
+        if [[ -s "$SCROLLBACK_FILE" ]]; then
+            # Add header with metadata
+            TEMP_FILE=$(mktemp)
+            cat > "$TEMP_FILE" << HEADER
+# Pre-Compaction Scrollback Capture
+# Session: $TMUX_SESSION
+# Captured: $(date -Iseconds)
+# Reason: Context compaction about to clear terminal history
+================================================================================
+
+HEADER
+            cat "$SCROLLBACK_FILE" >> "$TEMP_FILE"
+            mv "$TEMP_FILE" "$SCROLLBACK_FILE"
+
+            echo "[PreCompact] Saved scrollback to: $SCROLLBACK_FILE" >> "$CLAUDE_DIR/.agent-activity.log"
+        else
+            # Remove empty file
+            rm -f "$SCROLLBACK_FILE" 2>/dev/null
+        fi
+    fi
 fi
 
 if [[ -f "$AGENT_FILE" ]]; then

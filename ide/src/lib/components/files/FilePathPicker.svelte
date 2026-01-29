@@ -87,13 +87,6 @@
 		return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
 	});
 
-	// Handle input changes
-	function handleInput(e: Event) {
-		const target = e.target as HTMLInputElement;
-		filename = target.value;
-		onFilenameChange?.(filename);
-	}
-
 	// Handle keydown
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && filename.trim() && !confirmDisabled) {
@@ -119,6 +112,11 @@
 				}
 			}
 		}
+	});
+
+	// Notify parent of filename changes
+	$effect(() => {
+		onFilenameChange?.(filename);
 	});
 
 	// Get icon color based on extension
@@ -169,8 +167,7 @@
 		<input
 			bind:this={inputRef}
 			type="text"
-			value={filename}
-			oninput={handleInput}
+			bind:value={filename}
 			onkeydown={handleKeydown}
 			{placeholder}
 			class="filename-input"

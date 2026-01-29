@@ -801,7 +801,7 @@
 	function getEventLabel(event: TimelineEvent): string {
 		// Determine the signal type - in new format, type IS the signal type
 		const signalType = event.state || event.type;
-		const maxLen = 60;
+		const maxLen = 500;
 		const truncate = (s: string) => s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
 
 		// For user_input events, show truncated prompt preview
@@ -1052,31 +1052,31 @@
 						class="w-full px-3 py-2 flex items-center justify-between text-left"
 						onclick={() => toggleEventExpand(idx)}
 					>
-						<div class="flex items-center gap-2">
-							<span class="text-sm">{style.icon}</span>
+						<div class="flex items-center gap-2 flex-1 min-w-0">
+							<span class="text-sm flex-shrink-0">{style.icon}</span>
 							{#if isUnansweredQuestion}
 								<span
-									class="px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse"
+									class="px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse flex-shrink-0"
 									style="background: oklch(0.45 0.15 280); color: oklch(0.95 0.05 280);"
 								>
 									NEEDS ANSWER
 								</span>
 							{/if}
 							<span
-								class="font-mono text-xs font-medium"
+								class="font-mono text-xs font-medium truncate min-w-0"
 								style="color: {style.text};"
 							>
 								{getEventLabel(event)}
 							</span>
 							{#if event.git_sha}
 								<span
-									class="px-1 py-0.5 rounded text-[9px] font-mono bg-base-300 text-base-content/60"
+									class="px-1 py-0.5 rounded text-[9px] font-mono bg-base-300 text-base-content/60 flex-shrink-0"
 								>
 									{event.git_sha.slice(0, 7)}
 								</span>
 							{/if}
 						</div>
-						<div class="flex items-center gap-2">
+						<div class="flex items-center gap-2 flex-shrink-0">
 							{#if event.data?.agent_name || event.data?.agentName}
 								<span class="text-[10px] font-mono text-base-content/60">
 									{event.data.agent_name || event.data.agentName}
@@ -1527,32 +1527,32 @@
 								class="w-full px-3 py-1.5 flex items-center justify-between text-left"
 								onclick={() => toggleEventExpand(idx)}
 							>
-								<div class="flex items-center gap-2">
-									<span class="text-sm">{style.icon}</span>
+								<div class="flex items-center gap-2 flex-1 min-w-0">
+									<span class="text-sm flex-shrink-0">{style.icon}</span>
 									{#if isUnansweredQuestion}
 										<span
-											class="px-1.5 py-0.5 rounded text-[9px] font-bold"
+											class="px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0"
 											style="background: oklch(0.45 0.15 280); color: oklch(0.95 0.05 280);"
 										>
 											NEEDS ANSWER
 										</span>
 									{/if}
 									<span
-										class="font-mono text-xs font-medium {idx === 0 && isGenerating ? 'shimmer-text-fast' : ''}"
+										class="font-mono text-xs font-medium truncate min-w-0 {idx === 0 && isGenerating ? 'shimmer-text-fast' : ''}"
 										style={idx === 0 && isGenerating ? `--shimmer-text-color: ${style.text};` : `color: ${style.text};`}
 									>
 										{getEventLabel(event)}
 									</span>
 									{#if event.git_sha}
 										<span
-											class="px-1 py-0.5 rounded text-[9px] font-mono"
+											class="px-1 py-0.5 rounded text-[9px] font-mono flex-shrink-0"
 											style="background: oklch(0.25 0.02 250); color: oklch(0.60 0.02 250);"
 										>
 											{event.git_sha}
 										</span>
 									{/if}
 								</div>
-								<div class="flex items-center gap-2">
+								<div class="flex items-center gap-2 flex-shrink-0">
 									<span class="font-mono text-[10px]" style="color: oklch(0.50 0.02 250);">
 										{formatTime(event.timestamp)}
 									</span>
@@ -2561,21 +2561,21 @@
 						{#if isNewest}
 							<!-- Only show content on the front/newest card -->
 							<div class="px-3 h-full flex items-center justify-between">
-								<div class="flex items-center gap-2">
-									<span class="text-xs">{style.icon}</span>
-									<span class="font-mono text-[11px] font-medium {isNewest && isGenerating ? 'shimmer-text-fast' : ''}" style={isNewest && isGenerating ? `--shimmer-text-color: ${style.text};` : `color: ${style.text};`}>
+								<div class="flex items-center gap-2 flex-1 min-w-0">
+									<span class="text-xs flex-shrink-0">{style.icon}</span>
+									<span class="font-mono text-[11px] font-medium truncate min-w-0 {isNewest && isGenerating ? 'shimmer-text-fast' : ''}" style={isNewest && isGenerating ? `--shimmer-text-color: ${style.text};` : `color: ${style.text};`}>
 										{getEventLabel(event)}
 									</span>
 									{#if event.git_sha}
 										<span
-											class="font-mono text-[9px]"
+											class="font-mono text-[9px] flex-shrink-0"
 											style="color: oklch(0.50 0.02 250);"
 										>
 											{event.git_sha}
 										</span>
 									{/if}
 								</div>
-								<div class="flex items-center gap-2">
+								<div class="flex items-center gap-2 flex-shrink-0">
 									{#if hasUnansweredQuestion}
 										<span
 											class="px-1.5 py-0.5 rounded text-[9px] font-medium animate-pulse"
