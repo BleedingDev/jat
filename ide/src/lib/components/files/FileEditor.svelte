@@ -24,6 +24,7 @@
 		openFiles = $bindable([]),
 		activeFilePath = $bindable(null),
 		project = '',
+		projectPath = '',
 		onFileClose = () => {},
 		onFileSave = () => {},
 		onActiveFileChange = () => {},
@@ -36,6 +37,7 @@
 		openFiles: OpenFile[];
 		activeFilePath: string | null;
 		project?: string;
+		projectPath?: string;
 		onFileClose?: (path: string) => void;
 		onFileSave?: (path: string, content: string) => void;
 		onActiveFileChange?: (path: string) => void;
@@ -46,14 +48,21 @@
 		savingFiles?: Set<string>;
 	} = $props();
 
+	// Derived: base path for file save (directory of active file)
+	const llmBasePath = $derived(() => {
+		if (!activeFilePath) return projectPath || '';
+		const lastSlash = activeFilePath.lastIndexOf('/');
+		if (lastSlash > 0) {
+			return activeFilePath.slice(0, lastSlash);
+		}
+		return projectPath || '';
+	});
+
 	// Derived state: is the active file currently being saved?
 	const isActiveSaving = $derived(activeFilePath ? savingFiles.has(activeFilePath) : false);
 
 	// State: which file is showing the diff view (path or null)
 	let showingDiffForPath = $state<string | null>(null);
-
-	// Derived: is the active file currently showing the diff view?
-	const isShowingDiff = $derived(showingDiffForPath === activeFilePath && activeFile?.hasDiskChanges);
 
 	// Handle save button click
 	function handleSaveClick() {
@@ -178,6 +187,9 @@
 
 	// Get the currently active file
 	const activeFile = $derived(openFiles.find((f) => f.path === activeFilePath) || null);
+
+	// Derived: is the active file currently showing the diff view?
+	const isShowingDiff = $derived(showingDiffForPath === activeFilePath && activeFile?.hasDiskChanges);
 
 	// Get filename from path
 	function getFilename(path: string): string {
@@ -741,6 +753,8 @@
 	bind:isOpen={llmModalOpen}
 	selectedText={llmSelectedText}
 	{project}
+	basePath={llmBasePath()}
+	{projectPath}
 	onClose={() => { llmModalOpen = false; }}
 	onReplace={handleLLMReplace}
 	onInsert={handleLLMInsert}

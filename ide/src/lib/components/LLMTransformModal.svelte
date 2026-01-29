@@ -15,6 +15,7 @@
 	 */
 
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
+	import FilePathPicker from '$lib/components/files/FilePathPicker.svelte';
 
 	interface Props {
 		/** Whether the modal is open */
@@ -23,6 +24,10 @@
 		selectedText: string;
 		/** Project name for file saves and sessions */
 		project?: string;
+		/** Base path for file saves (directory containing active file) */
+		basePath?: string;
+		/** Project root path for path display truncation */
+		projectPath?: string;
 		/** Callback when modal closes */
 		onClose: () => void;
 		/** Callback when user wants to replace selection with result */
@@ -37,6 +42,8 @@
 		isOpen = $bindable(false),
 		selectedText,
 		project = '',
+		basePath = '',
+		projectPath = '',
 		onClose,
 		onReplace,
 		onInsert,
@@ -130,10 +137,11 @@
 		}
 	}
 
-	function handleSaveToFile() {
-		if (result && onSaveToFile && filename.trim()) {
-			onSaveToFile(filename.trim(), result);
-			successToast(`Saved to ${filename.trim()}`);
+	function handleSaveToFile(fullPath?: string, fname?: string) {
+		const finalFilename = fname || filename;
+		if (result && onSaveToFile && finalFilename.trim()) {
+			onSaveToFile(finalFilename.trim(), result);
+			successToast(`Saved to ${finalFilename.trim()}`);
 			showFilenameInput = false;
 			handleClose();
 		}
@@ -306,29 +314,20 @@ Continue this conversation. The user wants to discuss or refine this transformat
 				{/if}
 			</div>
 
-			<!-- Filename input modal overlay -->
+			<!-- Save file picker overlay -->
 			{#if showFilenameInput}
 				<div class="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-lg">
-					<div class="bg-base-300 p-4 rounded-lg shadow-xl border border-base-content/10 w-72" style="background: oklch(0.20 0.02 250);">
-						<label class="label py-1">
-							<span class="label-text text-xs text-base-content/60">Filename</span>
-						</label>
-						<input
-							type="text"
-							bind:value={filename}
+					<div class="w-80">
+						<FilePathPicker
+							{basePath}
+							{projectPath}
+							bind:filename
+							type="file"
 							placeholder="llm-result.md"
-							class="input input-sm input-bordered w-full font-mono text-xs"
-							style="background: oklch(0.14 0.01 250); border-color: oklch(0.25 0.02 250);"
-							onkeydown={(e) => e.key === 'Enter' && handleSaveToFile()}
+							confirmText="Save"
+							onConfirm={handleSaveToFile}
+							onCancel={() => showFilenameInput = false}
 						/>
-						<div class="flex justify-end gap-2 mt-3">
-							<button type="button" class="btn btn-xs btn-ghost" onclick={() => showFilenameInput = false}>
-								Cancel
-							</button>
-							<button type="button" class="btn btn-xs btn-primary" onclick={handleSaveToFile} disabled={!filename.trim()}>
-								Save
-							</button>
-						</div>
 					</div>
 				</div>
 			{/if}

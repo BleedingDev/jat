@@ -54,6 +54,13 @@
 	// Derived: project names for ProjectSelector
 	const projectNames = $derived(projects.map(p => p.name));
 
+	// Derived: selected project's root path (for file path display)
+	const selectedProjectPath = $derived(
+		selectedProject
+			? projects.find(p => p.name === selectedProject)?.path || ''
+			: ''
+	);
+
 	// Derived: project colors map for ProjectSelector
 	const projectColorsMap = $derived(
 		new Map(projects.map(p => [p.name, p.activeColor || 'oklch(0.60 0.15 145)']))
@@ -311,11 +318,6 @@
 	// Get display name for selected project
 	const selectedProjectDisplay = $derived(
 		projects.find(p => p.name === selectedProject)?.displayName || selectedProject || 'Select Project'
-	);
-
-	// Get path for selected project
-	const selectedProjectPath = $derived(
-		projects.find(p => p.name === selectedProject)?.path || null
 	);
 
 	// Handle file close request (called after FileEditor confirms if dirty)
@@ -1156,6 +1158,7 @@
 							bind:openFiles
 							bind:activeFilePath
 							project={selectedProject}
+							projectPath={selectedProjectPath}
 							onFileClose={handleFileClose}
 							onFileSave={handleFileSave}
 							onActiveFileChange={handleActiveFileChange}

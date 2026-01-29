@@ -854,23 +854,58 @@ export async function POST({ request }) {
 					// Step 3: Send Enter SEPARATELY - this is the key fix!
 					await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 
-					// Wait a moment for the command to be processed
-					await new Promise(resolve => setTimeout(resolve, 1500));
+					// Wait for the command to be accepted by Claude Code
+					// We need enough time for the slash command to start executing
+					// but NOT so aggressive that we interrupt commands in progress
+					await new Promise(resolve => setTimeout(resolve, 2000));
 
-					// Check if the command was executed by looking for "is running" in output
-					// (Claude Code shows "jat:start is running…" when slash command executes)
+					// Check if the command was received
+					// We look for signs the command is executing OR has been received
+					// DO NOT use Ctrl-C retry - it interrupts in-flight bash commands
+					// causing "Interrupted by user" errors (jat-t45zv)
+					//
+					// Use -S -40 -E -4 to capture agent output area only, skipping:
+					// - Last 1-2 lines: statusline ("bypass permissions", JAT status)
+					// - Last 2-3 lines: input prompt area
 					const { stdout: paneOutput } = await execAsync(
-						`tmux capture-pane -t "${sessionName}" -p 2>/dev/null | tail -20`
+						`tmux capture-pane -t "${sessionName}" -p -S -40 -E -4 2>/dev/null`
 					);
 
-					if (paneOutput.includes('is running') || paneOutput.includes('STARTING')) {
+					// Signs the command is executing or was received:
+					// 1. "is running" - Claude Code shows this for slash commands
+					// 2. "STARTING" - JAT signal state
+					// 3. "Bash(" - Tool execution has started
+					// 4. "● " - Tool execution indicator
+					const commandReceived =
+						paneOutput.includes('is running') ||
+						paneOutput.includes('STARTING') ||
+						paneOutput.includes('Bash(') ||
+						paneOutput.includes('● ');
+
+					if (commandReceived) {
 						commandSent = true;
 						console.log(`[spawn] Initial prompt sent successfully on attempt ${attempt}`);
 					} else if (attempt < maxRetries) {
-						// Command might not have executed - use Ctrl-C to clear input then retry
-						console.log(`[spawn] Attempt ${attempt}: Command may not have executed, retrying...`);
-						await execAsync(`tmux send-keys -t "${sessionName}" C-c`);  // Clear with Ctrl-C
-						await new Promise(resolve => setTimeout(resolve, 500));
+						// Check if command is still sitting in input buffer (separate capture for input area)
+						// Use -S -3 -E -1 to capture just the input line area (skip only statusline)
+						const { stdout: inputArea } = await execAsync(
+							`tmux capture-pane -t "${sessionName}" -p -S -4 -E -1 2>/dev/null`
+						);
+
+						const inputStillVisible = inputArea.includes(initialPrompt) &&
+							!inputArea.includes('is running');
+
+						if (inputStillVisible) {
+							// Command is still in input buffer - try sending Enter again
+							console.log(`[spawn] Attempt ${attempt}: Command visible in input, sending Enter again...`);
+							await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
+							await new Promise(resolve => setTimeout(resolve, 500));
+						} else {
+							// Command was likely received, just taking time to show "is running"
+							// DO NOT send Ctrl-C - it will interrupt in-flight bash commands
+							console.log(`[spawn] Attempt ${attempt}: Command likely in progress, waiting...`);
+							await new Promise(resolve => setTimeout(resolve, 2000));
+						}
 					}
 				} catch (err) {
 					// Non-fatal - session is created, prompt just failed
