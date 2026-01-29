@@ -28,6 +28,9 @@ JAT is the complete, self-contained environment for agentic development. Task ma
 ![JAT IDE](./assets/ide-screenshot.png)
 *The JAT IDE: agent sessions, task management, and code editor unified*
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=joewinke/jat&type=timeline&legend=top-left)](https://www.star-history.com/#joewinke/jat&type=timeline&legend=top-left)
 ---
 
 ## The Paradigm Shift
