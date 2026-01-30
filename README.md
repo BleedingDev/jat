@@ -24,6 +24,8 @@ JAT is the complete, self-contained environment for agentic development. Task ma
 ![Tools](https://img.shields.io/badge/Tools-50+-blue)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/AFJf93p7Bx)
 
+[**Docs**](https://jat.tools) | [**Star this repo**](https://github.com/joewinke/jat/stargazers)
+
 <!-- TODO: Add screenshot -->
 ![JAT IDE](./assets/ide-screenshot.png)
 *The JAT IDE: agent sessions, task management, and code editor unified*
