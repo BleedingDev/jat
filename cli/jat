@@ -169,6 +169,57 @@ launch_terminal_window() {
 }
 
 #------------------------------------------------------------------------------
+# Prerequisites Check
+#------------------------------------------------------------------------------
+
+HAS_TMUX=false
+command -v tmux &>/dev/null && HAS_TMUX=true
+
+HAS_NODE=false
+command -v node &>/dev/null && HAS_NODE=true
+
+HAS_NPM=false
+command -v npm &>/dev/null && HAS_NPM=true
+
+# Check prerequisites and warn about missing ones
+# Returns 0 if minimum requirements met, 1 if critical tools missing
+check_prerequisites() {
+    local mode="${1:-ide}"  # "ide" or "full"
+    local missing=()
+
+    if [[ "$HAS_NODE" == "false" ]]; then
+        missing+=("node")
+    fi
+    if [[ "$HAS_NPM" == "false" ]]; then
+        missing+=("npm")
+    fi
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo -e "${RED}Missing required tools: ${missing[*]}${NC}"
+        echo ""
+        if [[ "$IS_MACOS" == "true" ]]; then
+            echo -e "${DIM}Install with:${NC} brew install node"
+        else
+            echo -e "${DIM}Install with:${NC} sudo pacman -S nodejs npm  ${DIM}(or your package manager)${NC}"
+        fi
+        return 1
+    fi
+
+    if [[ "$HAS_TMUX" == "false" ]] && [[ "$mode" == "full" ]]; then
+        echo -e "${YELLOW}Warning: tmux not installed. Agent sessions require tmux.${NC}"
+        echo -e "${DIM}IDE will run without tmux, but multi-agent features will be limited.${NC}"
+        if [[ "$IS_MACOS" == "true" ]]; then
+            echo -e "${DIM}Install with:${NC} brew install tmux"
+        else
+            echo -e "${DIM}Install with:${NC} sudo pacman -S tmux  ${DIM}(or your package manager)${NC}"
+        fi
+        echo ""
+    fi
+
+    return 0
+}
+
+#------------------------------------------------------------------------------
 # Config Management
 #------------------------------------------------------------------------------
 
@@ -639,6 +690,22 @@ launch_ide() {
         return 0
     fi
 
+    # Check node/npm are available
+    if ! check_prerequisites "ide"; then
+        return 1
+    fi
+
+    # Auto-install npm dependencies if missing
+    if [[ ! -d "$ide_path/node_modules" ]]; then
+        echo -e "${DIM}  → Installing IDE dependencies...${NC}"
+        (cd "$ide_path" && npm install --silent) || {
+            echo -e "${RED}  ✗ Failed to install IDE dependencies${NC}"
+            echo -e "${DIM}  Try manually: cd $ide_path && npm install${NC}"
+            return 1
+        }
+        echo -e "${GREEN}  ✓ Dependencies installed${NC}"
+    fi
+
     # Detect if HTTPS is enabled (certs exist in ide/certs/)
     local ide_protocol="http"
     if [[ -f "$ide_path/certs/localhost.pem" ]] && [[ -f "$ide_path/certs/localhost-key.pem" ]]; then
@@ -650,7 +717,7 @@ launch_ide() {
 
     # Kill existing IDE server session before spawning new terminal
     # This allows running `jat` to reset/restart the IDE server
-    if tmux has-session -t "$session_name" 2>/dev/null; then
+    if [[ "$HAS_TMUX" == "true" ]] && tmux has-session -t "$session_name" 2>/dev/null; then
         echo -e "${DIM}  → Stopping existing IDE server...${NC}"
         tmux kill-session -t "$session_name" 2>/dev/null || true
     fi
@@ -663,15 +730,21 @@ launch_ide() {
     # Clear Vite cache to prevent stale chunk errors
     rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
 
-    # Launch IDE dev server inside a tmux session
-    # This allows the attach feature to work with tmux windows
-    launch_terminal_window "$name: IDE :$ide_port" "
-        cd '$ide_path'
-        tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$ide_path'
-        sleep 0.3
-        tmux send-keys -t '$session_name' 'npm run dev -- --port $ide_port' Enter
-        tmux attach-session -t '$session_name'
-    "
+    if [[ "$HAS_TMUX" == "true" ]]; then
+        # Launch IDE dev server inside a tmux session
+        # This allows the attach feature to work with tmux windows
+        launch_terminal_window "$name: IDE :$ide_port" "
+            cd '$ide_path'
+            tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$ide_path'
+            sleep 0.3
+            tmux send-keys -t '$session_name' 'npm run dev -- --port $ide_port' Enter
+            tmux attach-session -t '$session_name'
+        "
+    else
+        # No tmux: run IDE server directly in a new terminal window
+        echo -e "${YELLOW}  ⊘ tmux not installed - running IDE without session management${NC}"
+        launch_terminal_window "$name: IDE :$ide_port" "cd '$ide_path' && npm run dev -- --port $ide_port; echo 'IDE server stopped. Press Enter to close.'; read"
+    fi
 
     # Open browser after delay for server to start
     (
@@ -2297,7 +2370,7 @@ main() {
         interactive_update_check
 
         # Sweep zombie tasks (in_progress with no live tmux session)
-        sweep_zombie_tasks
+        [[ "$HAS_TMUX" == "true" ]] && sweep_zombie_tasks
 
         launch_ide "JAT"
         exit 0
