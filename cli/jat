@@ -1166,6 +1166,76 @@ EOF
 }
 
 #------------------------------------------------------------------------------
+# Sweep Zombie Tasks (in_progress tasks with dead assignees)
+#------------------------------------------------------------------------------
+
+sweep_zombie_tasks() {
+    local verbose="${1:-false}"
+
+    # Get live agent sessions from tmux
+    local live_agents=""
+    live_agents=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^jat-' | sed 's/^jat-//' || true)
+
+    local swept=0
+
+    # Iterate over all projects that have .beads/
+    for project in $(list_projects 2>/dev/null); do
+        local config path
+        config=$(get_project_config "$project")
+        path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+
+        [[ ! -d "$path/.beads" ]] && continue
+
+        # Get in_progress tasks with assignees
+        local tasks_json
+        tasks_json=$(cd "$path" && bd list --status in_progress --json 2>/dev/null || echo "[]")
+
+        [[ "$tasks_json" == "[]" ]] && continue
+
+        # Process each task
+        local task_ids assignees
+        task_ids=$(echo "$tasks_json" | jq -r '.[].id' 2>/dev/null)
+        assignees=$(echo "$tasks_json" | jq -r '.[].assignee // empty' 2>/dev/null)
+
+        # Convert to arrays
+        local -a ids=()
+        local -a names=()
+        while IFS= read -r id; do ids+=("$id"); done <<< "$task_ids"
+        while IFS= read -r name; do names+=("$name"); done <<< "$assignees"
+
+        local i
+        for ((i=0; i<${#ids[@]}; i++)); do
+            local task_id="${ids[$i]}"
+            local assignee="${names[$i]}"
+
+            [[ -z "$task_id" ]] && continue
+            [[ -z "$assignee" ]] && continue
+
+            # Check if assignee has a live tmux session
+            if echo "$live_agents" | grep -qxF "$assignee"; then
+                continue  # Agent is alive, skip
+            fi
+
+            # Assignee is dead - reset task
+            (cd "$path" && bd update "$task_id" --status open --assignee "" 2>/dev/null)
+            swept=$((swept + 1))
+
+            if [[ "$verbose" == "true" ]]; then
+                echo -e "  ${YELLOW}swept${NC} $task_id (assignee $assignee gone)"
+            fi
+        done
+    done
+
+    if [[ $swept -gt 0 ]]; then
+        echo -e "${GREEN}Swept $swept zombie task(s) back to open${NC}"
+    elif [[ "$verbose" == "true" ]]; then
+        echo -e "${DIM}No zombie tasks found${NC}"
+    fi
+
+    return 0
+}
+
+#------------------------------------------------------------------------------
 # Cleanup Stale Agents
 #------------------------------------------------------------------------------
 
@@ -1400,6 +1470,18 @@ cleanup_agents() {
 
 
     # =========================================================================
+    # PART 3: Sweep zombie tasks (in_progress with dead assignees)
+    # =========================================================================
+    echo ""
+    echo -e "${DIM}Zombie tasks:${NC}"
+
+    if $dry_run; then
+        echo -e "  ${DIM}(skipped in dry-run mode)${NC}"
+    else
+        sweep_zombie_tasks true
+    fi
+
+    # =========================================================================
     # Summary
     # =========================================================================
     echo ""
@@ -1407,6 +1489,7 @@ cleanup_agents() {
         echo -e "${YELLOW}DRY RUN:${NC}"
         echo -e "  Session files: Would delete $total_session_deleted, keep $total_session_kept"
         echo -e "  Agent Mail DB: Would delete $total_db_deleted, keep $total_db_kept"
+        echo -e "  Zombie tasks: Skipped (run without --dry-run)"
         echo ""
         echo "Run 'jat cleanup' to actually delete stale agents"
     else
@@ -2103,6 +2186,9 @@ main() {
 
         # Check for updates only on IDE launch (interactive prompt)
         interactive_update_check
+
+        # Sweep zombie tasks (in_progress with no live tmux session)
+        sweep_zombie_tasks
 
         launch_ide "JAT"
         exit 0

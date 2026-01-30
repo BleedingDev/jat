@@ -7,6 +7,7 @@ import {
   type ScreenshotResult,
   type ScreenshotOptions
 } from '../lib/screenshot'
+import { runtime, storage } from '../lib/browser-compat'
 
 console.log('JAT Browser Extension Content Script loaded on:', window.location.href)
 
@@ -413,13 +414,13 @@ async function handleElementClick(event: MouseEvent) {
   }
 
   // Store element data
-  chrome.runtime.sendMessage({
+  runtime.sendMessage({
     type: 'STORE_ELEMENT_DATA',
     data: elementData
   })
 
   // Notify popup
-  chrome.runtime.sendMessage({
+  runtime.sendMessage({
     type: 'ELEMENT_SELECTED',
     tagName: target.tagName,
     data: elementData
@@ -430,66 +431,59 @@ async function handleElementClick(event: MouseEvent) {
  * Capture a screenshot of a specific element by cropping from the full page screenshot
  */
 async function captureElementScreenshot(rect: DOMRect): Promise<string | null> {
-  return new Promise((resolve) => {
+  try {
     // Request full page screenshot from background
-    chrome.runtime.sendMessage({
+    const response = await runtime.sendMessage({
       type: 'CAPTURE_VISIBLE_TAB'
-    }, async (response) => {
-      if (!response?.success || !response.data) {
-        resolve(null)
-        return
-      }
+    }) as any
 
-      try {
-        // Create an image from the full screenshot
-        const img = new Image()
-        img.onload = () => {
-          // Calculate device pixel ratio for accurate cropping
-          const dpr = window.devicePixelRatio || 1
+    if (!response?.success || !response.data) {
+      return null
+    }
 
-          // Create canvas for cropping
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-
-          if (!ctx) {
-            resolve(null)
-            return
-          }
-
-          // Add padding around the element (10px on each side)
-          const padding = 10
-          const x = Math.max(0, (rect.left - padding) * dpr)
-          const y = Math.max(0, (rect.top - padding) * dpr)
-          const width = Math.min((rect.width + padding * 2) * dpr, img.width - x)
-          const height = Math.min((rect.height + padding * 2) * dpr, img.height - y)
-
-          // Set canvas size
-          canvas.width = width
-          canvas.height = height
-
-          // Draw cropped region
-          ctx.drawImage(
-            img,
-            x, y, width, height,  // Source rectangle
-            0, 0, width, height   // Destination rectangle
-          )
-
-          // Convert to data URL
-          const croppedDataUrl = canvas.toDataURL('image/png')
-          resolve(croppedDataUrl)
-        }
-
-        img.onerror = () => {
-          resolve(null)
-        }
-
-        img.src = response.data
-      } catch (error) {
-        originalConsole.error('Error cropping screenshot:', error)
-        resolve(null)
-      }
+    // Create an image from the full screenshot
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = () => reject(new Error('Image load failed'))
+      image.src = response.data
     })
-  })
+
+    // Calculate device pixel ratio for accurate cropping
+    const dpr = window.devicePixelRatio || 1
+
+    // Create canvas for cropping
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+
+    if (!ctx) {
+      return null
+    }
+
+    // Add padding around the element (10px on each side)
+    const padding = 10
+    const x = Math.max(0, (rect.left - padding) * dpr)
+    const y = Math.max(0, (rect.top - padding) * dpr)
+    const width = Math.min((rect.width + padding * 2) * dpr, img.width - x)
+    const height = Math.min((rect.height + padding * 2) * dpr, img.height - y)
+
+    // Set canvas size
+    canvas.width = width
+    canvas.height = height
+
+    // Draw cropped region
+    ctx.drawImage(
+      img,
+      x, y, width, height,  // Source rectangle
+      0, 0, width, height   // Destination rectangle
+    )
+
+    // Convert to data URL
+    return canvas.toDataURL('image/png')
+  } catch (error) {
+    originalConsole.error('Error cropping screenshot:', error)
+    return null
+  }
 }
 
 function handleElementPickerEscape(event: KeyboardEvent) {
@@ -786,10 +780,10 @@ async function handleBugReportSubmit(event: Event) {
   const severity = (document.getElementById('bug-severity') as HTMLSelectElement).value
   
   // Get all captured data
-  const response = await chrome.runtime.sendMessage({
+  const response = await runtime.sendMessage({
     type: 'GET_ALL_CAPTURED_DATA'
-  })
-  
+  }) as any
+
   const bugReport = {
     title,
     description,
@@ -804,7 +798,7 @@ async function handleBugReportSubmit(event: Event) {
   
   // Here you would typically send the bug report to your backend
   // For now, we'll just save it to storage and show a success message
-  chrome.storage.local.set({
+  storage.local.set({
     [`bugReport_${Date.now()}`]: bugReport
   })
   
@@ -813,7 +807,7 @@ async function handleBugReportSubmit(event: Event) {
 }
 
 // Message listener for communication with popup and background
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // Use original console to avoid capturing our own debug messages
   originalConsole.log('Content script received message:', message)
 
@@ -915,7 +909,7 @@ async function handleScreenshotRequest(sendResponse: Function, options?: Screens
       lastScreenshot = result
 
       // Store screenshot
-      chrome.runtime.sendMessage({
+      runtime.sendMessage({
         type: 'STORE_SCREENSHOT',
         data: result.dataUrl
       })
@@ -937,7 +931,7 @@ async function handleScreenshotRequest(sendResponse: Function, options?: Screens
       lastScreenshot = result
 
       // Store screenshot
-      chrome.runtime.sendMessage({
+      runtime.sendMessage({
         type: 'STORE_SCREENSHOT',
         data: result.dataUrl
       })
@@ -950,65 +944,64 @@ async function handleScreenshotRequest(sendResponse: Function, options?: Screens
       })
     } else {
       // Visible area capture (default)
-      chrome.runtime.sendMessage({
+      const response = await runtime.sendMessage({
         type: 'CAPTURE_VISIBLE_TAB'
-      }, (response) => {
-        if (response?.success) {
-          // Create result object
-          const img = new Image()
-          img.onload = async () => {
-            let dataUrl = response.data
-            let width = img.width
-            let height = img.height
+      }) as any
 
-            // Apply compression if needed
-            if (options?.maxWidth && width > options.maxWidth) {
-              dataUrl = await compressImage(dataUrl, options.maxWidth, options?.format || 'jpeg', options?.quality || 0.8)
-              // Update dimensions
-              const compressed = new Image()
-              compressed.src = dataUrl
-              await new Promise(resolve => compressed.onload = resolve)
-              width = compressed.width
-              height = compressed.height
-            }
+      if (response?.success) {
+        // Create result object
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const image = new Image()
+          image.onload = () => resolve(image)
+          image.onerror = () => reject(new Error('Failed to process screenshot'))
+          image.src = response.data
+        })
 
-            lastScreenshot = {
-              dataUrl,
-              width,
-              height,
-              format: options?.format || 'png',
-              size: Math.round((dataUrl.split(',')[1]?.length || 0) * 0.75),
-              capturedAt: new Date().toISOString(),
-              pageUrl: window.location.href
-            }
+        let dataUrl = response.data
+        let width = img.width
+        let height = img.height
 
-            // Store screenshot
-            chrome.runtime.sendMessage({
-              type: 'STORE_SCREENSHOT',
-              data: dataUrl
-            })
-
-            sendResponse({
-              success: true,
-              width,
-              height,
-              size: lastScreenshot.size
-            })
-          }
-          img.onerror = () => {
-            sendResponse({
-              success: false,
-              error: 'Failed to process screenshot'
-            })
-          }
-          img.src = response.data
-        } else {
-          sendResponse({
-            success: false,
-            error: response?.error || 'Screenshot capture failed'
+        // Apply compression if needed
+        if (options?.maxWidth && width > options.maxWidth) {
+          dataUrl = await compressImage(dataUrl, options.maxWidth, options?.format || 'jpeg', options?.quality || 0.8)
+          // Update dimensions
+          const compressed = await new Promise<HTMLImageElement>((resolve) => {
+            const compImg = new Image()
+            compImg.onload = () => resolve(compImg)
+            compImg.src = dataUrl
           })
+          width = compressed.width
+          height = compressed.height
         }
-      })
+
+        lastScreenshot = {
+          dataUrl,
+          width,
+          height,
+          format: options?.format || 'png',
+          size: Math.round((dataUrl.split(',')[1]?.length || 0) * 0.75),
+          capturedAt: new Date().toISOString(),
+          pageUrl: window.location.href
+        }
+
+        // Store screenshot
+        runtime.sendMessage({
+          type: 'STORE_SCREENSHOT',
+          data: dataUrl
+        })
+
+        sendResponse({
+          success: true,
+          width,
+          height,
+          size: lastScreenshot.size
+        })
+      } else {
+        sendResponse({
+          success: false,
+          error: response?.error || 'Screenshot capture failed'
+        })
+      }
     }
   } catch (error) {
     originalConsole.error('Screenshot error:', error)
@@ -1020,32 +1013,32 @@ async function handleScreenshotRequest(sendResponse: Function, options?: Screens
 }
 
 // Handle console logs request
-function handleConsoleLogsRequest(sendResponse: Function, options?: { types?: CapturedLogEntry['type'][]; since?: number; clearAfter?: boolean }) {
+async function handleConsoleLogsRequest(sendResponse: Function, options?: { types?: CapturedLogEntry['type'][]; since?: number; clearAfter?: boolean }) {
   try {
     const logs = getCapturedLogs(options)
 
     // Store console logs in background
-    chrome.runtime.sendMessage({
+    const response = await runtime.sendMessage({
       type: 'STORE_CONSOLE_LOGS',
       data: logs
-    }, (response) => {
-      if (response?.success) {
-        sendResponse({
-          success: true,
-          logsCount: logs.length,
-          logs: logs // Also return logs directly for immediate use
-        })
-        // Clear captured logs after storing if requested (default: true for backward compatibility)
-        if (options?.clearAfter !== false) {
-          clearCapturedLogs()
-        }
-      } else {
-        sendResponse({
-          success: false,
-          error: response?.error || 'Console log storage failed'
-        })
+    }) as any
+
+    if (response?.success) {
+      sendResponse({
+        success: true,
+        logsCount: logs.length,
+        logs: logs // Also return logs directly for immediate use
+      })
+      // Clear captured logs after storing if requested (default: true for backward compatibility)
+      if (options?.clearAfter !== false) {
+        clearCapturedLogs()
       }
-    })
+    } else {
+      sendResponse({
+        success: false,
+        error: response?.error || 'Console log storage failed'
+      })
+    }
   } catch (error) {
     originalConsole.error('Console logs error:', error)
     sendResponse({
@@ -1114,20 +1107,20 @@ async function handleElementScreenshotClick(event: MouseEvent) {
     lastScreenshot = result
 
     // Store screenshot
-    chrome.runtime.sendMessage({
+    runtime.sendMessage({
       type: 'STORE_SCREENSHOT',
       data: result.dataUrl
     })
 
     // Notify that element was captured
-    chrome.runtime.sendMessage({
+    runtime.sendMessage({
       type: 'STATUS_UPDATE',
       message: `Element captured (${result.width}x${result.height})`,
       isError: false
     })
   } catch (error) {
     originalConsole.error('Element screenshot error:', error)
-    chrome.runtime.sendMessage({
+    runtime.sendMessage({
       type: 'STATUS_UPDATE',
       message: `Screenshot failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       isError: true
@@ -1175,38 +1168,38 @@ async function handleOpenAnnotationEditor(sendResponse: Function) {
   try {
     if (!lastScreenshot) {
       // Try to get the last screenshot from storage
-      chrome.runtime.sendMessage({
+      const response = await runtime.sendMessage({
         type: 'GET_ALL_CAPTURED_DATA'
-      }, async (response) => {
-        if (response?.success && response.data?.screenshots?.length > 0) {
-          const latestScreenshot = response.data.screenshots[response.data.screenshots.length - 1]
-          try {
-            const annotated = await annotationEditor.open(latestScreenshot)
+      }) as any
 
-            // Store the annotated screenshot
-            chrome.runtime.sendMessage({
-              type: 'STORE_SCREENSHOT',
-              data: annotated
-            })
+      if (response?.success && response.data?.screenshots?.length > 0) {
+        const latestScreenshot = response.data.screenshots[response.data.screenshots.length - 1]
+        try {
+          const annotated = await annotationEditor.open(latestScreenshot)
 
-            sendResponse({ success: true })
-          } catch (error) {
-            if ((error as Error).message === 'Annotation cancelled') {
-              sendResponse({ success: true, cancelled: true })
-            } else {
-              sendResponse({
-                success: false,
-                error: error instanceof Error ? error.message : 'Annotation failed'
-              })
-            }
-          }
-        } else {
-          sendResponse({
-            success: false,
-            error: 'No screenshot available. Capture a screenshot first.'
+          // Store the annotated screenshot
+          runtime.sendMessage({
+            type: 'STORE_SCREENSHOT',
+            data: annotated
           })
+
+          sendResponse({ success: true })
+        } catch (error) {
+          if ((error as Error).message === 'Annotation cancelled') {
+            sendResponse({ success: true, cancelled: true })
+          } else {
+            sendResponse({
+              success: false,
+              error: error instanceof Error ? error.message : 'Annotation failed'
+            })
+          }
         }
-      })
+      } else {
+        sendResponse({
+          success: false,
+          error: 'No screenshot available. Capture a screenshot first.'
+        })
+      }
     } else {
       try {
         const annotated = await annotationEditor.open(lastScreenshot.dataUrl)
@@ -1215,7 +1208,7 @@ async function handleOpenAnnotationEditor(sendResponse: Function) {
         lastScreenshot.dataUrl = annotated
 
         // Store the annotated screenshot
-        chrome.runtime.sendMessage({
+        runtime.sendMessage({
           type: 'STORE_SCREENSHOT',
           data: annotated
         })

@@ -12,6 +12,14 @@ import {
   createDefaultTimings,
   toHARExport
 } from '../types/network'
+import {
+  runtime,
+  tabs,
+  storage,
+  contextMenus,
+  webRequest,
+  isExtensionUrl,
+} from '../lib/browser-compat'
 
 console.log('JAT Browser Extension Background Script loaded')
 
@@ -32,18 +40,18 @@ let capturedData: {
 }
 
 // Install event - set up initial state
-chrome.runtime.onInstalled.addListener((details) => {
+runtime.onInstalled.addListener((details) => {
   console.log('JAT Extension installed:', details.reason)
 
   // Initialize storage
-  chrome.storage.local.set({
+  storage.local.set({
     capturedData: capturedData,
     networkConfig: networkConfig,
-    extensionVersion: chrome.runtime.getManifest().version
+    extensionVersion: runtime.getManifest().version
   })
 
   // Create context menu for quick access
-  chrome.contextMenus.create({
+  contextMenus.create({
     id: 'jat-bug-report',
     title: 'Report Bug with JAT',
     contexts: ['page']
@@ -51,17 +59,17 @@ chrome.runtime.onInstalled.addListener((details) => {
 })
 
 // Load config from storage on startup
-chrome.storage.local.get(['networkConfig']).then((result) => {
+storage.local.get(['networkConfig']).then((result) => {
   if (result.networkConfig) {
-    networkConfig = { ...DEFAULT_NETWORK_CONFIG, ...result.networkConfig }
+    networkConfig = { ...DEFAULT_NETWORK_CONFIG, ...result.networkConfig as NetworkCaptureConfig }
   }
 })
 
 // Context menu click handler
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'jat-bug-report' && tab?.id) {
     // Send message to content script to open bug report
-    chrome.tabs.sendMessage(tab.id, {
+    tabs.sendMessage(tab.id, {
       type: 'OPEN_BUG_REPORT_FORM'
     })
   }
@@ -74,8 +82,8 @@ function shouldCaptureRequest(
   type: chrome.webRequest.ResourceType,
   url: string
 ): boolean {
-  // Always skip extension requests
-  if (url.startsWith('chrome-extension://')) return false
+  // Always skip extension requests (chrome-extension:// or moz-extension://)
+  if (isExtensionUrl(url)) return false
 
   // Check if type is in capture list
   if (!networkConfig.captureTypes.includes(type)) return false
@@ -107,7 +115,7 @@ function addNetworkRequest(entry: NetworkRequestEntry): void {
   }
 
   // Update storage (debounced in production, immediate for now)
-  chrome.storage.local.set({ capturedData })
+  storage.local.set({ capturedData })
 }
 
 /**
@@ -126,12 +134,12 @@ function updateNetworkRequest(
       ...capturedData.networkRequests[index],
       ...updates
     }
-    chrome.storage.local.set({ capturedData })
+    storage.local.set({ capturedData })
   }
 }
 
 // Web request listener for network logging - onBeforeRequest
-chrome.webRequest.onBeforeRequest.addListener(
+webRequest.onBeforeRequest.addListener(
   (details) => {
     // Only log requests from tabs
     if (details.tabId <= 0) return
@@ -185,7 +193,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 )
 
 // Capture request headers
-chrome.webRequest.onSendHeaders.addListener(
+webRequest.onSendHeaders.addListener(
   (details) => {
     if (details.tabId <= 0) return
 
@@ -214,7 +222,7 @@ chrome.webRequest.onSendHeaders.addListener(
 )
 
 // Capture response headers on completion
-chrome.webRequest.onHeadersReceived.addListener(
+webRequest.onHeadersReceived.addListener(
   (details) => {
     if (details.tabId <= 0) return
 
@@ -261,7 +269,7 @@ chrome.webRequest.onHeadersReceived.addListener(
 )
 
 // Response completed listener
-chrome.webRequest.onCompleted.addListener(
+webRequest.onCompleted.addListener(
   (details) => {
     if (details.tabId <= 0) return
 
@@ -289,7 +297,7 @@ chrome.webRequest.onCompleted.addListener(
 )
 
 // Handle request errors
-chrome.webRequest.onErrorOccurred.addListener(
+webRequest.onErrorOccurred.addListener(
   (details) => {
     if (details.tabId <= 0) return
 
@@ -310,7 +318,7 @@ chrome.webRequest.onErrorOccurred.addListener(
 )
 
 // Message listener for communication with popup and content scripts
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log('Background received message:', message)
 
   switch (message.type) {
@@ -441,7 +449,7 @@ async function handleClearNetworkLogs(
 ): Promise<void> {
   try {
     capturedData.networkRequests = []
-    await chrome.storage.local.set({ capturedData })
+    await storage.local.set({ capturedData })
 
     sendResponse({ success: true })
   } catch (error) {
@@ -460,7 +468,7 @@ async function handleSetNetworkConfig(
 ): Promise<void> {
   try {
     networkConfig = { ...networkConfig, ...config }
-    await chrome.storage.local.set({ networkConfig })
+    await storage.local.set({ networkConfig })
 
     sendResponse({ success: true, config: networkConfig })
   } catch (error) {
@@ -485,7 +493,7 @@ async function handleStoreScreenshot(
       capturedData.screenshots = capturedData.screenshots.slice(-10)
     }
 
-    await chrome.storage.local.set({ capturedData })
+    await storage.local.set({ capturedData })
 
     sendResponse({ success: true })
   } catch (error) {
@@ -530,7 +538,7 @@ async function handleStoreConsoleLogs(
       )
     }
 
-    await chrome.storage.local.set({ capturedData })
+    await storage.local.set({ capturedData })
 
     sendResponse({
       success: true,
@@ -559,7 +567,7 @@ async function handleStoreElementData(
       capturedData.selectedElements = capturedData.selectedElements.slice(-20)
     }
 
-    await chrome.storage.local.set({ capturedData })
+    await storage.local.set({ capturedData })
 
     sendResponse({ success: true })
   } catch (error) {
@@ -576,7 +584,7 @@ async function handleGetAllData(
   sendResponse: (response: unknown) => void
 ): Promise<void> {
   try {
-    const stored = await chrome.storage.local.get(['capturedData'])
+    const stored = await storage.local.get(['capturedData'])
     const data = stored.capturedData || capturedData
 
     sendResponse({
@@ -604,7 +612,7 @@ async function handleClearData(
       selectedElements: []
     }
 
-    await chrome.storage.local.set({ capturedData })
+    await storage.local.set({ capturedData })
 
     sendResponse({ success: true })
   } catch (error) {
@@ -621,7 +629,7 @@ async function handleCaptureVisibleTab(
   sendResponse: (response: unknown) => void
 ): Promise<void> {
   try {
-    const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' })
+    const dataUrl = await tabs.captureVisibleTab({ format: 'png' })
     sendResponse({ success: true, data: dataUrl })
   } catch (error) {
     console.error('Error capturing visible tab:', error)
@@ -637,7 +645,7 @@ async function handleRequestScreenshotCapture(
   sendResponse: (response: unknown) => void
 ): Promise<void> {
   try {
-    const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' })
+    const dataUrl = await tabs.captureVisibleTab({ format: 'png' })
 
     // Store the screenshot
     capturedData.screenshots.push(dataUrl)
@@ -647,7 +655,7 @@ async function handleRequestScreenshotCapture(
       capturedData.screenshots = capturedData.screenshots.slice(-10)
     }
 
-    await chrome.storage.local.set({ capturedData })
+    await storage.local.set({ capturedData })
 
     sendResponse({ success: true, data: dataUrl })
   } catch (error) {

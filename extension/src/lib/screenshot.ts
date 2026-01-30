@@ -1,4 +1,5 @@
 // Screenshot capture and annotation module for JAT Browser Extension
+import { tabs, runtime } from './browser-compat'
 
 export interface ScreenshotOptions {
   type: 'visible' | 'fullpage' | 'element'
@@ -45,41 +46,33 @@ export async function captureVisibleArea(options: Partial<ScreenshotOptions> = {
   const format = options.format || 'png'
   const quality = options.quality || 0.92
 
-  return new Promise((resolve, reject) => {
-    chrome.tabs.captureVisibleTab(
-      { format, quality: format === 'jpeg' ? Math.round(quality * 100) : undefined },
-      async (dataUrl) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message))
-          return
-        }
-
-        if (!dataUrl) {
-          reject(new Error('Failed to capture screenshot'))
-          return
-        }
-
-        // Get image dimensions
-        const img = await loadImage(dataUrl)
-
-        // Apply compression if needed
-        let finalDataUrl = dataUrl
-        if (options.maxWidth && img.width > options.maxWidth) {
-          finalDataUrl = await compressImage(dataUrl, options.maxWidth, format, quality)
-        }
-
-        resolve({
-          dataUrl: finalDataUrl,
-          width: img.width,
-          height: img.height,
-          format,
-          size: calculateBase64Size(finalDataUrl),
-          capturedAt: new Date().toISOString(),
-          pageUrl: '' // Will be filled by caller
-        })
-      }
-    )
+  const dataUrl = await tabs.captureVisibleTab({
+    format,
+    quality: format === 'jpeg' ? Math.round(quality * 100) : undefined,
   })
+
+  if (!dataUrl) {
+    throw new Error('Failed to capture screenshot')
+  }
+
+  // Get image dimensions
+  const img = await loadImage(dataUrl)
+
+  // Apply compression if needed
+  let finalDataUrl = dataUrl
+  if (options.maxWidth && img.width > options.maxWidth) {
+    finalDataUrl = await compressImage(dataUrl, options.maxWidth, format, quality)
+  }
+
+  return {
+    dataUrl: finalDataUrl,
+    width: img.width,
+    height: img.height,
+    format,
+    size: calculateBase64Size(finalDataUrl),
+    capturedAt: new Date().toISOString(),
+    pageUrl: '' // Will be filled by caller
+  }
 }
 
 /**
@@ -290,19 +283,15 @@ export async function compressImage(
 /**
  * Request screenshot capture from background script
  */
-function requestScreenshotCapture(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: 'CAPTURE_VISIBLE_TAB' },
-      (response) => {
-        if (response?.success) {
-          resolve(response.data)
-        } else {
-          reject(new Error(response?.error || 'Screenshot capture failed'))
-        }
-      }
-    )
-  })
+async function requestScreenshotCapture(): Promise<string> {
+  const response = await runtime.sendMessage({
+    type: 'CAPTURE_VISIBLE_TAB'
+  }) as any
+
+  if (response?.success) {
+    return response.data
+  }
+  throw new Error(response?.error || 'Screenshot capture failed')
 }
 
 /**
