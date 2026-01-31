@@ -156,12 +156,20 @@ export const BUILTIN_ACTIONS_CATALOG: AvailableBuiltinAction[] = [
 		defaultStates: ['needs-input']
 	},
 	{
+		id: 'pause',
+		label: 'Pause Session',
+		description: 'Save progress and close (resumable later)',
+		icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+		variant: 'default',
+		defaultStates: ['working', 'needs-input', 'ready-for-review', 'completing', 'starting', 'polishing', 'auto-proceeding', 'compacting', 'completed', 'idle', 'ready']
+	},
+	{
 		id: 'kill',
 		label: 'Kill Session',
 		description: 'Terminate tmux session',
 		icon: 'M6 18L18 6M6 6l12 12',
 		variant: 'error',
-		defaultStates: ['working', 'needs-input', 'ready-for-review', 'completing', 'starting', 'polishing']
+		defaultStates: ['working', 'needs-input', 'ready-for-review', 'completing', 'starting', 'polishing', 'auto-proceeding', 'compacting', 'completed', 'paused', 'idle', 'ready']
 	}
 ];
 
