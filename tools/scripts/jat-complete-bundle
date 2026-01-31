@@ -20,8 +20,10 @@
 #   3. Project review rules: .beads/review-rules.json
 #   4. Default: review_required (safe fallback)
 #
-# Environment:
-#   ANTHROPIC_API_KEY  API key for Anthropic (required)
+# Providers:
+#   - codex-native (default): uses `codex-native run` with JSON Schema output
+#   - codex: uses `codex exec` with JSON Schema output
+#   - anthropic: uses Anthropic Messages API (requires ANTHROPIC_API_KEY)
 #
 # Output:
 #   Outputs valid JSON suitable for: jat-signal complete "$JSON"
@@ -56,6 +58,7 @@ Usage:
 Options:
   --task <id>       Task ID (required)
   --agent <name>    Agent name (required)
+  --provider <p>    Provider: auto|codex-native|codex|anthropic (default: auto)
   --mode <mode>     Completion mode: review_required or auto_proceed (auto-detected if not specified)
   --auto-mode       Force auto-detection even if --mode is specified
   --next-task <id>  Next task ID (for auto_proceed mode, auto-detected if not specified)
@@ -70,7 +73,12 @@ Mode Auto-Detection:
   4. Default: review_required (safe fallback)
 
 Environment:
-  ANTHROPIC_API_KEY  API key for Anthropic (required)
+  # For codex-native/codex providers:
+  # - Authenticate via ~/.codex/auth.json (written by `codex login`) OR set OPENAI_API_KEY
+  # - codex-native also supports `--api-key` (see `codex-native run --help`)
+  #
+  # For anthropic provider:
+  ANTHROPIC_API_KEY  API key for Anthropic
 
 Output:
   Outputs valid JSON suitable for: jat-signal complete "$JSON"
@@ -85,6 +93,7 @@ EOF
 # Parse arguments
 TASK_ID=""
 AGENT_NAME=""
+PROVIDER="auto"
 COMPLETION_MODE=""  # Empty = auto-detect
 NEXT_TASK_ID=""
 EMIT_SIGNAL=false
@@ -98,6 +107,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --agent)
             AGENT_NAME="$2"
+            shift 2
+            ;;
+        --provider)
+            PROVIDER="$2"
             shift 2
             ;;
         --mode)
@@ -134,12 +147,6 @@ fi
 
 if [[ -z "$AGENT_NAME" ]]; then
     log_error "Agent name is required (--agent <name>)"
-    exit 1
-fi
-
-# Check for API key
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    log_error "ANTHROPIC_API_KEY environment variable is required"
     exit 1
 fi
 
@@ -374,51 +381,163 @@ PROMPT_EOF
 )
 
 # ============================================================================
-# CALL ANTHROPIC API
+# GENERATE VIA LLM PROVIDER
 # ============================================================================
 
-# Make the API call using curl
-API_RESPONSE=$(curl -s "https://api.anthropic.com/v1/messages" \
-    -H "Content-Type: application/json" \
-    -H "x-api-key: $ANTHROPIC_API_KEY" \
-    -H "anthropic-version: 2023-06-01" \
-    -d "$(jq -n \
-        --arg prompt "$PROMPT" \
-        '{
-            model: "claude-3-5-haiku-latest",
-            max_tokens: 2048,
-            messages: [
-                {
-                    role: "user",
-                    content: $prompt
-                }
-            ]
-        }'
-    )" 2>/dev/null)
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+COMPLETE_SCHEMA="${SCRIPT_DIR}/../signal/jat-complete-bundle-schema.json"
 
-# Check for API errors
-if echo "$API_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
-    ERROR_MSG=$(echo "$API_RESPONSE" | jq -r '.error.message // "Unknown error"')
-    log_error "API error: $ERROR_MSG"
+if [[ ! -f "$COMPLETE_SCHEMA" ]]; then
+    log_error "Missing schema file: $COMPLETE_SCHEMA"
     exit 1
 fi
 
-# Extract the content from the response
-BUNDLE_JSON=$(echo "$API_RESPONSE" | jq -r '.content[0].text // empty')
+generate_with_codex() {
+    local codex_cmd="$1"
+    local prompt="$2"
 
-if [[ -z "$BUNDLE_JSON" ]]; then
-    log_error "Empty response from API"
-    log_dim "Full response: $API_RESPONSE"
+    if ! command -v "$codex_cmd" >/dev/null 2>&1; then
+        log_error "Provider '$codex_cmd' not found in PATH"
+        return 1
+    fi
+
+    local out_file err_file
+    out_file="$(mktemp)"
+    err_file="$(mktemp)"
+
+    if [[ "$codex_cmd" == "codex-native" ]]; then
+        # codex-native: non-interactive mode is `run` and schema flag is `--schema`.
+        # Pass prompt as an argument (codex-native does not support codex's '-' stdin convention).
+        if ! "$codex_cmd" run \
+            --sandbox read-only \
+            --approval never \
+            --cd "$PWD" \
+            --schema "$COMPLETE_SCHEMA" \
+            "$prompt" \
+            >"$out_file" 2>"$err_file"; then
+            log_error "$codex_cmd run failed"
+            log_dim "$(tail -n 80 "$err_file" 2>/dev/null || true)"
+            rm -f "$out_file" "$err_file"
+            return 1
+        fi
+    else
+        # codex: feed prompt via stdin (use '-' prompt arg)
+        if ! printf "%s" "$prompt" | "$codex_cmd" exec \
+            --sandbox read-only \
+            --cd "$PWD" \
+            --output-schema "$COMPLETE_SCHEMA" \
+            --output-last-message "$out_file" \
+            - \
+            >/dev/null 2>"$err_file"; then
+            log_error "$codex_cmd exec failed"
+            log_dim "$(tail -n 80 "$err_file" 2>/dev/null || true)"
+            rm -f "$out_file" "$err_file"
+            return 1
+        fi
+    fi
+
+    local result
+    result="$(cat "$out_file" 2>/dev/null || true)"
+    rm -f "$out_file" "$err_file"
+
+    if [[ -z "$result" ]]; then
+        log_error "Empty response from $codex_cmd"
+        return 1
+    fi
+
+    echo "$result"
+    return 0
+}
+
+generate_with_anthropic() {
+    if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+        log_error "ANTHROPIC_API_KEY environment variable is required for --provider anthropic"
+        return 1
+    fi
+
+    local prompt="$1"
+    local api_response
+
+    api_response=$(curl -s "https://api.anthropic.com/v1/messages" \
+        -H "Content-Type: application/json" \
+        -H "x-api-key: $ANTHROPIC_API_KEY" \
+        -H "anthropic-version: 2023-06-01" \
+        -d "$(jq -n \
+            --arg prompt "$prompt" \
+            '{
+                model: "claude-3-5-haiku-latest",
+                max_tokens: 2048,
+                messages: [
+                    {
+                        role: "user",
+                        content: $prompt
+                    }
+                ]
+            }'
+        )" 2>/dev/null)
+
+    # Check for API errors
+    if echo "$api_response" | jq -e '.error' >/dev/null 2>&1; then
+        local error_msg
+        error_msg=$(echo "$api_response" | jq -r '.error.message // "Unknown error"')
+        log_error "Anthropic API error: $error_msg"
+        return 1
+    fi
+
+    local text
+    text=$(echo "$api_response" | jq -r '.content[0].text // empty')
+    if [[ -z "$text" ]]; then
+        log_error "Empty response from Anthropic API"
+        log_dim "Full response: $api_response"
+        return 1
+    fi
+
+    echo "$text"
+    return 0
+}
+
+RAW_BUNDLE=""
+
+case "$PROVIDER" in
+    auto)
+        if command -v codex-native >/dev/null 2>&1; then
+            RAW_BUNDLE="$(generate_with_codex codex-native "$PROMPT" || true)"
+        fi
+        if [[ -z "$RAW_BUNDLE" ]] && command -v codex >/dev/null 2>&1; then
+            RAW_BUNDLE="$(generate_with_codex codex "$PROMPT" || true)"
+        fi
+        if [[ -z "$RAW_BUNDLE" ]]; then
+            RAW_BUNDLE="$(generate_with_anthropic "$PROMPT" || true)"
+        fi
+        ;;
+    codex-native)
+        RAW_BUNDLE="$(generate_with_codex codex-native "$PROMPT")"
+        ;;
+    codex)
+        RAW_BUNDLE="$(generate_with_codex codex "$PROMPT")"
+        ;;
+    anthropic)
+        RAW_BUNDLE="$(generate_with_anthropic "$PROMPT")"
+        ;;
+    *)
+        log_error "Unknown provider: $PROVIDER"
+        log_error "Valid providers: auto, codex-native, codex, anthropic"
+        exit 1
+        ;;
+esac
+
+if [[ -z "$RAW_BUNDLE" ]]; then
+    log_error "Failed to generate completion bundle (provider: $PROVIDER)"
     exit 1
 fi
 
 # Clean up the JSON (remove any markdown code blocks if present)
-BUNDLE_JSON=$(echo "$BUNDLE_JSON" | sed 's/^```json//g; s/^```//g; s/```$//g' | tr -d '\n' | jq -c '.')
+BUNDLE_JSON=$(echo "$RAW_BUNDLE" | sed 's/^```json//g; s/^```//g; s/```$//g' | tr -d '\n' | jq -c '.')
 
 # Validate it's valid JSON
 if ! echo "$BUNDLE_JSON" | jq -e '.' >/dev/null 2>&1; then
     log_error "Invalid JSON from LLM response"
-    log_dim "Raw response: $BUNDLE_JSON"
+    log_dim "Raw response: $RAW_BUNDLE"
     exit 1
 fi
 

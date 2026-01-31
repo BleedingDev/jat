@@ -225,6 +225,49 @@ function getDateRange(range: TimeSeriesOptions['range']): { start: Date; end: Da
 }
 
 /**
+ * Get date range boundaries aligned to bucket boundaries.
+ *
+ * For fixed-size buckets (30min/hour) and finite ranges (24h/7d), we align
+ * the range to bucket boundaries so the bucket count is stable:
+ * - 24h @ 30min = 48 buckets
+ * - 24h @ hour  = 24 buckets
+ * - 7d  @ 30min = 336 buckets
+ * - 7d  @ hour  = 168 buckets
+ *
+ * For session buckets or range=all we return the raw range (no alignment).
+ */
+function getBucketAlignedDateRange(
+	range: TimeSeriesOptions['range'],
+	bucketSize: BucketSize
+): { start: Date; end: Date } {
+	const { start: rawStart, end: rawEnd } = getDateRange(range);
+
+	// Session buckets: use exact timestamps and raw range.
+	if (bucketSize === 'session') {
+		return { start: rawStart, end: rawEnd };
+	}
+
+	// "all" with fixed buckets can be arbitrarily large; keep raw bounds and
+	// rely on the caller to avoid huge gap-filling.
+	if (range === 'all') {
+		return { start: rawStart, end: rawEnd };
+	}
+
+	const bucketMs = getBucketDurationMs(bucketSize);
+
+	// Align end to the *next* bucket boundary (exclusive) so the last bucket
+	// represents the current (possibly partial) bucket.
+	const endBucketStart = roundToBucketStart(rawEnd, bucketSize);
+	const alignedEnd = new Date(endBucketStart.getTime() + bucketMs);
+
+	const durationMs = rawEnd.getTime() - rawStart.getTime();
+	const bucketCount = Math.ceil(durationMs / bucketMs);
+	const alignedStart = new Date(alignedEnd.getTime() - bucketCount * bucketMs);
+
+	return { start: alignedStart, end: alignedEnd };
+}
+
+/**
  * Fill missing buckets with zero values
  */
 function fillMissingBuckets(
@@ -240,14 +283,23 @@ function fillMissingBuckets(
 		);
 	}
 
+	// Avoid massive allocations for "all" range with fixed buckets.
+	if (startTime.getTime() === 0) {
+		return Array.from(data.values()).sort((a, b) =>
+			new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+		);
+	}
+
 	const bucketMs = getBucketDurationMs(bucketSize);
 	const filledData: TimeSeriesDataPoint[] = [];
-
-	// Generate all bucket timestamps in range
+	// Generate all bucket timestamps in range.
+	// NOTE: For fixed ranges we align endTime to the next bucket boundary and
+	// treat it as exclusive, yielding stable bucket counts (e.g. 48 for 24h/30min).
 	let currentBucketStart = roundToBucketStart(startTime, bucketSize);
-	const endBucketStart = roundToBucketStart(endTime, bucketSize);
 
-	while (currentBucketStart <= endBucketStart) {
+
+
+	while (currentBucketStart < endTime) {
 		const key = getBucketKey(currentBucketStart, bucketSize);
 
 		if (data.has(key)) {
@@ -302,7 +354,7 @@ export async function getTokenTimeSeries(
 	const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
 
 	// Get date range boundaries
-	const { start: startTime, end: endTime } = getDateRange(range);
+	const { start: startTime, end: endTime } = getBucketAlignedDateRange(range, bucketSize);
 
 	// Build session-agent map for filtering
 	const sessionAgentMap = await buildSessionAgentMap(projectPath);
@@ -361,12 +413,13 @@ export async function getTokenTimeSeries(
 					}
 
 					const timestamp = new Date(entry.timestamp);
-
 					// Filter by date range
-					if (timestamp < startTime || timestamp > endTime) {
-						continue;
+					if (bucketSize === 'session') {
+						if (timestamp < startTime || timestamp > endTime) continue;
+					} else {
+						// endTime is aligned to the next bucket boundary and treated as exclusive
+						if (timestamp < startTime || timestamp >= endTime) continue;
 					}
-
 					const usage = entry.message.usage;
 					const inputTokens = usage.input_tokens || 0;
 					const cacheCreation = usage.cache_creation_input_tokens || 0;

@@ -43,6 +43,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				case 'codex':
 					instructions.push('npm install -g @openai/codex');
 					break;
+				case 'codex-native':
+					instructions.push('Install codex-native (your fork)');
+					break;
 				case 'gemini':
 					instructions.push('Visit https://geminicli.com/ for installation');
 					break;
@@ -84,6 +87,9 @@ export const POST: RequestHandler = async ({ request }) => {
 					break;
 				case 'codex':
 					instructions.push('Run: codex login');
+					break;
+				case 'codex-native':
+					instructions.push('Run: codex login (writes ~/.codex/auth.json) or set OPENAI_API_KEY');
 					break;
 				case 'gemini':
 					instructions.push('Run: gemini auth');

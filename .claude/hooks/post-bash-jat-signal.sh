@@ -132,6 +132,27 @@ for BASE_DIR in $SEARCH_DIRS; do
     done
 done
 
+# If jat-signal already persisted this signal (tmux-first implementation),
+# skip hook writes to avoid duplicate timeline entries.
+if [[ -n "$TMUX_SESSION" ]]; then
+    TMUX_SIGNAL_FILE="/tmp/jat-signal-tmux-${TMUX_SESSION}.json"
+    if [[ -f "$TMUX_SIGNAL_FILE" ]]; then
+        WRITER=$(jq -r '.writer // empty' "$TMUX_SIGNAL_FILE" 2>/dev/null || echo "")
+        if [[ "$WRITER" == "jat-signal" ]]; then
+            # Only trust very recent writes (defense-in-depth for stale files)
+            if [[ "$(uname)" == "Darwin" ]]; then
+                FILE_MTIME=$(stat -f %m "$TMUX_SIGNAL_FILE" 2>/dev/null || echo "0")
+            else
+                FILE_MTIME=$(stat -c %Y "$TMUX_SIGNAL_FILE" 2>/dev/null || echo "0")
+            fi
+            FILE_AGE=$(( $(date +%s) - FILE_MTIME ))
+            if [[ $FILE_AGE -lt 5 ]]; then
+                exit 0
+            fi
+        fi
+    fi
+fi
+
 # Parse signal data as JSON (validate first to avoid || echo appending extra output)
 if [[ -n "$SIGNAL_DATA" ]] && echo "$SIGNAL_DATA" | jq -e . >/dev/null 2>&1; then
     PARSED_DATA=$(echo "$SIGNAL_DATA" | jq -c .)

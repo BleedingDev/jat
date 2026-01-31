@@ -4,7 +4,7 @@
  * Tests for tokenUsageTimeSeries.ts module
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
 	getTokenTimeSeries,
 	getSystemTimeSeries,
@@ -12,6 +12,7 @@ import {
 	type TimeSeriesOptions,
 	type TimeSeriesResult
 } from './tokenUsageTimeSeries';
+import { buildSessionAgentMap } from './tokenUsage';
 
 // ============================================================================
 // Mocks
@@ -28,6 +29,14 @@ vi.mock('os', () => ({
 	},
 	homedir: () => '/mock/home'
 }));
+
+vi.mock('./tokenUsage', async () => {
+	const actual = await vi.importActual<typeof import('./tokenUsage')>('./tokenUsage');
+	return {
+		...actual,
+		buildSessionAgentMap: vi.fn(async () => new Map())
+	};
+});
 
 import { readdir, readFile } from 'fs/promises';
 
@@ -76,8 +85,15 @@ function hoursAgo(hours: number): Date {
 // ============================================================================
 
 function resetMocks() {
+	vi.useFakeTimers();
+	vi.setSystemTime(new Date('2025-11-21T12:28:00Z'));
 	vi.clearAllMocks();
+	vi.mocked(buildSessionAgentMap).mockResolvedValue(new Map());
 }
+
+afterEach(() => {
+	vi.useRealTimers();
+});
 
 // ============================================================================
 // Tests: Time Bucket Aggregation (30-min buckets)
@@ -97,7 +113,6 @@ describe('getTokenTimeSeries - 30-minute buckets', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any) // buildSessionAgentMap (empty)
 			.mockResolvedValueOnce(createMockJSONL(entries)); // session1.jsonl
 
 		const result = await getTokenTimeSeries({ range: '24h', bucketSize: '30min', projectPath: '/test' });
@@ -121,7 +136,6 @@ describe('getTokenTimeSeries - 30-minute buckets', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any) // buildSessionAgentMap
 			.mockResolvedValueOnce(createMockJSONL(entries)); // session1.jsonl
 
 		const result = await getTokenTimeSeries({ range: '24h', bucketSize: '30min', projectPath: '/test' });
@@ -138,7 +152,6 @@ describe('getTokenTimeSeries - 30-minute buckets', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ range: '24h', bucketSize: '30min', projectPath: '/test' });
@@ -168,7 +181,6 @@ describe('getTokenTimeSeries - session-based buckets', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -191,7 +203,6 @@ describe('getTokenTimeSeries - session-based buckets', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -209,19 +220,17 @@ describe('getTokenTimeSeries - filtering', () => {
 	beforeEach(resetMocks);
 
 	it('should filter by agent name', async () => {
-		vi.mocked(readdir)
-			.mockResolvedValueOnce(['agent-session1.txt', 'agent-session2.txt'] as any) // buildSessionAgentMap
-			.mockResolvedValueOnce(['session1.jsonl', 'session2.jsonl'] as any); // getAllSessionIds
+		vi.mocked(buildSessionAgentMap).mockResolvedValue(
+			new Map([
+				['session1', 'AgentAlpha'],
+				['session2', 'AgentBeta']
+			])
+		);
 
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('AgentAlpha') // session1 agent
-			.mockResolvedValueOnce('AgentBeta') // session2 agent
-			.mockResolvedValueOnce(createMockJSONL([
-				{ timestamp: new Date().toISOString(), tokens: { input: 100 } }
-			])) // session1.jsonl
-			.mockResolvedValueOnce(createMockJSONL([
-				{ timestamp: new Date().toISOString(), tokens: { input: 200 } }
-			])); // session2.jsonl (should be filtered out)
+		vi.mocked(readdir).mockResolvedValue(['session1.jsonl', 'session2.jsonl'] as any);
+		vi.mocked(readFile).mockResolvedValueOnce(
+			createMockJSONL([{ timestamp: new Date().toISOString(), tokens: { input: 100 } }])
+		);
 
 		const result = await getTokenTimeSeries({
 			agentName: 'AgentAlpha',
@@ -243,9 +252,7 @@ describe('getTokenTimeSeries - filtering', () => {
 		];
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
-			.mockResolvedValueOnce(createMockJSONL(entries));
+		vi.mocked(readFile).mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ range: '24h', bucketSize: 'session', projectPath: '/test' });
 
@@ -254,12 +261,9 @@ describe('getTokenTimeSeries - filtering', () => {
 	});
 
 	it('should filter by specific session ID', async () => {
-		vi.mocked(readdir).mockResolvedValue(['session1.jsonl', 'session2.jsonl'] as any);
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any) // buildSessionAgentMap
-			.mockResolvedValueOnce(createMockJSONL([
-				{ timestamp: new Date().toISOString(), tokens: { input: 100 } }
-			])); // session1.jsonl only
+		vi.mocked(readFile).mockResolvedValueOnce(
+			createMockJSONL([{ timestamp: new Date().toISOString(), tokens: { input: 100 } }])
+		);
 
 		const result = await getTokenTimeSeries({
 			sessionId: 'session1',
@@ -270,7 +274,7 @@ describe('getTokenTimeSeries - filtering', () => {
 
 		// Should only process session1
 		expect(result.totalTokens).toBe(100);
-		expect(readFile).toHaveBeenCalledTimes(2); // buildSessionAgentMap + session1.jsonl (not session2)
+		expect(readFile).toHaveBeenCalledTimes(1); // session1.jsonl only
 	});
 });
 
@@ -284,7 +288,6 @@ describe('getTokenTimeSeries - edge cases', () => {
 	it('should handle empty JSONL files', async () => {
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(''); // Empty JSONL
 
 		const result = await getTokenTimeSeries({ range: '24h', bucketSize: '30min', projectPath: '/test' });
@@ -302,7 +305,6 @@ describe('getTokenTimeSeries - edge cases', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(entriesWithMissingTimestamp);
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -321,7 +323,6 @@ describe('getTokenTimeSeries - edge cases', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(malformedJSONL);
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -340,7 +341,6 @@ describe('getTokenTimeSeries - edge cases', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(entriesWithoutUsage);
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -353,7 +353,6 @@ describe('getTokenTimeSeries - edge cases', () => {
 	it('should handle file read errors gracefully', async () => {
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl', 'session2.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any) // buildSessionAgentMap
 			.mockResolvedValueOnce(createMockJSONL([{ timestamp: new Date().toISOString(), tokens: { input: 100 } }])) // session1 succeeds
 			.mockRejectedValueOnce(new Error('Permission denied')); // session2 fails
 
@@ -396,7 +395,6 @@ describe('getTokenTimeSeries - cost calculation', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -415,7 +413,6 @@ describe('getTokenTimeSeries - cost calculation', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -445,15 +442,11 @@ describe('Convenience functions', () => {
 	});
 
 	it('getAgentTimeSeries should use session buckets and all range', async () => {
-		vi.mocked(readdir)
-			.mockResolvedValueOnce(['agent-session1.txt'] as any) // buildSessionAgentMap
-			.mockResolvedValueOnce(['session1.jsonl'] as any); // getAllSessionIds
-
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('TestAgent') // session1 agent
-			.mockResolvedValueOnce(createMockJSONL([
-				{ timestamp: '2025-11-21T10:00:00Z', tokens: { input: 100 } }
-			])); // session1.jsonl
+		vi.mocked(buildSessionAgentMap).mockResolvedValue(new Map([['session1', 'TestAgent']]));
+		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
+		vi.mocked(readFile).mockResolvedValueOnce(
+			createMockJSONL([{ timestamp: '2025-11-21T10:00:00Z', tokens: { input: 100 } }])
+		);
 
 		const result = await getAgentTimeSeries('TestAgent', '/test');
 
@@ -485,7 +478,6 @@ describe('getTokenTimeSeries - token breakdown', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ bucketSize: 'session', range: 'all', projectPath: '/test' });
@@ -508,7 +500,6 @@ describe('getTokenTimeSeries - token breakdown', () => {
 
 		vi.mocked(readdir).mockResolvedValue(['session1.jsonl'] as any);
 		vi.mocked(readFile)
-			.mockResolvedValueOnce('' as any)
 			.mockResolvedValueOnce(createMockJSONL(entries));
 
 		const result = await getTokenTimeSeries({ range: '24h', bucketSize: '30min', projectPath: '/test' });

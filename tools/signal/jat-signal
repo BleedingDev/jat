@@ -21,8 +21,8 @@
 #   --strict         Fail on validation errors (default: warn)
 #
 # All signals emit: [JAT-SIGNAL:<TYPE>] <json-payload>
-# The PostToolUse hook captures this and writes to temp file.
-# IDE reads /tmp/jat-signal-{session}.json via SSE.
+# jat-signal also writes structured signal envelopes to /tmp for IDE consumption.
+# (Claude Code's PostToolUse hook remains supported for backwards-compat.)
 
 set -euo pipefail
 
@@ -78,15 +78,214 @@ show_usage() {
     echo ""
     echo "Required Fields by Signal Type:"
     echo "  working:     taskId, taskTitle"
-    echo "  review:      taskId"
+    echo "  review:      taskId, taskTitle, summary"
     echo "  needs_input: taskId, question, questionType"
     echo "  idle:        readyForWork"
     echo "  completing:  taskId, currentStep"
-    echo "  starting:    agentName"
+    echo "  starting:    agentName, project"
     echo "  compacting:  reason, contextSizeBefore"
     echo "  paused:      taskId, resumable"
     echo "  question:    question, questionType"
     echo "  complete:    (use jat-complete-bundle, do not construct manually)"
+}
+
+# =============================================================================
+# SIGNAL PERSISTENCE (AGENT-AGNOSTIC)
+# =============================================================================
+
+# Resolve tmux session name.
+# Prefer the actual tmux session when inside tmux; otherwise fall back to env vars
+# that the IDE can set when emitting signals outside a tmux context.
+resolve_tmux_session() {
+    local session=""
+    local from_env="false"
+
+    if [[ -n "${JAT_TMUX_SESSION:-}" ]]; then
+        session="$JAT_TMUX_SESSION"
+        from_env="true"
+    elif [[ -n "${JAT_SESSION:-}" ]]; then
+        session="$JAT_SESSION"
+        from_env="true"
+    fi
+
+    # If we're inside tmux, use the real session name
+    if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
+        local tmux_session=""
+        if [[ -n "${TMUX_PANE:-}" ]]; then
+            tmux_session=$(tmux display-message -p -t "$TMUX_PANE" '#S' 2>/dev/null || true)
+        fi
+        if [[ -z "$tmux_session" ]]; then
+            tmux_session=$(tmux display-message -p '#S' 2>/dev/null || true)
+        fi
+        if [[ -n "$tmux_session" ]]; then
+            session="$tmux_session"
+            from_env="false"
+        fi
+    fi
+
+    # Normalize env-provided session names to JAT's "jat-*" convention
+    if [[ "$from_env" == "true" ]] && [[ -n "$session" ]] && [[ "$session" != jat-* ]]; then
+        session="jat-${session}"
+    fi
+
+    echo "$session"
+}
+
+# Resolve an optional provider session id (Claude session UUID, Codex session UUID, etc).
+# For Claude Code, get-current-session-id is the most reliable source.
+resolve_provider_session_id() {
+    if [[ -n "${JAT_SESSION_ID:-}" ]]; then
+        echo "$JAT_SESSION_ID"
+        return 0
+    fi
+    if [[ -n "${CLAUDE_SESSION_ID:-}" ]]; then
+        echo "$CLAUDE_SESSION_ID"
+        return 0
+    fi
+    if [[ -n "${CODEX_SESSION_ID:-}" ]]; then
+        echo "$CODEX_SESSION_ID"
+        return 0
+    fi
+    if command -v get-current-session-id >/dev/null 2>&1; then
+        get-current-session-id 2>/dev/null || true
+        return 0
+    fi
+    echo ""
+}
+
+# Find the nearest directory (from $PWD upward) containing a .beads directory.
+find_beads_root() {
+    local dir="$PWD"
+    while [[ -n "$dir" && "$dir" != "/" ]]; do
+        if [[ -d "$dir/.beads" ]]; then
+            echo "$dir"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    echo ""
+}
+
+persist_signal() {
+    local canonical_type="$1"
+    local payload_json="$2"
+
+    local tmux_session
+    tmux_session="$(resolve_tmux_session)"
+
+    local provider_session_id
+    provider_session_id="$(resolve_provider_session_id)"
+
+    local task_id
+    task_id="$(echo "$payload_json" | jq -r '.taskId // ""' 2>/dev/null || echo "")"
+
+    local is_state_signal="false"
+    case "$canonical_type" in
+        working|review|needs_input|idle|completing|starting|compacting|question|paused)
+            is_state_signal="true"
+            ;;
+    esac
+
+    local signal_json
+    if [[ "$is_state_signal" == "true" ]]; then
+        signal_json="$(jq -c -n \
+            --arg state "$canonical_type" \
+            --arg session "$provider_session_id" \
+            --arg tmux "$tmux_session" \
+            --arg task "$task_id" \
+            --argjson data "$payload_json" \
+            '{
+                type: "state",
+                state: $state,
+                session_id: $session,
+                tmux_session: $tmux,
+                task_id: $task,
+                timestamp: (now | todate),
+                writer: "jat-signal",
+                data: $data
+            }' 2>/dev/null || echo "{}")"
+    else
+        signal_json="$(jq -c -n \
+            --arg type "$canonical_type" \
+            --arg session "$provider_session_id" \
+            --arg tmux "$tmux_session" \
+            --arg task "$task_id" \
+            --argjson data "$payload_json" \
+            '{
+                type: $type,
+                session_id: $session,
+                tmux_session: $tmux,
+                task_id: $task,
+                timestamp: (now | todate),
+                writer: "jat-signal",
+                data: $data
+            }' 2>/dev/null || echo "{}")"
+    fi
+
+    # Add git_sha when available (helps for rollback/navigation)
+    local git_sha=""
+    git_sha="$(git rev-parse --short HEAD 2>/dev/null || true)"
+    if [[ -n "$git_sha" ]]; then
+        signal_json="$(echo "$signal_json" | jq -c --arg sha "$git_sha" '. + {git_sha: $sha}' 2>/dev/null || echo "$signal_json")"
+    fi
+
+    # Write signal state by tmux session (authoritative for IDE)
+    if [[ -n "$tmux_session" ]]; then
+        echo "$signal_json" > "/tmp/jat-signal-tmux-${tmux_session}.json" 2>/dev/null || true
+        echo "$signal_json" >> "/tmp/jat-timeline-${tmux_session}.jsonl" 2>/dev/null || true
+    fi
+
+    # Optionally also write by provider session id (legacy path used by some tools)
+    if [[ -n "$provider_session_id" ]]; then
+        echo "$signal_json" > "/tmp/jat-signal-${provider_session_id}.json" 2>/dev/null || true
+    fi
+
+    # Question signals also write a separate question file for polling
+    if [[ "$canonical_type" == "question" ]]; then
+        local question_json
+        question_json="$(jq -c -n \
+            --arg session "$provider_session_id" \
+            --arg tmux "$tmux_session" \
+            --argjson data "$payload_json" \
+            '{
+                session_id: $session,
+                tmux_session: $tmux,
+                timestamp: (now | todate),
+                question: $data.question,
+                questionType: $data.questionType,
+                options: ($data.options // []),
+                timeout: ($data.timeout // null)
+            }' 2>/dev/null || echo "{}")"
+
+        if [[ -n "$tmux_session" ]]; then
+            echo "$question_json" > "/tmp/jat-question-tmux-${tmux_session}.json" 2>/dev/null || true
+        fi
+        if [[ -n "$provider_session_id" ]]; then
+            echo "$question_json" > "/tmp/jat-question-${provider_session_id}.json" 2>/dev/null || true
+        fi
+    fi
+
+    # Write per-task timeline to .beads/signals/{taskId}.jsonl (if available)
+    if [[ -n "$task_id" ]]; then
+        local beads_root
+        beads_root="$(find_beads_root)"
+        if [[ -n "$beads_root" ]]; then
+            local signals_dir="${beads_root}/.beads/signals"
+            mkdir -p "$signals_dir" 2>/dev/null || true
+
+            local agent_name=""
+            if [[ -n "$tmux_session" ]] && [[ "$tmux_session" =~ ^jat-(.+)$ ]]; then
+                agent_name="${BASH_REMATCH[1]}"
+            fi
+
+            local task_signal_json="$signal_json"
+            if [[ -n "$agent_name" ]]; then
+                task_signal_json="$(echo "$signal_json" | jq -c --arg agent "$agent_name" '. + {agent_name: $agent}' 2>/dev/null || echo "$signal_json")"
+            fi
+
+            echo "$task_signal_json" >> "${signals_dir}/${task_id}.jsonl" 2>/dev/null || true
+        fi
+    fi
 }
 
 # Parse options
@@ -198,14 +397,10 @@ require_json() {
             starting)
                 echo "Required fields:" >&2
                 echo "  - agentName: Your agent name" >&2
-                echo "  - sessionId: Claude Code session ID" >&2
                 echo "  - project: Project name" >&2
-                echo "  - model: Full model ID" >&2
-                echo "  - gitBranch: Current git branch" >&2
-                echo "  - gitStatus: \"clean\" or \"dirty\"" >&2
                 echo "" >&2
                 echo "Example:" >&2
-                echo "  jat-signal starting '{\"agentName\":\"Agent\",\"sessionId\":\"...\",\"project\":\"jat\",...}'" >&2
+                echo "  jat-signal starting '{\"agentName\":\"Agent\",\"project\":\"jat\",\"model\":\"gpt-5.2-codex\"}'" >&2
                 ;;
             *)
                 echo "Example: jat-signal $signal_type '{\"taskId\":\"...\"}'" >&2
@@ -247,6 +442,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "working" "$SIGNAL_DATA"
+        persist_signal "working" "$SIGNAL_DATA"
         TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
         TASK_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.taskTitle // ""')
         echo "Signal: working (task: ${TASK_ID} - ${TASK_TITLE})"
@@ -258,6 +454,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "review" "$SIGNAL_DATA"
+        persist_signal "review" "$SIGNAL_DATA"
         TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
         SUMMARY_COUNT=$(echo "$SIGNAL_DATA" | jq '.summary // [] | length')
         echo "Signal: review (task: ${TASK_ID}, ${SUMMARY_COUNT} items)"
@@ -269,6 +466,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "needs_input" "$SIGNAL_DATA"
+        persist_signal "needs_input" "$SIGNAL_DATA"
         TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
         QUESTION_TYPE=$(echo "$SIGNAL_DATA" | jq -r '.questionType // "text"')
         echo "Signal: needs_input (task: ${TASK_ID}, type: ${QUESTION_TYPE})"
@@ -280,6 +478,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "idle" "$SIGNAL_DATA"
+        persist_signal "idle" "$SIGNAL_DATA"
         READY=$(echo "$SIGNAL_DATA" | jq -r '.readyForWork // true')
         TASKS_COMPLETED=$(echo "$SIGNAL_DATA" | jq -r '.sessionSummary.tasksCompleted // [] | length')
         SUGGESTED=$(echo "$SIGNAL_DATA" | jq -r '.suggestedNextTask.taskId // ""')
@@ -303,6 +502,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "completing" "$SIGNAL_DATA"
+        persist_signal "completing" "$SIGNAL_DATA"
         TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
         STEP=$(echo "$SIGNAL_DATA" | jq -r '.currentStep // ""')
         echo "Signal: completing (task: ${TASK_ID}, step: ${STEP})"
@@ -314,6 +514,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "starting" "$SIGNAL_DATA"
+        persist_signal "starting" "$SIGNAL_DATA"
         AGENT_NAME=$(echo "$SIGNAL_DATA" | jq -r '.agentName // ""')
         PROJECT=$(echo "$SIGNAL_DATA" | jq -r '.project // ""')
         TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
@@ -333,6 +534,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "compacting" "$SIGNAL_DATA"
+        persist_signal "compacting" "$SIGNAL_DATA"
         REASON=$(echo "$SIGNAL_DATA" | jq -r '.reason // ""')
         CONTEXT_BEFORE=$(echo "$SIGNAL_DATA" | jq -r '.contextSizeBefore // 0')
         echo "Signal: compacting (reason: ${REASON}, context: ${CONTEXT_BEFORE})"
@@ -344,6 +546,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "paused" "$SIGNAL_DATA"
+        persist_signal "paused" "$SIGNAL_DATA"
         TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
         TASK_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.taskTitle // ""')
         RESUMABLE=$(echo "$SIGNAL_DATA" | jq -r '.resumable // true')
@@ -361,6 +564,7 @@ case "$SIGNAL_TYPE" in
         # Compact JSON to single line for hook parsing
         SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
         validate_payload "question" "$SIGNAL_DATA"
+        persist_signal "question" "$SIGNAL_DATA"
         QUESTION_TEXT=$(echo "$SIGNAL_DATA" | jq -r '.question // ""')
         QUESTION_TYPE=$(echo "$SIGNAL_DATA" | jq -r '.questionType // "choice"')
         OPTIONS_COUNT=$(echo "$SIGNAL_DATA" | jq '.options // [] | length')
@@ -380,12 +584,14 @@ case "$SIGNAL_TYPE" in
             # Compact JSON to single line for hook parsing
             SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
             validate_payload "complete" "$SIGNAL_DATA"
+            persist_signal "complete" "$SIGNAL_DATA"
             TASK_COUNT=$(echo "$SIGNAL_DATA" | jq '.suggestedTasks // [] | length')
             ACTION_COUNT=$(echo "$SIGNAL_DATA" | jq '.humanActions // [] | length')
             echo "Signal: complete (${TASK_COUNT} tasks, ${ACTION_COUNT} actions)"
         else
             SIGNAL_DATA="{}"
             echo "Signal: complete"
+            persist_signal "complete" "$SIGNAL_DATA"
         fi
         echo "[JAT-SIGNAL:complete] $SIGNAL_DATA"
         ;;

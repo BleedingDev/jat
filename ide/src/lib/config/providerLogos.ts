@@ -132,6 +132,7 @@ export function getProviderForAgent(
 		'claude-code': 'anthropic',
 		'codex-cli': 'openai',
 		'codex': 'openai',
+		'codex-native': 'openai',
 		'gemini-cli': 'gemini',
 		'gemini-code': 'gemini',
 		'gemini': 'gemini',

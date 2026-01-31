@@ -1,17 +1,17 @@
 ## JAT Signal System
 
-**Hook-based agent-to-IDE communication for real-time state tracking.**
+**tmux-first agent-to-IDE communication for real-time state tracking.**
 
-Agents emit signals via `jat-signal` command, PostToolUse hooks capture them, and the IDE receives real-time updates via SSE.
+Agents emit signals via `jat-signal`. `jat-signal` persists a structured envelope to `/tmp` for IDE consumption (and appends to a timeline JSONL). Claude Code PostToolUse hooks remain supported for backwards compatibility, but they are no longer required (Codex/codex-native don’t have Claude hooks).
 
 ### Why Signals?
 
 **Benefits:**
-- Reliable delivery (hooks fire on every Bash command)
+- Reliable delivery (agent writes directly; hooks are optional)
 - Structured data (JSON payloads)
 - Real-time SSE events to IDE
 - Extensible (states, tasks, actions, custom data)
-- No terminal parsing - direct hook capture
+- No terminal parsing - direct file-based state
 
 ### Signal TTL Behavior
 
@@ -21,12 +21,12 @@ Signal files expire after a time-to-live (TTL) to prevent stale data. Different 
 
 | TTL Type | Duration | States | Purpose |
 |----------|----------|--------|---------|
-| **Transient** | 1 minute | `working`, `starting`, `idle`, `compacting` | Agent is actively working, frequent updates expected |
-| **User-Waiting** | 30 minutes | `completed`, `review`, `needs_input` | Waiting for human action - user may step away |
+| **Transient** | 1 minute | `starting`, `idle`, `compacting` | Transitional state updates (short-lived) |
+| **User-Waiting** | 30 minutes | `completed`, `review`, `needs_input`, `question`, `paused`, `working` | Waiting for human action (or long work) |
 
 **Why this matters:**
 - If you emit a `review` signal and the user takes a coffee break, the signal persists for 30 minutes
-- Transient states like `working` expire quickly so stale signals don't show incorrect state
+- Transient states like `starting`/`idle` expire quickly so stale signals don't show incorrect state
 - Without the longer TTL, the IDE falls back to output parsing which can misinterpret state
 
 **Example:** Agent emits `review`, user is away for 10 minutes → IDE still shows "🔍 REVIEW" (not stale fallback state)
@@ -41,20 +41,32 @@ jat-signal <type> '<json-payload>'
 
 Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 
+### Persistence (Files)
+
+When you run `jat-signal`, it persists an **envelope** to disk for the IDE:
+
+- `/tmp/jat-signal-tmux-{tmuxSession}.json` - current state for the tmux session (authoritative)
+- `/tmp/jat-timeline-{tmuxSession}.jsonl` - append-only timeline (EventStack)
+- `/tmp/jat-question-tmux-{tmuxSession}.json` - current custom question (only for `question`)
+- `.beads/signals/{taskId}.jsonl` - per-task timeline (when a `.beads` root is found)
+
+Claude Code hooks may also write legacy `/tmp/jat-signal-{session_id}.json` files. These are still supported, but `jat-signal` is the preferred cross-agent path.
+
 ### Signal Types
 
 **State Signals** - Agent lifecycle states (all require JSON):
 
 | Signal | Command | Required Fields |
 |--------|---------|-----------------|
-| `starting` | `jat-signal starting '{...}'` | agentName (optional: sessionId, taskId, taskTitle, project) |
+| `starting` | `jat-signal starting '{...}'` | agentName, project (optional: sessionId, taskId, taskTitle) |
 | `working` | `jat-signal working '{...}'` | taskId, taskTitle |
 | `compacting` | `jat-signal compacting '{...}'` | reason, contextSizeBefore |
-| `review` | `jat-signal review '{...}'` | taskId |
+| `review` | `jat-signal review '{...}'` | taskId, taskTitle, summary |
 | `needs_input` | `jat-signal needs_input '{...}'` | taskId, question, questionType |
 | `idle` | `jat-signal idle '{...}'` | readyForWork |
 | `question` | `jat-signal question '{...}'` | question, questionType (optional: options, timeout) |
-| `completing` | `jat-signal completing '{...}'` | taskId, taskTitle, currentStep, stepsCompleted, stepsRemaining, progress, stepDescription, stepStartedAt |
+| `paused` | `jat-signal paused '{...}'` | taskId, resumable (optional: taskTitle, agentName, reason) |
+| `completing` | `jat-signal completing '{...}'` | taskId, currentStep (recommended: taskTitle, progress, stepDescription, stepStartedAt, stepsCompleted/Remaining) |
 
 **IDE Signals** - Events written by the IDE (not agents):
 
@@ -170,8 +182,8 @@ The IDE writes this signal directly to the timeline file when a user sends input
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
 | taskId | **Yes** | string | Task ID |
-| taskTitle | No | string | Task title |
-| summary | Recommended | string[] | Bullet points of accomplishments |
+| taskTitle | **Yes** | string | Task title |
+| summary | **Yes** | string[] | Bullet points of accomplishments |
 | approach | No | string | How it was implemented |
 | filesModified | Recommended | object[] | `{path, changeType, linesAdded, linesRemoved}` |
 | totalLinesAdded | No | number | Total lines added |
@@ -189,7 +201,7 @@ The IDE writes this signal directly to the timeline file when a user sends input
 |-------|----------|------|-------------|
 | taskId | **Yes** | string | Task ID |
 | question | **Yes** | string | The question to ask |
-| questionType | **Yes** | enum | "choice" / "text" / "approval" / "confirm" |
+| questionType | **Yes** | enum | "choice" / "text" / "approval" / "clarification" |
 | taskTitle | No | string | Task title for context |
 | context | No | string | Why this question arose |
 | options | No | object[] | `{label, value, description}` for choice questions |

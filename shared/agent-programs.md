@@ -21,7 +21,7 @@ JAT supports multiple AI coding assistants through a configurable agent program 
 │                                                                             │
 │  Supported Agents:                                                          │
 │  • Claude Code (claude)                                                     │
-│  • OpenAI Codex CLI (codex)                                                 │
+│  • OpenAI Codex (codex / codex-native)                                      │
 │  • Google Gemini (gemini)                                                   │
 │  • Aider (aider)                                                            │
 │  • OpenCode (opencode) - https://opencode.ai                                │
@@ -31,6 +31,9 @@ JAT supports multiple AI coding assistants through a configurable agent program 
 ```
 
 ### Configuration File
+
+**Codex-first note:** If you have `codex-native`, you can set `defaults.fallbackAgent` to `codex-native` so new installs route to Codex by default.
+
 
 **Location:** `~/.config/jat/agents.json`
 
@@ -51,24 +54,40 @@ JAT supports multiple AI coding assistants through a configurable agent program 
       "flags": ["--dangerously-skip-permissions"],
       "authType": "subscription",
       "enabled": true,
-      "isDefault": true,
-      "order": 0
+      "isDefault": false,
+      "order": 1
     },
     "codex-cli": {
       "id": "codex-cli",
       "name": "Codex CLI",
       "command": "codex",
       "models": [
-        { "id": "o3", "name": "O3", "shortName": "o3", "costTier": "high" },
-        { "id": "o4-mini", "name": "O4 Mini", "shortName": "o4-mini", "costTier": "medium" }
+        { "id": "gpt-5.2-codex", "name": "GPT-5.2 Codex", "shortName": "gpt5.2-codex", "costTier": "xhigh" },
+        { "id": "gpt-5.2", "name": "GPT-5.2", "shortName": "gpt5.2", "costTier": "xhigh" }
       ],
-      "defaultModel": "o4-mini",
-      "authType": "api_key",
-      "apiKeyProvider": "openai",
-      "apiKeyEnvVar": "OPENAI_API_KEY",
+      "defaultModel": "gpt5.2-codex",
+      "authType": "subscription",
+      "flags": ["--full-auto"],
+      "taskInjection": "argument",
       "enabled": true,
       "isDefault": false,
-      "order": 1
+      "order": 2
+    },
+    "codex-native": {
+      "id": "codex-native",
+      "name": "Codex Native",
+      "command": "codex-native",
+      "models": [
+        { "id": "gpt-5.2-codex", "name": "GPT-5.2 Codex", "shortName": "gpt5.2-codex", "costTier": "xhigh" },
+        { "id": "gpt-5.2", "name": "GPT-5.2", "shortName": "gpt5.2", "costTier": "xhigh" }
+      ],
+      "defaultModel": "gpt5.2-codex",
+      "authType": "subscription",
+      "flags": ["--full-auto"],
+      "taskInjection": "argument",
+      "enabled": true,
+      "isDefault": true,
+      "order": 0
     }
   },
   "routingRules": [
@@ -96,8 +115,8 @@ JAT supports multiple AI coding assistants through a configurable agent program 
     }
   ],
   "defaults": {
-    "fallbackAgent": "claude-code",
-    "fallbackModel": "opus"
+    "fallbackAgent": "codex-native",
+    "fallbackModel": "gpt5.2-codex"
   }
 }
 ```

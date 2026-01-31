@@ -323,11 +323,29 @@ const CODEX_AUTH_FILE = join(homedir(), '.codex', 'auth.json');
 const GEMINI_CLI_AUTH_FILE = join(homedir(), '.gemini', 'settings.json');
 
 /**
- * Check if Codex CLI has valid authentication configured.
- * Codex uses auth stored in ~/.codex/auth.json or OPENAI_API_KEY env var.
- * The auth.json format is: { "OPENAI_API_KEY": "sk-..." }
+ * Check if a Codex-family CLI has authentication configured.
+ *
+ * Codex-family CLIs use auth stored in `~/.codex/auth.json` or the `OPENAI_API_KEY` env var.
+ * auth.json can be either:
+ * - Legacy: { "OPENAI_API_KEY": "sk-..." }
+ * - Multi-account: { version: 1, accounts: [...], active_account: "..." }
+ *
+ * Note: codex-native does not currently ship a `login` subcommand; it can reuse the
+ * official Codex CLI credentials file (created by `codex login`) or use OPENAI_API_KEY/--api-key.
  */
-export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boolean; message?: string } {
+export function isCodexAuthConfigured(options: { cliCommand?: string } = {}): { configured: boolean; hasApiKey: boolean; message?: string } {
+	const cliCommand = options.cliCommand ?? 'codex';
+
+	const setupHint =
+		cliCommand === 'codex-native'
+			? 'Authenticate via "codex login" (writes ~/.codex/auth.json) or set OPENAI_API_KEY'
+			: `Run "${cliCommand} login" to authenticate or set OPENAI_API_KEY`;
+
+	// OPENAI_API_KEY env var works for API-key based auth (even when no auth.json exists)
+	if (process.env.OPENAI_API_KEY) {
+		return { configured: true, hasApiKey: true };
+	}
+
 	// Check if Codex auth file exists
 	if (!existsSync(CODEX_AUTH_FILE)) {
 		// Fall back to checking for OPENAI_API_KEY in credentials vault
@@ -340,7 +358,7 @@ export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boole
 		return {
 			configured: false,
 			hasApiKey: false,
-			message: 'Run "codex login" to authenticate or add OpenAI API key'
+			message: setupHint
 		};
 	}
 
@@ -348,8 +366,36 @@ export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boole
 		const content = readFileSync(CODEX_AUTH_FILE, 'utf-8');
 		const auth = JSON.parse(content);
 
-		// Codex auth.json stores the API key as OPENAI_API_KEY
-		// Format: { "OPENAI_API_KEY": "sk-..." }
+		// New format (multi-account):
+		// { version: 1, accounts: [{ name, tokens: { access_token, ... } }], active_account: "name" }
+		if (Array.isArray(auth.accounts)) {
+			const accounts: Array<{ name?: string; tokens?: Record<string, any> }> = auth.accounts;
+			const active =
+				typeof auth.active_account === 'string' && auth.active_account.length > 0
+					? auth.active_account
+					: null;
+
+			let account: any | undefined;
+			if (active) {
+				account = accounts.find((a) => a?.name === active);
+			}
+			if (!account && accounts.length > 0) {
+				account = accounts[0];
+			}
+
+			const tokens = account?.tokens ?? {};
+			if (tokens.OPENAI_API_KEY || tokens.api_key || tokens.access_token) {
+				return { configured: true, hasApiKey: true };
+			}
+
+			return {
+				configured: false,
+				hasApiKey: false,
+				message: setupHint
+			};
+		}
+
+		// Legacy format: { "OPENAI_API_KEY": "sk-..." }
 		if (auth.OPENAI_API_KEY || auth.api_key || auth.access_token) {
 			return {
 				configured: true,
@@ -361,13 +407,13 @@ export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boole
 		return {
 			configured: false,
 			hasApiKey: false,
-			message: 'Codex auth file exists but is invalid. Run "codex login"'
+			message: setupHint
 		};
 	} catch {
 		return {
 			configured: false,
 			hasApiKey: false,
-			message: 'Codex auth file is invalid. Run "codex login"'
+			message: setupHint
 		};
 	}
 }
@@ -509,9 +555,9 @@ export function getAgentStatus(agent: AgentProgram): AgentStatus {
 		} else {
 			statusMessage = 'Available';
 		}
-	} else if (agent.command === 'codex') {
+	} else if (agent.command === 'codex' || agent.command === 'codex-native') {
 		// Codex uses ~/.codex/auth.json or OPENAI_API_KEY
-		const codexAuth = isCodexAuthConfigured();
+		const codexAuth = isCodexAuthConfigured({ cliCommand: agent.command });
 
 		authConfigured = codexAuth.configured;
 

@@ -14,7 +14,6 @@
 	import { onMount } from 'svelte';
 	import { isSpawnModalOpen, openTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import {
-		DEFAULT_MODEL,
 		MAX_TMUX_SESSIONS,
 		DEFAULT_AGENT_COUNT,
 		MIN_AGENT_COUNT,
@@ -96,12 +95,12 @@
 				spawnProgress = i + 1;
 
 				try {
-					const response = await fetch('/api/sessions', {
+					const response = await fetch('/api/work/spawn', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
-							model: DEFAULT_MODEL,
-							task: task.id
+							taskId: task.id,
+							attach: false
 						})
 					});
 

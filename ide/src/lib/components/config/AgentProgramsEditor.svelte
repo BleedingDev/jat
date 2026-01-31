@@ -488,7 +488,13 @@
 
 	function removeModel(index: number) {
 		if (!editForm.models) return;
+		const removedModel = editForm.models[index];
 		editForm.models = editForm.models.filter((_, i) => i !== index);
+
+		// Auto-fix defaultModel if we removed the current default
+		if (editForm.defaultModel === removedModel.shortName && editForm.models.length > 0) {
+			editForm.defaultModel = editForm.models[0].shortName;
+		}
 	}
 
 	function updateModel(index: number, field: keyof AgentModel, value: string) {
@@ -832,6 +838,7 @@
 									<option value="low">Low</option>
 									<option value="medium">Medium</option>
 									<option value="high">High</option>
+									<option value="xhigh">XHigh</option>
 								</select>
 								<button
 									class="btn btn-xs btn-ghost btn-error"

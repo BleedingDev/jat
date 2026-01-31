@@ -218,6 +218,8 @@ const SIGNAL_STATE_MAP: Record<string, string> = {
 	'working': 'working',
 	'review': 'ready-for-review',
 	'needs_input': 'needs-input',
+	'question': 'needs-input',
+	'paused': 'paused',
 	'idle': 'idle',
 	'completed': 'completed',  // completionMode: 'auto_proceed' in payload triggers auto-spawn of next task
 	'starting': 'starting',

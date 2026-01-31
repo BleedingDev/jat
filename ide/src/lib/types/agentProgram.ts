@@ -64,8 +64,8 @@ export interface AgentModel {
 	/** Capability tags for routing decisions */
 	capabilities?: string[];
 
-	/** Cost tier hint for routing (optional) */
-	costTier?: 'low' | 'medium' | 'high';
+	/** Cost tier / reasoning effort hint for routing (optional) */
+	costTier?: 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 /**
@@ -460,16 +460,31 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 			name: 'Codex CLI',
 			command: 'codex',
 			models: [
-				{ id: 'o3', name: 'O3', shortName: 'o3', costTier: 'high' },
-				{ id: 'o4-mini', name: 'O4 Mini', shortName: 'o4-mini', costTier: 'medium' },
-				{ id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', shortName: 'gpt5-codex', costTier: 'high' },
-				{ id: 'gpt-4.1', name: 'GPT-4.1', shortName: 'gpt4.1', costTier: 'high' },
-				{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', shortName: 'gpt4.1-mini', costTier: 'low' }
+				{ id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', shortName: 'gpt5.2-codex', costTier: 'xhigh' },
+				{ id: 'gpt-5.2', name: 'GPT-5.2', shortName: 'gpt5.2', costTier: 'xhigh' }
 			],
-			defaultModel: 'o4-mini',
+			defaultModel: 'gpt5.2-codex',
 			authType: 'subscription',  // Codex has its own auth via 'codex auth'
 			flags: ['--full-auto'],
 			taskInjection: 'argument'  // Codex takes prompt as positional argument
+		}
+	},
+	{
+		id: 'codex-native',
+		name: 'Codex Native',
+		description: 'Codex via codex-native fork (multi-auth + native SDK)',
+		config: {
+			id: 'codex-native',
+			name: 'Codex Native',
+			command: 'codex-native',
+			models: [
+				{ id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', shortName: 'gpt5.2-codex', costTier: 'xhigh' },
+				{ id: 'gpt-5.2', name: 'GPT-5.2', shortName: 'gpt5.2', costTier: 'xhigh' }
+			],
+			defaultModel: 'gpt5.2-codex',
+			authType: 'subscription',
+			flags: ['--full-auto'],
+			taskInjection: 'argument'
 		}
 	},
 	{
@@ -572,6 +587,24 @@ export function isValidAgentId(id: string): boolean {
  */
 export function createDefaultAgentConfig(): AgentConfigFile {
 	const claudePreset = AGENT_PRESETS.find((p) => p.id === 'claude-code')!;
+	const codexNativePreset = AGENT_PRESETS.find((p) => p.id === 'codex-native')!;
+	const now = new Date().toISOString();
+
+	const codexNativeConfig: AgentProgram = {
+		...codexNativePreset.config,
+		id: 'codex-native',
+		name: 'Codex Native',
+		command: 'codex-native',
+		models: codexNativePreset.config.models!,
+		defaultModel: 'gpt5.2-codex',
+		flags: codexNativePreset.config.flags ?? [],
+		authType: 'subscription',
+		enabled: true,
+		isDefault: true,
+		order: 0,
+		createdAt: now,
+		updatedAt: now
+	};
 	const claudeConfig: AgentProgram = {
 		...claudePreset.config,
 		id: 'claude-code',
@@ -582,22 +615,23 @@ export function createDefaultAgentConfig(): AgentConfigFile {
 		flags: [],
 		authType: 'subscription',
 		enabled: true,
-		isDefault: true,
-		order: 0,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString()
+		isDefault: false,
+		order: 1,
+		createdAt: now,
+		updatedAt: now
 	};
 
 	return {
 		version: 1,
 		programs: {
+			'codex-native': codexNativeConfig,
 			'claude-code': claudeConfig
 		},
 		routingRules: [],
 		defaults: {
-			fallbackAgent: 'claude-code',
-			fallbackModel: 'opus'
+			fallbackAgent: 'codex-native',
+			fallbackModel: 'gpt5.2-codex'
 		},
-		updatedAt: new Date().toISOString()
+		updatedAt: now
 	};
 }

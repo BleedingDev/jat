@@ -336,17 +336,27 @@ describe('getAgentUsage', () => {
 	beforeEach(resetMocks);
 
 	it('should aggregate usage for an agent', async () => {
-		// Mock buildSessionAgentMap
-		vi.mocked(readdir).mockResolvedValueOnce([
-			'agent-session1.txt',
-			'agent-session2.txt'
-		] as any);
+		vi.mocked(readdir).mockImplementation(async (dir: any, options: any) => {
+			// buildSessionAgentMap scans several locations; keep this mock path-aware.
+			// - Any `withFileTypes` scan (~/code, ~/.claude/projects) returns empty.
+			// - Any .claude directory scan returns our agent session files.
+			if (options && typeof options === 'object' && 'withFileTypes' in options) {
+				return [] as any;
+			}
+			const dirStr = String(dir);
+			if (dirStr.includes('.claude') && !dirStr.includes('.claude/projects')) {
+				return ['agent-session1.txt', 'agent-session2.txt'] as any;
+			}
+			return [] as any;
+		});
 
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('AgentAlpha') // agent-session1.txt
-			.mockResolvedValueOnce('AgentAlpha') // agent-session2.txt
-			.mockResolvedValueOnce(MOCK_JSONL_VALID) // session1.jsonl
-			.mockResolvedValueOnce(MOCK_JSONL_VALID); // session2.jsonl
+		vi.mocked(readFile).mockImplementation(async (file: any) => {
+			const fileStr = String(file);
+			if (fileStr.endsWith('agent-session1.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('agent-session2.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('.jsonl')) return MOCK_JSONL_VALID;
+			throw new Error('File not found');
+		});
 
 		const usage = await getAgentUsage('AgentAlpha', 'all', '/test/project');
 
@@ -377,16 +387,26 @@ describe('getAgentUsage', () => {
 		const todaySession = `{"type":"request","message":{"usage":{"input_tokens":100,"output_tokens":200}},"timestamp":"${today.toISOString()}"}`;
 		const yesterdaySession = `{"type":"request","message":{"usage":{"input_tokens":100,"output_tokens":200}},"timestamp":"${yesterday.toISOString()}"}`;
 
-		vi.mocked(readdir).mockResolvedValueOnce([
-			'agent-session1.txt',
-			'agent-session2.txt'
-		] as any);
+		vi.mocked(readdir).mockImplementation(async (dir: any, options: any) => {
+			if (options && typeof options === 'object' && 'withFileTypes' in options) {
+				return [] as any;
+			}
+			const dirStr = String(dir);
+			if (dirStr.includes('.claude') && !dirStr.includes('.claude/projects')) {
+				return ['agent-session1.txt', 'agent-session2.txt'] as any;
+			}
+			return [] as any;
+		});
 
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('AgentAlpha')
-			.mockResolvedValueOnce('AgentAlpha')
-			.mockResolvedValueOnce(todaySession)
-			.mockResolvedValueOnce(yesterdaySession);
+		vi.mocked(readFile).mockImplementation(async (file: any) => {
+			const fileStr = String(file);
+			if (fileStr.endsWith('agent-session1.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('agent-session2.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('session1.jsonl')) return todaySession;
+			if (fileStr.endsWith('session2.jsonl')) return yesterdaySession;
+			if (fileStr.endsWith('.jsonl')) return '';
+			throw new Error('File not found');
+		});
 
 		const usage = await getAgentUsage('AgentAlpha', 'today', '/test/project');
 
@@ -397,16 +417,26 @@ describe('getAgentUsage', () => {
 	});
 
 	it('should handle sessions with missing JSONL files', async () => {
-		vi.mocked(readdir).mockResolvedValueOnce([
-			'agent-session1.txt',
-			'agent-session2.txt'
-		] as any);
+		vi.mocked(readdir).mockImplementation(async (dir: any, options: any) => {
+			if (options && typeof options === 'object' && 'withFileTypes' in options) {
+				return [] as any;
+			}
+			const dirStr = String(dir);
+			if (dirStr.includes('.claude') && !dirStr.includes('.claude/projects')) {
+				return ['agent-session1.txt', 'agent-session2.txt'] as any;
+			}
+			return [] as any;
+		});
 
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('AgentAlpha')
-			.mockResolvedValueOnce('AgentAlpha')
-			.mockResolvedValueOnce(MOCK_JSONL_VALID) // session1.jsonl exists
-			.mockRejectedValueOnce(new Error('File not found')); // session2.jsonl missing
+		vi.mocked(readFile).mockImplementation(async (file: any) => {
+			const fileStr = String(file);
+			if (fileStr.endsWith('agent-session1.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('agent-session2.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('session1.jsonl')) return MOCK_JSONL_VALID;
+			if (fileStr.endsWith('session2.jsonl')) throw new Error('File not found');
+			if (fileStr.endsWith('.jsonl')) return MOCK_JSONL_VALID;
+			throw new Error('File not found');
+		});
 
 		const usage = await getAgentUsage('AgentAlpha', 'all', '/test/project');
 
@@ -423,24 +453,24 @@ describe('getAllAgentUsage', () => {
 	beforeEach(resetMocks);
 
 	it('should get usage for all agents', async () => {
-		// getAllAgentUsage calls buildSessionAgentMap once, then getAgentUsage for each agent
-		// Each getAgentUsage also calls buildSessionAgentMap
-		// So we need: 1 initial + 2 for each agent = 3 readdir calls total
+		vi.mocked(readdir).mockImplementation(async (dir: any, options: any) => {
+			if (options && typeof options === 'object' && 'withFileTypes' in options) {
+				return [] as any;
+			}
+			const dirStr = String(dir);
+			if (dirStr.includes('.claude') && !dirStr.includes('.claude/projects')) {
+				return ['agent-session1.txt', 'agent-session2.txt'] as any;
+			}
+			return [] as any;
+		});
 
-		vi.mocked(readdir)
-			.mockResolvedValueOnce(['agent-session1.txt', 'agent-session2.txt'] as any) // Initial buildSessionAgentMap
-			.mockResolvedValueOnce(['agent-session1.txt', 'agent-session2.txt'] as any) // AgentAlpha's getAgentUsage
-			.mockResolvedValueOnce(['agent-session1.txt', 'agent-session2.txt'] as any); // AgentBeta's getAgentUsage
-
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('AgentAlpha') // Initial: session1
-			.mockResolvedValueOnce('AgentBeta') // Initial: session2
-			.mockResolvedValueOnce('AgentAlpha') // AgentAlpha's buildSessionAgentMap: session1
-			.mockResolvedValueOnce('AgentBeta') // AgentAlpha's buildSessionAgentMap: session2
-			.mockResolvedValueOnce(MOCK_JSONL_VALID) // AgentAlpha's parseSessionUsage: session1.jsonl
-			.mockResolvedValueOnce('AgentAlpha') // AgentBeta's buildSessionAgentMap: session1
-			.mockResolvedValueOnce('AgentBeta') // AgentBeta's buildSessionAgentMap: session2
-			.mockResolvedValueOnce(MOCK_JSONL_VALID); // AgentBeta's parseSessionUsage: session2.jsonl
+		vi.mocked(readFile).mockImplementation(async (file: any) => {
+			const fileStr = String(file);
+			if (fileStr.endsWith('agent-session1.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('agent-session2.txt')) return 'AgentBeta';
+			if (fileStr.endsWith('.jsonl')) return MOCK_JSONL_VALID;
+			throw new Error('File not found');
+		});
 
 		const usageMap = await getAllAgentUsage('all', '/test/project');
 
@@ -474,22 +504,24 @@ describe('getSystemUsage', () => {
 	beforeEach(resetMocks);
 
 	it('should aggregate total usage across all agents', async () => {
-		// getSystemUsage calls getAllAgentUsage, which calls buildSessionAgentMap + getAgentUsage per agent
-		// Same mocking pattern as getAllAgentUsage test
-		vi.mocked(readdir)
-			.mockResolvedValueOnce(['agent-session1.txt', 'agent-session2.txt'] as any) // Initial buildSessionAgentMap
-			.mockResolvedValueOnce(['agent-session1.txt', 'agent-session2.txt'] as any) // AgentAlpha's getAgentUsage
-			.mockResolvedValueOnce(['agent-session1.txt', 'agent-session2.txt'] as any); // AgentBeta's getAgentUsage
+		vi.mocked(readdir).mockImplementation(async (dir: any, options: any) => {
+			if (options && typeof options === 'object' && 'withFileTypes' in options) {
+				return [] as any;
+			}
+			const dirStr = String(dir);
+			if (dirStr.includes('.claude') && !dirStr.includes('.claude/projects')) {
+				return ['agent-session1.txt', 'agent-session2.txt'] as any;
+			}
+			return [] as any;
+		});
 
-		vi.mocked(readFile)
-			.mockResolvedValueOnce('AgentAlpha') // Initial: session1
-			.mockResolvedValueOnce('AgentBeta') // Initial: session2
-			.mockResolvedValueOnce('AgentAlpha') // AgentAlpha's buildSessionAgentMap: session1
-			.mockResolvedValueOnce('AgentBeta') // AgentAlpha's buildSessionAgentMap: session2
-			.mockResolvedValueOnce(MOCK_JSONL_VALID) // AgentAlpha's parseSessionUsage: session1.jsonl
-			.mockResolvedValueOnce('AgentAlpha') // AgentBeta's buildSessionAgentMap: session1
-			.mockResolvedValueOnce('AgentBeta') // AgentBeta's buildSessionAgentMap: session2
-			.mockResolvedValueOnce(MOCK_JSONL_VALID); // AgentBeta's parseSessionUsage: session2.jsonl
+		vi.mocked(readFile).mockImplementation(async (file: any) => {
+			const fileStr = String(file);
+			if (fileStr.endsWith('agent-session1.txt')) return 'AgentAlpha';
+			if (fileStr.endsWith('agent-session2.txt')) return 'AgentBeta';
+			if (fileStr.endsWith('.jsonl')) return MOCK_JSONL_VALID;
+			throw new Error('File not found');
+		});
 
 		const totalUsage = await getSystemUsage('all', '/test/project');
 

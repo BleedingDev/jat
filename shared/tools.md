@@ -200,7 +200,10 @@ jat-step <step> --task <id> --title <title> --agent <name> [--type <type>]
 | `announcing` | am-send completion | completing (80%) |
 | `complete` | Generate bundle + emit complete signal | complete (100%) |
 
-**Requires:** `ANTHROPIC_API_KEY` environment variable (for `complete` step)
+**LLM requirements (for `complete` step):**
+- Prefers `codex-native` (if installed and authenticated)
+- Falls back to `codex` (if installed and authenticated)
+- Optional fallback: Anthropic API (`ANTHROPIC_API_KEY`)
 
 ---
 

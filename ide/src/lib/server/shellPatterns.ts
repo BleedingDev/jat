@@ -77,7 +77,7 @@ export function getReadyPatternsForAgent(command: string): string[] {
 	if (command === 'opencode') {
 		return OPENCODE_READY_PATTERNS;
 	}
-	if (command === 'codex') {
+	if (command === 'codex' || command === 'codex-native') {
 		return CODEX_READY_PATTERNS;
 	}
 	if (command === 'gemini') {

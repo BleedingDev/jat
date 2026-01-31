@@ -1,17 +1,21 @@
 /**
  * Session Resume API
- * POST /api/sessions/[name]/resume - Resume a completed session using Claude's -r flag
+ * POST /api/sessions/[name]/resume - Resume a completed session (agent-agnostic)
  *
- * Uses the session_id from signal files to resume the Claude Code conversation.
- * Launches a new terminal window with the resumed session.
+ * Claude Code: Uses the Claude conversation session_id to resume via `claude -r`.
+ * Codex CLI: Uses `codex resume` (prefers explicit session id; falls back to --last).
+ * codex-native: Uses `codex-native tui --resume` (prefers explicit session id; falls back to --resume-last).
+ * Launches a new terminal window attached to a tmux session.
  */
 
 import { json } from '@sveltejs/kit';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { join, basename } from 'path';
 import Database from 'better-sqlite3';
+import { getAgentProgram } from '$lib/utils/agentConfig.js';
+import { getAgentModel } from '$lib/types/agentProgram.js';
 
 const execAsync = promisify(exec);
 
@@ -53,20 +57,23 @@ function getProjectSlug(projectPath) {
 }
 
 /**
- * Look up agent's project path from Agent Mail database
+ * Look up agent info from Agent Mail database
  * @param {string} agentName - Agent name to look up
- * @returns {string | null} - Project path or null if not found
+ * @returns {{ projectPath: string, program: string | null, model: string | null } | null}
  */
-function getAgentProjectFromDb(agentName) {
+function getAgentInfoFromDb(agentName) {
 	if (!existsSync(AGENT_MAIL_DB_PATH)) {
 		return null;
 	}
 
 	try {
 		const db = new Database(AGENT_MAIL_DB_PATH, { readonly: true });
-		const result = /** @type {{ project: string } | undefined} */ (
+		const result = /** @type {{ project: string, program: string | null, model: string | null } | undefined} */ (
 			db.prepare(`
-				SELECT p.human_key as project
+				SELECT
+					p.human_key as project,
+					a.program as program,
+					a.model as model
 				FROM agents a
 				JOIN projects p ON a.project_id = p.id
 				WHERE a.name = ?
@@ -76,7 +83,11 @@ function getAgentProjectFromDb(agentName) {
 
 		if (result?.project) {
 			// The human_key is already the full path (e.g., /home/jw/code/steelbridge)
-			return result.project;
+			return {
+				projectPath: result.project,
+				program: result.program ?? null,
+				model: result.model ?? null
+			};
 		}
 	} catch (e) {
 		console.error(`Failed to query Agent Mail DB for ${agentName}:`, e);
@@ -151,12 +162,116 @@ function findSessionIdFromJsonl(agentName, projectPath) {
 }
 
 /**
- * Find session_id from signal files or persistent agent session files
+ * Find a provider session_id from signal files (tmux signal + timeline).
+ * Works for any agent as long as jat-signal included a session_id value.
  * @param {string} sessionName - tmux session name (e.g., "jat-QuickOcean")
- * @param {string | null} projectPath - project path to search for persistent session files
- * @returns {string | null} - Claude session_id or null if not found
+ * @returns {string | null}
  */
-function findSessionId(sessionName, projectPath = null) {
+/**
+ * Read a small prefix of a file for fast substring checks.
+ * Avoids loading large Codex session JSONL files fully.
+ * @param {string} filePath
+ * @param {number} [maxBytes]
+ * @returns {string}
+ */
+function readFilePrefix(filePath, maxBytes = 1024 * 1024) {
+	try {
+		const fd = openSync(filePath, 'r');
+		try {
+			const buffer = Buffer.allocUnsafe(maxBytes);
+			const bytesRead = readSync(fd, buffer, 0, maxBytes, 0);
+			return buffer.toString('utf-8', 0, bytesRead);
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		return '';
+	}
+}
+
+/**
+ * Extract a provider session id from a Codex session JSONL filename.
+ * Codex stores sessions like: rollout-YYYY-MM-DDTHH-MM-SS-<uuid>.jsonl
+ * @param {string} filePath
+ * @returns {string | null}
+ */
+function extractCodexSessionIdFromPath(filePath) {
+	const base = basename(filePath);
+	const match = base.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i);
+	return match ? match[1] : null;
+}
+
+/**
+ * Search Codex session logs for this agent's most recent provider session id.
+ * Uses stable JAT markers embedded in the spawn prompt:
+ * - [JAT_AGENT_NAME:Name]
+ * - [JAT_TMUX_SESSION:jat-Name]
+ * Falls back to the legacy plain-text prompt line if markers aren't present.
+ * @param {string} agentName
+ * @param {string | null} projectPath
+ * @returns {string | null}
+ */
+function findCodexSessionIdFromSessions(agentName, projectPath) {
+	const homeDir = process.env.HOME || '';
+	const sessionsRoot = join(homeDir, '.codex', 'sessions');
+	if (!homeDir || !existsSync(sessionsRoot)) {
+		return null;
+	}
+
+	const marker1 = `[JAT_AGENT_NAME:${agentName}]`;
+	const marker2 = `[JAT_TMUX_SESSION:jat-${agentName}]`;
+	const legacyNeedle = `Your agent name is: ${agentName}`;
+
+	/** @type {Array<{ path: string; modified_millis: number; cwds?: string[] }>} */
+	let entries = [];
+	const indexFile = join(sessionsRoot, '_schaltwerk_session_index_cache.json');
+	if (existsSync(indexFile)) {
+		try {
+			const index = JSON.parse(readFileSync(indexFile, 'utf-8'));
+			if (Array.isArray(index.entries)) {
+				entries = index.entries;
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	// Prefer same cwd if projectPath is known; otherwise scan most recent sessions.
+	let candidates = entries;
+	if (projectPath) {
+		const normalizedProjectPath = projectPath.replace(/\/$/, '');
+		const byCwd = entries.filter((e) =>
+			Array.isArray(e.cwds) && e.cwds.some((cwd) => String(cwd).replace(/\/$/, '') === normalizedProjectPath)
+		);
+		if (byCwd.length > 0) {
+			candidates = byCwd;
+		}
+	}
+
+	candidates = candidates
+		.filter((e) => typeof e.path === 'string' && e.path.endsWith('.jsonl'))
+		.sort((a, b) => (b.modified_millis || 0) - (a.modified_millis || 0));
+
+	const maxCandidates = 200;
+	for (const entry of candidates.slice(0, maxCandidates)) {
+		try {
+			const prefix = readFilePrefix(entry.path, 1024 * 1024);
+			if (!prefix) continue;
+			if (prefix.includes(marker1) || prefix.includes(marker2) || prefix.includes(legacyNeedle)) {
+				const id = extractCodexSessionIdFromPath(entry.path);
+				if (id) {
+					console.log(`Found Codex session for ${agentName}: ${id}`);
+					return id;
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	return null;
+}
+function findSessionIdFromSignals(sessionName) {
 	// Try tmux-named signal file first (in /tmp, cleared on restart)
 	const tmuxSignalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
 	if (existsSync(tmuxSignalFile)) {
@@ -171,7 +286,6 @@ function findSessionId(sessionName, projectPath = null) {
 	}
 
 	// Fallback: search timeline for the session (in /tmp, cleared on restart)
-	const agentName = sessionName.replace(/^jat-/, '');
 	const timelineFile = `/tmp/jat-timeline-${sessionName}.jsonl`;
 	if (existsSync(timelineFile)) {
 		try {
@@ -190,6 +304,22 @@ function findSessionId(sessionName, projectPath = null) {
 		} catch (e) {
 			console.error(`Failed to read timeline ${timelineFile}:`, e);
 		}
+	}
+
+	return null;
+}
+
+/**
+ * Find Claude session_id from signal files or persistent agent session files
+ * @param {string} sessionName - tmux session name (e.g., "jat-QuickOcean")
+ * @param {string | null} projectPath - project path to search for persistent session files
+ * @returns {string | null} - Claude session_id or null if not found
+ */
+function findSessionId(sessionName, projectPath = null) {
+	const agentName = sessionName.replace(/^jat-/, '');
+	const fromSignals = findSessionIdFromSignals(sessionName);
+	if (fromSignals) {
+		return fromSignals;
 	}
 
 	// Fallback: search persistent .claude/sessions/agent-*.txt files (survive restarts)
@@ -235,7 +365,6 @@ function findSessionId(sessionName, projectPath = null) {
 	// Final fallback: scan Claude JSONL session files for agent's signals
 	// This catches sessions where .claude/sessions/agent-*.txt was never created
 	if (projectPath) {
-		const agentName = sessionName.replace(/^jat-/, '');
 		const jsonlSessionId = findSessionIdFromJsonl(agentName, projectPath);
 		if (jsonlSessionId) {
 			return jsonlSessionId;
@@ -294,8 +423,9 @@ async function getProjectPath(agentName) {
 	if (existsSync(signalFile)) {
 		try {
 			const data = JSON.parse(readFileSync(signalFile, 'utf-8'));
-			if (data.data?.project) {
-				const resolved = resolveProjectPath(data.data.project);
+			const projectRef = data.data?.project || data.project;
+			if (projectRef) {
+				const resolved = resolveProjectPath(projectRef);
 				if (resolved) return resolved;
 			}
 		} catch (e) {
@@ -312,8 +442,9 @@ async function getProjectPath(agentName) {
 			for (let i = lines.length - 1; i >= 0; i--) {
 				try {
 					const event = JSON.parse(lines[i]);
-					if (event.data?.project) {
-						const resolved = resolveProjectPath(event.data.project);
+					const projectRef = event.data?.project || event.project;
+					if (projectRef) {
+						const resolved = resolveProjectPath(projectRef);
 						if (resolved) return resolved;
 					}
 				} catch (e) {
@@ -327,9 +458,9 @@ async function getProjectPath(agentName) {
 
 	// Query Agent Mail database for agent's registered project
 	// This is the most reliable source when temp files don't exist (e.g., after reboot)
-	const dbProjectPath = getAgentProjectFromDb(agentName);
-	if (dbProjectPath && existsSync(dbProjectPath)) {
-		return dbProjectPath;
+	const dbInfo = getAgentInfoFromDb(agentName);
+	if (dbInfo?.projectPath && existsSync(dbInfo.projectPath)) {
+		return dbInfo.projectPath;
 	}
 
 	// Default to current working directory
@@ -338,10 +469,10 @@ async function getProjectPath(agentName) {
 
 /**
  * POST /api/sessions/[name]/resume
- * Resume a session using Claude's -r flag
+ * Resume a session in a new tmux session.
  *
  * Body can include:
- * - session_id: Claude conversation ID to resume (if known)
+ * - session_id: Provider session ID to resume (if known)
  * - project: Project name or path (optional override)
  */
 /** @type {import('./$types').RequestHandler} */
@@ -357,6 +488,7 @@ export async function POST({ params, request }) {
 		}
 
 		// Parse request body for optional session_id
+		/** @type {{ session_id?: string; project?: string; agentProgram?: string; model?: string }} */
 		let body = {};
 		try {
 			body = await request.json();
@@ -378,16 +510,41 @@ export async function POST({ params, request }) {
 			}, { status: 404 });
 		}
 
-		// Use provided session_id or look it up from signal files AND persistent agent files
+		// Determine which agent program to resume (Agent Mail is authoritative)
+		const dbInfo = getAgentInfoFromDb(agentName);
+		const agentProgramId = body.agentProgram || dbInfo?.program || 'claude-code';
+		const agentProgram = agentProgramId ? getAgentProgram(agentProgramId) : undefined;
+		const agentCommand =
+			agentProgram?.command ||
+			(agentProgramId === 'codex-native'
+				? 'codex-native'
+				: agentProgramId === 'codex-cli'
+					? 'codex'
+					: 'claude');
+
+		// Resolve model (best-effort; used for Codex resume)
+		const modelShortName = body.model || dbInfo?.model || null;
+		const resolvedModel = modelShortName && agentProgram ? getAgentModel(agentProgram, modelShortName) : null;
+
+		// Use provided session_id or look it up from signal files (and provider-specific fallbacks)
 		let sessionId = body.session_id;
 		if (!sessionId) {
-			sessionId = findSessionId(sessionName, projectPath);
+			if (agentCommand === 'claude') {
+				sessionId = findSessionId(sessionName, projectPath);
+			} else {
+				sessionId = findSessionIdFromSignals(sessionName);
+				// For Codex-family sessions, recover provider session id from ~/.codex/sessions when signals lack session_id.
+				if (!sessionId && (agentCommand === 'codex' || agentCommand === 'codex-native')) {
+					sessionId = findCodexSessionIdFromSessions(agentName, projectPath);
+				}
+			}
 		}
 
-		if (!sessionId) {
+		// Claude requires an explicit conversation id; Codex can fall back to --last.
+		if (agentCommand === 'claude' && !sessionId) {
 			return json({
 				error: 'Session ID not found',
-				message: `Could not find session ID for agent '${agentName}'. No matching session files found in /tmp or .claude/sessions/.`,
+				message: `Could not find Claude session ID for agent '${agentName}'. No matching session files found in /tmp or .claude/sessions/.`,
 				agentName,
 				sessionName,
 				projectPath
@@ -418,13 +575,13 @@ export async function POST({ params, request }) {
 			}
 		}
 
-		// Get claude flags from config
+		// Get claude flags from config (legacy)
 		let claudeFlags = '--dangerously-skip-permissions';
 		if (existsSync(configPath)) {
 			try {
 				const config = JSON.parse(readFileSync(configPath, 'utf-8'));
 				claudeFlags = config.defaults?.claude_flags || claudeFlags;
-			} catch (e) {
+			} catch {
 				// Use default
 			}
 		}
@@ -433,8 +590,11 @@ export async function POST({ params, request }) {
 		const resumeMarker = `/tmp/jat-resumed-${sessionName}.json`;
 		const resumeData = JSON.stringify({
 			resumed: true,
-			originalSessionId: sessionId,
+			originalSessionId: sessionId || null,
 			agentName,
+			agentProgram: agentProgramId,
+			agentCommand,
+			model: resolvedModel?.id || modelShortName || null,
 			project: projectPath,
 			resumedAt: new Date().toISOString()
 		}, null, 2);
@@ -445,11 +605,64 @@ export async function POST({ params, request }) {
 			console.error('Failed to write resume marker:', e);
 		}
 
+		const escapeForDoubleQuotedShell = (/** @type {unknown} */ s) =>
+			String(s)
+				.replace(/\\/g, '\\\\')
+				.replace(/"/g, '\\"')
+				.replace(/\$/g, '\\$')
+				.replace(/`/g, '\\`');
+
 		// Build the resume command wrapped in a tmux session for IDE tracking
 		// 1. Kill any existing session with this name (in case it's stale)
-		// 2. Create new tmux session with claude -r running inside
+		// 2. Create new tmux session with the agent resume command running inside
 		// 3. Attach terminal to that session
-		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "claude ${claudeFlags} -r '${sessionId}'"`;
+		let innerCmd = '';
+
+		if (agentCommand === 'claude') {
+			// Merge agent-program flags with legacy claude_flags (best-effort)
+			const extraFlags = (agentProgram?.flags || []).filter((f) => !claudeFlags.includes(f));
+			const allFlags = [claudeFlags, ...extraFlags].filter(Boolean).join(' ').trim();
+			innerCmd = `claude ${allFlags} -r '${sessionId}'`;
+		} else if (agentCommand === 'codex') {
+			const parts = ['codex', 'resume'];
+			if (resolvedModel?.id) {
+				parts.push('--model', resolvedModel.id);
+			}
+			if (agentProgram?.flags?.length) {
+				parts.push(...agentProgram.flags);
+			}
+			if (sessionId) {
+				parts.push(sessionId);
+			} else {
+				parts.push('--last');
+			}
+			innerCmd = parts.join(' ');
+		} else if (agentCommand === 'codex-native') {
+			// codex-native does not have a 'resume' subcommand; use the TUI resume flags.
+			const parts = ['codex-native', 'tui'];
+			if (resolvedModel?.id) {
+				parts.push('--model', resolvedModel.id);
+			}
+			if (agentProgram?.flags?.length) {
+				parts.push(...agentProgram.flags);
+			}
+			if (sessionId) {
+				parts.push('--resume', sessionId);
+			} else {
+				parts.push('--resume-last');
+			}
+			innerCmd = parts.join(' ');
+		} else {
+			return json({
+				error: 'Unsupported agent program',
+				message: `Unsupported agent command '${agentCommand}' for resume`,
+				agentName,
+				sessionName,
+				agentProgram: agentProgramId
+			}, { status: 400 });
+		}
+
+		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "${escapeForDoubleQuotedShell(innerCmd)}"`;
 		const tmuxAttachCmd = `tmux attach-session -t "${sessionName}"`;
 
 		// First create the tmux session
@@ -527,7 +740,10 @@ export async function POST({ params, request }) {
 			success: true,
 			agentName,
 			sessionName,
-			sessionId,
+			sessionId: sessionId || null,
+			agentProgram: agentProgramId,
+			agentCommand,
+			model: resolvedModel?.id || modelShortName || null,
 			projectPath,
 			terminal,
 			message: `Resuming session for ${agentName} in new terminal`,

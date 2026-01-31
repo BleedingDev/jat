@@ -217,9 +217,7 @@ case "$STEP" in
             git commit -m "$(cat <<EOF
 ${TASK_TYPE}(${TASK_ID}): ${TASK_TITLE}
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
+Generated with JAT (agent: ${AGENT_NAME})
 EOF
 )"
             log_success "Changes committed"

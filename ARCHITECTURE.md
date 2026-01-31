@@ -2,6 +2,8 @@
 
 Technical architecture documentation explaining design decisions, schema design, token savings analysis, and tool composition patterns.
 
+> **Note (2026-01-31):** JAT is moving to an **agent-agnostic** orchestration model with **Codex-native as the default harness** while preserving **Claude Code compatibility**. Some sections below are Claude-centric/historical. For the Codex-first migration plan and current direction, see `docs/codex-native-migration.md`.
+
 ---
 
 ## Table of Contents
@@ -34,7 +36,7 @@ Technical architecture documentation explaining design decisions, schema design,
 
 3. **Prompts are code** (inspired by Mario Zechner)
    - Slash commands are markdown files with instructions
-   - Claude executes step-by-step logic
+   - The active agent harness executes step-by-step logic (Claude Code, Codex CLI, etc.)
    - Self-documenting coordination protocols
 
 4. **Minimal token overhead**

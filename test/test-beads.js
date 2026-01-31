@@ -85,9 +85,10 @@ if (allTasks.length > 0) {
         console.log(`    • ${dep.id} - ${dep.title} (${dep.status})`);
       });
     }
-    console.log(`  Dependents: ${taskDetails.dependents.length} task(s)`);
-    if (taskDetails.dependents.length > 0) {
-      taskDetails.dependents.forEach(dep => {
+    const dependents = taskDetails.dependents || taskDetails.blocked_by || [];
+    console.log(`  Dependents: ${dependents.length} task(s)`);
+    if (dependents.length > 0) {
+      dependents.forEach(dep => {
         console.log(`    • ${dep.id} - ${dep.title} (${dep.status})`);
       });
     }

@@ -12,6 +12,7 @@
 #   jat-signal-validate starting '{"agentName":"...",...}'
 #   jat-signal-validate compacting '{"reason":"...","contextSizeBefore":...}'
 #   jat-signal-validate question '{"question":"...","questionType":"choice",...}'
+#   jat-signal-validate paused '{"taskId":"...","resumable":true,...}'
 #
 # Returns:
 #   0 - Valid payload
@@ -104,6 +105,12 @@ error_missing_field() {
         question:questionType)
             echo "  Expected: \"questionType\": \"choice\" (one of: choice, confirm, input)" >&2
             ;;
+        paused:taskId)
+            echo "  Expected: \"taskId\": \"jat-abc\" (the task being paused)" >&2
+            ;;
+        paused:resumable)
+            echo "  Expected: \"resumable\": true (boolean)" >&2
+            ;;
         *)
             if [[ -n "$example" ]]; then
                 echo "  Expected: \"${field}\": ${example}" >&2
@@ -149,14 +156,10 @@ show_required_fields() {
         starting)
             echo "Required fields for 'starting' signal:" >&2
             echo "  - agentName: Your agent name" >&2
-            echo "  - sessionId: Claude Code session ID (from get-current-session-id)" >&2
             echo "  - project: Project name (e.g., \"jat\")" >&2
-            echo "  - model: Full model ID (e.g., \"claude-opus-4-5-20251101\")" >&2
-            echo "  - gitBranch: Current git branch" >&2
-            echo "  - gitStatus: \"clean\" or \"dirty\"" >&2
             echo "" >&2
             echo "Example:" >&2
-            echo "  jat-signal starting '{\"agentName\":\"Agent\",\"sessionId\":\"...\",\"project\":\"jat\",\"model\":\"claude-opus-4-5-20251101\",\"gitBranch\":\"master\",\"gitStatus\":\"clean\",\"tools\":[],\"uncommittedFiles\":[]}'" >&2
+            echo "  jat-signal starting '{\"agentName\":\"Agent\",\"project\":\"jat\",\"model\":\"gpt-5.2-codex\",\"gitBranch\":\"master\",\"gitStatus\":\"clean\"}'" >&2
             ;;
         completing)
             echo "Required fields for 'completing' signal:" >&2
@@ -188,6 +191,14 @@ show_required_fields() {
             echo "" >&2
             echo "Example:" >&2
             echo "  jat-signal question '{\"question\":\"Continue?\",\"questionType\":\"confirm\"}'" >&2
+            ;;
+        paused)
+            echo "Required fields for 'paused' signal:" >&2
+            echo "  - taskId: The Beads task ID" >&2
+            echo "  - resumable: Boolean (true/false)" >&2
+            echo "" >&2
+            echo "Example:" >&2
+            echo "  jat-signal paused '{\"taskId\":\"jat-abc\",\"taskTitle\":\"Fix bug\",\"resumable\":true}'" >&2
             ;;
     esac
 }
@@ -307,6 +318,7 @@ show_usage() {
     echo "  starting    - Validate rich starting signal"
     echo "  compacting  - Validate rich compacting signal"
     echo "  question    - Validate question signal for IDE"
+    echo "  paused      - Validate paused signal"
     echo ""
     echo "Examples:"
     echo "  jat-signal-validate complete '{\"taskId\":\"jat-abc\",\"agentName\":\"Agent\"}'"
@@ -977,42 +989,58 @@ validate_starting() {
     # Required: agentName (string, non-empty)
     require_string_field "$payload" "starting" "agentName" || return 1
 
-    # Required: sessionId (string, non-empty) - per schema
-    require_string_field "$payload" "starting" "sessionId" || return 1
-
     # Required: project (string, non-empty) - per schema
     require_string_field "$payload" "starting" "project" || return 1
 
-    # Required: model (string, non-empty) - per schema
-    require_string_field "$payload" "starting" "model" || return 1
-
-    # Required: gitBranch (string, non-empty) - per schema
-    require_string_field "$payload" "starting" "gitBranch" || return 1
-
-    # Required: gitStatus (must be "clean" or "dirty") - per schema
-    if ! echo "$payload" | jq -e 'has("gitStatus")' >/dev/null 2>&1; then
-        error_missing_field "starting" "gitStatus"
-        show_required_fields "starting"
-        return 1
+    # Optional: sessionId (if present, must be non-empty string)
+    if echo "$payload" | jq -e 'has("sessionId")' >/dev/null 2>&1; then
+        local session_id
+        session_id=$(echo "$payload" | jq -r '.sessionId // ""')
+        if [[ -z "$session_id" ]]; then
+            echo "Error: starting.sessionId cannot be empty when provided" >&2
+            return 1
+        fi
     fi
 
-    local git_status
-    git_status=$(echo "$payload" | jq -r '.gitStatus // ""')
-    case "$git_status" in
-        clean|dirty) ;;
-        "")
-            echo "Error: starting.gitStatus cannot be empty" >&2
-            echo "  Expected: \"gitStatus\": \"clean\" (one of: clean, dirty)" >&2
-            show_required_fields "starting"
+    # Optional: model (if present, must be non-empty string)
+    if echo "$payload" | jq -e 'has("model")' >/dev/null 2>&1; then
+        local model
+        model=$(echo "$payload" | jq -r '.model // ""')
+        if [[ -z "$model" ]]; then
+            echo "Error: starting.model cannot be empty when provided" >&2
             return 1
-            ;;
-        *)
-            echo "Error: starting.gitStatus must be one of: clean, dirty" >&2
-            echo "  Got: \"$git_status\"" >&2
-            echo "  Expected: \"gitStatus\": \"clean\" or \"gitStatus\": \"dirty\"" >&2
+        fi
+    fi
+
+    # Optional: gitBranch (if present, must be non-empty string)
+    if echo "$payload" | jq -e 'has("gitBranch")' >/dev/null 2>&1; then
+        local git_branch
+        git_branch=$(echo "$payload" | jq -r '.gitBranch // ""')
+        if [[ -z "$git_branch" ]]; then
+            echo "Error: starting.gitBranch cannot be empty when provided" >&2
             return 1
-            ;;
-    esac
+        fi
+    fi
+
+    # Optional: gitStatus (if present, must be "clean" or "dirty")
+    if echo "$payload" | jq -e 'has("gitStatus")' >/dev/null 2>&1; then
+        local git_status
+        git_status=$(echo "$payload" | jq -r '.gitStatus // ""')
+        case "$git_status" in
+            clean|dirty) ;;
+            "")
+                echo "Error: starting.gitStatus cannot be empty when provided" >&2
+                echo "  Expected: \"gitStatus\": \"clean\" (one of: clean, dirty)" >&2
+                return 1
+                ;;
+            *)
+                echo "Error: starting.gitStatus must be one of: clean, dirty" >&2
+                echo "  Got: \"$git_status\"" >&2
+                echo "  Expected: \"gitStatus\": \"clean\" or \"gitStatus\": \"dirty\"" >&2
+                return 1
+                ;;
+        esac
+    fi
 
     # Optional: taskId (if present, must be non-empty string)
     if echo "$payload" | jq -e 'has("taskId")' >/dev/null 2>&1; then
@@ -1194,6 +1222,53 @@ validate_question() {
     if [[ -n "$unknown" ]]; then
         echo "Error: question signal has unknown field '$unknown'" >&2
         return 1
+    fi
+
+    return 0
+}
+
+validate_paused() {
+    local payload="$1"
+
+    # Must be an object
+    if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
+        echo "Error: paused signal must be a JSON object" >&2
+        show_required_fields "paused"
+        return 1
+    fi
+
+    # Required: taskId (string, non-empty)
+    require_string_field "$payload" "paused" "taskId" || return 1
+
+    # Required: resumable (boolean)
+    require_boolean_field "$payload" "paused" "resumable" || return 1
+
+    # Optional: taskTitle (if present, must be non-empty string)
+    if echo "$payload" | jq -e 'has("taskTitle")' >/dev/null 2>&1; then
+        local task_title
+        task_title=$(echo "$payload" | jq -r '.taskTitle // ""')
+        if [[ -z "$task_title" ]]; then
+            echo "Error: paused.taskTitle cannot be empty when provided" >&2
+            return 1
+        fi
+    fi
+
+    # Optional: agentName (if present, must be non-empty string)
+    if echo "$payload" | jq -e 'has("agentName")' >/dev/null 2>&1; then
+        local agent_name
+        agent_name=$(echo "$payload" | jq -r '.agentName // ""')
+        if [[ -z "$agent_name" ]]; then
+            echo "Error: paused.agentName cannot be empty when provided" >&2
+            return 1
+        fi
+    fi
+
+    # Optional: reason (string)
+    if echo "$payload" | jq -e 'has("reason")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.reason | type == "string"' >/dev/null 2>&1; then
+            echo "Error: paused.reason must be a string" >&2
+            return 1
+        fi
     fi
 
     return 0
@@ -1450,9 +1525,12 @@ case "$SIGNAL_TYPE" in
     question)
         validate_question "$PAYLOAD"
         ;;
+    paused)
+        validate_paused "$PAYLOAD"
+        ;;
     *)
         echo "Error: Unknown signal type '$SIGNAL_TYPE'" >&2
-        echo "Valid types: complete, working, review, needs_input, idle, completing, starting, compacting, question" >&2
+        echo "Valid types: complete, working, review, needs_input, idle, completing, starting, compacting, question, paused" >&2
         exit 2
         ;;
 esac

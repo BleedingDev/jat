@@ -26,13 +26,11 @@ import { promisify } from 'util';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import Database from 'better-sqlite3';
 import {
-	DEFAULT_MODEL,
 	AGENT_MAIL_URL,
-	CLAUDE_STARTUP_TIMEOUT_SECONDS
 } from '$lib/config/spawnConfig.js';
 import { getTaskById } from '$lib/server/beads.js';
 import { getProjectPath, getJatDefaults } from '$lib/server/projectPaths.js';
-import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS, isYoloWarningDialog, getReadyPatternsForAgent } from '$lib/server/shellPatterns.js';
+import { SHELL_PROMPT_PATTERNS, isYoloWarningDialog, getReadyPatternsForAgent } from '$lib/server/shellPatterns.js';
 import { stripAnsi } from '$lib/utils/ansiToHtml.js';
 import {
 	evaluateRouting,
@@ -402,7 +400,16 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 		// Add model flag (agent-specific)
 		if (agent.command === 'claude') {
 			agentCmd += ` --model ${model.shortName}`;
-		} else if (agent.command === 'codex' || agent.command === 'gemini') {
+		} else if (agent.command === 'codex') {
+			agentCmd += ` --model ${model.id}`;
+			// Add reasoning effort for Codex CLI (uses model's costTier: low/medium/high/xhigh)
+			if (model.costTier) {
+				agentCmd += ` --config model_reasoning_effort="${model.costTier}"`;
+			}
+		} else if (agent.command === 'codex-native') {
+			// codex-native is Codex-family but uses a different flag surface than the official CLI.
+			agentCmd += ` --model ${model.id}`;
+		} else if (agent.command === 'gemini') {
 			agentCmd += ` --model ${model.id}`;
 		} else if (agent.command === 'opencode') {
 			// OpenCode uses provider/model format (e.g., anthropic/claude-sonnet-4-20250514)
@@ -452,7 +459,18 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 			}
 			if (agentName) {
 				promptParts.push(`Your agent name is: ${agentName}`);
+				// Stable markers for session->agent correlation in provider logs.
+				// Used to recover provider session IDs for resume when --last is ambiguous.
+				promptParts.push(`[JAT_AGENT_NAME:${agentName}]`);
+				promptParts.push(`[JAT_TMUX_SESSION:jat-${agentName}]`);
 			}
+			if (taskId) {
+				promptParts.push(`[JAT_TASK_ID:${taskId}]`);
+			}
+			if (taskTitle) {
+				promptParts.push(`[JAT_TASK_TITLE:${taskTitle}]`);
+			}
+			promptParts.push(`[JAT_PROJECT_PATH:${projectPath}]`);
 			promptParts.push('Read the CLAUDE.md file in the project root for JAT workflow instructions.');
 			promptParts.push('Start by understanding the task and implementing it.');
 
@@ -472,7 +490,18 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 			}
 			if (agentName) {
 				promptParts.push(`Your agent name is: ${agentName}`);
+				// Stable markers for session->agent correlation in provider logs.
+				// Used to recover provider session IDs for resume when --last is ambiguous.
+				promptParts.push(`[JAT_AGENT_NAME:${agentName}]`);
+				promptParts.push(`[JAT_TMUX_SESSION:jat-${agentName}]`);
 			}
+			if (taskId) {
+				promptParts.push(`[JAT_TASK_ID:${taskId}]`);
+			}
+			if (taskTitle) {
+				promptParts.push(`[JAT_TASK_TITLE:${taskTitle}]`);
+			}
+			promptParts.push(`[JAT_PROJECT_PATH:${projectPath}]`);
 			promptParts.push('Read the CLAUDE.md file in the project root for JAT workflow instructions.');
 			promptParts.push('Start by understanding the task and implementing it.');
 
@@ -650,24 +679,25 @@ export async function POST({ request }) {
 			}
 		}
 
-		// Step 3: Create tmux session with Claude Code
+		// Step 3: Create tmux session for the selected agent
 		const sessionName = `jat-${agentName}`;
 
-		// Step 3a: Write agent identity file for session-start hook to restore
+		// Step 3a (Claude-only): Write agent identity file for SessionStart hook to restore
 		// The hook (session-start-restore-agent.sh) uses this to set up .claude/sessions/agent-{sessionId}.txt
-		// We use tmux session name as the key since that's known before Claude starts
-		try {
-			const sessionsDir = `${projectPath}/.claude/sessions`;
-			mkdirSync(sessionsDir, { recursive: true });
+		if (selectedAgent.command === 'claude') {
+			try {
+				const sessionsDir = `${projectPath}/.claude/sessions`;
+				mkdirSync(sessionsDir, { recursive: true });
 
-			// Write a file that maps tmux session name to agent name
-			// The hook can look this up using: tmux display-message -p '#S' to get session name
-			const tmuxAgentFile = `${sessionsDir}/.tmux-agent-${sessionName}`;
-			writeFileSync(tmuxAgentFile, agentName, 'utf-8');
-			console.log(`[spawn] Wrote agent identity file: ${tmuxAgentFile}`);
-		} catch (err) {
-			// Non-fatal - hook will still work through other mechanisms
-			console.warn('[spawn] Failed to write agent identity file:', err);
+				// Write a file that maps tmux session name to agent name
+				// The hook can look this up using: tmux display-message -p '#S' to get session name
+				const tmuxAgentFile = `${sessionsDir}/.tmux-agent-${sessionName}`;
+				writeFileSync(tmuxAgentFile, agentName, 'utf-8');
+				console.log(`[spawn] Wrote agent identity file: ${tmuxAgentFile}`);
+			} catch (err) {
+				// Non-fatal - hook will still work through other mechanisms
+				console.warn('[spawn] Failed to write agent identity file:', err);
+			}
 		}
 
 		// Default tmux dimensions for proper terminal output width
@@ -795,7 +825,10 @@ export async function POST({ request }) {
 				// 3. We've waited at least 3 seconds (give agent command time to start)
 				const outputLowercase = paneOutput.toLowerCase();
 				const hasShellPatterns = SHELL_PROMPT_PATTERNS.some(p => paneOutput.includes(p));
-				const mentionsAgent = outputLowercase.includes(selectedAgent.command.toLowerCase());
+				const mentionsAgent =
+					outputLowercase.includes(selectedAgent.command.toLowerCase()) ||
+					// codex-native prints "Codex" but may not include the literal binary name
+					(selectedAgent.command === 'codex-native' && outputLowercase.includes('codex'));
 				const isLikelyShellPrompt = hasShellPatterns && !mentionsAgent && waited > 3000;
 
 				if (hasAgentPatterns) {

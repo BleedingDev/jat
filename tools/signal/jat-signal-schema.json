@@ -5,7 +5,7 @@
   "definitions": {
     "signalState": {
       "type": "string",
-      "enum": ["working", "review", "idle", "needs_input", "starting", "compacting", "completing"],
+      "enum": ["working", "review", "idle", "needs_input", "starting", "compacting", "completing", "question", "paused"],
       "description": "Valid state signal values"
     },
     "estimatedScope": {
@@ -721,7 +721,7 @@
     "startingSignal": {
       "type": "object",
       "description": "Enhanced starting signal with agent capabilities",
-      "required": ["agentName", "project", "sessionId", "model", "gitBranch", "gitStatus"],
+      "required": ["agentName", "project"],
       "additionalProperties": false,
       "properties": {
         "agentName": {
@@ -734,7 +734,7 @@
         },
         "sessionId": {
           "type": "string",
-          "description": "Claude Code session ID"
+          "description": "Agent session ID (provider-specific, optional)"
         },
         "taskId": {
           "type": "string",
@@ -764,6 +764,42 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "List of uncommitted files"
+        }
+      }
+    },
+    "pausedSignal": {
+      "type": "object",
+      "description": "Paused signal when a session is paused and can be resumed later",
+      "required": ["taskId", "resumable"],
+      "additionalProperties": false,
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "description": "Task ID that was paused"
+        },
+        "taskTitle": {
+          "type": "string",
+          "description": "Task title for display"
+        },
+        "agentName": {
+          "type": "string",
+          "description": "Agent name for this session"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the session was paused"
+        },
+        "resumable": {
+          "type": "boolean",
+          "description": "Whether the work can be resumed"
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Provider session ID (optional)"
+        },
+        "project": {
+          "type": "string",
+          "description": "Project being worked on (optional)"
         }
       }
     },
