@@ -11,6 +11,7 @@
 
 	import { onMount, onDestroy } from "svelte";
 	import { slide } from "svelte/transition";
+	import { goto } from "$app/navigation";
 	import SortDropdown from "$lib/components/SortDropdown.svelte";
 	import TasksActive from "$lib/components/sessions/TasksActive.svelte";
 	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
@@ -18,6 +19,7 @@
 	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
 	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
+	import TaskQuickAdd from "$lib/components/tasks/TaskQuickAdd.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
 	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer } from "$lib/stores/drawerStore";
 	import {
@@ -1033,6 +1035,13 @@
 				</svg>
 			</button>
 		</div>
+
+		<!-- Quick Add Bar -->
+		<TaskQuickAdd
+			selectedProject={selectedProject}
+			onTaskCreated={() => fetchAllData()}
+			onOpenWorkspace={() => goto('/tasks/create')}
+		/>
 
 		<!-- Selected Project Content -->
 		{#if selectedProject}

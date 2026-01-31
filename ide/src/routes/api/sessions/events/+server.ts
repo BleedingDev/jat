@@ -224,6 +224,7 @@ const SIGNAL_STATE_MAP: Record<string, string> = {
 	'compacting': 'compacting',
 	'completing': 'completing',
 	'polishing': 'polishing',  // Post-completion follow-up tweaks
+	'planning': 'planning',    // Interactive planning session
 };
 
 /**

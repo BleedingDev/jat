@@ -1,0 +1,391 @@
+<script lang="ts">
+	/**
+	 * CreatePlan — Planning session tab for the creation workspace
+	 *
+	 * Left side: project/model selectors, planning description, action buttons
+	 * Right side: SessionCard with live agent terminal for interactive planning
+	 */
+	import { onMount, onDestroy } from 'svelte';
+	import SessionCard from '$lib/components/work/SessionCard.svelte';
+	import {
+		fetch as fetchSessions,
+		addSession,
+		sendInput,
+		kill,
+		workSessionsState,
+		subscribeToOutputUpdates,
+		unsubscribeFromOutputUpdates
+	} from '$lib/stores/workSessions.svelte';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
+	import { playSuccessChime, playErrorSound } from '$lib/utils/soundEffects';
+	import { revokeAttachmentPreviews } from '$lib/utils/attachmentUpload';
+	import type { PendingAttachment } from '$lib/types/attachment';
+	import ProjectSelector from './ProjectSelector.svelte';
+	import AttachmentZone from './AttachmentZone.svelte';
+
+	interface Props {
+		projects: string[];
+		initialProject?: string;
+		hideProjectSelector?: boolean;
+		stacked?: boolean;
+		onTasksCreated?: () => void;
+	}
+
+	let {
+		projects = [],
+		initialProject = '',
+		hideProjectSelector = false,
+		stacked = false,
+		onTasksCreated = () => {},
+	}: Props = $props();
+
+	// State
+	let selectedProject = $state(initialProject || projects[0] || '');
+	let selectedModel = $state('sonnet');
+	let description = $state('');
+	let isSpawning = $state(false);
+	let activeSessionName = $state<string | null>(null);
+	let activeAgentName = $state<string | null>(null);
+	let contextSent = $state(false);
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let attachments = $state<PendingAttachment[]>([]);
+
+	$effect(() => {
+		if (initialProject) {
+			selectedProject = initialProject;
+		} else if (!selectedProject && projects.length > 0) {
+			selectedProject = projects[0];
+		}
+	});
+
+	// Get session from store reactively
+	let session = $derived.by(() => {
+		if (!activeSessionName) return null;
+		return workSessionsState.sessions.find(
+			(s) => s.sessionName === activeSessionName
+		) ?? null;
+	});
+
+	onMount(() => {
+		// Restore session from sessionStorage (persists across tab switches)
+		const stored = sessionStorage.getItem('jat-plan-session');
+		if (stored) {
+			try {
+				const { sessionName, agentName } = JSON.parse(stored);
+				activeSessionName = sessionName;
+				activeAgentName = agentName;
+			} catch {
+				sessionStorage.removeItem('jat-plan-session');
+			}
+		}
+
+		// Start polling + WebSocket output streaming
+		fetchSessions();
+		subscribeToOutputUpdates();
+		pollTimer = setInterval(() => fetchSessions(), 3000);
+	});
+
+	onDestroy(() => {
+		if (pollTimer) clearInterval(pollTimer);
+		unsubscribeFromOutputUpdates();
+		revokeAttachmentPreviews(attachments);
+	});
+
+	async function handleStartPlanning() {
+		if (isSpawning) return;
+
+		isSpawning = true;
+		try {
+			const response = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					project: selectedProject,
+					model: selectedModel,
+					mode: 'plan',
+				}),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.message || data.error || 'Failed to start planning session');
+			}
+
+			if (data.success && data.session) {
+				activeSessionName = data.session.sessionName;
+				activeAgentName = data.session.agentName;
+				contextSent = false;
+
+				// Add to store for WebSocket output tracking
+				addSession({
+					...data.session,
+					task: null,
+					lastCompletedTask: null,
+				});
+
+				// Persist across tab switches
+				sessionStorage.setItem('jat-plan-session', JSON.stringify({
+					sessionName: data.session.sessionName,
+					agentName: data.session.agentName,
+				}));
+
+				playSuccessChime();
+				successToast('Planning session started', `Agent: ${data.session.agentName}`);
+
+				// If user wrote a description, send it after agent initializes
+				if (description.trim()) {
+					setTimeout(() => sendPlanningContext(), 4000);
+				}
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : 'Failed to start planning session';
+			playErrorSound();
+			errorToast(msg);
+		} finally {
+			isSpawning = false;
+		}
+	}
+
+	async function sendPlanningContext() {
+		if (!activeSessionName || !description.trim() || contextSent) return;
+
+		const text = `I want to plan the following for the ${selectedProject} project:\n\n${description.trim()}\n\nHelp me think through requirements, architecture, and break this down into actionable tasks.`;
+
+		const sent = await sendInput(activeSessionName, text, 'text');
+		if (sent) {
+			contextSent = true;
+		}
+	}
+
+	async function handleConvertToTasks() {
+		if (!activeSessionName) return;
+		await sendInput(activeSessionName, 'Please convert our plan into a structured task tree. Create the tasks in Beads using bd create with proper types, priorities, labels, descriptions, and dependency ordering.', 'text');
+	}
+
+	async function handleEndSession() {
+		if (!activeSessionName) return;
+
+		const killed = await kill(activeSessionName);
+		if (killed) {
+			activeSessionName = null;
+			activeAgentName = null;
+			contextSent = false;
+			sessionStorage.removeItem('jat-plan-session');
+			successToast('Planning session ended');
+		}
+	}
+
+	async function handleSendInput(input: string, type: 'text' | 'key' | 'raw'): Promise<boolean | void> {
+		if (!activeSessionName) return false;
+
+		if (type === 'text') {
+			return sendInput(activeSessionName, input, 'text');
+		} else if (type === 'raw') {
+			return sendInput(activeSessionName, input, 'raw');
+		} else {
+			// type === 'key' — pass the key name as the type
+			return sendInput(activeSessionName, input, input as Parameters<typeof sendInput>[2]);
+		}
+	}
+</script>
+
+<div class="plan-container" class:plan-stacked={stacked}>
+	<!-- Left: Controls -->
+	<div class="plan-input">
+		<!-- Project selector -->
+		{#if !hideProjectSelector}
+		<div class="mb-3">
+			<label class="label py-1">
+				<span class="label-text text-sm font-medium">Project</span>
+			</label>
+			<ProjectSelector
+				projects={projects}
+				selected={selectedProject}
+				onSelect={(p) => selectedProject = p}
+				disabled={!!activeSessionName}
+			/>
+		</div>
+		{/if}
+
+		<!-- Model -->
+		<div class="form-control mb-3">
+			<label class="label py-1">
+				<span class="label-text text-sm font-medium">Model</span>
+			</label>
+			<select class="select select-sm select-bordered" bind:value={selectedModel} disabled={!!activeSessionName}>
+				<option value="opus">Opus</option>
+				<option value="sonnet">Sonnet</option>
+				<option value="haiku">Haiku</option>
+			</select>
+		</div>
+
+		<!-- Planning description -->
+		<div class="form-control">
+			<label class="label py-1">
+				<span class="label-text text-sm font-medium">What do you want to plan?</span>
+			</label>
+			<textarea
+				class="textarea textarea-bordered w-full text-sm"
+				rows={8}
+				bind:value={description}
+				disabled={contextSent}
+				placeholder={`Describe the feature or system you want to plan. Be specific about requirements, target users, and technical constraints.\n\nExample: Build a notification system with email and in-app alerts. Users should configure preferences per event type. Support batching to avoid notification fatigue.`}
+			onkeydown={(e) => {
+				if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+					e.preventDefault();
+					if (!activeSessionName && !isSpawning && description.trim()) {
+						handleStartPlanning();
+					} else if (activeSessionName && description.trim() && !contextSent) {
+						sendPlanningContext();
+					}
+				}
+			}}
+			></textarea>
+		</div>
+
+		<!-- Attachments (context for planning) -->
+		<div class="mt-3">
+			<AttachmentZone disabled={!!activeSessionName} bind:attachments />
+		</div>
+
+		<!-- Action buttons -->
+		<div class="flex flex-col gap-2 mt-4">
+			{#if !activeSessionName}
+				<button
+					class="btn btn-sm btn-primary"
+					onclick={handleStartPlanning}
+					disabled={isSpawning || !description.trim()}
+					title="Ctrl+Enter"
+				>
+					{#if isSpawning}
+						<span class="loading loading-spinner loading-xs"></span>
+						Starting...
+					{:else}
+						Start Planning <kbd class="kbd kbd-xs ml-1 opacity-50">Ctrl+Enter</kbd>
+					{/if}
+				</button>
+			{:else}
+				{#if description.trim() && !contextSent}
+					<button
+						class="btn btn-sm btn-secondary"
+						onclick={sendPlanningContext}
+						title="Ctrl+Enter"
+					>
+						Send Context to Agent <kbd class="kbd kbd-xs ml-1 opacity-50">Ctrl+Enter</kbd>
+					</button>
+				{/if}
+
+				<button
+					class="btn btn-sm btn-accent"
+					onclick={handleConvertToTasks}
+				>
+					Convert to Tasks
+				</button>
+
+				<button
+					class="btn btn-sm btn-ghost text-error"
+					onclick={handleEndSession}
+				>
+					End Session
+				</button>
+			{/if}
+		</div>
+
+		<!-- Session info -->
+		{#if activeSessionName && activeAgentName}
+			<div class="defaults-section">
+				<h4 class="text-xs font-medium opacity-50 mb-2">Session</h4>
+				<div class="text-xs opacity-70">
+					<div>Agent: <span class="font-mono">{activeAgentName}</span></div>
+					<div>Session: <span class="font-mono text-[0.6875rem]">{activeSessionName}</span></div>
+					{#if contextSent}
+						<div class="text-success mt-1">Context sent</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
+	</div>
+
+	<!-- Right: Terminal -->
+	<div class="plan-terminal">
+		{#if session}
+			<SessionCard
+				mode="agent"
+				sessionName={session.sessionName}
+				agentName={session.agentName || activeAgentName || ''}
+				task={null}
+				output={session.output}
+				lineCount={session.lineCount}
+				sseState={session._sseState}
+				headerless
+				onSendInput={handleSendInput}
+				onKillSession={handleEndSession}
+			/>
+		{:else if activeSessionName}
+			<div class="flex flex-col items-center justify-center py-12 gap-3">
+				<span class="loading loading-spinner loading-md"></span>
+				<span class="text-sm opacity-50">Connecting to planning session...</span>
+			</div>
+		{:else}
+			<div class="empty-state">
+				<div class="text-sm opacity-40 text-center">
+					<p class="mb-2">Select a project and describe what you want to plan.</p>
+					<p>Click "Start Planning" to begin a conversation with an AI agent.</p>
+					<p class="mt-4 text-xs opacity-60">
+						When your plan is ready, click "Convert to Tasks" to generate a task tree.
+					</p>
+				</div>
+			</div>
+		{/if}
+	</div>
+</div>
+
+<style>
+	.plan-container {
+		display: grid;
+		grid-template-columns: 1fr 1.5fr;
+		gap: 1.5rem;
+		height: 100%;
+	}
+
+	.plan-input {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.plan-terminal {
+		overflow: hidden;
+		border-radius: 0.5rem;
+		background: oklch(0.18 0.01 250 / 0.5);
+		border: 1px solid oklch(0.28 0.02 250 / 0.3);
+		display: flex;
+		flex-direction: column;
+	}
+
+	.defaults-section {
+		margin-top: 1rem;
+		padding: 0.75rem;
+		border-radius: 0.5rem;
+		background: oklch(0.18 0.01 250 / 0.3);
+		border: 1px solid oklch(0.28 0.02 250 / 0.2);
+	}
+
+	.empty-state {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 100%;
+		padding: 2rem;
+	}
+
+	.plan-container.plan-stacked {
+		grid-template-columns: 1fr;
+	}
+
+	@media (max-width: 768px) {
+		.plan-container {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

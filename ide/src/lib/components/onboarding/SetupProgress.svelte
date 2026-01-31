@@ -2,9 +2,10 @@
 	let { currentStep = 1 }: { currentStep: number } = $props();
 
 	const steps = [
-		{ num: 1, label: 'Prerequisites' },
-		{ num: 2, label: 'Add Project' },
-		{ num: 3, label: 'First Task' }
+		{ num: 1, label: 'Prerequisites', subtitle: 'Required tools' },
+		{ num: 2, label: 'Agent Harness', subtitle: 'AI coding tools' },
+		{ num: 3, label: 'Add Project', subtitle: 'Your codebase' },
+		{ num: 4, label: 'First Task', subtitle: 'Ready to go' }
 	];
 </script>
 
@@ -38,6 +39,12 @@
 				style="color: {isComplete ? 'oklch(0.65 0.12 145)' : isActive ? 'oklch(0.75 0.12 240)' : 'oklch(0.45 0.02 250)'};"
 			>
 				{step.label}
+			</span>
+			<span
+				class="text-[9px] transition-colors duration-300"
+				style="color: {isComplete ? 'oklch(0.55 0.06 145)' : isActive ? 'oklch(0.55 0.06 240)' : 'oklch(0.38 0.02 250)'};"
+			>
+				{step.subtitle}
 			</span>
 		</div>
 

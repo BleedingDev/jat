@@ -357,7 +357,7 @@ function selectAgentAndModel({ agentId, model, task }) {
  * @param {string} [params.taskTitle] - Task title for task injection
  * @returns {{ command: string, env: Record<string, string>, needsJatStart: boolean }}
  */
-function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, taskId, taskTitle }) {
+function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, taskId, taskTitle, mode }) {
 	// Build environment variables
 	/** @type {Record<string, string>} */
 	const env = { AGENT_MAIL_URL };
@@ -435,7 +435,10 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 
 		if (agent.command === 'claude') {
 			// Claude Code uses JAT bootstrap + /jat:start after startup
-			const jatBootstrap = `You are a JAT agent. Run /jat:start to begin work.`;
+			const projName = projectPath.split('/').filter(Boolean).pop() || 'project';
+			const jatBootstrap = mode === 'plan'
+				? `You are a planning assistant for the ${projName} project. Help the user plan features, discuss architecture, and think through requirements. When the user is ready to create tasks, they can use /jat:tasktree. Do NOT run /jat:start.`
+				: `You are a JAT agent. Run /jat:start to begin work.`;
 			agentCmd += ` --append-system-prompt '${jatBootstrap}'`;
 		} else if (taskInjectionMode === 'argument' && (agentName || taskId)) {
 			// Agents with argument injection (like Codex) - pass task as positional argument
@@ -486,7 +489,7 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 	// Claude Code: yes (uses /jat:start slash command)
 	// OpenCode with prompt injection: no (task already passed via --prompt)
 	const taskInjectionMode = agent.taskInjection || 'stdin';
-	const needsJatStart = agent.command === 'claude' || taskInjectionMode === 'stdin';
+	const needsJatStart = mode !== 'plan' && (agent.command === 'claude' || taskInjectionMode === 'stdin');
 
 	return {
 		command: cmdParts.join(' && '),
@@ -505,7 +508,8 @@ export async function POST({ request }) {
 			model = null,
 			attach = false,
 			imagePath = null,
-			project = null
+			project = null,
+			mode = 'task'
 		} = body;
 
 		// agentId is optional - if omitted, uses routing rules or fallback
@@ -680,7 +684,8 @@ export async function POST({ request }) {
 			jatDefaults,
 			agentName,
 			taskId,
-			taskTitle: task?.title
+			taskTitle: task?.title,
+			mode
 		});
 
 		console.log(`[spawn] Agent command: ${agentCmd.substring(0, 100)}...`);
@@ -716,11 +721,12 @@ export async function POST({ request }) {
 			}, { status: 500 });
 		}
 
-		// Write IDE-initiated "starting" signal for instant UI feedback
-		// This shows STARTING state immediately, before agent emits its own signal
+		// Write IDE-initiated signal for instant UI feedback
+		// For plan mode, write 'planning' state; otherwise write 'starting'
 		try {
+			const signalType = mode === 'plan' ? 'planning' : 'starting';
 			const startingSignal = {
-				type: 'starting',
+				type: signalType,
 				agentName,
 				sessionId: sessionName,
 				project: projectName,
@@ -732,7 +738,7 @@ export async function POST({ request }) {
 			};
 			const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
 			writeFileSync(signalFile, JSON.stringify(startingSignal, null, 2), 'utf-8');
-			console.log(`[spawn] Wrote IDE-initiated starting signal: ${signalFile}`);
+			console.log(`[spawn] Wrote IDE-initiated ${signalType} signal: ${signalFile}`);
 		} catch (err) {
 			// Non-fatal - UI will eventually get state from agent
 			console.warn('[spawn] Failed to write starting signal:', err);

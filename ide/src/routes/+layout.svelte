@@ -900,6 +900,13 @@
 
 	// Global keyboard shortcuts
 	async function handleGlobalKeydown(event: KeyboardEvent) {
+		// Cmd+K / Ctrl+K → Focus quick-add bar (dispatch custom event)
+		if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+			event.preventDefault();
+			document.dispatchEvent(new CustomEvent('focus-quick-add'));
+			return;
+		}
+
 		// First check for user-defined command shortcuts (unless in an input field that should capture the event)
 		// User shortcuts take priority over global shortcuts (except Shift variants)
 		if (!event.shiftKey) {

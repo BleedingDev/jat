@@ -13,7 +13,7 @@
 
 	import { tick, onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects, initialTaskText } from '$lib/stores/drawerStore';
+	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects, initialTaskText, drawerCreationMode, type DrawerCreationMode } from '$lib/stores/drawerStore';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { broadcastSessionEvent } from '$lib/stores/sessionEvents';
 	import { playSuccessChime, playErrorSound, playAttachmentSound } from '$lib/utils/soundEffects';
@@ -21,6 +21,10 @@
 	import { getFileTypeInfo, formatFileSize, getAcceptAttribute, type FileCategory } from '$lib/utils/fileUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import VoiceInput from './VoiceInput.svelte';
+	import CreatePaste from './tasks/CreatePaste.svelte';
+	import CreateTemplate from './tasks/CreateTemplate.svelte';
+	import CreateGenerator from './tasks/CreateGenerator.svelte';
+	import CreatePlan from './tasks/CreatePlan.svelte';
 
 	// Type for pending attachments (before upload)
 	interface PendingAttachment {
@@ -42,6 +46,35 @@
 		});
 		return unsubscribe;
 	});
+
+	// Active creation mode (tab selection)
+	let activeMode = $state<DrawerCreationMode>('task');
+
+	// Sync activeMode from store when drawer opens
+	$effect(() => {
+		const unsubscribe = drawerCreationMode.subscribe(value => {
+			activeMode = value;
+		});
+		return unsubscribe;
+	});
+
+	// Tab configuration
+	const creationTabs: { id: DrawerCreationMode; label: string }[] = [
+		{ id: 'task', label: 'Task' },
+		{ id: 'paste', label: 'Paste' },
+		{ id: 'template', label: 'Template' },
+		{ id: 'generator', label: 'Gen' },
+		{ id: 'plan', label: 'Plan' },
+	];
+
+	function navigateTab(direction: -1 | 1) {
+		const idx = creationTabs.findIndex(t => t.id === activeMode);
+		const next = idx + direction;
+		if (next >= 0 && next < creationTabs.length) {
+			activeMode = creationTabs[next].id;
+			drawerCreationMode.set(activeMode);
+		}
+	}
 
 	// Track if drawer was opened without an explicit project (requires user to select one)
 	let projectSelectionRequired = $state(false);
@@ -1065,6 +1098,8 @@
 	function handleClose() {
 		if (!isSubmitting) {
 			resetForm();
+			activeMode = 'task';
+			drawerCreationMode.set('task');
 			isTaskDrawerOpen.set(false);
 		}
 	}
@@ -1073,6 +1108,8 @@
 	function handleCancel() {
 		if (!isSubmitting) {
 			resetForm();
+			activeMode = 'task';
+			drawerCreationMode.set('task');
 			isTaskDrawerOpen.set(false);
 		}
 	}
@@ -1150,6 +1187,14 @@
 				closeProjectDropdown();
 				break;
 		}
+	}
+
+	// Callback for Create* components when tasks are created
+	function handleNonTaskModeCreated() {
+		resetForm();
+		activeMode = 'task';
+		drawerCreationMode.set('task');
+		isTaskDrawerOpen.set(false);
 	}
 
 	// Handle keyboard shortcuts
@@ -1336,12 +1381,32 @@
 				</button>
 			</div>
 
-			<!-- Content (scrollable area between sticky header and footer) - Industrial -->
-			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0 bg-base-300">
-				<div class="space-y-6">
+			<!-- Tab Strip -->
+			<div class="flex border-b border-base-content/20 bg-base-200 px-6 gap-1">
+				{#each creationTabs as tab}
+					<button
+						type="button"
+						class="px-3 py-2 text-xs font-mono font-semibold uppercase tracking-wider transition-colors relative
+							{activeMode === tab.id
+								? 'text-primary'
+								: 'text-base-content/50 hover:text-base-content/80'}"
+						onclick={() => { activeMode = tab.id; drawerCreationMode.set(tab.id); }}
+					>
+						{tab.label}
+						{#if activeMode === tab.id}
+							<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+						{/if}
+					</button>
+				{/each}
+			</div>
+
+			<!-- Content: Task mode (original form) -->
+			{#if activeMode === 'task'}
+			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-4 flex flex-col min-h-0 bg-base-300">
+				<div class="space-y-3">
 					<!-- Title (Required) - Industrial -->
 					<div class="form-control">
-						<label class="label justify-between w-full mb-2" for="task-title">
+						<label class="label justify-between w-full py-0.5" for="task-title">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Title
 								<span class="text-error">*</span>
@@ -1369,6 +1434,12 @@
 								bind:this={titleInput}
 								bind:value={formData.title}
 								onpaste={handleTitlePaste}
+								onkeydown={(e) => {
+									if (!formData.title && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+										e.preventDefault();
+										navigateTab(e.key === 'ArrowLeft' ? -1 : 1);
+									}
+								}}
 								disabled={formDisabled || isSubmitting}
 								required
 								autofocus={isOpen && !projectSelectionRequired}
@@ -1391,7 +1462,7 @@
 
 					<!-- Description (Optional) - Industrial -->
 					<div class="form-control">
-						<label class="label" for="task-description">
+						<label class="label py-0.5" for="task-description">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">Description</span>
 							<span class="flex items-center gap-1.5 -mt-2">
 								{#if isLoadingSuggestions}
@@ -1452,30 +1523,33 @@
 						</div>
 					{/if}
 
-					<!-- Notes (Optional - Personal notes not submitted to AI) - Industrial -->
-					<div class="form-control">
-						<label class="label" for="task-notes">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">Notes</span>
-							<span class="label-text-alt text-base-content/50 flex items-center gap-1">
+					<!-- Notes (Optional) — collapsed disclosure -->
+					<details class="group">
+						<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70 py-1">
+							<svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+							</svg>
+							Notes
+							<span class="font-normal normal-case tracking-normal text-base-content/40 flex items-center gap-1">
 								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
 								</svg>
 								Not sent to AI
 							</span>
-						</label>
-						<textarea
-							id="task-notes"
-							placeholder={formDisabled ? "Select a project first..." : "Personal notes, reference links, etc. (not included in AI context)"}
-							class="textarea w-full h-24 font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
-							bind:value={formData.notes}
-							disabled={formDisabled || isSubmitting}
-						></textarea>
-						<label class="label">
-							<span class="label-text-alt text-base-content/50">
-								For your own reference only - agents won't see this field
-							</span>
-						</label>
-					</div>
+							{#if formData.notes}
+								<span class="badge badge-xs bg-base-content/20 text-base-content/60 ml-auto normal-case tracking-normal font-normal">has notes</span>
+							{/if}
+						</summary>
+						<div class="mt-1">
+							<textarea
+								id="task-notes"
+								placeholder={formDisabled ? "Select a project first..." : "Personal notes, reference links, etc."}
+								class="textarea w-full h-20 font-mono text-sm bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
+								bind:value={formData.notes}
+								disabled={formDisabled || isSubmitting}
+							></textarea>
+						</div>
+					</details>
 
 					<!-- AI Suggestion Reasoning - Show when suggestions applied -->
 					{#if suggestionReasoning}
@@ -1531,14 +1605,37 @@
 						</div>
 					{/if}
 
-					<!-- Priority & Type Row - Industrial -->
-					<div class="grid grid-cols-2 gap-4">
-						<!-- Priority (Required) - Industrial -->
+					<!-- Type / Priority / Labels — 3-col grid -->
+					<div class="grid grid-cols-3 gap-3">
+						<!-- Type (Required) -->
 						<div class="form-control">
-							<label class="label" for="task-priority">
+							<label class="label py-0.5" for="task-type">
 								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-									Priority
-									<span class="text-error">*</span>
+									Type <span class="text-error">*</span>
+									{#if suggestionsApplied && !userModifiedFields.has('type')}
+										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
+									{/if}
+								</span>
+							</label>
+							<select
+								id="task-type"
+								class="select select-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.type ? 'select-error' : ''} {formDisabled ? 'opacity-50' : ''}"
+								bind:value={formData.type}
+								onchange={() => markFieldModified('type')}
+								disabled={formDisabled || isSubmitting}
+								required
+							>
+								{#each typeOptions as option}
+									<option value={option.value}>{option.label} {option.icon}</option>
+								{/each}
+							</select>
+						</div>
+
+						<!-- Priority (Required) -->
+						<div class="form-control">
+							<label class="label py-0.5" for="task-priority">
+								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+									Priority <span class="text-error">*</span>
 									{#if suggestionsApplied && !userModifiedFields.has('priority')}
 										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
 									{/if}
@@ -1546,7 +1643,7 @@
 							</label>
 							<select
 								id="task-priority"
-								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
+								class="select select-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
 								bind:value={formData.priority}
 								onchange={() => markFieldModified('priority')}
 								disabled={formDisabled || isSubmitting}
@@ -1558,66 +1655,34 @@
 							</select>
 						</div>
 
-						<!-- Type (Required) - Industrial -->
+						<!-- Labels (Optional) -->
 						<div class="form-control">
-							<label class="label" for="task-type">
+							<label class="label py-0.5" for="task-labels">
 								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-									Type
-									<span class="text-error">*</span>
-									{#if suggestionsApplied && !userModifiedFields.has('type')}
+									Labels
+									{#if suggestionsApplied && !userModifiedFields.has('labels') && formData.labels}
 										<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
 									{/if}
 								</span>
 							</label>
-							<select
-								id="task-type"
-								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.type ? 'select-error' : ''} {formDisabled ? 'opacity-50' : ''}"
-								bind:value={formData.type}
-								onchange={() => markFieldModified('type')}
+							<input
+								id="task-labels"
+								type="text"
+								placeholder={formDisabled ? "" : "frontend, urgent"}
+								class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
+								bind:value={formData.labels}
+								oninput={() => markFieldModified('labels')}
 								disabled={formDisabled || isSubmitting}
-								required
-							>
-								{#each typeOptions as option}
-									<option value={option.value}>{option.label} {option.icon}</option>
-								{/each}
-							</select>
-							{#if validationErrors.type}
-								<label class="label">
-									<span class="label-text-alt text-error">{validationErrors.type}</span>
-								</label>
-							{/if}
+							/>
 						</div>
 					</div>
-
-					<!-- Labels (Optional) - Industrial -->
-					<div class="form-control">
-						<label class="label" for="task-labels">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-								Labels
-								{#if suggestionsApplied && !userModifiedFields.has('labels') && formData.labels}
-									<span class="badge badge-xs ml-1 bg-primary/30 text-base-content">AI</span>
-								{/if}
-							</span>
-						</label>
-						<input
-							id="task-labels"
-							type="text"
-							placeholder={formDisabled ? "Select a project first..." : "e.g., frontend, urgent, bug-fix"}
-							class="input w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
-							bind:value={formData.labels}
-							oninput={() => markFieldModified('labels')}
-							disabled={formDisabled || isSubmitting}
-						/>
-						<label class="label">
-							<span class="label-text-alt text-base-content/60">
-								Comma-separated list of labels
-							</span>
-						</label>
-					</div>
+					{#if validationErrors.type}
+						<div class="text-xs text-error -mt-2">{validationErrors.type}</div>
+					{/if}
 
 					<!-- Attachments Dropzone - Industrial -->
 					<div class="form-control">
-						<label class="label">
+						<label class="label py-0.5">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Attachments
 							</span>
@@ -1639,24 +1704,21 @@
 							disabled={formDisabled || isSubmitting}
 						/>
 
-						<!-- Click-to-browse zone (drops handled by drawer-level handler) -->
+						<!-- Click-to-browse zone (compact) -->
 						<div
-							class="relative rounded-lg p-6 text-center transition-all duration-200 {formDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} bg-base-200 border-base-content/30"
+							class="relative rounded-lg p-3 transition-all duration-200 {formDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} bg-base-200 border-base-content/30"
 							style="border: 2px dashed;"
 							onclick={() => !formDisabled && openFilePicker()}
 							role="button"
 							tabindex={formDisabled ? -1 : 0}
 							onkeydown={(e) => !formDisabled && e.key === 'Enter' && openFilePicker()}
 						>
-							<svg class="w-10 h-10 mx-auto mb-2 text-base-content/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-							</svg>
-							<p class="font-mono text-sm text-base-content/70">
-								Drop files anywhere or click to browse
-							</p>
-							<p class="font-mono text-xs mt-1 text-base-content/50">
-								Images, PDFs, text files supported
-							</p>
+							<div class="flex items-center gap-3">
+								<svg class="w-6 h-6 flex-shrink-0 text-base-content/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+								</svg>
+								<span class="font-mono text-sm text-base-content/60">Drop files or click to browse</span>
+							</div>
 						</div>
 
 						<!-- Attached Files List -->
@@ -1711,135 +1773,46 @@
 						{/if}
 					</div>
 
-					<!-- Review Override - Industrial -->
+					<!-- Review Override — compact join -->
 					<div class="form-control">
-						<label class="label">
+						<label class="label py-0.5">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Review Override
 							</span>
 							{#if isLoadingReviewPreview}
 								<span class="loading loading-spinner loading-xs text-base-content/70"></span>
+							{:else if computedReviewAction}
+								<span class="text-xs text-base-content/50">
+									Default: <span class="{computedReviewAction === 'review' ? 'text-info' : 'text-success'}">{computedReviewAction === 'review' ? 'Review' : 'Auto-proceed'}</span>
+								</span>
 							{/if}
 						</label>
-
-						<!-- Computed default display -->
-						{#if computedReviewAction && !isLoadingReviewPreview}
-							<div
-								class="rounded-lg p-3 mb-3 bg-base-100 border border-base-content/20"
+						<div class="join w-full {formDisabled ? 'opacity-50' : ''}">
+							<button
+								type="button"
+								class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === null ? 'btn-active' : 'btn-ghost'}"
+								onclick={() => reviewOverride = null}
+								disabled={formDisabled || isSubmitting}
 							>
-								<div class="flex items-center gap-2 mb-1">
-									{#if computedReviewAction === 'review'}
-										<span class="flex items-center gap-1.5 text-sm font-medium text-info">
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-												<path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-											</svg>
-											Requires Review
-										</span>
-									{:else}
-										<span class="flex items-center gap-1.5 text-sm font-medium text-success">
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-											</svg>
-											Auto-Proceed
-										</span>
-									{/if}
-									<span class="text-xs text-base-content/60">
-										(project default for P{formData.priority} {formData.type})
-									</span>
-								</div>
-								{#if computedReviewReason}
-									<p class="text-xs text-base-content/70">
-										{computedReviewReason}
-									</p>
-								{/if}
-							</div>
-						{/if}
-
-						<!-- Radio buttons for override -->
-						<div class="space-y-2 {formDisabled ? 'opacity-50' : ''}">
-							<!-- Use project rules (default) -->
-							<label
-								class="flex items-center gap-3 p-3 rounded-lg transition-all {formDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} {reviewOverride === null ? 'bg-primary/10 border-primary/50' : 'bg-base-200 border-base-content/20'}"
-								style="border-width: 1px; border-style: solid;"
+								Project Rules
+							</button>
+							<button
+								type="button"
+								class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === 'always_review' ? 'btn-active btn-info' : 'btn-ghost'}"
+								onclick={() => reviewOverride = 'always_review'}
+								disabled={formDisabled || isSubmitting}
 							>
-								<input
-									type="radio"
-									name="review-override"
-									class="radio radio-sm"
-									checked={reviewOverride === null}
-									onchange={() => reviewOverride = null}
-									disabled={formDisabled || isSubmitting}
-								/>
-								<div class="flex-1">
-									<span class="text-sm font-medium text-base-content">
-										Use project rules
-									</span>
-									<p class="text-xs mt-0.5 text-base-content/60">
-										Apply the configured review rules for this type and priority
-									</p>
-								</div>
-							</label>
-
-							<!-- Always require review -->
-							<label
-								class="flex items-center gap-3 p-3 rounded-lg transition-all {formDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} {reviewOverride === 'always_review' ? 'bg-info/10 border-info/50' : 'bg-base-200 border-base-content/20'}"
-								style="border-width: 1px; border-style: solid;"
+								Always Review
+							</button>
+							<button
+								type="button"
+								class="join-item btn btn-sm flex-1 font-mono text-xs {reviewOverride === 'always_auto' ? 'btn-active btn-success' : 'btn-ghost'}"
+								onclick={() => reviewOverride = 'always_auto'}
+								disabled={formDisabled || isSubmitting}
 							>
-								<input
-									type="radio"
-									name="review-override"
-									class="radio radio-sm"
-									checked={reviewOverride === 'always_review'}
-									onchange={() => reviewOverride = 'always_review'}
-									disabled={formDisabled || isSubmitting}
-								/>
-								<div class="flex-1">
-									<span class="flex items-center gap-1.5 text-sm font-medium text-base-content">
-										<svg class="w-4 h-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-											<path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-										</svg>
-										Always require review
-									</span>
-									<p class="text-xs mt-0.5 text-base-content/60">
-										Override project rules - this task always needs human review
-									</p>
-								</div>
-							</label>
-
-							<!-- Always auto-proceed -->
-							<label
-								class="flex items-center gap-3 p-3 rounded-lg transition-all {formDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} {reviewOverride === 'always_auto' ? 'bg-success/10 border-success/50' : 'bg-base-200 border-base-content/20'}"
-								style="border-width: 1px; border-style: solid;"
-							>
-								<input
-									type="radio"
-									name="review-override"
-									class="radio radio-sm"
-									checked={reviewOverride === 'always_auto'}
-									onchange={() => reviewOverride = 'always_auto'}
-									disabled={formDisabled || isSubmitting}
-								/>
-								<div class="flex-1">
-									<span class="flex items-center gap-1.5 text-sm font-medium text-base-content">
-										<svg class="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-										</svg>
-										Always auto-proceed
-									</span>
-									<p class="text-xs mt-0.5 text-base-content/60">
-										Override project rules - this task can auto-proceed without review
-									</p>
-								</div>
-							</label>
+								Auto-Proceed
+							</button>
 						</div>
-
-						<label class="label">
-							<span class="label-text-alt text-base-content/50">
-								Override the project's review rules for this specific task
-							</span>
-						</label>
 					</div>
 
 					<!-- Dependencies (Optional) - Industrial -->
@@ -1997,8 +1970,47 @@
 					{/if}
 				</div>
 			</form>
+			{:else}
+			<!-- Content: Non-task modes (Create* components handle their own actions) -->
+			<div class="flex-1 overflow-y-auto p-6 bg-base-300">
+				{#if activeMode === 'paste'}
+					<CreatePaste
+						projects={dynamicProjects}
+						initialProject={formData.project}
+						hideProjectSelector={true}
+						stacked={true}
+						onTasksCreated={handleNonTaskModeCreated}
+					/>
+				{:else if activeMode === 'template'}
+					<CreateTemplate
+						projects={dynamicProjects}
+						initialProject={formData.project}
+						hideProjectSelector={true}
+						stacked={true}
+						onTasksCreated={handleNonTaskModeCreated}
+					/>
+				{:else if activeMode === 'generator'}
+					<CreateGenerator
+						projects={dynamicProjects}
+						initialProject={formData.project}
+						hideProjectSelector={true}
+						stacked={true}
+						onTasksCreated={handleNonTaskModeCreated}
+					/>
+				{:else if activeMode === 'plan'}
+					<CreatePlan
+						projects={dynamicProjects}
+						initialProject={formData.project}
+						hideProjectSelector={true}
+						stacked={true}
+						onTasksCreated={handleNonTaskModeCreated}
+					/>
+				{/if}
+			</div>
+			{/if}
 
-			<!-- Footer Actions - Industrial -->
+			<!-- Footer Actions - Industrial (only for Task mode) -->
+			{#if activeMode === 'task'}
 			<div
 				class="p-6 bg-base-200 border-t border-base-content/30"
 			>
@@ -2112,6 +2124,7 @@
 					</div>
 				</div>
 			</div>
+			{/if}
 		</div>
 	</div>
 </div>

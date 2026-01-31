@@ -273,7 +273,10 @@ export const STATUS_ICONS = {
 	warning: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z',
 
 	// Checkmark circle (for closed/success)
-	check: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+	check: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+
+	// Chat bubble (for planning)
+	chat: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z'
 };
 
 // =============================================================================
@@ -413,7 +416,7 @@ export function getIssueTypeVisual(issueType: string | undefined | null): IssueT
 //
 // Both use the same icon identifiers and labels for consistency.
 
-export type SessionStateIconType = 'rocket' | 'gear' | 'question' | 'eye' | 'check' | 'circle';
+export type SessionStateIconType = 'rocket' | 'gear' | 'question' | 'eye' | 'check' | 'circle' | 'chat';
 
 /**
  * Centralized SessionState type - single source of truth for all session states.
@@ -423,6 +426,7 @@ export type SessionStateIconType = 'rocket' | 'gear' | 'question' | 'eye' | 'che
 export type SessionState =
 	| 'starting'
 	| 'working'
+	| 'planning'
 	| 'compacting'
 	| 'needs-input'
 	| 'ready-for-review'
@@ -501,6 +505,23 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		dormantBgTint: 'oklch(0.50 0.05 250 / 0.05)',
 		dormantGlow: 'oklch(0.50 0.05 250 / 0.2)',
 		icon: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z M15 12a3 3 0 11-6 0 3 3 0 016 0z'
+	},
+	// PLANNING: Interactive planning session (no task assigned, chat-based)
+	planning: {
+		label: '💬 PLANNING',
+		shortLabel: '💬 Planning',
+		iconType: 'chat',
+		description: 'Interactive planning session — brainstorming with an agent',
+		// StatusActionBadge colors - warm indigo/violet for creative/planning work
+		bgColor: 'oklch(0.50 0.18 270 / 0.3)',
+		textColor: 'oklch(0.85 0.15 270)',
+		borderColor: 'oklch(0.50 0.18 270 / 0.5)',
+		// SessionCard accent colors - distinct indigo
+		accent: 'oklch(0.68 0.20 270)',
+		bgTint: 'oklch(0.68 0.20 270 / 0.10)',
+		glow: 'oklch(0.68 0.20 270 / 0.5)',
+		// Chat bubble icon
+		icon: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z'
 	},
 	// RECOVERING: Automation rule triggered recovery action (API overloaded, rate limit, etc.)
 	recovering: {
@@ -785,6 +806,36 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
+		}
+	],
+	planning: [
+		{
+			id: 'convert-to-tasks',
+			label: 'Convert to Tasks',
+			icon: 'M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z',
+			variant: 'success',
+			description: 'Ask the agent to convert the plan into tasks'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open planning session in terminal'
+		},
+		{
+			id: 'interrupt',
+			label: 'Interrupt',
+			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
+			variant: 'warning',
+			description: 'Send Ctrl+C to interrupt'
+		},
+		{
+			id: 'kill',
+			label: 'End Planning',
+			icon: 'M6 18L18 6M6 6l12 12',
+			variant: 'error',
+			description: 'End the planning session'
 		}
 	],
 	'auto-proceeding': [

@@ -489,7 +489,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Limit bulk creation to prevent abuse
-		const MAX_TASKS = 50;
+		const MAX_TASKS = 500;
 		if (body.tasks.length > MAX_TASKS) {
 			return json(
 				{

@@ -2249,12 +2249,13 @@
 			"auto-proceeding",
 			"recovering",
 			"idle",
+			"planning",
 		];
 
 		if (sseState && validStates.includes(sseState as SessionState)) {
-			// "completed" and "auto-proceeding" states should persist - they indicate terminal states
-			// that are handled by the API (session cleanup, next task spawn)
-			if (sseState === "completed" || sseState === "auto-proceeding") {
+			// "completed", "auto-proceeding", and "planning" states should persist - they indicate
+			// terminal/long-lived states that don't change via output parsing
+			if (sseState === "completed" || sseState === "auto-proceeding" || sseState === "planning") {
 				return sseState as SessionState;
 			}
 			// Other states use TTL for freshness
@@ -3882,6 +3883,11 @@
 					}
 				}
 				await sendWorkflowCommand("/jat:start");
+				break;
+
+			case "convert-to-tasks":
+				// Send /jat:tasktree command to convert the planning session into tasks
+				await sendWorkflowCommand("/jat:tasktree");
 				break;
 
 			default:
@@ -7514,7 +7520,7 @@
 									reviewReason={reviewStatus?.reason ?? null}
 								/>
 							{/if}
-						{:else if sessionState === "ready-for-review" || sessionState === "idle" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}
+						{:else if sessionState === "ready-for-review" || sessionState === "idle" || sessionState === "planning" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}
 							<!-- Unified status badge with state-appropriate actions and all commands -->
 							<StatusActionBadge
 								{sessionState}

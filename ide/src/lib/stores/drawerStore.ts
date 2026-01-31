@@ -35,6 +35,10 @@ export const selectedDrawerProject = writable<string | null>(null);
 // Initial text to populate task drawer (parsed like paste: first line = title, rest = description)
 export const initialTaskText = writable<string | null>(null);
 
+// Creation mode for multi-mode task drawer (tabs: task, paste, template, generator, plan)
+export type DrawerCreationMode = 'task' | 'paste' | 'template' | 'generator' | 'plan';
+export const drawerCreationMode = writable<DrawerCreationMode>('task');
+
 // Available projects for task drawer (dynamically populated from tasks)
 export const availableProjects = writable<string[]>([]);
 
@@ -42,7 +46,7 @@ export const availableProjects = writable<string[]>([]);
 export const projectColorsStore = writable<Record<string, string>>({});
 
 // Helper functions
-export function openTaskDrawer(project?: string, text?: string) {
+export function openTaskDrawer(project?: string, text?: string, mode?: DrawerCreationMode) {
 	if (project && project !== 'All Projects') {
 		selectedDrawerProject.set(project);
 	} else {
@@ -53,6 +57,7 @@ export function openTaskDrawer(project?: string, text?: string) {
 	} else {
 		initialTaskText.set(null);
 	}
+	drawerCreationMode.set(mode || 'task');
 	isTaskDrawerOpen.set(true);
 }
 

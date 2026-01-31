@@ -195,10 +195,11 @@
 				<div class="dropdown-header">Select Project</div>
 				{#each projects as project}
 					<button
-						class="dropdown-item"
+						class="dropdown-item dropdown-item-project"
+						style="--project-color: {getProjectColor(project.name)}"
 						onclick={() => handleNewProjectSelect(project.name)}
 					>
-						<span class="project-dot" style="background: {getProjectColor(project.name)}"></span>
+						<span class="project-dot"></span>
 						<span class="dropdown-item-label">{project.name}</span>
 						{#if project.taskCount !== undefined}
 							<span class="dropdown-hint">{project.taskCount}</span>
@@ -253,9 +254,10 @@
 							<button
 								class="dropdown-tab"
 								class:active={startSelectedTab === project}
+								style="--project-color: {getProjectColor(project)}"
 								onclick={() => startSelectedTab = project}
 							>
-								<span class="tab-dot" style="background: {getProjectColor(project)}"></span>
+								<span class="tab-dot"></span>
 								{project}
 								<span class="tab-count">{readyTasks.filter(t => (t.project || t.id.split('-')[0]) === project).length}</span>
 							</button>
@@ -555,12 +557,34 @@
 		padding: 0.375rem 0.625rem 0.25rem;
 	}
 
+	/* Branded project items in New dropdown */
+	.dropdown-item-project {
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		color: oklch(0.75 0.02 250);
+	}
+
+	.dropdown-item-project:hover:not(:disabled) {
+		background: color-mix(in oklch, var(--project-color) 15%, transparent);
+		color: var(--project-color);
+	}
+
 	/* Project dot */
 	.project-dot {
 		width: 0.5rem;
 		height: 0.5rem;
 		border-radius: 50%;
 		flex-shrink: 0;
+		background: var(--project-color);
+		opacity: 0.8;
+	}
+
+	.dropdown-item-project:hover .project-dot {
+		opacity: 1;
+		box-shadow: 0 0 5px color-mix(in oklch, var(--project-color) 50%, transparent);
 	}
 
 	/* Dropdown item label (truncate) */
@@ -659,8 +683,11 @@
 		border: none;
 		background: transparent;
 		color: oklch(0.60 0.02 250);
-		font-size: 0.75rem;
-		font-weight: 500;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
 		border-radius: 0.3rem;
 		cursor: pointer;
 		white-space: nowrap;
@@ -668,20 +695,27 @@
 	}
 
 	.dropdown-tab:hover {
-		background: oklch(0.26 0.02 250);
+		background: color-mix(in oklch, var(--project-color, oklch(0.60 0.02 250)) 12%, transparent);
 		color: oklch(0.80 0.02 250);
 	}
 
 	.dropdown-tab.active {
-		background: oklch(0.32 0.04 200 / 0.4);
-		color: oklch(0.88 0.10 200);
+		background: color-mix(in oklch, var(--project-color, oklch(0.70 0.10 200)) 25%, transparent);
+		color: var(--project-color, oklch(0.88 0.10 200));
 	}
 
 	.tab-dot {
-		width: 0.4rem;
-		height: 0.4rem;
+		width: 0.5rem;
+		height: 0.5rem;
 		border-radius: 50%;
 		flex-shrink: 0;
+		background: var(--project-color);
+		opacity: 0.8;
+	}
+
+	.dropdown-tab.active .tab-dot {
+		opacity: 1;
+		box-shadow: 0 0 5px color-mix(in oklch, var(--project-color) 50%, transparent);
 	}
 
 	.tab-count {
@@ -696,8 +730,8 @@
 	}
 
 	.dropdown-tab.active .tab-count {
-		background: oklch(0.38 0.06 200 / 0.5);
-		color: oklch(0.85 0.10 200);
+		background: color-mix(in oklch, var(--project-color, oklch(0.70 0.10 200)) 30%, transparent);
+		color: var(--project-color, oklch(0.85 0.10 200));
 	}
 
 	/* Scrollable task list */

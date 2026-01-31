@@ -5,11 +5,9 @@
 	 * User profile dropdown with theme selector, sound settings, and terminal settings.
 	 * Shows avatar with user info, theme picker, sound toggle, and terminal height slider.
 	 * Uses DaisyUI dropdown component.
-	 *
-	 * Note: This is a placeholder component. No authentication system implemented yet.
-	 * Replace with real user data when auth is added.
 	 */
 
+	import { onMount } from 'svelte';
 	import ThemeSelector from './ThemeSelector.svelte';
 	import {
 		enableSounds,
@@ -63,12 +61,22 @@
 		type SessionMaximizeHeight
 	} from '$lib/stores/preferences.svelte';
 
-	// Placeholder user data
-	const user = {
-		name: 'Agent User',
-		initials: 'AU',
-		email: 'agent@example.com'
-	};
+	// User identity (inferred from git config)
+	let userName = $state('');
+	let userInitials = $state('');
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/config/user');
+			const data = await res.json();
+			if (data.name) {
+				userName = data.name;
+				userInitials = data.initials;
+			}
+		} catch {
+			// keep defaults
+		}
+	});
 
 	// User icon SVG path
 	const userIcon =
@@ -327,16 +335,20 @@
 		class="flex items-center justify-center w-7 h-7 rounded transition-all hover:scale-105 bg-base-300 border border-base-content/20"
 		aria-label="User profile menu"
 	>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke-width="1.5"
-			stroke="currentColor"
-			class="w-4 h-4 text-primary"
-		>
-			<path stroke-linecap="round" stroke-linejoin="round" d={userIcon} />
-		</svg>
+		{#if userInitials}
+			<span class="text-[10px] font-bold text-primary leading-none">{userInitials}</span>
+		{:else}
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke-width="1.5"
+				stroke="currentColor"
+				class="w-4 h-4 text-primary"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" d={userIcon} />
+			</svg>
+		{/if}
 	</button>
 
 	<!-- Dropdown Menu - Industrial -->
@@ -344,6 +356,14 @@
 		tabindex="0"
 		class="dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto bg-base-300 border border-base-content/20"
 	>
+		<!-- User Greeting -->
+		{#if userName}
+			<li class="px-2 py-1.5">
+				<span class="text-xs font-medium text-base-content/70">{userName}</span>
+			</li>
+			<div class="divider my-1 h-px bg-base-content/20"></div>
+		{/if}
+
 		<!-- Help & Shortcuts -->
 		<li>
 			<button

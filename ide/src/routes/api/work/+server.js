@@ -43,6 +43,7 @@ const SIGNAL_STATE_MAP = {
 	'compacting': 'compacting',
 	'completing': 'completing',
 	'polishing': 'polishing',  // Post-completion follow-up tweaks
+	'planning': 'planning',    // Interactive planning session
 };
 
 /**
