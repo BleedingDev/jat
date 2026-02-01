@@ -254,7 +254,6 @@
 					bind:this={cssScaleRef}
 					output={terminalOutput}
 					height={180}
-					scale={0.06}
 					onPositionClick={handleMinimapClick}
 				/>
 

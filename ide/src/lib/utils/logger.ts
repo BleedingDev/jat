@@ -24,9 +24,9 @@ const logger = pino({
     serialize: true,
     transmit: {
       level: 'error',
-      send: (level, logEvent) => {
-        // Send errors to monitoring service in production
-        if (!dev && level.value >= 50) { // error and above
+      send: (_level, logEvent) => {
+        // Transmit config already filters to errors; keep a dev guard here too.
+        if (!dev) {
           fetch('/api/logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

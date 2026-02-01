@@ -368,8 +368,8 @@
 
 	// Default project derived from current task ID or last completed task (for suggested tasks pre-selection)
 	const defaultProject = $derived(
-		task?.id ? getProjectFromTaskId(task.id) :
-		lastCompletedTask?.id ? getProjectFromTaskId(lastCompletedTask.id) : ''
+		task?.id ? (getProjectFromTaskId(task.id) || '') :
+		lastCompletedTask?.id ? (getProjectFromTaskId(lastCompletedTask.id) || '') : ''
 	);
 
 	// Project color for session card border accent (uses project config colors)
@@ -1572,6 +1572,9 @@
 	let inputRef: HTMLTextAreaElement | null = null;
 	let sendToLLMRef: { open: () => void } | null = null;
 
+	// Attached files (pending upload) - supports images, PDFs, text, code, etc.
+	let attachedFiles = $state<AttachedFile[]>([]);
+
 	// Derived check for whether input has content (for Send button visibility)
 	// Using $derived ensures reactivity when inputText changes
 	const hasInputContent = $derived(inputText.trim().length > 0 || attachedFiles.length > 0);
@@ -1838,14 +1841,15 @@
 	// Attached files (pending upload) - supports images, PDFs, text, code, etc.
 	interface AttachedFile {
 		id: string;
-		blob: Blob;
+		blob: Blob | null;
 		preview: string; // Object URL for thumbnail (images only)
 		name: string;
 		category: FileCategory; // File type category
 		icon: string; // SVG path for non-image files
 		iconColor: string; // oklch color for icon
+		/** Optional absolute path on disk (for pre-uploaded attachments) */
+		path?: string;
 	}
-	let attachedFiles = $state<AttachedFile[]>([]);
 
 	// Drag-and-drop state for file attachments
 	let isDragOver = $state(false);
@@ -2468,7 +2472,7 @@
 		if (!autoCompleteTriggered && !autoCompleteDisabled) {
 			autoCompleteTriggered = true;
 			console.log(
-				`[SessionCard] Auto-completing ${sessionName} (review rules: auto for ${reviewStatus.reason})`,
+				`[SessionCard] Auto-completing ${sessionName} (review rules: auto for ${reviewStatus?.reason ?? 'unknown'})`,
 			);
 
 			// Brief delay so user sees the state transition in the UI
@@ -3832,8 +3836,8 @@
 							body: JSON.stringify({
 								type: 'working',
 								data: {
-									taskId: displayTask?.id || sseSignal?.taskId,
-									taskTitle: displayTask?.title || sseSignal?.taskTitle,
+									taskId: displayTask?.id || '',
+									taskTitle: displayTask?.title || displayTask?.id || '',
 									agentName: agentName,
 									approach: 'Resuming from paused state',
 									expectedFiles: [],
@@ -5866,7 +5870,7 @@
 						<ReviewSignalCard
 							signal={reviewSignal}
 							projectName={defaultProject}
-							baselineCommit={lastBaselineCommit}
+							baselineCommit={lastBaselineCommit ?? undefined}
 							onTaskClick={(taskId) => onTaskClick?.(taskId)}
 							onApprove={async () => {
 								// When user approves from review card, trigger completion flow

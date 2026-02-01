@@ -1045,7 +1045,7 @@
 				{@const eventKey = getEventKey(event)}
 				<div
 					class="rounded-lg transition-all"
-					style="background: {style.bg}; border: 1px solid {style.border}; border-left: 3px solid {style.accent || style.border};"
+					style="background: {style.bg}; border: 1px solid {style.border}; border-left: 3px solid {style.border};"
 				>
 					<!-- Event header (always visible) -->
 					<button
@@ -1420,7 +1420,6 @@
 									projectName={defaultProject}
 									onTaskClick={onTaskClick}
 									onFileClick={onFileClick}
-									onComplete={onComplete}
 								/>
 							{:else if (event.state === 'review' || event.type === 'review') && event.data}
 								<ReviewSignalCard
@@ -1441,10 +1440,7 @@
 									onSubmitText={onSubmitText}
 								/>
 							{:else if (event.state === 'completing' || event.type === 'completing') && event.data}
-								<CompletingSignalCard
-									signal={event.data as CompletingSignal}
-									onTaskClick={onTaskClick}
-								/>
+								<CompletingSignalCard signal={event.data as CompletingSignal} />
 							{:else if event.data}
 								<!-- Fallback: show raw JSON for other events -->
 								<div class="text-xs space-y-1">
@@ -2066,7 +2062,7 @@
 														label = '✗ Rejected';
 													} else if (needsInputSignal.options) {
 														// Try to find by id or value
-														const option = needsInputSignal.options.find(o => o.id === optionId || o.value === optionId);
+														const option = needsInputSignal.options.find(o => o.id === optionId || o.label === optionId);
 														if (option) {
 															label = option.label;
 														} else {

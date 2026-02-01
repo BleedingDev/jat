@@ -307,22 +307,23 @@
 
 		<!-- Detail panel for selected task -->
 		{#if selectedTask()}
+						{@const task = selectedTask()!}
 			<div class="detail-panel">
 				<div class="detail-content">
 					<div class="detail-header">
 						<TaskIdBadge
-							task={selectedTask()}
+							task={task}
 							size="sm"
 							copyOnly
 						/>
 					</div>
-					<h2>{selectedTask().title}</h2>
-					{#if selectedTask().description}
-						<p class="detail-description">{selectedTask().description}</p>
+					<h2>{task.title}</h2>
+					{#if task.description}
+						<p class="detail-description">{task.description}</p>
 					{/if}
-					{#if selectedTask().labels && selectedTask().labels.length > 0}
+					{#if task.labels && task.labels.length > 0}
 						<div class="detail-labels">
-							{#each selectedTask().labels as label}
+							{#each task.labels as label}
 								<span class="label">{label}</span>
 							{/each}
 						</div>

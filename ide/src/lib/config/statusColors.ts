@@ -432,9 +432,11 @@ export type SessionState =
 	| 'ready-for-review'
 	| 'completing'
 	| 'completed'
+	| 'polishing'
 	| 'auto-proceeding'
 	| 'recovering'
 	| 'paused'
+	| 'ready'
 	| 'idle';
 
 export interface SessionStateVisual {

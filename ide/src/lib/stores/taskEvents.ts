@@ -125,12 +125,16 @@ export function disconnectTaskEvents() {
 /**
  * Broadcast a task event to all listening components (local, in-browser)
  */
-export function broadcastTaskEvent(type: TaskEventType, taskId: string) {
-	const event: TaskEvent = {
-		type,
-		taskId,
-		timestamp: Date.now()
-	};
+export function broadcastTaskEvent(type: TaskEventType, taskId: string): void;
+export function broadcastTaskEvent(event: Omit<TaskEvent, 'timestamp'> & { timestamp?: number }): void;
+export function broadcastTaskEvent(
+	arg1: TaskEventType | (Omit<TaskEvent, 'timestamp'> & { timestamp?: number }),
+	arg2?: string
+) {
+	const event: TaskEvent =
+		typeof arg1 === 'string'
+			? { type: arg1, taskId: arg2 ?? '', timestamp: Date.now() }
+			: { ...arg1, timestamp: arg1.timestamp ?? Date.now() };
 
 	lastTaskEvent.set(event);
 }

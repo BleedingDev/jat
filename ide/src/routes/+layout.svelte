@@ -218,7 +218,7 @@
 	let connectionIds: string[] = [];
 
 	// Initialize theme-change, SSE, preferences, and load all tasks
-	onMount(async () => {
+	onMount(() => {
 		initPreferences(); // Initialize unified preferences store
 		initKeyboardShortcuts(); // Initialize keyboard shortcuts from localStorage
 		initNotifications(); // Initialize push notification system (favicon badge, title badge)
@@ -235,6 +235,8 @@
 			registerConnection('session-events-sse', connectSessionEvents, disconnectSessionEvents, 10),
 			registerConnection('task-events-sse', connectTaskEvents, disconnectTaskEvents, 15)
 		];
+
+		void (async () => {
 
 		// Phase 1: Critical data for initial render (fast, no usage data)
 		// Use loadAllTasksFast instead of loadAllTasks to avoid 2-4s token aggregation
@@ -271,6 +273,8 @@
 
 		// Activity polling - 500ms is responsive enough, 200ms was too aggressive
 		startActivityPolling(500);
+
+		})();
 
 		return () => {
 			closeSessionEvents(); // Close cross-page BroadcastChannel

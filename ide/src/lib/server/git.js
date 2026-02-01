@@ -23,7 +23,7 @@ function expandHome(path) {
 
 /**
  * Get a simple-git instance for a project
- * @param {string} projectName - Project name
+ * @param {string | null | undefined} projectName - Project name
  * @returns {Promise<{git: import('simple-git').SimpleGit, projectPath: string} | {error: string, status: number}>}
  */
 export async function getGitForProject(projectName) {

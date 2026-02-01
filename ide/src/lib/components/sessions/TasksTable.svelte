@@ -6,6 +6,7 @@
 	 * All three sections share the same layout - only the action column differs.
 	 */
 
+	import type { SessionState } from '$lib/config/statusColors';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
 
@@ -70,10 +71,10 @@
 	}
 
 	// Get session state for StatusActionBadge
-	function getSessionState(row: TableRow): string {
+	function getSessionState(row: TableRow): SessionState {
 		if (mode === 'paused') return 'paused';
 		if (mode === 'open') return 'ready'; // For "START" button
-		return row.sessionState || 'idle';
+		return (row.sessionState || 'idle') as SessionState;
 	}
 </script>
 
@@ -111,7 +112,7 @@
 									resumed={row.resumed}
 									attached={row.attached}
 									animate={row.isNew}
-									onClick={() => onViewTask?.(row.taskId)}
+									onOpenTask={(id) => onViewTask?.(id)}
 								/>
 							</div>
 						</td>

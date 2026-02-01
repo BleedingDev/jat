@@ -1048,7 +1048,7 @@
 
 		<!-- Quick Add Bar -->
 		<TaskQuickAdd
-			selectedProject={selectedProject}
+			selectedProject={selectedProject || undefined}
 			onTaskCreated={() => fetchAllData()}
 			onOpenWorkspace={() => goto('/tasks/create')}
 		/>
@@ -1073,7 +1073,6 @@
 				<ProjectNotes
 					projectName={selectedProject}
 					notes={projectNotes[selectedProject] || ""}
-					notesHeight={projectNotesHeight[selectedProject] || null}
 					{projectColor}
 				/>
 

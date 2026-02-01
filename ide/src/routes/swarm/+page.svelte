@@ -60,12 +60,18 @@
 			await fetchSessions();
 			// Map sessions from store
 			const state = workSessionsState;
-			sessions = (state.sessions || []).map(s => ({
-				name: s.sessionName || s.name,
-				agentName: s.agentName || s.agent || s.name?.replace('jat-', '') || '',
-				task: s.task,
-				status: s.sseState || s.state || 'idle'
-			}));
+			sessions = (state.sessions || []).map((s) => ({
+					name: s.sessionName,
+					agentName: s.agentName,
+					task: s.task
+						? {
+								id: s.task.id,
+								title: s.task.title || s.task.id,
+								status: s.task.status || 'in_progress'
+						}
+						: undefined,
+					status: s._sseState || 'idle'
+				}));
 		} catch (err) {
 			console.error('[Swarm] Failed to load sessions:', err);
 		} finally {

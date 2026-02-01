@@ -28,6 +28,8 @@
 		variant?: 'avatar' | 'name' | 'timer';
 		/** Callback when badge is clicked */
 		onClick?: (agentName: string) => void;
+		/** Optional tooltip override */
+		title?: string;
 		/** Additional CSS classes */
 		class?: string;
 	}
@@ -40,6 +42,7 @@
 		startTime = null,
 		variant = 'timer',
 		onClick,
+		title,
 		class: className = ''
 	}: Props = $props();
 
@@ -113,7 +116,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="{onClick ? 'cursor-pointer hover:scale-110 transition-transform' : ''} {className}"
-		title={tooltipText}
+		title={title || tooltipText}
 		onclick={handleClick}
 	>
 		<AgentAvatar {name} {size} showRing={isWorking} sessionState={effectiveState} />
@@ -124,6 +127,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="inline-flex items-center gap-1.5 {onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''} {className}"
+		title={title || tooltipText}
 		onclick={handleClick}
 	>
 		<AgentAvatar {name} {size} showRing={isWorking} sessionState={effectiveState} />

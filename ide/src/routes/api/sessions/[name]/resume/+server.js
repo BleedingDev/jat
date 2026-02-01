@@ -162,12 +162,6 @@ function findSessionIdFromJsonl(agentName, projectPath) {
 }
 
 /**
- * Find a provider session_id from signal files (tmux signal + timeline).
- * Works for any agent as long as jat-signal included a session_id value.
- * @param {string} sessionName - tmux session name (e.g., "jat-QuickOcean")
- * @returns {string | null}
- */
-/**
  * Read a small prefix of a file for fast substring checks.
  * Avoids loading large Codex session JSONL files fully.
  * @param {string} filePath
@@ -271,6 +265,12 @@ function findCodexSessionIdFromSessions(agentName, projectPath) {
 
 	return null;
 }
+/**
+ * Find a provider session_id from signal files (tmux signal + timeline).
+ * Works for any agent as long as jat-signal included a session_id value.
+ * @param {string} sessionName - tmux session name (e.g., "jat-QuickOcean")
+ * @returns {string | null}
+ */
 function findSessionIdFromSignals(sessionName) {
 	// Try tmux-named signal file first (in /tmp, cleared on restart)
 	const tmuxSignalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
@@ -527,15 +527,20 @@ export async function POST({ params, request }) {
 		const resolvedModel = modelShortName && agentProgram ? getAgentModel(agentProgram, modelShortName) : null;
 
 		// Use provided session_id or look it up from signal files (and provider-specific fallbacks)
+		/** @type {string | undefined} */
 		let sessionId = body.session_id;
 		if (!sessionId) {
 			if (agentCommand === 'claude') {
-				sessionId = findSessionId(sessionName, projectPath);
+				const found = findSessionId(sessionName, projectPath);
+				if (found) sessionId = found;
 			} else {
-				sessionId = findSessionIdFromSignals(sessionName);
+				const fromSignals = findSessionIdFromSignals(sessionName);
+				if (fromSignals) sessionId = fromSignals;
+
 				// For Codex-family sessions, recover provider session id from ~/.codex/sessions when signals lack session_id.
 				if (!sessionId && (agentCommand === 'codex' || agentCommand === 'codex-native')) {
-					sessionId = findCodexSessionIdFromSessions(agentName, projectPath);
+					const recovered = findCodexSessionIdFromSessions(agentName, projectPath);
+					if (recovered) sessionId = recovered;
 				}
 			}
 		}
@@ -670,7 +675,8 @@ export async function POST({ params, request }) {
 			await execAsync(tmuxCreateCmd);
 		} catch (e) {
 			// Ignore errors from kill-session if session doesn't exist
-			console.log('tmux session creation:', e.message);
+			const msg = e instanceof Error ? e.message : String(e);
+			console.log('tmux session creation:', msg);
 		}
 
 		// Then launch terminal attached to the tmux session

@@ -91,6 +91,7 @@ function addProjectToConfig(projectKey, absolutePath) {
 	}
 
 	// Read existing config or create new one
+	/** @type {{ projects: Record<string, any>, defaults: Record<string, any> }} */
 	let config = { projects: {}, defaults: {} };
 	if (existsSync(CONFIG_FILE)) {
 		try {

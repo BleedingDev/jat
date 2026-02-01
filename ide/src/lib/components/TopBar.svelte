@@ -62,8 +62,8 @@
 	});
 
 	// Check which page we're on for showing appropriate sort dropdown
-	const isAgentsPage = $derived($page.url.pathname === "/agents");
-	const isServersPage = $derived($page.url.pathname === "/servers");
+	const isAgentsPage = $derived(String($page.url.pathname) === "/agents");
+	const isServersPage = $derived(String($page.url.pathname) === "/servers");
 
 	// Sort dropdown state (shared between agent and server pages)
 	let showSortDropdown = $state(false);
@@ -126,7 +126,6 @@
 	// New Session - spawn a planning session in selected project
 	async function handleNewSession(projectName: string) {
 		newSessionLoading = true;
-		showSessionDropdown = false;
 		try {
 			const projectPath = `/home/jw/code/${projectName}`;
 			const response = await fetch("/api/work/spawn", {
@@ -357,7 +356,7 @@
 	);
 
 	// Handle task creation for selected project
-	function handleNewTask(projectName: string) {
+	function handleNewTask(projectName?: string) {
 		openTaskDrawer(projectName);
 	}
 
@@ -434,8 +433,8 @@
 	// Spawn a single task (called by ActionPill)
 	let spawningTaskId = $state<string | null>(null);
 
-	async function handleSpawnSingle(taskId: string) {
-		if (spawningTaskId || swarmLoading) return;
+	async function handleSpawnSingle(taskId?: string) {
+		if (!taskId || spawningTaskId || swarmLoading) return;
 
 		spawningTaskId = taskId;
 		startSpawning(taskId);

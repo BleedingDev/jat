@@ -203,8 +203,9 @@ export async function GET({ url, locals }) {
 			perf.end({ agentCount: agents.length, mode: 'simple' });
 			return json({ agents });
 		} catch (error) {
-			locals.logger?.error({ error }, 'Failed to fetch simple agent list');
-			perf.end({ error: error.message, mode: 'simple' });
+			const err = error instanceof Error ? error : new Error(String(error));
+			locals.logger?.error({ error: err }, 'Failed to fetch simple agent list');
+			perf.end({ error: err.message, mode: 'simple' });
 			return json({ error: 'Failed to fetch agents', agents: [] }, { status: 500 });
 		}
 	}

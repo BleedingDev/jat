@@ -418,12 +418,12 @@
 							</div>
 						{:else if activeMode === 'git'}
 							<GitPanel
-								project={selectedProject}
+								project={selectedProject!}
 								onFileClick={handleFileClick}
 							/>
 						{:else}
 							<SupabasePanel
-								project={selectedProject}
+								project={selectedProject!}
 								onMigrationSelect={handleMigrationSelect}
 							/>
 						{/if}
@@ -483,7 +483,7 @@
 								title={selectedMigrationTitle}
 								isDiff={isDiff}
 								filename={selectedMigrationFilename}
-								project={selectedProject}
+								project={selectedProject!}
 								onClose={handleClearMigration}
 								onSave={(newContent) => { selectedMigrationContent = newContent; }}
 							/>

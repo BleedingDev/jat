@@ -111,7 +111,7 @@
 										size="sm"
 										variant="agentPill"
 										agentName={session.agentName}
-										onClick={() => onViewTask?.(session.taskId)}
+										onOpenTask={(id) => onViewTask?.(id)}
 									/>
 								</div>
 							</div>

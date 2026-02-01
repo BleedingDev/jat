@@ -59,19 +59,19 @@ export async function GET({ params }) {
 		const isAgentSession = sessionId.startsWith('jat-') && !sessionId.endsWith('-dev');
 		const isServerSession = sessionId.endsWith('-dev') || sessionId.includes('-dev-');
 
-		let agentName = null;
+		/** @type {string | null} */
+		const agentName = isAgentSession ? sessionId.replace(/^jat-/, '') : null;
+
+		/** @type {import('$lib/server/beads.js').Task | null} */
 		let task = null;
 
-		if (isAgentSession) {
-			// Extract agent name from jat-{AgentName}
-			agentName = sessionId.replace(/^jat-/, '');
-
+		if (agentName) {
 			// Find task assigned to this agent
 			try {
 				const allTasks = getTasks({});
 				task = allTasks.find(
-					t => t.status === 'in_progress' && t.assignee === agentName
-				);
+						t => t.status === 'in_progress' && t.assignee === agentName
+					) ?? null;
 			} catch (err) {
 				console.error('Failed to fetch tasks:', err);
 				// Continue without task info

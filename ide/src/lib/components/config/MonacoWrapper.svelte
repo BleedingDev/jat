@@ -68,10 +68,11 @@
 
 		try {
 			// Load Monaco using the loader
-			monaco = await loader.init();
+			const m = await loader.init();
+			monaco = m;
 
 			// Create editor instance
-			editor = monaco.editor.create(containerRef, {
+			editor = m.editor.create(containerRef, {
 				value: value,
 				language: language,
 				theme: effectiveTheme,
@@ -108,10 +109,12 @@
 					acceptSuggestionOnEnter: 'off'
 				} : {})
 			});
+			const ed = editor;
+			if (!ed) return;
 
 			// Listen for content changes
-			editor.onDidChangeModelContent(() => {
-				const newValue = editor?.getValue() ?? '';
+			ed.onDidChangeModelContent(() => {
+				const newValue = ed.getValue();
 				if (newValue !== value) {
 					value = newValue;
 					onchange?.(newValue);
@@ -119,10 +122,10 @@
 			});
 
 			// Track focus state to prevent external syncs from interrupting typing
-			editor.onDidFocusEditorText(() => {
+			ed.onDidFocusEditorText(() => {
 				isEditorFocused = true;
 			});
-			editor.onDidBlurEditorText(() => {
+			ed.onDidBlurEditorText(() => {
 				isEditorFocused = false;
 			});
 
@@ -130,10 +133,10 @@
 			// Monaco's built-in context menu doesn't include Paste because the editor
 			// doesn't use native <input>/<textarea> elements, so browsers don't offer
 			// standard clipboard actions. We add it manually via the Clipboard API.
-			editor.addAction({
+			ed.addAction({
 				id: 'editor.action.clipboardPasteAction',
 				label: 'Paste',
-				keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV],
+				keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyV],
 				contextMenuGroupId: 'clipboard',
 				contextMenuOrder: 3,
 				run: async (ed) => {
@@ -158,10 +161,10 @@
 
 			// Add "Send to LLM" action to context menu (only shows when text is selected)
 			if (onSendToLLM) {
-				editor.addAction({
+				ed.addAction({
 					id: 'editor.action.sendToLLM',
 					label: 'Send to LLM',
-					keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyL],
+					keybindings: [m.KeyMod.Alt | m.KeyCode.KeyL],
 					contextMenuGroupId: 'modification',
 					contextMenuOrder: 1.5,
 					precondition: 'editorHasSelection',
@@ -182,10 +185,10 @@
 
 			// Add "Create Task" action to context menu (only shows when text is selected)
 			if (onCreateTask) {
-				editor.addAction({
+				ed.addAction({
 					id: 'editor.action.createTask',
 					label: 'Create Task from Selection',
-					keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
+					keybindings: [m.KeyMod.Alt | m.KeyCode.KeyT],
 					contextMenuGroupId: 'modification',
 					contextMenuOrder: 1.6,
 					precondition: 'editorHasSelection',
@@ -206,7 +209,7 @@
 
 			// Set up resize observer for auto-layout
 			resizeObserver = new ResizeObserver(() => {
-				editor?.layout();
+				ed.layout();
 			});
 			resizeObserver.observe(containerRef);
 

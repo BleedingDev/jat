@@ -558,6 +558,7 @@
 						{#each cmds as cmd}
 							{@const currentShortcut = getShortcut(cmd.invocation)}
 							{@const isEditing = editingItem === cmd.invocation && editingType === 'command'}
+							{@const cmdDescription = cmd.frontmatter?.description}
 
 							<div
 								class="shortcut-row flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200/50 transition-colors"
@@ -568,8 +569,8 @@
 									<div class="flex items-center gap-2">
 										<code class="text-sm font-mono text-primary">{cmd.invocation}</code>
 									</div>
-									{#if cmd.description}
-										<p class="text-xs text-base-content/50 truncate mt-0.5">{cmd.description}</p>
+								{#if cmdDescription}
+										<p class="text-xs text-base-content/50 truncate mt-0.5">{cmdDescription}</p>
 									{/if}
 								</div>
 

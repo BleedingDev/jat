@@ -585,7 +585,8 @@ export function shouldLog(
   currentLevel: keyof typeof LOG_LEVELS
 ): boolean {
   // Find the event's category
-  for (const [level, events] of Object.entries(EVENT_CATEGORIES)) {
+  const entries = Object.entries(EVENT_CATEGORIES) as Array<[keyof typeof EVENT_CATEGORIES, readonly string[]]>;
+  for (const [level, events] of entries) {
     if (events.includes(eventType)) {
       // Check if event level is >= current level
       return LOG_LEVELS[level as keyof typeof LOG_LEVELS] >= LOG_LEVELS[currentLevel];

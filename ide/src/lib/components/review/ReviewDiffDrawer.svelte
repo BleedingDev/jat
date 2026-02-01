@@ -278,10 +278,11 @@
 			});
 
 			// Load Monaco
-			monaco = await loader.init();
+			const m = await loader.init();
+			monaco = m;
 
 			// Create diff editor
-			diffEditor = monaco.editor.createDiffEditor(containerRef, {
+			diffEditor = m.editor.createDiffEditor(containerRef, {
 				theme: effectiveTheme,
 				readOnly: true,
 				renderSideBySide: true,

@@ -197,6 +197,16 @@
 		agentStatus !== null && agentStatus !== 'offline' && agentStatus !== 'disconnected'
 	);
 
+	// Recoverable session state (for paused tasks where agent is offline)
+	interface RecoverableSession {
+		agentName: string;
+		sessionId: string;
+		taskId: string;
+		lastActivity?: string;
+	}
+	let recoverableSession = $state<RecoverableSession | null>(null);
+	let recoverableLoading = $state(false);
+
 	// Derived: Is this a paused/recoverable session? (in_progress but agent offline)
 	// This happens when an agent was working but their tmux session is gone (paused or crashed)
 	const isPausedSession = $derived(
@@ -305,15 +315,6 @@
 	let signalsStats = $state<TaskSignalsResponse['stats'] | null>(null);
 	let resumingSessionId = $state<string | null>(null);  // Track which session is being resumed
 
-	// Recoverable session state (for paused tasks where agent is offline)
-	interface RecoverableSession {
-		agentName: string;
-		sessionId: string;
-		taskId: string;
-		lastActivity?: string;
-	}
-	let recoverableSession = $state<RecoverableSession | null>(null);
-	let recoverableLoading = $state(false);
 
 	// Available projects for suggested task creation
 	let availableProjects = $state<string[]>([]);
@@ -1482,7 +1483,7 @@
 			if (results.success.length > 0) {
 				showToast('success', `✓ Created ${results.success.length} task${results.success.length > 1 ? 's' : ''}`);
 				// Broadcast task event to refresh task lists
-				broadcastTaskEvent({ type: 'tasks-created', taskIds: results.success.map((r: any) => r.taskId) });
+				broadcastTaskEvent({ type: 'task-change', newTasks: results.success.map((r: any) => r.taskId), timestamp: Date.now() });
 			}
 			if (results.failed.length > 0) {
 				showToast('error', `✗ Failed to create ${results.failed.length} task${results.failed.length > 1 ? 's' : ''}`);
@@ -2110,7 +2111,7 @@
 														<li>
 															<button
 																class="text-xs"
-																onclick={() => { handleResumeSession(session.session_id, session.agent_name); document.activeElement?.blur(); }}
+																onclick={() => { handleResumeSession(session.session_id, session.agent_name); if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); }}
 																disabled={resumingSessionId === session.session_id}
 															>
 																{#if resumingSessionId === session.session_id}
@@ -2586,7 +2587,7 @@
 												});
 												if (response.ok) {
 													// Refetch task to update drawer
-													await fetchTask();
+													await fetchTask(tid);
 												}
 											} catch (e) {
 												console.error('[TaskDetailDrawer] Failed to apply rename:', e);
@@ -2601,7 +2602,7 @@
 												});
 												if (response.ok) {
 													// Refetch task to update drawer
-													await fetchTask();
+													await fetchTask(tid);
 												}
 											} catch (e) {
 												console.error('[TaskDetailDrawer] Failed to apply labels:', e);

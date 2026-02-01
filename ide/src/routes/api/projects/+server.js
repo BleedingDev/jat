@@ -229,7 +229,8 @@ async function getProjectTaskCounts(projectPath) {
 		const total = tasks.length;
 		return { open, total };
 	} catch (err) {
-		console.error(`[getProjectTaskCounts] Error for ${projectPath}:`, err.message);
+		const msg = err instanceof Error ? err.message : String(err);
+		console.error(`[getProjectTaskCounts] Error for ${projectPath}:`, msg);
 		return { open: 0, total: 0 };
 	}
 }
@@ -499,8 +500,9 @@ export async function GET({ url }) {
 		const jatConfig = await readJatConfig();
 		const ideSettings = await readIdeSettings();
 		// Normalize hidden projects to lowercase for case-insensitive comparison
-		const hiddenProjects = new Set((ideSettings.hiddenProjects || []).map(p => p.toLowerCase()));
+		const hiddenProjects = new Set((ideSettings.hiddenProjects || []).map((/** @type {string} */ p) => p.toLowerCase()));
 
+		/** @type {any[]} */
 		let projects = [];
 
 		if (jatConfig?.projects) {

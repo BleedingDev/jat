@@ -128,6 +128,8 @@ function getProjectFromTaskId(taskId: string): string | null {
  */
 function groupSessionsByProject(
 	sessions: Array<{
+		sessionName?: string;
+		agentName?: string;
 		task?: { id?: string } | null;
 		lastCompletedTask?: { id?: string } | null;
 		project?: string | null;

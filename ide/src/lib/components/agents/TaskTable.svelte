@@ -3614,7 +3614,7 @@
 						{@const isParentRunningEpic = groupingMode === 'parent' && epicQueueIsActive && epicQueueId === groupKey}
 						{@const parentEpicQueueAgents = isParentRunningEpic ? epicQueueRunningAgents : []}
 						{@const parentAllTasksList = allTasks.length > 0 ? allTasks : tasks}
-						{@const parentAllChildren = epicChildrenAllMap.get(groupKey) || []}
+						{@const parentAllChildren = (groupKey ? epicChildrenAllMap.get(groupKey) : undefined) || []}
 						{@const parentClosedCount = parentAllChildren.filter(t => t.status === 'closed').length}
 						{@const parentTotalCount = parentAllChildren.length}
 						{@const parentIsFullyComplete = parentClosedCount === parentTotalCount && parentTotalCount > 0}

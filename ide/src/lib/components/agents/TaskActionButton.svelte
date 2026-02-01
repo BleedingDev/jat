@@ -224,7 +224,7 @@
 				// Show success toast
 				successToast('Session resumed', `Resuming ${task.assignee}'s session`);
 				// Broadcast event so pages refresh immediately
-				broadcastTaskEvent('session-resumed', task.id);
+				broadcastTaskEvent('task-updated', task.id);
 				dropdownOpen = false;
 			}
 		} catch (err) {

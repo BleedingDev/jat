@@ -531,7 +531,7 @@
 											{task}
 											size="sm"
 											variant="agentPill"
-											onClick={() => !isExiting && handleRowClick(task.id)}
+											onOpenTask={(id) => !isExiting && handleRowClick(id)}
 											animate={isNew}
 										/>
 									</div>

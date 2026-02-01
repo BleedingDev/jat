@@ -168,7 +168,8 @@
 	}
 
 	// Handle voice transcription
-	function handleVoiceTranscription(text: string) {
+	function handleVoiceTranscription(event: CustomEvent<string>) {
+		const text = event.detail;
 		inputText = inputText ? inputText + ' ' + text : text;
 		onVoiceTranscription(text);
 		triggerFlash((v) => (voiceFlash = v));
@@ -488,7 +489,7 @@
 			<VoiceInput
 				size="sm"
 				ontranscription={handleVoiceTranscription}
-				onerror={onVoiceError}
+				onerror={(event: CustomEvent<string>) => onVoiceError(event.detail)}
 				onstart={() => triggerFlash((v) => (voiceFlash = v))}
 				onend={() => triggerFlash((v) => (voiceFlash = v))}
 				disabled={sendingInput || disabled}

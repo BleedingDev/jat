@@ -90,6 +90,16 @@ async function scanBeadsProjects() {
 }
 
 /**
+ * Normalize a project name for comparison
+ * Handles: case, underscores vs hyphens, spaces
+ * @param {string} name
+ * @returns {string}
+ */
+function normalizeProjectName(name) {
+	return name.toLowerCase().replace(/[-_\s]/g, '');
+}
+
+/**
  * Get the filesystem path for a project by name
  *
  * Looks up in order:
@@ -100,16 +110,6 @@ async function scanBeadsProjects() {
  * @param {string} projectName - Project name (e.g., "chimaro", "jat")
  * @returns {Promise<{path: string, source: 'jat-config' | 'beads-discovered' | 'default', exists: boolean}>}
  */
-/**
- * Normalize a project name for comparison
- * Handles: case, underscores vs hyphens, spaces
- * @param {string} name
- * @returns {string}
- */
-function normalizeProjectName(name) {
-	return name.toLowerCase().replace(/[-_\s]/g, '');
-}
-
 export async function getProjectPath(projectName) {
 	const normalizedName = normalizeProjectName(projectName);
 

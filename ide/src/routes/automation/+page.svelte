@@ -22,7 +22,7 @@
 		const storeEvents = getActivityEvents();
 		// DEBUG: Log what we're converting
 		console.log('[automation page] Converting', storeEvents.length, 'store events to log entries');
-		const entries = storeEvents.map(event => ({
+		const entries: ActivityLogEntry[] = storeEvents.map((event) => ({
 			id: event.id,
 			timestamp: new Date(event.timestamp),
 			sessionName: event.sessionName,
@@ -48,8 +48,15 @@
 				enabled: rule.enabled,
 				pattern: pattern.pattern,
 				isRegex: pattern.mode === 'regex',
-				caseSensitive: pattern.caseSensitive,
-				action: rule.actions[0] || { type: 'notify_only' as const, value: '' },
+				caseSensitive: pattern.caseSensitive ?? false,
+				action: (() => {
+					const firstAction = rule.actions[0];
+					if (!firstAction) return { type: 'notify_only' as const, value: '' };
+					if (firstAction.type === 'show_question_ui' || firstAction.type === 'run_command') {
+						return { type: 'notify_only' as const, value: firstAction.payload };
+					}
+					return { type: firstAction.type, value: firstAction.payload };
+				})(),
 				cooldownMs: rule.cooldownSeconds * 1000,
 				priority: rule.priority
 			}));
