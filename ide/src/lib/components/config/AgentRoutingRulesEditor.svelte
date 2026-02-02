@@ -87,6 +87,7 @@
 	interface AgentInfo {
 		id: string;
 		name: string;
+		isDefault?: boolean;
 		models: { shortName: string; name: string }[];
 	}
 
@@ -181,7 +182,7 @@
 	}
 
 	function startNewRule() {
-		const defaultAgent = agents.find((a) => a.id === 'claude-code') ?? agents[0];
+		const defaultAgent = agents.find((a) => a.isDefault) ?? agents[0];
 		editingRule = {
 			id: generateId(),
 			name: '',

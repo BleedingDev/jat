@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "taskId": { "type": "string" },
+    "title": { "type": "string" },
+    "summary": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 0,
+      "maxItems": 10
+    },
+    "outcome": { "type": "string", "enum": ["completed", "incomplete", "blocked"] },
+    "keyChanges": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 0,
+      "maxItems": 50
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tests": { "type": "string", "enum": ["passing", "failing", "none", "skipped"] },
+        "build": { "type": "string", "enum": ["clean", "warnings", "errors"] }
+      }
+    },
+    "suggestedTasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string", "enum": ["task", "bug", "feature", "chore"] },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "priority": { "type": "integer", "minimum": 0, "maximum": 4 }
+        },
+        "required": ["type", "title", "description", "priority"]
+      },
+      "minItems": 0,
+      "maxItems": 10
+    },
+    "crossAgentIntel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": { "type": "array", "items": { "type": "string" } },
+        "patterns": { "type": "array", "items": { "type": "string" } },
+        "gotchas": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+    "breakingChanges": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 0,
+      "maxItems": 20
+    }
+  },
+  "required": ["taskId", "title", "summary", "outcome", "keyChanges"]
+}

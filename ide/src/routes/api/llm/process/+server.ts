@@ -13,7 +13,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { llmCall, stripCodeBlocks } from '$lib/server/llmService';
+import { llmCall, getLlmSchemaPath, stripCodeBlocks } from '$lib/server/llmService';
 import type { RequestHandler } from './$types';
 
 interface ProcessRequest {
@@ -30,8 +30,8 @@ interface ProcessResponse {
 	result: string;
 	/** Suggested filename if applicable */
 	suggestedFilename?: string;
-	/** Provider used (api or cli) */
-	provider: 'api' | 'cli';
+	/** Provider used */
+	provider: 'codex-native' | 'api' | 'cli';
 	/** Processing time in ms */
 	durationMs?: number;
 }
@@ -39,7 +39,11 @@ interface ProcessResponse {
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = (await request.json()) as ProcessRequest;
-		console.log('[llm/process] Request received:', { contentLength: body.content?.length, instructionsLength: body.instructions?.length, suggestFilename: body.suggestFilename });
+		console.log('[llm/process] Request received:', {
+			contentLength: body.content?.length,
+			instructionsLength: body.instructions?.length,
+			suggestFilename: body.suggestFilename
+		});
 
 		if (!body.content || typeof body.content !== 'string') {
 			return json({ error: 'Missing required field: content' }, { status: 400 });
@@ -49,6 +53,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: 'Missing required field: instructions' }, { status: 400 });
 		}
 
+		const schemaPath = body.suggestFilename
+			? (getLlmSchemaPath('llm-process-with-filename-schema.json') ?? undefined)
+			: undefined;
+
 		// Build the prompt
 		const prompt = buildPrompt(body.content, body.instructions, body.suggestFilename);
 
@@ -57,7 +65,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Call the LLM
 		const response = await llmCall(prompt, {
 			maxTokens: 4096,
-			model: 'claude-3-5-haiku-20241022' // Use fast model for this utility
+			schemaPath
 		});
 
 		const durationMs = Date.now() - startTime;
@@ -69,10 +77,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (body.suggestFilename) {
 			try {
 				const cleaned = stripCodeBlocks(response.result);
-				const parsed = JSON.parse(cleaned);
-				if (parsed.result && typeof parsed.result === 'string') {
+				const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+				if (typeof parsed.result === 'string') {
 					result = parsed.result;
-					suggestedFilename = parsed.filename || parsed.suggestedFilename;
+				}
+				if (typeof parsed.filename === 'string') {
+					suggestedFilename = parsed.filename;
+				} else if (typeof parsed.suggestedFilename === 'string') {
+					suggestedFilename = parsed.suggestedFilename;
 				}
 			} catch {
 				// Response wasn't JSON, use as-is
@@ -86,7 +98,12 @@ export const POST: RequestHandler = async ({ request }) => {
 			durationMs
 		};
 
-		console.log('[llm/process] Response:', { resultLength: result?.length, suggestedFilename, provider: response.provider, durationMs });
+		console.log('[llm/process] Response:', {
+			resultLength: result?.length,
+			suggestedFilename,
+			provider: response.provider,
+			durationMs
+		});
 		return json(processResponse);
 	} catch (err) {
 		console.error('[llm/process] Error:', err);

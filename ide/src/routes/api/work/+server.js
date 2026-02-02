@@ -23,7 +23,8 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { getTasks } from '$lib/server/beads.js';
-import { getAgentUsageAsync, getAgentHourlyUsageAsync, getAgentContextPercent } from '$lib/utils/tokenUsage.js';
+import { getAgentContextPercent } from '$lib/utils/tokenUsage.js';
+import { getLast24HoursHourly, getTodayUsage } from '$lib/server/tokenUsageDb.js';
 import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
 import { SIGNAL_TTL } from '$lib/config/constants.js';
 
@@ -548,23 +549,26 @@ export async function GET({ url }) {
 							contextPercent = cachedUsage.contextPercent;
 						}
 					} else {
-						// Fetch fresh usage data (using worker threads to avoid blocking)
+						// Fetch fresh usage data (fast SQLite query)
 						try {
-							const usage = await getAgentUsageAsync(agentName, 'today', projectPath);
+							const projectName = projectPath.split('/').filter(Boolean).pop();
+							const usage = getTodayUsage({ project: projectName, agent: agentName });
 							tokens = usage.total_tokens || 0;
-							cost = usage.cost || 0;
+							cost = usage.cost_usd || 0;
 						} catch (err) {
 							// No usage data available
 						}
 
-						// Get hourly sparkline data (last 24h, using worker threads)
+						// Get hourly sparkline data (last 24h, SQLite)
 						try {
-							sparklineData = await getAgentHourlyUsageAsync(agentName, projectPath);
+							const projectName = projectPath.split('/').filter(Boolean).pop();
+							const breakdown = getLast24HoursHourly({ project: projectName, agent: agentName, bucketMinutes: 30 });
+							sparklineData = breakdown.map((b) => ({ timestamp: b.timestamp, tokens: b.total_tokens, cost: b.cost_usd }));
 						} catch (err) {
 							// No sparkline data available
 						}
 
-						// Fall back to token-based calculation if not found in output
+						// Fall back to token-based calculation if not found in output (Claude-only)
 						let fetchedContextPercent = null;
 						if (contextPercent === null) {
 							try {
@@ -575,7 +579,7 @@ export async function GET({ url }) {
 							}
 						}
 
-						// Cache the usage data for 30 seconds (reduces JSONL parsing)
+						// Cache the usage data for 30 seconds (reduces DB queries)
 						apiCache.set(usageCacheKey, {
 							tokens,
 							cost,

@@ -9,9 +9,8 @@ export PROJECT_KEY="${PROJECT_KEY:-$(pwd)}"
 # Initialize database with schema
 am_init_db() {
     local db="$1"
-    if [[ ! -f "$db" ]]; then
-        sqlite3 "$db" < "$(dirname "${BASH_SOURCE[0]}")/schema.sql"
-    fi
+    # Always apply schema (idempotent) so new tables/indexes are available on existing DBs.
+    sqlite3 "$db" < "$(dirname "${BASH_SOURCE[0]}")/schema.sql"
 }
 
 # Get or create project by path

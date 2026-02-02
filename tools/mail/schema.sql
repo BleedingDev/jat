@@ -150,3 +150,22 @@ WHERE m.ack_required = 1
   AND mr.ack_ts IS NULL
   AND (m.expires_ts IS NULL OR datetime('now') < datetime(m.expires_ts))
 ORDER BY m.created_ts DESC;
+
+-- Agent Sessions: provider session id mapping for reliable resume
+-- Stores provider session ids (Claude, Codex, etc) keyed by agent.
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL,
+    tmux_session TEXT,
+    provider TEXT NOT NULL,             -- e.g. 'claude' | 'codex' | 'codex-native'
+    provider_session_id TEXT NOT NULL,  -- Provider conversation/session UUID
+    created_ts TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_ts TEXT NOT NULL DEFAULT (datetime('now')),
+
+    FOREIGN KEY (agent_id) REFERENCES agents(id),
+    UNIQUE (agent_id, provider, provider_session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_id ON agent_sessions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_provider ON agent_sessions(provider);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_last_seen_ts ON agent_sessions(last_seen_ts);

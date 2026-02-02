@@ -116,10 +116,9 @@ jat myproject 4 --auto
 
 **What happens:**
 1. Tmux session created: `jat-{AgentName}`
-2. Claude Code starts in session
-3. Agent runs `/jat:start` (picks highest priority task)
-4. IDE shows live terminal output
-5. Session state updates in real-time
+2. Your configured fallback agent starts (codex-native by default; use `--claude` for Claude Code)
+3. Agent follows the bootstrap prompt (`bd ready` / `bd update`, and `jat-signal` for IDE state)
+4. IDE shows live terminal output and state updates in real-time
 
 ---
 
@@ -230,7 +229,9 @@ Go to **Config → Automation → Presets**:
 
 **Fix:**
 ```bash
-# Don't run:
+# Don't run (if you want IDE tracking):
+codex "..."          # ❌ No tmux, IDE can't track
+codex-native "..."   # ❌ No tmux, IDE can't track
 claude "/jat:start"  # ❌ No tmux, IDE can't track
 
 # Do run:

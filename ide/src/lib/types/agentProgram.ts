@@ -465,7 +465,7 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 			],
 			defaultModel: 'gpt5.2-codex',
 			authType: 'subscription',  // Codex has its own auth via 'codex auth'
-			flags: ['--full-auto'],
+			flags: ['--sandbox', 'danger-full-access', '--ask-for-approval', 'never'],
 			taskInjection: 'argument'  // Codex takes prompt as positional argument
 		}
 	},
@@ -483,7 +483,7 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 			],
 			defaultModel: 'gpt5.2-codex',
 			authType: 'subscription',
-			flags: ['--full-auto'],
+			flags: ['--sandbox', 'danger-full-access', '--approval', 'never'],
 			taskInjection: 'argument'
 		}
 	},

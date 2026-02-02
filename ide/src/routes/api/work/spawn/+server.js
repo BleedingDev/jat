@@ -23,7 +23,8 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
+import { join, basename } from 'path';
 import Database from 'better-sqlite3';
 import {
 	AGENT_MAIL_URL,
@@ -195,6 +196,232 @@ function registerAgentInDb(agentName, projectPath, model, program = 'claude-code
 	}
 }
 
+
+// -----------------------------------------------------------------------------
+// Codex Provider Session ID Persistence (Agent Mail DB)
+// -----------------------------------------------------------------------------
+
+/**
+ * Persist provider session id mapping for reliable resume.
+ * Stored in Agent Mail DB table agent_sessions.
+ *
+ * @param {number} agentId
+ * @param {string} provider - e.g. 'codex' | 'codex-native'
+ * @param {string} providerSessionId
+ * @param {string} tmuxSession
+ */
+function upsertProviderSessionIdToDb(agentId, provider, providerSessionId, tmuxSession) {
+	if (!agentId || !provider || !providerSessionId) {
+		return;
+	}
+
+	try {
+		const db = new Database(DB_PATH);
+		try {
+			// Ensure table exists (safe for existing DBs)
+			db.exec(`
+				CREATE TABLE IF NOT EXISTS agent_sessions (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					agent_id INTEGER NOT NULL,
+					tmux_session TEXT,
+					provider TEXT NOT NULL,
+					provider_session_id TEXT NOT NULL,
+					created_ts TEXT NOT NULL DEFAULT (datetime('now')),
+					last_seen_ts TEXT NOT NULL DEFAULT (datetime('now')),
+					FOREIGN KEY (agent_id) REFERENCES agents(id),
+					UNIQUE (agent_id, provider, provider_session_id)
+				);
+				CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_id ON agent_sessions(agent_id);
+				CREATE INDEX IF NOT EXISTS idx_agent_sessions_provider ON agent_sessions(provider);
+				CREATE INDEX IF NOT EXISTS idx_agent_sessions_last_seen_ts ON agent_sessions(last_seen_ts);
+			`);
+
+			const stmt = db.prepare(`
+				INSERT INTO agent_sessions (agent_id, tmux_session, provider, provider_session_id, created_ts, last_seen_ts)
+				VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+				ON CONFLICT(agent_id, provider, provider_session_id) DO UPDATE SET
+					tmux_session = excluded.tmux_session,
+					last_seen_ts = datetime('now')
+			`);
+			stmt.run(agentId, tmuxSession, provider, providerSessionId);
+		} finally {
+			db.close();
+		}
+	} catch (e) {
+		console.warn('[spawn] Failed to persist provider session id mapping:', e);
+	}
+}
+
+/**
+ * Read a small prefix of a file for fast substring checks.
+ * Avoids loading large Codex session JSONL files fully.
+ * @param {string} filePath
+ * @param {number} [maxBytes]
+ * @returns {string}
+ */
+function readFilePrefix(filePath, maxBytes = 1024 * 1024) {
+	try {
+		const fd = openSync(filePath, 'r');
+		try {
+			const buffer = Buffer.allocUnsafe(maxBytes);
+			const bytesRead = readSync(fd, buffer, 0, maxBytes, 0);
+			return buffer.toString('utf-8', 0, bytesRead);
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		return '';
+	}
+}
+
+/**
+ * Extract a provider session id from a Codex session JSONL filename.
+ * Codex stores sessions like: rollout-YYYY-MM-DDTHH-MM-SS-<uuid>.jsonl
+ * @param {string} filePath
+ * @returns {string | null}
+ */
+function extractCodexSessionIdFromPath(filePath) {
+	const base = basename(filePath);
+	const match = base.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i);
+	return match ? match[1] : null;
+}
+
+/**
+ * Search Codex session logs for this agent's most recent provider session id.
+ * Uses stable JAT markers embedded in the spawn prompt.
+ * @param {string} agentName
+ * @param {string} projectPath
+ * @param {string} tmuxSession
+ * @returns {string | null}
+ */
+function findCodexSessionIdFromSessions(agentName, projectPath, tmuxSession) {
+	const homeDir = process.env.HOME || '';
+	const sessionsRoot = join(homeDir, '.codex', 'sessions');
+	if (!homeDir || !existsSync(sessionsRoot)) {
+		return null;
+	}
+
+	const markerAgent = `[JAT_AGENT_NAME:${agentName}]`;
+	const markerTmux = `[JAT_TMUX_SESSION:${tmuxSession}]`;
+	const markerProject = `[JAT_PROJECT_PATH:${projectPath.replace(/\/+$/, '')}]`;
+	const legacyNeedle = `Your agent name is: ${agentName}`;
+
+	/** @type {Array<{ path: string; modified_millis: number; cwds?: string[] }>} */
+	let entries = [];
+
+	const indexFile = join(sessionsRoot, '_schaltwerk_session_index_cache.json');
+	if (existsSync(indexFile)) {
+		try {
+			const index = JSON.parse(readFileSync(indexFile, 'utf-8'));
+			if (Array.isArray(index.entries)) {
+				entries = index.entries;
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	if (entries.length === 0) {
+		// Fallback: scan ~/.codex/sessions recursively for recent JSONL files (index cache may be absent).
+		try {
+			const cutoffMillis = Date.now() - 2 * 60 * 60 * 1000;
+			const stack = [{ dir: sessionsRoot, depth: 0 }];
+			const files = [];
+			const maxDepth = 6;
+
+			while (stack.length > 0) {
+				const item = stack.pop();
+				if (!item) break;
+				if (item.depth > maxDepth) continue;
+
+				let dirEntries;
+				try {
+					dirEntries = readdirSync(item.dir, { withFileTypes: true });
+				} catch {
+					continue;
+				}
+
+				for (const ent of dirEntries) {
+					const fullPath = join(item.dir, ent.name);
+					if (ent.isDirectory()) {
+						if (ent.name.startsWith('.')) continue;
+						stack.push({ dir: fullPath, depth: item.depth + 1 });
+						continue;
+					}
+					if (!ent.isFile()) continue;
+					if (!ent.name.endsWith('.jsonl')) continue;
+
+					try {
+						const st = statSync(fullPath);
+						if (st.mtimeMs < cutoffMillis) continue;
+						files.push({ path: fullPath, modified_millis: st.mtimeMs });
+					} catch {
+						// ignore
+					}
+				}
+			}
+
+			files.sort((a, b) => (b.modified_millis || 0) - (a.modified_millis || 0));
+			entries = files.slice(0, 2000);
+		} catch {
+			// ignore
+		}
+	}
+
+	// Prefer same cwd if available
+	const normalizedProjectPath = projectPath.replace(/\/$/, '');
+	const byCwd = entries.filter((e) =>
+		Array.isArray(e.cwds) && e.cwds.some((cwd) => String(cwd).replace(/\/$/, '') === normalizedProjectPath)
+	);
+
+	let candidates = entries;
+	if (byCwd.length > 0) {
+		candidates = byCwd;
+	}
+
+	candidates = candidates
+		.filter((e) => typeof e.path === 'string' && e.path.endsWith('.jsonl'))
+		.sort((a, b) => (b.modified_millis || 0) - (a.modified_millis || 0));
+
+	for (const entry of candidates.slice(0, 200)) {
+		try {
+			const prefix = readFilePrefix(entry.path, 1024 * 1024);
+			if (!prefix) continue;
+			if (!prefix.includes(markerProject)) continue;
+			if (prefix.includes(markerAgent) || prefix.includes(markerTmux) || prefix.includes(legacyNeedle)) {
+				const id = extractCodexSessionIdFromPath(entry.path);
+				if (id) {
+					return id;
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Retry Codex session id discovery for a short window.
+ * Useful right after spawn, when the provider session file may not exist yet.
+ *
+ * @param {{ agentName: string, projectPath: string, tmuxSession: string, maxAttempts?: number, delayMs?: number }} params
+ * @returns {Promise<string | null>}
+ */
+async function findCodexSessionIdWithRetry(params) {
+	const maxAttempts = params?.maxAttempts ?? 20;
+	const delayMs = params?.delayMs ?? 500;
+
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		const id = findCodexSessionIdFromSessions(params.agentName, params.projectPath, params.tmuxSession);
+		if (id) return id;
+		await new Promise((resolve) => setTimeout(resolve, delayMs));
+	}
+
+	return null;
+}
+
 const execAsync = promisify(exec);
 
 /**
@@ -336,6 +563,7 @@ function selectAgentAndModel({ agentId, model, task }) {
 
 /**
  * @typedef {Object} JatDefaults
+ * @property {string} [tools_path]
  * @property {boolean} [skip_permissions]
  * @property {number} [claude_startup_timeout]
  * @property {string} [model]
@@ -360,6 +588,16 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 	// Build environment variables
 	/** @type {Record<string, string>} */
 	const env = { AGENT_MAIL_URL };
+
+	// Keep Agent Mail DB path stable across IDE + spawned sessions.
+	env.AGENT_MAIL_DB = DB_PATH;
+
+	// Ensure JAT tools are on PATH for all agents (Codex/Claude/etc).
+	const resolvedToolsPath = (jatDefaults.tools_path || '~/.local/bin').replace(/^~(?=\/)/, process.env.HOME || '');
+	if (resolvedToolsPath) {
+		const claudeToolsPath = agent.command === 'claude' ? `:${projectPath}/.claude/tools` : '';
+		env.PATH = `$PATH:${resolvedToolsPath}${claudeToolsPath}`;
+	}
 
 	// For API key auth, inject the key as environment variable
 	if (agent.authType === 'api_key' && agent.apiKeyEnvVar && agent.apiKeyProvider) {
@@ -421,9 +659,58 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 			agentCmd += ` --model ${model.id}`;
 		}
 
-		// Add configured flags
+		// Add configured flags (normalize Codex approval flag naming for compatibility)
 		if (agent.flags && agent.flags.length > 0) {
-			agentCmd += ' ' + agent.flags.join(' ');
+			const normalizedFlags =
+				agent.command === 'codex'
+					? agent.flags.map((f) =>
+						f === '--approval'
+							? '--ask-for-approval'
+							: f.startsWith('--approval ')
+								? f.replace(/^--approval /, '--ask-for-approval ')
+								: f
+					)
+					: agent.command === 'codex-native'
+						? agent.flags.map((f) =>
+							f === '--ask-for-approval'
+								? '--approval'
+								: f.startsWith('--ask-for-approval ')
+									? f.replace(/^--ask-for-approval /, '--approval ')
+									: f
+						)
+						: agent.flags;
+
+			agentCmd += ' ' + normalizedFlags.join(' ');
+		}
+
+		// Codex-family default: run with full permissions unless the user explicitly configured sandboxing.
+		// JAT writes runtime state to /tmp (signals) and uses the Agent Mail DB at ~/.agent-mail.db by default.
+		if (agent.command === 'codex' || agent.command === 'codex-native') {
+			const hasBypass = agent.flags?.some((f) => f.includes('--dangerously-bypass-approvals-and-sandbox')) || false;
+			if (!hasBypass) {
+				const hasSandbox = agent.flags?.some((f) => f === '--sandbox' || f.startsWith('--sandbox ')) || false;
+				const hasApproval = agent.command === 'codex'
+					? (agent.flags?.some((f) =>
+						f === '--ask-for-approval' ||
+						f.startsWith('--ask-for-approval ') ||
+						f === '-a' ||
+						f.startsWith('-a ') ||
+						f === '--approval' ||
+						f.startsWith('--approval ')
+					) || false)
+					: (agent.flags?.some((f) =>
+						f === '--approval' ||
+						f.startsWith('--approval ') ||
+						f === '--ask-for-approval' ||
+						f.startsWith('--ask-for-approval ')
+					) || false);
+				if (!hasSandbox) {
+					agentCmd += ' --sandbox danger-full-access';
+				}
+				if (!hasApproval) {
+					agentCmd += agent.command === 'codex' ? ' --ask-for-approval never' : ' --approval never';
+				}
+			}
 		}
 
 		// For Claude Code specifically, handle skip_permissions from JAT config
@@ -471,8 +758,8 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 			if (taskTitle) {
 				promptParts.push(`[JAT_TASK_TITLE:${taskTitle}]`);
 			}
-			promptParts.push(`[JAT_PROJECT_PATH:${projectPath}]`);
-			promptParts.push('Read the CLAUDE.md file in the project root for JAT workflow instructions.');
+			promptParts.push(`[JAT_PROJECT_PATH:${projectPath.replace(/\/+$/, '')}]`);
+			promptParts.push('Read AGENTS.md (preferred for Codex/Codex-native) and/or CLAUDE.md (Claude Code slash commands) in the project root for JAT workflow instructions.');
 			promptParts.push('Start by understanding the task and implementing it.');
 
 			const prompt = promptParts.join(' ');
@@ -502,8 +789,8 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 			if (taskTitle) {
 				promptParts.push(`[JAT_TASK_TITLE:${taskTitle}]`);
 			}
-			promptParts.push(`[JAT_PROJECT_PATH:${projectPath}]`);
-			promptParts.push('Read the CLAUDE.md file in the project root for JAT workflow instructions.');
+			promptParts.push(`[JAT_PROJECT_PATH:${projectPath.replace(/\/+$/, '')}]`);
+			promptParts.push('Read AGENTS.md (preferred for Codex/Codex-native) and/or CLAUDE.md (Claude Code slash commands) in the project root for JAT workflow instructions.');
 			promptParts.push('Start by understanding the task and implementing it.');
 
 			const prompt = promptParts.join(' ');
@@ -863,6 +1150,42 @@ export async function POST({ request }) {
 			}
 			// No shell prompt but no agent patterns either - might still be starting
 			console.warn(`[spawn] ${selectedAgent.name} may not have started properly after ${maxWaitSeconds}s, proceeding with caution`);
+		}
+
+		// Step 4a (Codex-family): Best-effort persist provider session id mapping for reliable resume.
+		// Codex/codex-native session ids are discovered from ~/.codex/sessions JSONL files using stable JAT markers
+		// embedded in the spawn prompt.
+		if (
+			registerResult.agentId &&
+			(selectedAgent.command === 'codex' || selectedAgent.command === 'codex-native')
+		) {
+			try {
+				const providerSessionId = await findCodexSessionIdWithRetry({
+					agentName,
+					projectPath,
+					tmuxSession: sessionName,
+					maxAttempts: 20,
+					delayMs: 500
+				});
+
+				if (providerSessionId) {
+					upsertProviderSessionIdToDb(
+						registerResult.agentId,
+						selectedAgent.command,
+						providerSessionId,
+						sessionName
+					);
+					console.log(
+						`[spawn] Persisted ${selectedAgent.command} provider session id for ${agentName}: ${providerSessionId}`
+					);
+				} else {
+					console.warn(
+						`[spawn] Could not determine ${selectedAgent.command} provider session id for ${agentName} (will fall back to --last/--resume-last)`
+					);
+				}
+			} catch (e) {
+				console.warn('[spawn] Failed to persist Codex provider session id mapping:', e);
+			}
 		}
 
 		// Only send /jat:start for agents that use stdin injection (like Claude Code)

@@ -6,7 +6,7 @@
 	 * - Commands tab: View and manage slash commands
 	 * - Projects tab: View and manage project configurations
 	 * - Hooks tab: Visual editor for .claude/settings.json hooks
-	 * - CLAUDE.md tab: View project CLAUDE.md documentation
+	 * - Instructions tab: View AGENTS.md / CLAUDE.md
 	 *
 	 * Tab state syncs with URL query parameter (?tab=commands|projects|hooks|claude).
 	 *
@@ -71,7 +71,7 @@
 	let isProjectEditorOpen = $state(false);
 	let editingProject = $state<{ key: string; config: ProjectConfig } | null>(null);
 
-	// CLAUDE.md editor state
+	// Instructions editor state
 	interface ClaudeMdFile {
 		path: string;
 		displayName: string;
@@ -536,7 +536,7 @@
 						/>
 					</div>
 				{:else if activeTab === 'claude'}
-					<!-- CLAUDE.md Tab -->
+					<!-- Instructions Tab -->
 					<div
 						role="tabpanel"
 						id="claude-panel"
@@ -737,7 +737,7 @@
 		gap: 1rem;
 	}
 
-	/* CLAUDE.md panel - side by side layout */
+	/* Instructions panel - side by side layout */
 	.claude-panel {
 		display: flex;
 		gap: 1.5rem;

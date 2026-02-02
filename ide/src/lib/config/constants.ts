@@ -394,19 +394,22 @@ export const COMMIT_MESSAGE_DEFAULTS = {
  * LLM provider mode for IDE features (task suggestions, summaries, commit messages)
  */
 export type LlmProviderMode =
-	| 'auto'    // Use API key if available, fall back to CLI
-	| 'api'     // Use API key only (fail if not available)
-	| 'cli';    // Use Claude CLI only (fail if not available)
+	| 'auto'         // Prefer Codex-native, fall back to Anthropic API, then Claude CLI
+	| 'codex-native' // Use codex-native only (fail if not available/authenticated)
+	| 'api'          // Use Anthropic API only (fail if not available)
+	| 'cli';         // Use Claude CLI only (fail if not available)
 
 /**
  * Default configuration for LLM provider
  */
 export const LLM_PROVIDER_DEFAULTS = {
-	/** Provider mode: auto, api, or cli */
+	/** Provider mode: auto, codex-native, api, or cli */
 	mode: 'auto' as LlmProviderMode,
-	/** Default model for API calls (used when mode is 'api' or 'auto') */
+	/** Default model for codex-native calls (used when mode is 'codex-native' or 'auto') */
+	codex_model: 'gpt-5.2-codex',
+	/** Default model for Anthropic API calls (used when mode is 'api' or 'auto' fallback) */
 	api_model: 'claude-3-5-haiku-20241022' as const,
-	/** Default model for CLI calls (used when mode is 'cli' or 'auto' fallback) */
+	/** Default model for Claude CLI calls (used when mode is 'cli' or 'auto' fallback) */
 	cli_model: 'haiku' as 'haiku' | 'sonnet' | 'opus',
 	/** Timeout in milliseconds for CLI calls */
 	cli_timeout_ms: 30000,

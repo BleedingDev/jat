@@ -37,6 +37,7 @@ export const GET: RequestHandler = async () => {
 			agents: programs.map((p) => ({
 				id: p.id,
 				name: p.name,
+				isDefault: p.isDefault,
 				models: p.models.map((m) => ({ shortName: m.shortName, name: m.name }))
 			}))
 		});

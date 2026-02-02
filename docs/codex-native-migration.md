@@ -131,6 +131,19 @@ Principle: **the agent writes its own state** in a stable place the IDE can read
   - Codex-native CLI provider (using `codex-native run` with optional schema)
   - or OpenAI API provider (if desired)
 
+### Phase 7 — Usage / Cost Metrics (agent-agnostic)
+
+**Outcome:** Usage charts show both Claude and Codex sessions (tokens always; cost where available).
+
+- Aggregation DB: `${XDG_DATA_HOME:-~/.local/share}/jat/token-usage.db`
+- Claude ingestion: `~/.claude/projects/**/{sessionId}.jsonl` (uses `message.usage`)
+- Codex / codex-native ingestion: `~/.codex/sessions/**/rollout-*.jsonl` (uses `event_msg` `token_count`)
+- Session→agent mapping:
+  - Claude: `.claude/sessions/agent-{sessionId}.txt`
+  - Codex: stable prompt markers `[JAT_AGENT_NAME:*]` / `[JAT_PROJECT_PATH:*]` (fallback: session cwd match)
+- Lookback window for Codex ingestion: `JAT_CODEX_USAGE_LOOKBACK_DAYS` (default: 30)
+- Current limitation: Codex cost is stored as `0` (pricing is not yet wired for OpenAI API-key billing).
+
 ---
 
 ## Compatibility Notes

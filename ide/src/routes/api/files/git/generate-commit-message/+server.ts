@@ -2,7 +2,7 @@
  * Generate Commit Message API Endpoint
  *
  * POST /api/files/git/generate-commit-message
- * Generates a commit message based on staged changes using Claude.
+ * Generates a commit message based on staged changes.
  *
  * Request body:
  * - project: Project name (required)
@@ -12,20 +12,22 @@
  * - reasoning: Brief explanation of the suggested message
  *
  * Uses configuration from /api/config/commit-message:
- * - model: Claude model to use (haiku or sonnet)
+ * - model: Claude model to use (haiku or sonnet) for Anthropic/Claude fallbacks
  * - style: Message style (conventional, descriptive, imperative, gitmoji)
- * - max_tokens: Maximum response tokens
+ * - max_tokens: Maximum response tokens (API only)
  * - include_body: Whether to include detailed body section
  * - subject_max_length: Maximum first line length
  * - custom_instructions: Additional instructions for the AI
  *
+ * Uses centralized llmService (Codex-native-first, Claude-compatible).
+ *
  * Task: jat-2d600 - Add a 'generate commit message' button in /files
  * Task: jat-i97j2 - Implement Commit Message Generation Configuration Options
+ * Task: jat-2af.4 - Make IDE helper LLM provider pluggable (Codex-native-first)
  */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getGitForProject, formatGitError } from '$lib/server/git.js';
-import { env } from '$env/dynamic/private';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -35,7 +37,7 @@ import {
 	type CommitMessageStyle,
 	type CommitMessageModel
 } from '$lib/config/constants';
-import { claudeCliCall } from '$lib/server/claudeCli';
+import { getLlmSchemaPath, llmCall, parseJsonResponse } from '$lib/server/llmService';
 
 const CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
 
@@ -46,11 +48,6 @@ interface CommitMessageConfig {
 	include_body: boolean;
 	subject_max_length: number;
 	custom_instructions: string;
-}
-
-// Get API key from environment
-function getApiKey(): string | undefined {
-	return env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
 }
 
 /**
@@ -123,7 +120,7 @@ Example: "✨ Add user authentication" or ":sparkles: Add user authentication"`;
 }
 
 /**
- * Build the prompt for Claude to generate a commit message
+ * Build the prompt to generate a commit message
  */
 function buildPrompt(diff: string, stagedFiles: string[], config: CommitMessageConfig): string {
 	// Truncate diff if too long (keep first 8000 chars to stay within token limits)
@@ -198,79 +195,28 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// Build prompt with configuration
 		const prompt = buildPrompt(diff, stagedFiles, config);
+		const schemaPath = getLlmSchemaPath('git-commit-message-schema.json') ?? undefined;
 
-		// Get API key (may be null - will use CLI fallback)
-		const apiKey = getApiKey();
+		// For Claude-compatible providers, respect the commit message model setting.
+		// codex-native uses the configured codex model (Settings → LLM Provider Settings).
+		const cliModel = config.model.includes('haiku') ? 'haiku' : 'sonnet';
 
-		let responseText: string;
-		let usage = null;
+		const llmResponse = await llmCall(prompt, {
+			maxTokens: config.max_tokens,
+			schemaPath,
+			apiModel: config.model,
+			cliModel
+		});
 
-		if (apiKey) {
-			// Call Claude API with configured model and max_tokens
-			const response = await fetch('https://api.anthropic.com/v1/messages', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'x-api-key': apiKey,
-					'anthropic-version': '2023-06-01'
-				},
-				body: JSON.stringify({
-					model: config.model,
-					max_tokens: config.max_tokens,
-					messages: [
-						{
-							role: 'user',
-							content: prompt
-						}
-					]
-				})
-			});
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('Claude API error:', response.status, errorText);
-				throw error(502, `Claude API error: ${response.status}`);
-			}
-
-			const apiResult = await response.json();
-			const textContent = apiResult.content?.find((c: { type?: string; text?: string }) => c.type === 'text');
-			if (!textContent?.text) {
-				throw error(500, 'No response from Claude');
-			}
-			responseText = textContent.text;
-			usage = apiResult.usage;
-		} else {
-			// Use Claude CLI as fallback (uses user's Claude Code authentication)
-			// Map config.model to CLI model names
-			const cliModel = config.model.includes('haiku') ? 'haiku' : 'sonnet';
-			try {
-				const cliResponse = await claudeCliCall(prompt, { model: cliModel });
-				responseText = cliResponse.result;
-				usage = cliResponse.usage;
-			} catch (cliErr) {
-				const cliError = cliErr as Error;
-				console.error('Claude CLI error:', cliError.message);
-				throw error(503, cliError.message.includes('not found')
-					? 'Claude CLI not available. Install Claude Code or configure ANTHROPIC_API_KEY.'
-					: `Claude CLI error: ${cliError.message}`);
-			}
-		}
-
-		// Parse the JSON response
 		let suggestion;
 		try {
-			// Try to extract JSON from the response (handle potential markdown code blocks)
-			let jsonText = responseText.trim();
-			if (jsonText.startsWith('```')) {
-				jsonText = jsonText.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
-			}
-			suggestion = JSON.parse(jsonText);
+			suggestion = parseJsonResponse<{ message?: string; reasoning?: string }>(llmResponse.result);
 		} catch (parseErr) {
-			console.error('Failed to parse Claude response:', responseText);
+			console.error('Failed to parse LLM response:', llmResponse.result);
 			// Fall back to using the raw text as the message
 			return json({
 				success: true,
-				message: responseText.trim(),
+				message: llmResponse.result.trim(),
 				reasoning: 'Could not parse structured response, using raw output'
 			});
 		}
@@ -279,7 +225,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			success: true,
 			message: suggestion.message || '',
 			reasoning: suggestion.reasoning || '',
-			usage,
+			provider: llmResponse.provider,
+			usage: llmResponse.usage,
 			config: {
 				model: config.model,
 				style: config.style

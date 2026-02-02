@@ -1,8 +1,8 @@
 <script lang="ts">
 	/**
-	 * ClaudeMdEditor Component
+	 * Instruction Editor Component
 	 *
-	 * Monaco editor for editing CLAUDE.md files.
+	 * Monaco editor for editing instruction files (AGENTS.md / CLAUDE.md).
 	 * Shows file path, last modified, and save button.
 	 *
 	 * @see ide/src/routes/config/+page.svelte for usage
@@ -148,7 +148,7 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="claude-md-editor">
+<div class="instructions-editor">
 	{#if !filePath}
 		<div class="empty-state">
 			<svg
@@ -171,7 +171,7 @@
 		<!-- Header -->
 		<div class="editor-header">
 			<div class="file-info">
-				<h3 class="file-name">{displayName || 'CLAUDE.md'}</h3>
+				<h3 class="file-name">{displayName || (filePath ? filePath.split('/').pop() : 'Instructions')}</h3>
 				<span class="file-path" title={filePath}>{filePath}</span>
 				{#if lastModified}
 					<span class="last-modified">Last modified: {formatDate(lastModified)}</span>
@@ -239,7 +239,7 @@
 </div>
 
 <style>
-	.claude-md-editor {
+	.instructions-editor {
 		display: flex;
 		flex-direction: column;
 		flex: 1;

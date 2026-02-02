@@ -273,7 +273,7 @@ JAT isn't trying to replace your editor—it's the control tower for your agent 
 
 - **Node.js** 20+
 - **tmux** (agent sessions)
-- **Claude Code** or similar AI assistant
+- **codex-native** (preferred), **Codex CLI**, **Claude Code**, or similar AI assistant
 - **sqlite3**, **jq** (auto-installed)
 
 ---
@@ -338,6 +338,7 @@ IDE settings at `/config`:
 | [CLAUDE.md](./CLAUDE.md) | Full technical reference |
 | [ide/CLAUDE.md](./ide/CLAUDE.md) | IDE dev guide |
 | [shared/](./shared/) | Agent documentation |
+| [shared/agent-programs.md](./shared/agent-programs.md) | Agent harness config (Codex-first) |
 
 ---
 

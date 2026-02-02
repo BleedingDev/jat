@@ -11,27 +11,15 @@
  * the task creation drawer. Only the selected project's context is sent
  * to the AI to avoid cross-project confusion.
  *
- * Uses Claude Haiku for fast, cost-effective suggestions.
+ * Uses centralized llmService (Codex-native-first, Claude-compatible).
  *
  * Task: jat-3qgk - Auto prioritize and type a task
  * Fix: jat-6z5ix - Only send selected project context (not all projects)
+ * Task: jat-2af.4 - Make IDE helper LLM provider pluggable (Codex-native-first)
  */
 
 import { json } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
-import { getApiKeyWithFallback } from '$lib/utils/credentials';
-import { claudeCliCall } from '$lib/server/claudeCli';
-
-// Get API key with fallback chain:
-// 1. ~/.config/jat/credentials.json (preferred)
-// 2. Environment variables (legacy)
-// 3. null (will use claude CLI as fallback)
-function getApiKey() {
-	return getApiKeyWithFallback('anthropic', 'ANTHROPIC_API_KEY') ||
-		env.ANTHROPIC_API_KEY ||
-		process.env.ANTHROPIC_API_KEY ||
-		null;
-}
+import { llmCall, getLlmSchemaPath, parseJsonResponse } from '$lib/server/llmService';
 
 /**
  * Format open tasks for the prompt
@@ -46,7 +34,7 @@ function formatOpenTasks(tasks) {
 }
 
 /**
- * Build the prompt for Claude
+ * Build the prompt
  * @param {string} title
  * @param {string} description
  * @param {Array<{ id?: string, title?: string, priority?: number, issue_type?: string }>} openTasks
@@ -56,13 +44,14 @@ function formatOpenTasks(tasks) {
  */
 function buildPrompt(title, description, openTasks, selectedProject, projectDescription = '') {
 	const taskList = openTasks
-		.map((/** @type {{ id?: string, title?: string, priority?: number, issue_type?: string }} */ t) => `- ${t.id}: ${t.title} (P${t.priority}, ${t.issue_type})`)
+		.map((/** @type {{ id?: string, title?: string, priority?: number, issue_type?: string }} */ t) =>
+			`- ${t.id}: ${t.title} (P${t.priority}, ${t.issue_type})`
+		)
 		.join('\n');
 
 	// Project context - user has already selected this project
 	const projectSection = projectDescription
-		? `PROJECT: ${selectedProject}
-Description: ${projectDescription}`
+		? `PROJECT: ${selectedProject}\nDescription: ${projectDescription}`
 		: `PROJECT: ${selectedProject}`;
 
 	return `You are a task triage assistant. Analyze this new task and suggest appropriate metadata.
@@ -116,97 +105,21 @@ export async function POST({ request }) {
 			projectDescription || ''
 		);
 
-		// Get API key (may be null - will use CLI fallback)
-		const apiKey = getApiKey();
+		const schemaPath = getLlmSchemaPath('task-suggest-schema.json') ?? undefined;
 
-		let responseText = '';
-		let usage = null;
-
-		if (apiKey) {
-			// Use direct API call
-			const response = await fetch('https://api.anthropic.com/v1/messages', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'x-api-key': apiKey,
-					'anthropic-version': '2023-06-01'
-				},
-				body: JSON.stringify({
-					model: 'claude-3-5-haiku-20241022',
-					max_tokens: 500,
-					messages: [
-						{
-							role: 'user',
-							content: prompt
-						}
-					]
-				})
-			});
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('Claude API error:', response.status, errorText);
-				return json(
-					{
-						error: true,
-						message: `Claude API error: ${response.status}`,
-						details: errorText
-					},
-					{ status: 502 }
-				);
-			}
-
-			const result = await response.json();
-			const textContent = result.content?.find((/** @type {{ type?: string, text?: string }} */ c) => c.type === 'text');
-			if (!textContent?.text) {
-				return json(
-					{
-						error: true,
-						message: 'No response from Claude'
-					},
-					{ status: 500 }
-				);
-			}
-			responseText = textContent.text;
-			usage = result.usage;
-		} else {
-			// Use Claude CLI as fallback (uses user's Claude Code authentication)
-			try {
-				const cliResponse = await claudeCliCall(prompt, { model: 'haiku' });
-				responseText = cliResponse.result;
-				usage = cliResponse.usage;
-			} catch (cliErr) {
-				const cliError = /** @type {Error} */ (cliErr);
-				console.error('Claude CLI error:', cliError.message);
-				return json(
-					{
-						error: true,
-						message: cliError.message.includes('not found')
-							? 'Claude CLI not available. Install Claude Code or configure ANTHROPIC_API_KEY.'
-							: `Claude CLI error: ${cliError.message}`
-					},
-					{ status: 503 }
-				);
-			}
-		}
+		const llmResponse = await llmCall(prompt, {
+			maxTokens: 700,
+			schemaPath
+		});
 
 		// Parse the JSON response
 		let suggestions;
 		try {
-			// Try to extract JSON from the response (handle potential markdown code blocks)
-			let jsonText = responseText.trim();
-			if (jsonText.startsWith('```')) {
-				jsonText = jsonText.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
-			}
-			suggestions = JSON.parse(jsonText);
+			suggestions = parseJsonResponse(llmResponse.result);
 		} catch (parseErr) {
-			console.error('Failed to parse Claude response:', responseText);
+			console.error('Failed to parse LLM response:', llmResponse.result);
 			return json(
-				{
-					error: true,
-					message: 'Failed to parse AI suggestions',
-					raw: responseText
-				},
+				{ error: true, message: 'Failed to parse AI suggestions', raw: llmResponse.result },
 				{ status: 500 }
 			);
 		}
@@ -218,14 +131,15 @@ export async function POST({ request }) {
 			type: ['task', 'bug', 'feature', 'epic', 'chore'].includes(suggestions.type)
 				? suggestions.type
 				: 'task',
-			// Project is no longer suggested - user's selection is respected
 			labels: Array.isArray(suggestions.labels)
 				? suggestions.labels.filter((/** @type {unknown} */ l) => typeof l === 'string').slice(0, 5)
 				: [],
 			dependencies: Array.isArray(suggestions.dependencies)
 				? suggestions.dependencies
-						.filter((/** @type {unknown} */ d) => typeof d === 'string' && openTasks.some((/** @type {{ id?: string }} */ t) => t.id === d))
-						.slice(0, 3)
+						.filter((/** @type {unknown} */ d) =>
+						typeof d === 'string' && openTasks.some((/** @type {{ id?: string }} */ t) => t.id === d)
+					)
+					.slice(0, 3)
 				: [],
 			reasoning: suggestions.reasoning || ''
 		};
@@ -233,31 +147,15 @@ export async function POST({ request }) {
 		return json({
 			success: true,
 			suggestions: sanitized,
-			usage
+			usage: llmResponse.usage
 		});
 	} catch (err) {
 		const error = /** @type {Error} */ (err);
 		console.error('Error in task suggest API:', error);
 
-		// Provide more helpful error messages for common failures
 		let message = error.message || 'Internal server error';
 		let status = 500;
 
-		if (error.message === 'fetch failed' || error.name === 'TypeError') {
-			// Network error reaching Anthropic API
-			message = 'Unable to connect to Claude API. Check your network connection.';
-			status = 503;
-		} else if (error.message?.includes('ENOTFOUND') || error.message?.includes('ECONNREFUSED')) {
-			message = 'Cannot reach Claude API. Check your network connection.';
-			status = 503;
-		}
-
-		return json(
-			{
-				error: true,
-				message
-			},
-			{ status }
-		);
+		return json({ error: true, message }, { status });
 	}
 }

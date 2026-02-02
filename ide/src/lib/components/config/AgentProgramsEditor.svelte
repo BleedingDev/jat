@@ -892,7 +892,7 @@
 							type="text"
 							id="edit-instructions"
 							class="input input-bordered w-full"
-							placeholder="/path/to/CLAUDE.md"
+							placeholder="/path/to/AGENTS.md"
 							bind:value={editForm.instructionsFile}
 						/>
 						<p class="form-hint">Path to instructions file to inject</p>

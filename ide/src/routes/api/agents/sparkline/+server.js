@@ -14,7 +14,7 @@
  * - session: Session ID filter (optional)
  * - bucketSize: Time bucket size (30min | hour | session) - defaults to 30min
  * - multiProject: Return multi-project data with per-project breakdown (optional, boolean)
- * - source: Data source (sqlite | jsonl) - defaults to jsonl
+ * - source: Data source (sqlite | jsonl) - defaults to sqlite
  *   - sqlite: Uses pre-aggregated SQLite data (~1-5ms query time)
  *   - jsonl: Parses JSONL files directly (~100-5000ms depending on data volume)
  *   - Falls back to JSONL if SQLite has no data
@@ -156,7 +156,7 @@ function setCache(key, data) {
  * @returns {string} Cache key
  */
 function getCacheKey(params) {
-	const { range = '24h', agent = '', session = '', bucketSize = '30min', multiProject = false, source = 'jsonl' } = params;
+	const { range = '24h', agent = '', session = '', bucketSize = '30min', multiProject = false, source = 'sqlite' } = params;
 	return `${range}-${agent}-${session}-${bucketSize}-${multiProject}-${source}`;
 }
 
@@ -369,7 +369,7 @@ export async function GET({ url }) {
 		const sessionId = url.searchParams.get('session') || undefined;
 		const bucketSize = url.searchParams.get('bucketSize') || '30min';
 		const multiProject = url.searchParams.get('multiProject') === 'true';
-		const source = url.searchParams.get('source') || 'jsonl'; // 'sqlite' or 'jsonl'
+		const source = url.searchParams.get('source') || 'sqlite'; // 'sqlite' or 'jsonl'
 
 		// Validate parameters
 		if (!['24h', '7d', 'all'].includes(range)) {

@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "result": { "type": "string" },
+    "filename": { "type": "string" },
+    "suggestedFilename": { "type": "string" }
+  },
+  "required": ["result"],
+  "anyOf": [
+    { "required": ["filename"] },
+    { "required": ["suggestedFilename"] }
+  ]
+}

@@ -182,7 +182,7 @@
 				{/if}
 				Beads
 			</span>
-			<span class="badge claude-md-badge" class:has-claude-md={project.stats.hasClaudeMd} title={project.stats.hasClaudeMd ? 'Has CLAUDE.md or AGENTS.md' : 'No CLAUDE.md found'}>
+			<span class="badge instructions-badge" class:has-instructions={project.stats.hasClaudeMd} title={project.stats.hasClaudeMd ? 'Has AGENTS.md or CLAUDE.md' : 'No AGENTS.md or CLAUDE.md found'}>
 				{#if project.stats.hasClaudeMd}
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="badge-icon">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -192,7 +192,7 @@
 						<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
 					</svg>
 				{/if}
-				CLAUDE.md
+				Instructions
 			</span>
 		{/if}
 
@@ -412,7 +412,7 @@
 		background: oklch(0.25 0.06 55);
 	}
 
-	/* Status badges (Beads, CLAUDE.md) */
+	/* Status badges (Beads, Instructions) */
 	.beads-badge {
 		color: oklch(0.70 0.10 50);
 		background: oklch(0.25 0.06 50);
@@ -423,12 +423,12 @@
 		background: oklch(0.25 0.06 145);
 	}
 
-	.claude-md-badge {
+	.instructions-badge {
 		color: oklch(0.70 0.10 30);
 		background: oklch(0.25 0.06 30);
 	}
 
-	.claude-md-badge.has-claude-md {
+	.instructions-badge.has-instructions {
 		color: oklch(0.80 0.12 145);
 		background: oklch(0.25 0.06 145);
 	}

@@ -6,7 +6,7 @@
  *
  * Configuration stored in: ~/.config/jat/projects.json under "llm" key
  *
- * Task: jat-ce8x8 - Implement Claude CLI Fallback Configuration System
+ * Task: jat-2af.4 - Make IDE helper LLM provider pluggable (Codex-native-first)
  */
 
 import { json } from '@sveltejs/kit';
@@ -33,10 +33,7 @@ export const GET: RequestHandler = async () => {
 		});
 	} catch (err) {
 		console.error('[api/config/llm] Error getting config:', err);
-		return json(
-			{ error: 'Failed to get LLM configuration' },
-			{ status: 500 }
-		);
+		return json({ error: 'Failed to get LLM configuration' }, { status: 500 });
 	}
 };
 
@@ -48,12 +45,19 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const body = await request.json();
 
 		// Validate mode
-		const validModes: LlmProviderMode[] = ['auto', 'api', 'cli'];
+		const validModes: LlmProviderMode[] = ['auto', 'codex-native', 'api', 'cli'];
 		if (body.mode && !validModes.includes(body.mode)) {
 			return json(
 				{ error: `Invalid mode: ${body.mode}. Must be one of: ${validModes.join(', ')}` },
 				{ status: 400 }
 			);
+		}
+
+		// Validate codex model
+		if (body.codex_model !== undefined) {
+			if (typeof body.codex_model !== 'string' || body.codex_model.trim().length === 0) {
+				return json({ error: 'codex_model must be a non-empty string' }, { status: 400 });
+			}
 		}
 
 		// Validate CLI model
@@ -89,6 +93,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 		// Update LLM section
 		const llmConfig = {
 			mode: body.mode || LLM_PROVIDER_DEFAULTS.mode,
+			codex_model: body.codex_model || LLM_PROVIDER_DEFAULTS.codex_model,
 			api_model: body.api_model || LLM_PROVIDER_DEFAULTS.api_model,
 			cli_model: body.cli_model || LLM_PROVIDER_DEFAULTS.cli_model,
 			cli_timeout_ms: body.cli_timeout_ms ?? LLM_PROVIDER_DEFAULTS.cli_timeout_ms,
@@ -116,9 +121,6 @@ export const PUT: RequestHandler = async ({ request }) => {
 		});
 	} catch (err) {
 		console.error('[api/config/llm] Error saving config:', err);
-		return json(
-			{ error: 'Failed to save LLM configuration' },
-			{ status: 500 }
-		);
+		return json({ error: 'Failed to save LLM configuration' }, { status: 500 });
 	}
 };

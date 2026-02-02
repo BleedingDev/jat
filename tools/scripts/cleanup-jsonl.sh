@@ -3,7 +3,7 @@
 # Cleanup old Claude Code JSONL session files
 #
 # These files contain full conversation history but token usage
-# is already aggregated into ~/.claude/token-usage.db by the IDE.
+# is already aggregated into ${XDG_DATA_HOME:-~/.local/share}/jat/token-usage.db by the IDE.
 #
 # Safe to delete files older than 7 days.
 #

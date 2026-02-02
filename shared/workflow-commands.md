@@ -2,7 +2,9 @@
 
 **5 streamlined commands for multi-agent coordination** located in `~/code/jat/commands/jat/`
 
-**One agent = one session = one task.** Each Claude session handles exactly one task from start to completion.
+**Note:** `/jat:*` commands are implemented as Claude Code slash commands. For Codex/Codex-native sessions, follow the same workflow using `bd`, `am-*`, and `jat-signal` per `AGENTS.md`.
+
+**One agent = one tmux session = one task.** Works with Codex/Codex-native and Claude Code (Claude uses `/jat:*` slash commands; Codex uses the underlying CLIs like `bd`, `am-*`, and `jat-signal`).
 
 **Core Workflow:**
 - `/jat:start [agent-name | task-id]` - **Main command**: handles registration, task selection, conflict detection, and work start
@@ -51,6 +53,6 @@ spawn agent → work on task → review → /jat:complete → session ends
 ```
 
 **Session-Aware:**
-Each command automatically updates `.claude/sessions/agent-{session_id}.txt` for statusline display. Supports multiple concurrent agents in different terminals.
+In Claude Code, each command updates `.claude/sessions/agent-{session_id}.txt` for statusline display. In Codex/Codex-native, JAT correlates sessions via injected prompt markers like `[JAT_AGENT_NAME:*]`.
 
-**See project CLAUDE.md for detailed documentation.**
+**See project AGENTS.md / CLAUDE.md for detailed documentation (AGENTS for Codex; CLAUDE for Claude Code).**

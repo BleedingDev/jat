@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Register or resume agent identity with Agent Mail
-# Usage: am-register [--name AgentName] [--program claude-code] [--model sonnet-4.5] [--task "Description"]
+# Usage: am-register [--name AgentName] [--program codex-native] [--model gpt5.2-codex] [--task "Description"]
 
 set -euo pipefail
 
@@ -9,8 +9,8 @@ source "$SCRIPT_DIR/am-lib.sh"
 
 # Parse arguments
 NAME=""
-PROGRAM="claude-code"
-MODEL="sonnet-4.5"
+PROGRAM="codex-native"
+MODEL="gpt5.2-codex"
 TASK=""
 PROJECT="$PROJECT_KEY"
 JSON_OUTPUT=false
@@ -30,8 +30,8 @@ This command is for manual/CLI use only.
 
 Options:
   --name NAME         Agent name (required, e.g., BlueLake)
-  --program PROGRAM   Program name (default: claude-code)
-  --model MODEL       Model name (default: sonnet-4.5)
+  --program PROGRAM   Program name (default: codex-native)
+  --model MODEL       Model name (default: gpt5.2-codex)
   --task TASK         Task description (default: "")
   --project PATH      Project path (default: current directory)
   --json              Output as JSON

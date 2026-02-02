@@ -14,7 +14,7 @@ import { promisify } from 'util';
 import { existsSync, readFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { join, basename } from 'path';
 import Database from 'better-sqlite3';
-import { getAgentProgram } from '$lib/utils/agentConfig.js';
+import { getAgentConfig, getAgentProgram } from '$lib/utils/agentConfig.js';
 import { getAgentModel } from '$lib/types/agentProgram.js';
 
 const execAsync = promisify(exec);
@@ -59,7 +59,7 @@ function getProjectSlug(projectPath) {
 /**
  * Look up agent info from Agent Mail database
  * @param {string} agentName - Agent name to look up
- * @returns {{ projectPath: string, program: string | null, model: string | null } | null}
+ * @returns {{ agentId: number, projectPath: string, program: string | null, model: string | null } | null}
  */
 function getAgentInfoFromDb(agentName) {
 	if (!existsSync(AGENT_MAIL_DB_PATH)) {
@@ -68,9 +68,10 @@ function getAgentInfoFromDb(agentName) {
 
 	try {
 		const db = new Database(AGENT_MAIL_DB_PATH, { readonly: true });
-		const result = /** @type {{ project: string, program: string | null, model: string | null } | undefined} */ (
+		const result = /** @type {{ agent_id: number, project: string, program: string | null, model: string | null } | undefined} */ (
 			db.prepare(`
 				SELECT
+					a.id as agent_id,
 					p.human_key as project,
 					a.program as program,
 					a.model as model
@@ -84,6 +85,7 @@ function getAgentInfoFromDb(agentName) {
 		if (result?.project) {
 			// The human_key is already the full path (e.g., /home/jw/code/steelbridge)
 			return {
+				agentId: result.agent_id,
 				projectPath: result.project,
 				program: result.program ?? null,
 				model: result.model ?? null
@@ -94,6 +96,89 @@ function getAgentInfoFromDb(agentName) {
 	}
 
 	return null;
+}
+
+
+// -----------------------------------------------------------------------------
+// Provider Session ID Persistence (Agent Mail DB)
+// -----------------------------------------------------------------------------
+
+/**
+ * @param {number} agentId
+ * @param {string} provider
+ * @returns {string | null}
+ */
+function getLatestProviderSessionIdFromDb(agentId, provider) {
+	if (!existsSync(AGENT_MAIL_DB_PATH)) {
+		return null;
+	}
+	try {
+		const db = new Database(AGENT_MAIL_DB_PATH, { readonly: true });
+		try {
+			const row = /** @type {{ provider_session_id: string } | undefined} */ (
+				db
+					.prepare(
+						'SELECT provider_session_id FROM agent_sessions WHERE agent_id = ? AND provider = ? ORDER BY last_seen_ts DESC LIMIT 1'
+					)
+					.get(agentId, provider)
+			);
+			return row?.provider_session_id ?? null;
+		} catch {
+			return null;
+		} finally {
+			db.close();
+		}
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * @param {number} agentId
+ * @param {string} provider
+ * @param {string} providerSessionId
+ * @param {string} tmuxSession
+ * @returns {void}
+ */
+function upsertProviderSessionIdToDb(agentId, provider, providerSessionId, tmuxSession) {
+	if (!existsSync(AGENT_MAIL_DB_PATH)) {
+		return;
+	}
+	try {
+		const db = new Database(AGENT_MAIL_DB_PATH);
+		try {
+			// Ensure table exists (safe for existing DBs)
+			db.exec(`
+				CREATE TABLE IF NOT EXISTS agent_sessions (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					agent_id INTEGER NOT NULL,
+					tmux_session TEXT,
+					provider TEXT NOT NULL,
+					provider_session_id TEXT NOT NULL,
+					created_ts TEXT NOT NULL DEFAULT (datetime('now')),
+					last_seen_ts TEXT NOT NULL DEFAULT (datetime('now')),
+					FOREIGN KEY (agent_id) REFERENCES agents(id),
+					UNIQUE (agent_id, provider, provider_session_id)
+				);
+				CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_id ON agent_sessions(agent_id);
+				CREATE INDEX IF NOT EXISTS idx_agent_sessions_provider ON agent_sessions(provider);
+				CREATE INDEX IF NOT EXISTS idx_agent_sessions_last_seen_ts ON agent_sessions(last_seen_ts);
+			`);
+
+			const stmt = db.prepare(`
+				INSERT INTO agent_sessions (agent_id, tmux_session, provider, provider_session_id, created_ts, last_seen_ts)
+				VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+				ON CONFLICT(agent_id, provider, provider_session_id) DO UPDATE SET
+					tmux_session = excluded.tmux_session,
+					last_seen_ts = datetime('now')
+			`);
+			stmt.run(agentId, tmuxSession, provider, providerSessionId);
+		} finally {
+			db.close();
+		}
+	} catch (e) {
+		console.warn('[resume] Failed to persist provider session id mapping:', e);
+	}
 }
 
 /**
@@ -205,6 +290,131 @@ function extractCodexSessionIdFromPath(filePath) {
  * @param {string | null} projectPath
  * @returns {string | null}
  */
+
+
+/**
+ * Find a Codex session JSONL file path for a given provider session id.
+ * Uses the Codex index cache when present, otherwise falls back to a bounded recursive scan.
+ * @param {string} providerSessionId
+ * @returns {string | null}
+ */
+function findCodexSessionFileById(providerSessionId) {
+	const homeDir = process.env.HOME || '';
+	const sessionsRoot = join(homeDir, '.codex', 'sessions');
+	if (!homeDir || !existsSync(sessionsRoot)) {
+		return null;
+	}
+
+	const indexFile = join(sessionsRoot, '_schaltwerk_session_index_cache.json');
+	if (existsSync(indexFile)) {
+		try {
+			const index = JSON.parse(readFileSync(indexFile, 'utf-8'));
+			if (Array.isArray(index.entries)) {
+				/** @type {Array<{ path?: string; modified_millis?: number }>} */
+				const entries = index.entries;
+				const matches = entries
+					.filter((e) => typeof e.path === 'string' && e.path.includes(providerSessionId) && e.path.endsWith('.jsonl'))
+					.sort((a, b) => (b.modified_millis || 0) - (a.modified_millis || 0));
+
+				for (const entry of matches) {
+					if (entry?.path && existsSync(entry.path)) {
+						return entry.path;
+					}
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	// Fallback: bounded recursive scan for a filename ending with the session id.
+	try {
+		const stack = [{ dir: sessionsRoot, depth: 0 }];
+		const maxDepth = 6;
+		let bestPath = null;
+		let bestMtime = 0;
+
+		while (stack.length > 0) {
+			const item = stack.pop();
+			if (!item) break;
+			if (item.depth > maxDepth) continue;
+
+			let dirEntries;
+			try {
+				dirEntries = readdirSync(item.dir, { withFileTypes: true });
+			} catch {
+				continue;
+			}
+
+			for (const ent of dirEntries) {
+				const fullPath = join(item.dir, ent.name);
+				if (ent.isDirectory()) {
+					if (ent.name.startsWith('.')) continue;
+					stack.push({ dir: fullPath, depth: item.depth + 1 });
+					continue;
+				}
+				if (!ent.isFile()) continue;
+				if (!ent.name.endsWith(`${providerSessionId}.jsonl`)) continue;
+
+				try {
+					const st = statSync(fullPath);
+					if (st.mtimeMs > bestMtime) {
+						bestMtime = st.mtimeMs;
+						bestPath = fullPath;
+					}
+				} catch {
+					// ignore
+				}
+			}
+		}
+
+		return bestPath;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Validate that a Codex provider session id belongs to this agent/project.
+ * Prevents resuming the wrong session when DB mappings go stale.
+ * @param {string} providerSessionId
+ * @param {string} agentName
+ * @param {string} projectPath
+ * @param {string} tmuxSession
+ * @returns {boolean}
+ */
+function isCodexProviderSessionIdMatchForAgent(providerSessionId, agentName, projectPath, tmuxSession) {
+	const filePath = findCodexSessionFileById(providerSessionId);
+	if (!filePath) {
+		return false;
+	}
+
+	const prefix = readFilePrefix(filePath, 1024 * 1024);
+	if (!prefix) {
+		return false;
+	}
+
+	const normalizedProjectPath = projectPath.replace(/\/+$/, '');
+	const markerProject = `[JAT_PROJECT_PATH:${normalizedProjectPath}]`;
+	const markerAgent = `[JAT_AGENT_NAME:${agentName}]`;
+	const markerTmux = `[JAT_TMUX_SESSION:${tmuxSession}]`;
+	const legacyNeedle = `Your agent name is: ${agentName}`;
+
+	if (!prefix.includes(markerProject)) {
+		return false;
+	}
+
+	return prefix.includes(markerAgent) || prefix.includes(markerTmux) || prefix.includes(legacyNeedle);
+}
+
+/**
+ * Search Codex session logs for this agent's most recent provider session id.
+ * Uses stable JAT markers embedded in the spawn prompt.
+ *
+ * @param {string} agentName
+ * @param {string | null} projectPath
+ * @returns {string | null}
+ */
 function findCodexSessionIdFromSessions(agentName, projectPath) {
 	const homeDir = process.env.HOME || '';
 	const sessionsRoot = join(homeDir, '.codex', 'sessions');
@@ -215,6 +425,7 @@ function findCodexSessionIdFromSessions(agentName, projectPath) {
 	const marker1 = `[JAT_AGENT_NAME:${agentName}]`;
 	const marker2 = `[JAT_TMUX_SESSION:jat-${agentName}]`;
 	const legacyNeedle = `Your agent name is: ${agentName}`;
+	const markerProject = projectPath ? `[JAT_PROJECT_PATH:${projectPath.replace(/\/+$/, '')}]` : null;
 
 	/** @type {Array<{ path: string; modified_millis: number; cwds?: string[] }>} */
 	let entries = [];
@@ -230,12 +441,59 @@ function findCodexSessionIdFromSessions(agentName, projectPath) {
 		}
 	}
 
+	if (entries.length === 0) {
+		// Fallback: scan ~/.codex/sessions recursively for recent JSONL files (index cache may be absent).
+		try {
+			const cutoffMillis = Date.now() - 30 * 24 * 60 * 60 * 1000;
+			const stack = [{ dir: sessionsRoot, depth: 0 }];
+			const files = [];
+			const maxDepth = 6;
+
+			while (stack.length > 0) {
+				const item = stack.pop();
+				if (!item) break;
+				if (item.depth > maxDepth) continue;
+
+				let dirEntries;
+				try {
+					dirEntries = readdirSync(item.dir, { withFileTypes: true });
+				} catch {
+					continue;
+				}
+
+				for (const ent of dirEntries) {
+					const fullPath = join(item.dir, ent.name);
+					if (ent.isDirectory()) {
+						if (ent.name.startsWith('.')) continue;
+						stack.push({ dir: fullPath, depth: item.depth + 1 });
+						continue;
+					}
+					if (!ent.isFile()) continue;
+					if (!ent.name.endsWith('.jsonl')) continue;
+
+					try {
+						const st = statSync(fullPath);
+						if (st.mtimeMs < cutoffMillis) continue;
+						files.push({ path: fullPath, modified_millis: st.mtimeMs });
+					} catch {
+						// ignore
+					}
+				}
+			}
+
+			files.sort((a, b) => (b.modified_millis || 0) - (a.modified_millis || 0));
+			entries = files.slice(0, 2000);
+		} catch {
+			// ignore
+		}
+	}
+
 	// Prefer same cwd if projectPath is known; otherwise scan most recent sessions.
 	let candidates = entries;
 	if (projectPath) {
-		const normalizedProjectPath = projectPath.replace(/\/$/, '');
+		const normalizedProjectPath = projectPath.replace(/\/+$/, '');
 		const byCwd = entries.filter((e) =>
-			Array.isArray(e.cwds) && e.cwds.some((cwd) => String(cwd).replace(/\/$/, '') === normalizedProjectPath)
+			Array.isArray(e.cwds) && e.cwds.some((cwd) => String(cwd).replace(/\/+$/, '') === normalizedProjectPath)
 		);
 		if (byCwd.length > 0) {
 			candidates = byCwd;
@@ -251,6 +509,7 @@ function findCodexSessionIdFromSessions(agentName, projectPath) {
 		try {
 			const prefix = readFilePrefix(entry.path, 1024 * 1024);
 			if (!prefix) continue;
+			if (markerProject && !prefix.includes(markerProject)) continue;
 			if (prefix.includes(marker1) || prefix.includes(marker2) || prefix.includes(legacyNeedle)) {
 				const id = extractCodexSessionIdFromPath(entry.path);
 				if (id) {
@@ -512,7 +771,9 @@ export async function POST({ params, request }) {
 
 		// Determine which agent program to resume (Agent Mail is authoritative)
 		const dbInfo = getAgentInfoFromDb(agentName);
-		const agentProgramId = body.agentProgram || dbInfo?.program || 'claude-code';
+		const agentConfig = getAgentConfig();
+		const fallbackAgentId = agentConfig.defaults?.fallbackAgent || 'codex-native';
+		const agentProgramId = body.agentProgram || dbInfo?.program || fallbackAgentId;
 		const agentProgram = agentProgramId ? getAgentProgram(agentProgramId) : undefined;
 		const agentCommand =
 			agentProgram?.command ||
@@ -529,6 +790,19 @@ export async function POST({ params, request }) {
 		// Use provided session_id or look it up from signal files (and provider-specific fallbacks)
 		/** @type {string | undefined} */
 		let sessionId = body.session_id;
+		// Prefer durable provider session mapping from Agent Mail DB (survives restarts).
+		// Validate mappings against Codex session logs to avoid resuming the wrong session when mappings go stale.
+		if (!sessionId && dbInfo?.agentId && (agentCommand === 'codex' || agentCommand === 'codex-native')) {
+			const mapped = getLatestProviderSessionIdFromDb(dbInfo.agentId, agentCommand);
+			if (mapped) {
+				const ok = isCodexProviderSessionIdMatchForAgent(mapped, agentName, projectPath, sessionName);
+				if (ok) {
+					sessionId = mapped;
+				} else {
+					console.warn(`[resume] Ignoring stale provider session id mapping for ${agentName}: ${mapped}`);
+				}
+			}
+		}
 		if (!sessionId) {
 			if (agentCommand === 'claude') {
 				const found = findSessionId(sessionName, projectPath);
@@ -580,6 +854,22 @@ export async function POST({ params, request }) {
 			}
 		}
 
+		// Resolve tools + Agent Mail env for the resumed session (agent-agnostic).
+		let toolsPath = `${process.env.HOME}/.local/bin`;
+		if (existsSync(configPath)) {
+			try {
+				const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+				toolsPath = config.defaults?.tools_path || toolsPath;
+			} catch {
+				// Use default
+			}
+		}
+		toolsPath = String(toolsPath).replace(/^~(?=\/)/, process.env.HOME || '');
+
+		const basePath = process.env.PATH || '';
+		const fullPath = `${basePath}:${toolsPath}` + (agentCommand === 'claude' ? `:${projectPath}/.claude/tools` : '');
+		const envPrefix = `PATH="${fullPath}" AGENT_MAIL_URL="http://localhost:8765" AGENT_MAIL_DB="${AGENT_MAIL_DB_PATH}"`;
+
 		// Get claude flags from config (legacy)
 		let claudeFlags = '--dangerously-skip-permissions';
 		if (existsSync(configPath)) {
@@ -589,6 +879,11 @@ export async function POST({ params, request }) {
 			} catch {
 				// Use default
 			}
+		}
+
+		// Persist provider session id mapping for reliable future resumes (best-effort).
+		if (sessionId && dbInfo?.agentId) {
+			upsertProviderSessionIdToDb(dbInfo.agentId, agentCommand, sessionId, sessionName);
 		}
 
 		// Write resume marker file so IDE can show "RESUMED" badge
@@ -633,8 +928,29 @@ export async function POST({ params, request }) {
 			if (resolvedModel?.id) {
 				parts.push('--model', resolvedModel.id);
 			}
-			if (agentProgram?.flags?.length) {
-				parts.push(...agentProgram.flags);
+			let effectiveFlags = agentProgram?.flags?.length ? [...agentProgram.flags] : [];
+			// Normalize legacy Codex approval flag name (`--approval` → `--ask-for-approval`).
+			effectiveFlags = effectiveFlags.map((f) =>
+				f === '--approval'
+					? '--ask-for-approval'
+					: f.startsWith('--approval ')
+						? f.replace(/^--approval /, '--ask-for-approval ')
+						: f
+			);
+			const hasBypass = effectiveFlags.some((f) => f.includes('--dangerously-bypass-approvals-and-sandbox'));
+			if (!hasBypass) {
+				const hasSandbox = effectiveFlags.some((f) => f === '--sandbox' || f.startsWith('--sandbox '));
+				const hasApproval = effectiveFlags.some((f) =>
+					f === '--ask-for-approval' ||
+					f.startsWith('--ask-for-approval ') ||
+					f === '-a' ||
+					f.startsWith('-a ')
+				);
+				if (!hasSandbox) effectiveFlags.push('--sandbox', 'danger-full-access');
+				if (!hasApproval) effectiveFlags.push('--ask-for-approval', 'never');
+			}
+			if (effectiveFlags.length) {
+				parts.push(...effectiveFlags);
 			}
 			if (sessionId) {
 				parts.push(sessionId);
@@ -648,8 +964,24 @@ export async function POST({ params, request }) {
 			if (resolvedModel?.id) {
 				parts.push('--model', resolvedModel.id);
 			}
-			if (agentProgram?.flags?.length) {
-				parts.push(...agentProgram.flags);
+			let effectiveFlags = agentProgram?.flags?.length ? [...agentProgram.flags] : [];
+			// Normalize legacy Codex approval flag name (`--ask-for-approval` → `--approval`) for codex-native.
+			effectiveFlags = effectiveFlags.map((f) =>
+				f === '--ask-for-approval'
+					? '--approval'
+					: f.startsWith('--ask-for-approval ')
+						? f.replace(/^--ask-for-approval /, '--approval ')
+						: f
+			);
+			const hasBypass = effectiveFlags.some((f) => f.includes('--dangerously-bypass-approvals-and-sandbox'));
+			if (!hasBypass) {
+				const hasSandbox = effectiveFlags.some((f) => f === '--sandbox' || f.startsWith('--sandbox '));
+				const hasApproval = effectiveFlags.some((f) => f === '--approval' || f.startsWith('--approval '));
+				if (!hasSandbox) effectiveFlags.push('--sandbox', 'danger-full-access');
+				if (!hasApproval) effectiveFlags.push('--approval', 'never');
+			}
+			if (effectiveFlags.length) {
+				parts.push(...effectiveFlags);
 			}
 			if (sessionId) {
 				parts.push('--resume', sessionId);
@@ -667,7 +999,8 @@ export async function POST({ params, request }) {
 			}, { status: 400 });
 		}
 
-		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "${escapeForDoubleQuotedShell(innerCmd)}"`;
+		const fullInnerCmd = `${envPrefix} ${innerCmd}`.trim();
+		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "${escapeForDoubleQuotedShell(fullInnerCmd)}"`;
 		const tmuxAttachCmd = `tmux attach-session -t "${sessionName}"`;
 
 		// First create the tmux session

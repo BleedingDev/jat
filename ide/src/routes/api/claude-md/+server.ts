@@ -1,25 +1,30 @@
 /**
- * API endpoint for listing discoverable CLAUDE.md files
+ * API endpoint for listing discoverable agent instruction files.
  *
- * GET /api/claude-md - Returns list of CLAUDE.md files with metadata
+ * GET /api/claude-md - Returns list of instruction files with metadata
  *
  * Discovers files from:
- * - Project root CLAUDE.md
- * - ide/CLAUDE.md
- * - User's ~/.claude/CLAUDE.md
- * - Other project subdirectories with CLAUDE.md
+ * - Project root AGENTS.md / CLAUDE.md
+ * - ide/AGENTS.md / ide/CLAUDE.md (if present)
+ * - User's ~/.claude/CLAUDE.md (Claude Code)
+ * - User's ~/.codex/AGENTS.md (Codex/Codex-native, optional)
+ * - Other project subdirectories with AGENTS.md / CLAUDE.md (1 level deep)
+ *
+ * NOTE: Despite the route name, this endpoint is agent-agnostic and includes
+ * both AGENTS.md and CLAUDE.md.
  */
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readFile, stat } from 'fs/promises';
-import { existsSync } from 'fs';
-import { join, dirname, basename } from 'path';
+import { stat } from 'fs/promises';
+import { existsSync, readdirSync } from 'fs';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 
-interface ClaudeMdFile {
+interface InstructionFile {
 	path: string;
 	displayName: string;
+	kind: 'agents' | 'claude';
 	location: 'project' | 'ide' | 'user' | 'subdirectory';
 	lastModified: string;
 	size: number;
@@ -37,76 +42,74 @@ async function getFileMetadata(filePath: string): Promise<{ lastModified: string
 	}
 }
 
+async function addFile(
+	files: InstructionFile[],
+	filePath: string,
+	displayName: string,
+	kind: InstructionFile['kind'],
+	location: InstructionFile['location']
+) {
+	if (!existsSync(filePath)) return;
+	const metadata = await getFileMetadata(filePath);
+	if (!metadata) return;
+	files.push({
+		path: filePath,
+		displayName,
+		kind,
+		location,
+		...metadata
+	});
+}
+
 export const GET: RequestHandler = async () => {
 	try {
 		// Get project root (ide parent directory)
 		const ideDir = process.cwd();
 		const projectRoot = dirname(ideDir);
 		const userClaudeDir = join(homedir(), '.claude');
+		const userCodexDir = join(homedir(), '.codex');
 
-		const files: ClaudeMdFile[] = [];
+		const files: InstructionFile[] = [];
 
-		// 1. Check project root CLAUDE.md
-		const projectClaudeMd = join(projectRoot, 'CLAUDE.md');
-		if (existsSync(projectClaudeMd)) {
-			const metadata = await getFileMetadata(projectClaudeMd);
-			if (metadata) {
-				files.push({
-					path: projectClaudeMd,
-					displayName: 'Project CLAUDE.md',
-					location: 'project',
-					...metadata
-				});
-			}
-		}
+		// 1) Project root instruction files
+		await addFile(files, join(projectRoot, 'AGENTS.md'), 'Project AGENTS.md', 'agents', 'project');
+		await addFile(files, join(projectRoot, 'CLAUDE.md'), 'Project CLAUDE.md', 'claude', 'project');
 
-		// 2. Check IDE CLAUDE.md
-		const ideClaudeMd = join(ideDir, 'CLAUDE.md');
-		if (existsSync(ideClaudeMd)) {
-			const metadata = await getFileMetadata(ideClaudeMd);
-			if (metadata) {
-				files.push({
-					path: ideClaudeMd,
-					displayName: 'IDE CLAUDE.md',
-					location: 'ide',
-					...metadata
-				});
-			}
-		}
+		// 2) IDE instruction files (rare, but useful for monorepos)
+		await addFile(files, join(ideDir, 'AGENTS.md'), 'IDE AGENTS.md', 'agents', 'ide');
+		await addFile(files, join(ideDir, 'CLAUDE.md'), 'IDE CLAUDE.md', 'claude', 'ide');
 
-		// 3. Check user's ~/.claude/CLAUDE.md
-		const userClaudeMd = join(userClaudeDir, 'CLAUDE.md');
-		if (existsSync(userClaudeMd)) {
-			const metadata = await getFileMetadata(userClaudeMd);
-			if (metadata) {
-				files.push({
-					path: userClaudeMd,
-					displayName: 'User CLAUDE.md',
-					location: 'user',
-					...metadata
-				});
-			}
-		}
+		// 3) User/global instruction files
+		await addFile(files, join(userClaudeDir, 'CLAUDE.md'), 'User CLAUDE.md', 'claude', 'user');
+		await addFile(files, join(userCodexDir, 'AGENTS.md'), 'User AGENTS.md', 'agents', 'user');
 
-		// 4. Check for other CLAUDE.md files in project subdirectories (1 level deep)
-		const { readdirSync } = await import('fs');
+		// 4) Scan 1 level deep for subdirectory instruction files
 		try {
 			const entries = readdirSync(projectRoot, { withFileTypes: true });
 			for (const entry of entries) {
-				if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules' && entry.name !== 'ide') {
-					const subClaudeMd = join(projectRoot, entry.name, 'CLAUDE.md');
-					if (existsSync(subClaudeMd)) {
-						const metadata = await getFileMetadata(subClaudeMd);
-						if (metadata) {
-							files.push({
-								path: subClaudeMd,
-								displayName: `${entry.name}/CLAUDE.md`,
-								location: 'subdirectory',
-								...metadata
-							});
-						}
-					}
+				if (
+					!entry.isDirectory() ||
+					entry.name.startsWith('.') ||
+					entry.name === 'node_modules' ||
+					entry.name === 'ide'
+				) {
+					continue;
 				}
+
+				await addFile(
+					files,
+					join(projectRoot, entry.name, 'AGENTS.md'),
+					`${entry.name}/AGENTS.md`,
+					'agents',
+					'subdirectory'
+				);
+				await addFile(
+					files,
+					join(projectRoot, entry.name, 'CLAUDE.md'),
+					`${entry.name}/CLAUDE.md`,
+					'claude',
+					'subdirectory'
+				);
 			}
 		} catch (e) {
 			console.error('Error scanning subdirectories:', e);
@@ -114,7 +117,7 @@ export const GET: RequestHandler = async () => {
 
 		return json({ files });
 	} catch (error) {
-		console.error('Error listing CLAUDE.md files:', error);
-		return json({ error: 'Failed to list CLAUDE.md files' }, { status: 500 });
+		console.error('Error listing instruction files:', error);
+		return json({ error: 'Failed to list instruction files' }, { status: 500 });
 	}
 };

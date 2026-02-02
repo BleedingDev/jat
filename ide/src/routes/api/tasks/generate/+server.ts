@@ -8,7 +8,7 @@
  * Uses centralized llmService (auto-fallback: API key → Claude CLI subscription).
  */
 import { json } from '@sveltejs/kit';
-import { llmCall, parseJsonResponse } from '$lib/server/llmService';
+import { llmCall, parseJsonResponse, getLlmSchemaPath } from '$lib/server/llmService';
 import type { RequestHandler } from './$types';
 
 interface GenerateRequest {
@@ -120,8 +120,10 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const prompt = buildPrompt(body);
 
-		// Use centralized LLM service (auto-fallback: API → CLI)
-		const llmResponse = await llmCall(prompt, { maxTokens: 4096 });
+		const schemaPath = getLlmSchemaPath('task-generate-schema.json') ?? undefined;
+
+		// Use centralized LLM service (auto-fallback: codex-native → API → Claude CLI)
+		const llmResponse = await llmCall(prompt, { maxTokens: 4096, schemaPath });
 
 		// Parse JSON response (handles markdown code blocks)
 		let parsed: unknown[];

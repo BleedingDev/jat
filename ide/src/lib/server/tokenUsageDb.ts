@@ -1,18 +1,23 @@
 /**
  * Token Usage SQLite Database Module
  *
- * Pre-aggregates token usage from JSONL files into SQLite for fast API queries.
+ * Pre-aggregates token usage from provider log files into SQLite for fast API queries.
  *
  * Design:
  * 1. Background job runs every 5 minutes (or on-demand)
- * 2. Scans JSONL files for new entries (tracks last processed position per file)
+ * 2. Scans provider session logs for new entries (tracks last processed byte offset per file)
  * 3. Aggregates into 30-minute buckets in SQLite (48 points per 24h for better sparkline resolution)
- * 4. API queries SQLite instead of parsing files
+ * 4. API queries SQLite instead of parsing logs on demand
  *
  * Tables:
  * - token_usage_hourly: Per-bucket aggregation by project, agent, session
  *                       (column named "hour_start" for backward compatibility, but stores 30-min bucket start)
- * - aggregation_state: Tracks last processed position per JSONL file
+ * - aggregation_state: Tracks last processed position per log file
+ * - session_agent_map: Session-id → agent/project mapping (for joining provider logs back to JAT agents)
+ *
+ * Providers:
+ * - Claude Code: reads ~/.claude/projects/<project>/*.jsonl (message.usage)
+ * - Codex / codex-native: reads ~/.codex/sessions/<session>/rollout-*.jsonl (event_msg token_count)
  *
  * Benefits:
  * - API response time: 109s → <100ms
@@ -24,7 +29,9 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as os from 'os';
-import { readdir, readFile, stat } from 'fs/promises';
+import { createReadStream, existsSync, mkdirSync } from 'fs';
+import { readdir, readFile, stat, open as openFile } from 'fs/promises';
+import { createInterface } from 'readline';
 import type { Database as DatabaseType } from 'better-sqlite3';
 
 // ============================================================================
@@ -51,6 +58,11 @@ export interface AggregationStateRow {
 	file_path: string;
 	last_position: number;
 	last_modified: number;
+	// Optional columns (added later) used for Codex cumulative token_count deltas
+	last_cumulative_input_tokens?: number;
+	last_cumulative_cached_input_tokens?: number;
+	last_cumulative_output_tokens?: number;
+	last_cumulative_total_tokens?: number;
 	processed_at: string;
 }
 
@@ -68,7 +80,16 @@ export interface AggregatedUsage {
 // Constants
 // ============================================================================
 
-const DB_PATH = path.join(os.homedir(), '.claude', 'token-usage.db');
+function getJatDataDir(): string {
+	const xdgDataHome = process.env.XDG_DATA_HOME;
+	if (xdgDataHome && xdgDataHome.trim()) {
+		return path.join(xdgDataHome, 'jat');
+	}
+
+	return path.join(os.homedir(), '.local', 'share', 'jat');
+}
+
+const DB_PATH = path.join(getJatDataDir(), 'token-usage.db');
 
 // Claude Sonnet 4.5 Pricing (per million tokens)
 const PRICING = {
@@ -77,6 +98,14 @@ const PRICING = {
 	cache_read: 0.30,
 	output: 15.0
 } as const;
+
+const CODEX_SESSIONS_DIR = path.join(os.homedir(), '.codex', 'sessions');
+const CODEX_SESSION_INDEX_FILE = path.join(CODEX_SESSIONS_DIR, '_schaltwerk_session_index_cache.json');
+const CODEX_LOOKBACK_DAYS = (() => {
+	const raw = process.env.JAT_CODEX_USAGE_LOOKBACK_DAYS;
+	const parsed = raw ? Number(raw) : NaN;
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+})();
 
 // ============================================================================
 // Database Singleton
@@ -89,6 +118,11 @@ let db: DatabaseType | null = null;
  */
 export function getDatabase(): DatabaseType {
 	if (!db) {
+		const dbDir = path.dirname(DB_PATH);
+		if (!existsSync(dbDir)) {
+			mkdirSync(dbDir, { recursive: true });
+		}
+
 		db = new Database(DB_PATH);
 		db.pragma('journal_mode = WAL');
 		db.pragma('synchronous = NORMAL');
@@ -110,6 +144,28 @@ export function closeDatabase(): void {
 // ============================================================================
 // Schema Initialization
 // ============================================================================
+
+function ensureAggregationStateColumns(db: DatabaseType): void {
+	try {
+		const cols = db.prepare("PRAGMA table_info('aggregation_state')").all() as Array<{ name: string }>;
+		const existing = new Set(cols.map(c => c.name));
+
+		const additions: Array<{ name: string; sql: string }> = [
+			{ name: 'last_cumulative_input_tokens', sql: 'ALTER TABLE aggregation_state ADD COLUMN last_cumulative_input_tokens INTEGER DEFAULT 0' },
+			{ name: 'last_cumulative_cached_input_tokens', sql: 'ALTER TABLE aggregation_state ADD COLUMN last_cumulative_cached_input_tokens INTEGER DEFAULT 0' },
+			{ name: 'last_cumulative_output_tokens', sql: 'ALTER TABLE aggregation_state ADD COLUMN last_cumulative_output_tokens INTEGER DEFAULT 0' },
+			{ name: 'last_cumulative_total_tokens', sql: 'ALTER TABLE aggregation_state ADD COLUMN last_cumulative_total_tokens INTEGER DEFAULT 0' }
+		];
+
+		for (const add of additions) {
+			if (!existing.has(add.name)) {
+				db.exec(add.sql);
+			}
+		}
+	} catch {
+		// If PRAGMA fails or table is missing, initialization will recreate it.
+	}
+}
 
 function initializeTables(db: DatabaseType): void {
 	// Hourly usage aggregation table
@@ -143,9 +199,15 @@ function initializeTables(db: DatabaseType): void {
 			file_path TEXT PRIMARY KEY,
 			last_position INTEGER DEFAULT 0,
 			last_modified INTEGER DEFAULT 0,
+			last_cumulative_input_tokens INTEGER DEFAULT 0,
+			last_cumulative_cached_input_tokens INTEGER DEFAULT 0,
+			last_cumulative_output_tokens INTEGER DEFAULT 0,
+			last_cumulative_total_tokens INTEGER DEFAULT 0,
 			processed_at TEXT DEFAULT CURRENT_TIMESTAMP
 		)
 	`);
+
+	ensureAggregationStateColumns(db);
 
 	// Session-to-agent mapping cache
 	db.exec(`
@@ -165,8 +227,31 @@ function initializeTables(db: DatabaseType): void {
 // Session-Agent Mapping (Cached in SQLite)
 // ============================================================================
 
+function upsertSessionAgentMap(sessionId: string, agentName: string, projectName: string): void {
+	const db = getDatabase();
+	const stmt = db.prepare(`
+		INSERT INTO session_agent_map (session_id, agent, project, discovered_at)
+		VALUES (?, ?, ?, datetime('now'))
+		ON CONFLICT(session_id) DO UPDATE SET
+			agent = excluded.agent,
+			project = excluded.project
+	`);
+	stmt.run(sessionId, agentName, projectName);
+}
+
+function getSessionMapping(sessionId: string): { agent: string; project: string } | null {
+	const db = getDatabase();
+	const row = db
+		.prepare('SELECT agent, project FROM session_agent_map WHERE session_id = ?')
+		.get(sessionId) as { agent: string; project: string } | undefined;
+	return row ?? null;
+}
+
 /**
- * Scan for agent-*.txt files and update the session_agent_map table
+ * Scan for agent-*.txt files and update the session_agent_map table.
+ *
+ * This is Claude Code's durable mapping mechanism:
+ * - .claude/sessions/agent-{sessionId}.txt contains the agent name
  */
 export async function updateSessionAgentMap(projectPaths: string[]): Promise<void> {
 	const db = getDatabase();
@@ -225,7 +310,15 @@ export function getAgentForSession(sessionId: string): string | null {
 // JSONL Parsing and Aggregation
 // ============================================================================
 
-interface JSONLEntry {
+type BucketAgg = {
+	input: number;
+	cacheCreation: number;
+	cacheRead: number;
+	output: number;
+	count: number;
+};
+
+interface ClaudeJSONLEntry {
 	timestamp?: string;
 	message?: {
 		usage?: {
@@ -237,6 +330,33 @@ interface JSONLEntry {
 	};
 }
 
+interface CodexSessionIndex {
+	version?: number;
+	entries?: Array<{
+		path?: string;
+		modified_millis?: number;
+		cwds?: string[];
+	}>;
+}
+
+interface CodexTokenCountInfo {
+	total_token_usage?: {
+		input_tokens?: number;
+		cached_input_tokens?: number;
+		output_tokens?: number;
+		total_tokens?: number;
+	};
+}
+
+interface CodexJSONLEntry {
+	timestamp?: string;
+	type?: string;
+	payload?: {
+		type?: string;
+		info?: CodexTokenCountInfo | null;
+	};
+}
+
 /**
  * Default bucket size in minutes for token aggregation.
  * 30 minutes gives 48 data points per 24 hours for better sparkline resolution.
@@ -245,9 +365,6 @@ export const DEFAULT_BUCKET_MINUTES = 30;
 
 /**
  * Round timestamp to bucket start (for bucketing)
- * @param timestamp - The timestamp to round
- * @param bucketMinutes - Bucket size in minutes (default: 30)
- * @returns ISO timestamp string rounded to bucket start
  */
 function roundToBucket(timestamp: Date, bucketMinutes: number = DEFAULT_BUCKET_MINUTES): string {
 	const rounded = new Date(timestamp);
@@ -258,7 +375,7 @@ function roundToBucket(timestamp: Date, bucketMinutes: number = DEFAULT_BUCKET_M
 }
 
 /**
- * Calculate cost from token counts
+ * Calculate Claude cost from token counts
  */
 function calculateCost(input: number, cacheCreation: number, cacheRead: number, output: number): number {
 	return (
@@ -269,91 +386,149 @@ function calculateCost(input: number, cacheCreation: number, cacheRead: number, 
 	);
 }
 
-/**
- * Process a single JSONL file incrementally
- * Returns number of new entries processed
- */
-async function processJSONLFile(
-	filePath: string,
-	project: string,
-	sessionId: string
-): Promise<number> {
-	const db = getDatabase();
+async function readFilePrefix(filePath: string, maxBytes: number = 1024 * 1024): Promise<string> {
+	try {
+		const fh = await openFile(filePath, 'r');
+		try {
+			const buffer = Buffer.allocUnsafe(maxBytes);
+			const { bytesRead } = await fh.read(buffer, 0, maxBytes, 0);
+			return buffer.toString('utf-8', 0, bytesRead);
+		} finally {
+			await fh.close();
+		}
+	} catch {
+		return '';
+	}
+}
 
-	// Get last processed state
-	const stateRow = db.prepare('SELECT last_position, last_modified FROM aggregation_state WHERE file_path = ?')
-		.get(filePath) as AggregationStateRow | undefined;
-
-	let lastPosition = stateRow?.last_position ?? 0;
-	const lastModified = stateRow?.last_modified ?? 0;
-
-	// Check file modification time
-	const fileStat = await stat(filePath);
-	const currentModified = fileStat.mtimeMs;
-
-	// Skip if file hasn't changed since last processing
-	if (currentModified <= lastModified && lastPosition > 0) {
-		return 0;
+async function scanCodexSessionEntriesFallback(params: {
+	cutoffMillis: number;
+	normalizedProjects: Set<string>;
+	maxEntries?: number;
+}): Promise<NonNullable<CodexSessionIndex['entries']>> {
+	const results: NonNullable<CodexSessionIndex['entries']> = [];
+	if (!existsSync(CODEX_SESSIONS_DIR)) {
+		return results;
 	}
 
-	// Read file content
-	const content = await readFile(filePath, 'utf-8');
-	const lines = content.split('\n');
+	const maxEntries = params.maxEntries ?? 2000;
 
-	// Get agent for this session
-	const agent = getAgentForSession(sessionId);
+	type StackItem = { dir: string; depth: number };
+	const stack: StackItem[] = [{ dir: CODEX_SESSIONS_DIR, depth: 0 }];
+	const files: Array<{ path: string; modified_millis: number }> = [];
 
-	// Prepare hourly aggregation buckets
-	const hourlyBuckets = new Map<string, {
-		input: number;
-		cacheCreation: number;
-		cacheRead: number;
-		output: number;
-		count: number;
-	}>();
+	// Codex stores sessions under ~/.codex/sessions/<year>/...; keep recursion bounded.
+	const maxDepth = 6;
 
-	let entriesProcessed = 0;
-	let currentPosition = 0;
+	while (stack.length > 0) {
+		const item = stack.pop();
+		if (!item) break;
+		if (item.depth > maxDepth) continue;
 
-	for (const line of lines) {
-		currentPosition += line.length + 1; // +1 for newline
-
-		// Skip already processed content
-		if (currentPosition <= lastPosition) {
+		let dirEntries;
+		try {
+			dirEntries = await readdir(item.dir, { withFileTypes: true });
+		} catch {
 			continue;
 		}
 
-		if (!line.trim()) continue;
-
-		try {
-			const entry: JSONLEntry = JSON.parse(line);
-
-			if (!entry.message?.usage || !entry.timestamp) continue;
-
-			const usage = entry.message.usage;
-			const bucketStart = roundToBucket(new Date(entry.timestamp));
-
-			// Get or create bucket
-			let bucket = hourlyBuckets.get(bucketStart);
-			if (!bucket) {
-				bucket = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0, count: 0 };
-				hourlyBuckets.set(bucketStart, bucket);
+		for (const ent of dirEntries) {
+			const fullPath = path.join(item.dir, ent.name);
+			if (ent.isDirectory()) {
+				if (ent.name.startsWith('.')) continue;
+				stack.push({ dir: fullPath, depth: item.depth + 1 });
+				continue;
 			}
+			if (!ent.isFile()) continue;
+			if (!ent.name.endsWith('.jsonl')) continue;
 
-			// Accumulate tokens
-			bucket.input += usage.input_tokens || 0;
-			bucket.cacheCreation += usage.cache_creation_input_tokens || 0;
-			bucket.cacheRead += usage.cache_read_input_tokens || 0;
-			bucket.output += usage.output_tokens || 0;
-			bucket.count++;
-
-			entriesProcessed++;
-		} catch {
-			// Skip malformed lines
+			try {
+				const st = await stat(fullPath);
+				const m = st.mtimeMs;
+				if (m < params.cutoffMillis) continue;
+				files.push({ path: fullPath, modified_millis: m });
+			} catch {
+				// ignore
+			}
 		}
 	}
 
-	// Update SQLite with aggregated data (upsert pattern)
+	files.sort((a, b) => b.modified_millis - a.modified_millis);
+
+	// Only inspect a bounded set of recent files; we'll filter further by JAT markers.
+	const recent = files.slice(0, maxEntries * 2);
+
+	for (const file of recent) {
+		const prefix = await readFilePrefix(file.path, 1024 * 1024);
+		if (!prefix) continue;
+
+		const markers = parseJatMarkers(prefix);
+		if (!markers.projectPath) continue;
+
+		const normalizedProject = normalizePath(markers.projectPath);
+		if (!params.normalizedProjects.has(normalizedProject)) continue;
+
+		results.push({
+			path: file.path,
+			modified_millis: file.modified_millis,
+			cwds: [normalizedProject]
+		});
+
+		if (results.length >= maxEntries) break;
+	}
+
+	return results;
+}
+
+function extractCodexSessionIdFromPath(filePath: string): string | null {
+	const base = path.basename(filePath);
+	const match = base.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i);
+	return match ? match[1] : null;
+}
+
+function parseJatMarkers(text: string): { agentName?: string; projectPath?: string } {
+	const agentMatch = text.match(/\[JAT_AGENT_NAME:([^\]]+)\]/);
+	const projectMatch = text.match(/\[JAT_PROJECT_PATH:([^\]]+)\]/);
+	return {
+		agentName: agentMatch?.[1],
+		projectPath: projectMatch?.[1]
+	};
+}
+
+function normalizePath(p: string): string {
+	return String(p).replace(/\/+$/, '');
+}
+
+async function streamJsonlLines(filePath: string, start: number, onLine: (line: string) => void): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		const stream = createReadStream(filePath, { encoding: 'utf-8', start });
+		stream.on('error', reject);
+
+		const rl = createInterface({ input: stream, crlfDelay: Infinity });
+		rl.on('line', onLine);
+		rl.on('close', () => resolve());
+		rl.on('error', reject);
+	});
+}
+
+function upsertBucketsAndState(params: {
+	filePath: string;
+	project: string;
+	agent: string | null;
+	sessionId: string;
+	hourlyBuckets: Map<string, BucketAgg>;
+	lastPosition: number;
+	currentModified: number;
+	stateCumulative?: {
+		inputTokens: number;
+		cachedInputTokens: number;
+		outputTokens: number;
+		totalTokens: number;
+	};
+	provider: 'claude' | 'codex';
+}): void {
+	const db = getDatabase();
+
 	const upsertUsage = db.prepare(`
 		INSERT INTO token_usage_hourly (
 			project, agent, session_id, hour_start,
@@ -371,29 +546,274 @@ async function processJSONLFile(
 			updated_at = datetime('now')
 	`);
 
-	// Insert all hourly buckets in a transaction
+	const upsertState = db.prepare(`
+		INSERT INTO aggregation_state (
+			file_path,
+			last_position,
+			last_modified,
+			last_cumulative_input_tokens,
+			last_cumulative_cached_input_tokens,
+			last_cumulative_output_tokens,
+			last_cumulative_total_tokens,
+			processed_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+		ON CONFLICT(file_path) DO UPDATE SET
+			last_position = excluded.last_position,
+			last_modified = excluded.last_modified,
+			last_cumulative_input_tokens = excluded.last_cumulative_input_tokens,
+			last_cumulative_cached_input_tokens = excluded.last_cumulative_cached_input_tokens,
+			last_cumulative_output_tokens = excluded.last_cumulative_output_tokens,
+			last_cumulative_total_tokens = excluded.last_cumulative_total_tokens,
+			processed_at = datetime('now')
+	`);
+
 	db.transaction(() => {
-		for (const [hourStart, bucket] of hourlyBuckets) {
+		for (const [hourStart, bucket] of params.hourlyBuckets) {
 			const total = bucket.input + bucket.cacheCreation + bucket.cacheRead + bucket.output;
-			const cost = calculateCost(bucket.input, bucket.cacheCreation, bucket.cacheRead, bucket.output);
+			const cost = params.provider === 'claude'
+				? calculateCost(bucket.input, bucket.cacheCreation, bucket.cacheRead, bucket.output)
+				: 0;
 
 			upsertUsage.run(
-				project, agent, sessionId, hourStart,
-				bucket.input, bucket.cacheCreation, bucket.cacheRead, bucket.output,
-				total, cost, bucket.count
+				params.project,
+				params.agent,
+				params.sessionId,
+				hourStart,
+				bucket.input,
+				bucket.cacheCreation,
+				bucket.cacheRead,
+				bucket.output,
+				total,
+				cost,
+				bucket.count
 			);
 		}
 
-		// Update aggregation state
-		db.prepare(`
-			INSERT INTO aggregation_state (file_path, last_position, last_modified, processed_at)
-			VALUES (?, ?, ?, datetime('now'))
-			ON CONFLICT(file_path) DO UPDATE SET
-				last_position = excluded.last_position,
-				last_modified = excluded.last_modified,
-				processed_at = datetime('now')
-		`).run(filePath, currentPosition, currentModified);
+		const cum = params.stateCumulative ?? { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0 };
+		upsertState.run(
+			params.filePath,
+			params.lastPosition,
+			params.currentModified,
+			cum.inputTokens,
+			cum.cachedInputTokens,
+			cum.outputTokens,
+			cum.totalTokens
+		);
 	})();
+}
+
+/**
+ * Process a single Claude JSONL file incrementally.
+ * Returns number of new usage entries processed.
+ */
+async function processJSONLFile(filePath: string, project: string, sessionId: string): Promise<number> {
+	const db = getDatabase();
+
+	// Get last processed state
+	const stateRow = db
+		.prepare('SELECT last_position, last_modified FROM aggregation_state WHERE file_path = ?')
+		.get(filePath) as AggregationStateRow | undefined;
+
+	let lastPosition = stateRow?.last_position ?? 0;
+	const lastModified = stateRow?.last_modified ?? 0;
+
+	// Check file modification time
+	const fileStat = await stat(filePath);
+	const currentModified = fileStat.mtimeMs;
+
+	// Reset state if file was truncated/rotated
+	if (fileStat.size < lastPosition) {
+		lastPosition = 0;
+	}
+
+	// Skip if file hasn't changed since last processing
+	if (currentModified <= lastModified && lastPosition > 0) {
+		return 0;
+	}
+
+	// Get agent for this session
+	const agent = getAgentForSession(sessionId);
+
+	// Prepare hourly aggregation buckets
+	const hourlyBuckets = new Map<string, BucketAgg>();
+
+	let entriesProcessed = 0;
+
+	await streamJsonlLines(filePath, lastPosition, (line) => {
+		if (!line.trim()) return;
+		try {
+			const entry: ClaudeJSONLEntry = JSON.parse(line);
+			if (!entry.message?.usage || !entry.timestamp) return;
+
+			const usage = entry.message.usage;
+			const bucketStart = roundToBucket(new Date(entry.timestamp));
+
+			let bucket = hourlyBuckets.get(bucketStart);
+			if (!bucket) {
+				bucket = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0, count: 0 };
+				hourlyBuckets.set(bucketStart, bucket);
+			}
+
+			bucket.input += usage.input_tokens || 0;
+			bucket.cacheCreation += usage.cache_creation_input_tokens || 0;
+			bucket.cacheRead += usage.cache_read_input_tokens || 0;
+			bucket.output += usage.output_tokens || 0;
+			bucket.count++;
+			entriesProcessed++;
+		} catch {
+			// Skip malformed lines
+		}
+	});
+
+	upsertBucketsAndState({
+		filePath,
+		project,
+		agent,
+		sessionId,
+		hourlyBuckets,
+		lastPosition: fileStat.size,
+		currentModified,
+		provider: 'claude'
+	});
+
+	return entriesProcessed;
+}
+
+/**
+ * Process a single Codex session JSONL file incrementally.
+ * Returns number of new token_count events processed.
+ */
+async function processCodexSessionFile(
+	filePath: string,
+	project: string,
+	sessionId: string,
+	agent: string | null
+): Promise<number> {
+	const db = getDatabase();
+
+	const stateRow = db
+		.prepare(`
+			SELECT
+				last_position,
+				last_modified,
+				last_cumulative_input_tokens,
+				last_cumulative_cached_input_tokens,
+				last_cumulative_output_tokens,
+				last_cumulative_total_tokens
+			FROM aggregation_state
+			WHERE file_path = ?
+		`)
+		.get(filePath) as AggregationStateRow | undefined;
+
+	let lastPosition = stateRow?.last_position ?? 0;
+	const lastModified = stateRow?.last_modified ?? 0;
+
+	let lastCumInput = stateRow?.last_cumulative_input_tokens ?? 0;
+	let lastCumCached = stateRow?.last_cumulative_cached_input_tokens ?? 0;
+	let lastCumOutput = stateRow?.last_cumulative_output_tokens ?? 0;
+	let lastCumTotal = stateRow?.last_cumulative_total_tokens ?? 0;
+
+	const fileStat = await stat(filePath);
+	const currentModified = fileStat.mtimeMs;
+
+	// Reset state if file was truncated/rotated
+	if (fileStat.size < lastPosition) {
+		lastPosition = 0;
+		lastCumInput = 0;
+		lastCumCached = 0;
+		lastCumOutput = 0;
+		lastCumTotal = 0;
+	}
+
+	if (currentModified <= lastModified && lastPosition > 0) {
+		return 0;
+	}
+
+	const hourlyBuckets = new Map<string, BucketAgg>();
+	let entriesProcessed = 0;
+
+	await streamJsonlLines(filePath, lastPosition, (line) => {
+		if (!line.trim()) return;
+
+		let entry: CodexJSONLEntry;
+		try {
+			entry = JSON.parse(line) as CodexJSONLEntry;
+		} catch {
+			return;
+		}
+
+		if (!entry.timestamp || entry.type !== 'event_msg') return;
+		const payload = entry.payload;
+		if (!payload || payload.type !== 'token_count') return;
+
+		const info = payload.info;
+		const totalUsage = info?.total_token_usage;
+		if (!totalUsage) return;
+
+		const nextInput = Number(totalUsage.input_tokens ?? 0);
+		const nextCached = Number(totalUsage.cached_input_tokens ?? 0);
+		const nextOutput = Number(totalUsage.output_tokens ?? 0);
+		const nextTotal = Number(totalUsage.total_tokens ?? 0);
+
+		// If the session compacts/resets, totals can move backwards. Reset baseline and skip this event.
+		if (nextInput < lastCumInput || nextCached < lastCumCached || nextOutput < lastCumOutput || nextTotal < lastCumTotal) {
+			lastCumInput = nextInput;
+			lastCumCached = nextCached;
+			lastCumOutput = nextOutput;
+			lastCumTotal = nextTotal;
+			return;
+		}
+
+		const deltaInput = nextInput - lastCumInput;
+		const deltaCached = nextCached - lastCumCached;
+		const deltaOutput = nextOutput - lastCumOutput;
+
+		// Total tokens is redundant (Codex reports total as input+output), but keep baseline in sync.
+		lastCumInput = nextInput;
+		lastCumCached = nextCached;
+		lastCumOutput = nextOutput;
+		lastCumTotal = nextTotal;
+
+		// Nothing new
+		if (deltaInput === 0 && deltaOutput === 0 && deltaCached === 0) {
+			return;
+		}
+
+		const inputNonCached = Math.max(0, deltaInput - deltaCached);
+		const cacheRead = Math.max(0, deltaCached);
+		const output = Math.max(0, deltaOutput);
+
+		const bucketStart = roundToBucket(new Date(entry.timestamp));
+		let bucket = hourlyBuckets.get(bucketStart);
+		if (!bucket) {
+			bucket = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0, count: 0 };
+			hourlyBuckets.set(bucketStart, bucket);
+		}
+
+		bucket.input += inputNonCached;
+		bucket.cacheRead += cacheRead;
+		bucket.output += output;
+		bucket.count++;
+		entriesProcessed++;
+	});
+
+	upsertBucketsAndState({
+		filePath,
+		project,
+		agent,
+		sessionId,
+		hourlyBuckets,
+		lastPosition: fileStat.size,
+		currentModified,
+		provider: 'codex',
+		stateCumulative: {
+			inputTokens: lastCumInput,
+			cachedInputTokens: lastCumCached,
+			outputTokens: lastCumOutput,
+			totalTokens: lastCumTotal
+		}
+	});
 
 	return entriesProcessed;
 }
@@ -402,9 +822,54 @@ async function processJSONLFile(
 // Aggregation Job
 // ============================================================================
 
+async function discoverProjectPathsForAggregation(homeDir: string): Promise<string[]> {
+	const paths = new Set<string>();
+
+	// 1) Configured JAT projects
+	try {
+		const configPath = path.join(homeDir, '.config', 'jat', 'projects.json');
+		if (existsSync(configPath)) {
+			const raw = await readFile(configPath, 'utf-8');
+			const parsed = JSON.parse(raw) as { projects?: Record<string, { path?: string }> };
+			for (const value of Object.values(parsed.projects ?? {})) {
+				if (value?.path) {
+					const expanded = value.path.replace(/^~(?=\/)/, homeDir);
+					paths.add(normalizePath(expanded));
+				}
+			}
+		}
+	} catch {
+		// ignore
+	}
+
+	// 2) ~/code/* projects
+	try {
+		const codeDir = path.join(homeDir, 'code');
+		const codeDirs = await readdir(codeDir, { withFileTypes: true });
+		for (const d of codeDirs) {
+			if (d.isDirectory()) {
+				paths.add(normalizePath(path.join(codeDir, d.name)));
+			}
+		}
+	} catch {
+		// ignore
+	}
+
+	// 3) Current working directory (IDE typically runs from <repo>/ide)
+	try {
+		const cwd = process.cwd();
+		const guessedRoot = cwd.endsWith(`${path.sep}ide`) ? path.resolve(cwd, '..') : cwd;
+		paths.add(normalizePath(guessedRoot));
+	} catch {
+		// ignore
+	}
+
+	return Array.from(paths);
+}
+
 /**
  * Run the full aggregation job
- * Scans all JSONL files and updates the SQLite database
+ * Scans all provider session logs and updates the SQLite database
  */
 export async function runAggregation(): Promise<{
 	filesProcessed: number;
@@ -413,57 +878,138 @@ export async function runAggregation(): Promise<{
 }> {
 	const startTime = Date.now();
 	const homeDir = os.homedir();
-	const projectsDir = path.join(homeDir, '.claude', 'projects');
+	const claudeProjectsDir = path.join(homeDir, '.claude', 'projects');
 
 	let filesProcessed = 0;
 	let entriesProcessed = 0;
 
 	try {
-		// Get all project directories
-		const projectDirs = await readdir(projectsDir, { withFileTypes: true });
+		const projectPaths = await discoverProjectPathsForAggregation(homeDir);
 
-		// Discover project paths for session-agent mapping
-		const codeDirs = await readdir(path.join(homeDir, 'code'), { withFileTypes: true });
-		const projectPaths = codeDirs
-			.filter(d => d.isDirectory())
-			.map(d => path.join(homeDir, 'code', d.name));
-
-		// Update session-agent mapping first
+		// Update session-agent mapping first (Claude file-based mapping)
 		await updateSessionAgentMap(projectPaths);
 
-		// Process each project's JSONL files
-		for (const dir of projectDirs) {
-			if (!dir.isDirectory()) continue;
+		// ---------------------------------------------------------------------
+		// Claude Code usage ingestion
+		// ---------------------------------------------------------------------
+		try {
+			const projectDirs = await readdir(claudeProjectsDir, { withFileTypes: true });
 
-			const projectSlug = dir.name;
-			// Extract project name from slug (e.g., "-home-jw-code-jat" -> "jat")
-			const projectName = projectSlug.split('-').pop() || projectSlug;
-			const projectDir = path.join(projectsDir, projectSlug);
+			for (const dir of projectDirs) {
+				if (!dir.isDirectory()) continue;
 
-			try {
-				const files = await readdir(projectDir);
-				const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+				const projectSlug = dir.name;
+				// Extract project name from slug (e.g., "-home-jw-code-jat" -> "jat")
+				const projectName = projectSlug.split('-').pop() || projectSlug;
+				const projectDir = path.join(claudeProjectsDir, projectSlug);
 
-				for (const file of jsonlFiles) {
-					const sessionId = file.replace('.jsonl', '');
-					const filePath = path.join(projectDir, file);
+				try {
+					const files = await readdir(projectDir);
+					const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
 
-					try {
-						const entries = await processJSONLFile(filePath, projectName, sessionId);
-						if (entries > 0) {
-							filesProcessed++;
-							entriesProcessed += entries;
+					for (const file of jsonlFiles) {
+						const sessionId = file.replace('.jsonl', '');
+						const filePath = path.join(projectDir, file);
+
+						try {
+							const count = await processJSONLFile(filePath, projectName, sessionId);
+							if (count > 0) {
+								filesProcessed++;
+								entriesProcessed += count;
+							}
+						} catch (err) {
+							console.error(`[Token Aggregation] Error processing Claude file ${filePath}:`, err);
 						}
-					} catch (err) {
-						console.error(`Error processing ${filePath}:`, err);
+					}
+				} catch {
+					// Project directory unreadable, skip
+				}
+			}
+		} catch {
+			// No Claude directory, skip
+		}
+
+		// ---------------------------------------------------------------------
+		// Codex / codex-native usage ingestion
+		// ---------------------------------------------------------------------
+		try {
+			const cutoffMillis = Date.now() - CODEX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+			const normalizedProjects = new Set((await discoverProjectPathsForAggregation(homeDir)).map(normalizePath));
+
+			let entries: NonNullable<CodexSessionIndex['entries']> = [];
+			if (existsSync(CODEX_SESSION_INDEX_FILE)) {
+				try {
+					const raw = await readFile(CODEX_SESSION_INDEX_FILE, 'utf-8');
+					const index = JSON.parse(raw) as CodexSessionIndex;
+					entries = Array.isArray(index.entries) ? index.entries : [];
+				} catch {
+					entries = [];
+				}
+			} else {
+				// No index cache available; fall back to scanning ~/.codex/sessions directly (only JAT-marked sessions).
+				entries = await scanCodexSessionEntriesFallback({ cutoffMillis, normalizedProjects });
+			}
+
+			const candidates = entries
+				.filter((e) => typeof e.path === 'string' && e.path.endsWith('.jsonl'))
+				.filter((e) => typeof e.modified_millis === 'number' && e.modified_millis >= cutoffMillis)
+				.filter((e) => Array.isArray(e.cwds) && e.cwds.some((cwd) => normalizedProjects.has(normalizePath(cwd))));
+
+			for (const entry of candidates) {
+				const filePath = entry.path as string;
+
+				const codexSessionId = extractCodexSessionIdFromPath(filePath);
+				if (!codexSessionId) continue;
+				const sessionKey = `codex:${codexSessionId}`;
+
+				let mapping = getSessionMapping(sessionKey);
+				let projectName: string | null = mapping?.project ?? null;
+				let agentName: string | null = mapping?.agent ?? null;
+
+				if (!projectName || !agentName) {
+					// Try to discover markers from the session file prefix (stable across runs)
+					const prefix = await readFilePrefix(filePath, 1024 * 1024);
+					const markers = prefix ? parseJatMarkers(prefix) : {};
+					if (!projectName && markers.projectPath) {
+						projectName = path.basename(markers.projectPath);
+					}
+					if (!agentName && markers.agentName) {
+						agentName = markers.agentName;
+					}
+
+					if (agentName && projectName) {
+						upsertSessionAgentMap(sessionKey, agentName, projectName);
+						mapping = { agent: agentName, project: projectName };
 					}
 				}
-			} catch {
-				// Project directory unreadable, skip
+
+				if (!projectName) {
+					// Fallback: infer project from matching cwd
+					const matchCwd = entry.cwds?.find((cwd) => normalizedProjects.has(normalizePath(cwd)));
+					if (matchCwd) {
+						projectName = path.basename(matchCwd);
+					}
+				}
+
+				if (!projectName) {
+					continue;
+				}
+
+				try {
+					const count = await processCodexSessionFile(filePath, projectName, sessionKey, agentName);
+					if (count > 0) {
+						filesProcessed++;
+						entriesProcessed += count;
+					}
+				} catch (err) {
+					console.error(`[Token Aggregation] Error processing Codex file ${filePath}:`, err);
+				}
 			}
+		} catch (err) {
+			console.error('[Token Aggregation] Error during Codex aggregation:', err);
 		}
 	} catch (err) {
-		console.error('Error during aggregation:', err);
+		console.error('[Token Aggregation] Error during aggregation:', err);
 	}
 
 	return {
@@ -523,11 +1069,6 @@ export function getUsageForRange(
  * Get time-bucketed breakdown for sparklines.
  * Data is stored in 30-minute buckets by default.
  * Use bucketMinutes to aggregate into larger buckets (e.g., 60 for hourly).
- *
- * @param startTime - Start of time range
- * @param endTime - End of time range
- * @param options.bucketMinutes - Output bucket size (30 = native 30-min, 60 = hourly, etc.)
- *                                Default is 30 (native resolution).
  */
 export function getHourlyBreakdown(
 	startTime: Date,
@@ -545,24 +1086,16 @@ export function getHourlyBreakdown(
 	const db = getDatabase();
 	const bucketMinutes = options?.bucketMinutes ?? DEFAULT_BUCKET_MINUTES;
 
-	// Data is stored in 30-minute buckets (hour_start column).
-	// For 30-minute output, just return the raw data grouped by hour_start.
-	// For 60-minute (hourly) output, use SQLite datetime functions to re-bucket.
 	let groupExpression: string;
 	let selectExpression: string;
 
 	if (bucketMinutes === 30 || bucketMinutes === DEFAULT_BUCKET_MINUTES) {
-		// Native 30-minute buckets - just use hour_start directly
 		groupExpression = 'hour_start';
 		selectExpression = 'hour_start';
 	} else if (bucketMinutes === 60) {
-		// Re-aggregate to hourly by truncating to hour
-		// strftime('%Y-%m-%dT%H:00:00.000Z', hour_start) rounds to hour start
 		groupExpression = "strftime('%Y-%m-%dT%H:00:00.000Z', hour_start)";
 		selectExpression = groupExpression;
 	} else {
-		// For other bucket sizes, fall back to native granularity
-		// (could implement more complex SQL for arbitrary bucket sizes if needed)
 		groupExpression = 'hour_start';
 		selectExpression = 'hour_start';
 	}

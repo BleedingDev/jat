@@ -2,7 +2,7 @@
 	/**
 	 * ClaudeMdList Component
 	 *
-	 * Lists discoverable CLAUDE.md files with metadata.
+	 * Lists discoverable agent instruction files (AGENTS.md and CLAUDE.md) with metadata.
 	 * Allows selecting a file for editing.
 	 *
 	 * @see ide/src/routes/config/+page.svelte for usage
@@ -10,9 +10,10 @@
 
 	import { onMount } from 'svelte';
 
-	interface ClaudeMdFile {
+	interface InstructionFile {
 		path: string;
 		displayName: string;
+		kind: 'agents' | 'claude';
 		location: 'project' | 'ide' | 'user' | 'subdirectory';
 		lastModified: string;
 		size: number;
@@ -22,15 +23,20 @@
 		/** Currently selected file path */
 		selectedPath?: string | null;
 		/** Called when a file is selected */
-		onSelect?: (file: ClaudeMdFile) => void;
+		onSelect?: (file: InstructionFile) => void;
 	}
 
 	let { selectedPath = null, onSelect = () => {} }: Props = $props();
 
 	// State
-	let files = $state<ClaudeMdFile[]>([]);
+	let files = $state<InstructionFile[]>([]);
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
+
+	const kindConfig: Record<string, { label: string; color: string }> = {
+		agents: { label: 'AGENTS', color: 'oklch(0.75 0.12 200)' },
+		claude: { label: 'CLAUDE', color: 'oklch(0.75 0.12 280)' }
+	};
 
 	// Location display names and icons
 	const locationConfig: Record<string, { label: string; color: string }> = {
@@ -40,14 +46,12 @@
 		subdirectory: { label: 'Subdir', color: 'oklch(0.75 0.10 50)' }
 	};
 
-	// Format file size
 	function formatSize(bytes: number): string {
 		if (bytes < 1024) return `${bytes} B`;
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	}
 
-	// Format date
 	function formatDate(isoString: string): string {
 		const date = new Date(isoString);
 		return date.toLocaleDateString('en-US', {
@@ -59,7 +63,6 @@
 		});
 	}
 
-	// Fetch files
 	async function fetchFiles() {
 		isLoading = true;
 		error = null;
@@ -88,9 +91,9 @@
 	});
 </script>
 
-<div class="claude-md-list">
+<div class="instructions-list">
 	<div class="list-header">
-		<h3 class="list-title">CLAUDE.md Files</h3>
+		<h3 class="list-title">Instructions</h3>
 		<button class="refresh-btn" onclick={fetchFiles} disabled={isLoading}>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
@@ -150,7 +153,7 @@
 					d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
 				/>
 			</svg>
-			<span>No CLAUDE.md files found</span>
+			<span>No instruction files found</span>
 		</div>
 	{:else}
 		<div class="file-list">
@@ -162,12 +165,20 @@
 				>
 					<div class="file-main">
 						<span class="file-name">{file.displayName}</span>
-						<span
-							class="location-badge"
-							style="background: {locationConfig[file.location]?.color || 'oklch(0.5 0 0)'}"
-						>
-							{locationConfig[file.location]?.label || file.location}
-						</span>
+						<div class="badges">
+							<span
+								class="kind-badge"
+								style="background: {kindConfig[file.kind]?.color || 'oklch(0.5 0 0)'}"
+							>
+								{kindConfig[file.kind]?.label || file.kind}
+							</span>
+							<span
+								class="location-badge"
+								style="background: {locationConfig[file.location]?.color || 'oklch(0.5 0 0)'}"
+							>
+								{locationConfig[file.location]?.label || file.location}
+							</span>
+						</div>
 					</div>
 					<div class="file-meta">
 						<span class="file-size">{formatSize(file.size)}</span>
@@ -181,7 +192,7 @@
 </div>
 
 <style>
-	.claude-md-list {
+	.instructions-list {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
@@ -242,127 +253,138 @@
 		animation: spin 1s linear infinite;
 	}
 
-	/* States */
+	@keyframes spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
 	.loading-state,
 	.error-state,
 	.empty-state {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
 		gap: 0.5rem;
 		padding: 2rem 1rem;
-		color: oklch(0.55 0.02 250);
-		font-size: 0.8rem;
+		color: oklch(0.60 0.02 250);
+		text-align: center;
 	}
 
 	.loading-spinner {
 		width: 24px;
 		height: 24px;
 		border: 2px solid oklch(0.30 0.02 250);
-		border-top-color: oklch(0.65 0.15 200);
+		border-top: 2px solid oklch(0.70 0.12 200);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}
 
 	.error-icon,
 	.empty-icon {
-		width: 32px;
-		height: 32px;
-		color: oklch(0.45 0.02 250);
-	}
-
-	.error-state {
-		color: oklch(0.65 0.12 25);
-	}
-
-	.error-state .error-icon {
-		color: oklch(0.60 0.15 25);
+		width: 24px;
+		height: 24px;
+		color: oklch(0.75 0.15 30);
 	}
 
 	.retry-btn {
-		margin-top: 0.5rem;
-		padding: 0.375rem 0.75rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		background: oklch(0.25 0.06 200);
-		border: 1px solid oklch(0.35 0.08 200);
+		padding: 0.5rem 1rem;
+		background: oklch(0.20 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
 		border-radius: 6px;
-		color: oklch(0.85 0.08 200);
+		color: oklch(0.80 0.02 250);
 		cursor: pointer;
 		transition: all 0.15s ease;
 	}
 
 	.retry-btn:hover {
-		background: oklch(0.30 0.08 200);
+		background: oklch(0.25 0.02 250);
 	}
 
-	/* File list */
 	.file-list {
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+		max-height: 500px;
+		overflow-y: auto;
 	}
 
 	.file-item {
 		display: flex;
 		flex-direction: column;
-		gap: 0.375rem;
+		gap: 0.25rem;
 		padding: 0.75rem;
-		background: oklch(0.18 0.01 250);
-		border: 1px solid oklch(0.25 0.02 250);
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.22 0.02 250);
 		border-radius: 8px;
 		cursor: pointer;
-		transition: all 0.15s ease;
 		text-align: left;
-		width: 100%;
+		transition: all 0.15s ease;
 	}
 
 	.file-item:hover {
-		background: oklch(0.22 0.02 250);
-		border-color: oklch(0.35 0.04 200);
+		background: oklch(0.18 0.02 250);
+		border-color: oklch(0.30 0.04 250);
 	}
 
 	.file-item.selected {
-		background: oklch(0.22 0.05 200);
-		border-color: oklch(0.50 0.12 200);
+		background: oklch(0.20 0.03 250);
+		border-color: oklch(0.70 0.12 200);
 	}
 
 	.file-main {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 0.5rem;
 	}
 
 	.file-name {
 		font-size: 0.85rem;
 		font-weight: 500;
-		color: oklch(0.90 0.02 250);
-		font-family: ui-monospace, monospace;
+		color: oklch(0.85 0.02 250);
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
+	.badges {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		flex-shrink: 0;
+	}
+
+	.kind-badge,
 	.location-badge {
 		font-size: 0.65rem;
-		font-weight: 500;
-		padding: 0.125rem 0.375rem;
-		border-radius: 4px;
-		color: oklch(0.15 0 0);
+		font-weight: 600;
+		padding: 0.15rem 0.4rem;
+		border-radius: 999px;
+		color: oklch(0.12 0.01 250);
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
 	}
 
 	.file-meta {
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
+		justify-content: space-between;
 		font-size: 0.7rem;
-		color: oklch(0.55 0.02 250);
+		color: oklch(0.60 0.02 250);
 	}
 
 	.file-path {
 		font-size: 0.65rem;
-		color: oklch(0.45 0.02 250);
+		color: oklch(0.50 0.02 250);
 		font-family: ui-monospace, monospace;
-		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
+		opacity: 0.8;
 	}
 </style>

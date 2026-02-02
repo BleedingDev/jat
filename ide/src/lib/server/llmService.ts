@@ -1,34 +1,31 @@
 /**
- * LLM Service - Centralized LLM provider management
+ * LLM Service - Centralized IDE helper LLM provider management
  *
- * Provides a unified interface for making LLM calls across the IDE,
- * handling automatic fallback between Anthropic API and Claude CLI.
+ * Provides a unified interface for IDE helper features (task suggestions, summaries,
+ * commit message generation, etc.) with configurable provider selection.
  *
- * Features:
- * - Configurable provider mode (auto, api, cli)
- * - Automatic fallback when primary provider unavailable
- * - Centralized error handling
- * - Provider availability detection
- *
- * Usage:
- *   import { llmCall, getLlmProviderStatus } from '$lib/server/llmService';
- *
- *   // Make an LLM call (uses configured provider mode)
- *   const result = await llmCall(prompt, { maxTokens: 500 });
- *
- *   // Check what providers are available
- *   const status = await getLlmProviderStatus();
+ * Provider modes:
+ * - auto: codex-native → Anthropic API → Claude CLI
+ * - codex-native: codex-native only (requires auth)
+ * - api: Anthropic API only
+ * - cli: Claude CLI only
  *
  * Configuration stored in: ~/.config/jat/projects.json under "llm" key
  *
- * Task: jat-ce8x8 - Implement Claude CLI Fallback Configuration System
+ * Task: jat-2af.4 - Make IDE helper LLM provider pluggable (Codex-native-first)
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { getApiKeyWithFallback } from '$lib/utils/credentials';
 import { claudeCliCall, isClaudeCliAvailable, type ClaudeCliOptions } from './claudeCli';
+import {
+	codexNativeCliCall,
+	isCodexNativeAuthAvailable,
+	isCodexNativeCliAvailable,
+	type CodexNativeCliOptions
+} from './codexNativeCli';
 import { LLM_PROVIDER_DEFAULTS, type LlmProviderMode } from '$lib/config/constants';
 
 // Configuration path
@@ -39,7 +36,7 @@ export interface LlmResponse {
 	/** The response text from the LLM */
 	result: string;
 	/** Which provider was used */
-	provider: 'api' | 'cli';
+	provider: 'codex-native' | 'api' | 'cli';
 	/** Token usage (if available) */
 	usage?: {
 		input_tokens: number;
@@ -47,27 +44,34 @@ export interface LlmResponse {
 		cache_creation_input_tokens?: number;
 		cache_read_input_tokens?: number;
 	};
-	/** Cost in USD (if available, mainly from CLI) */
+	/** Cost in USD (if available, mainly from Claude CLI) */
 	cost_usd?: number;
-	/** Duration in ms (if available, mainly from CLI) */
+	/** Duration in ms (best-effort) */
 	duration_ms?: number;
 	/** Model used */
 	model?: string;
 }
 
 export interface LlmCallOptions {
-	/** Maximum tokens for response */
+	/** Maximum tokens for response (API only) */
 	maxTokens?: number;
-	/** Override the model (for API calls: full model ID, for CLI: haiku/sonnet/opus) */
-	model?: string;
 	/** Override provider mode for this call */
 	providerMode?: LlmProviderMode;
-	/** Timeout in ms (for CLI calls) */
+	/** Timeout in ms (CLI providers) */
 	timeout?: number;
+	/** Working directory for provider calls (codex-native) */
+	cwd?: string;
+	/** Optional schema path (codex-native --schema) */
+	schemaPath?: string;
+	/** Provider-specific model overrides */
+	codexModel?: string;
+	apiModel?: string;
+	cliModel?: ClaudeCliOptions['model'];
 }
 
 export interface LlmConfig {
 	mode: LlmProviderMode;
+	codex_model: string;
 	api_model: string;
 	cli_model: 'haiku' | 'sonnet' | 'opus';
 	cli_timeout_ms: number;
@@ -77,12 +81,16 @@ export interface LlmConfig {
 export interface LlmProviderStatus {
 	/** Currently configured mode */
 	mode: LlmProviderMode;
-	/** Whether API key is available */
+	/** Whether codex-native CLI is installed */
+	codexNativeAvailable: boolean;
+	/** Whether codex-native has usable auth */
+	codexNativeAuthAvailable: boolean;
+	/** Whether Anthropic API key is available */
 	apiAvailable: boolean;
-	/** Whether CLI is available */
+	/** Whether Claude CLI is available */
 	cliAvailable: boolean;
 	/** Which provider would be used with current config */
-	activeProvider: 'api' | 'cli' | 'none';
+	activeProvider: 'codex-native' | 'api' | 'cli' | 'none';
 	/** Human-readable status message */
 	statusMessage: string;
 }
@@ -96,15 +104,18 @@ export function getLlmConfig(): LlmConfig {
 			return { ...LLM_PROVIDER_DEFAULTS };
 		}
 		const content = readFileSync(CONFIG_PATH, 'utf-8');
-		const config = JSON.parse(content);
-		const llmConfig = config.llm || {};
+		const config = JSON.parse(content) as Record<string, unknown>;
+		const llmConfig = (config.llm || {}) as Record<string, unknown>;
 
 		return {
-			mode: llmConfig.mode || LLM_PROVIDER_DEFAULTS.mode,
-			api_model: llmConfig.api_model || LLM_PROVIDER_DEFAULTS.api_model,
-			cli_model: llmConfig.cli_model || LLM_PROVIDER_DEFAULTS.cli_model,
-			cli_timeout_ms: llmConfig.cli_timeout_ms ?? LLM_PROVIDER_DEFAULTS.cli_timeout_ms,
-			show_provider_status: llmConfig.show_provider_status ?? LLM_PROVIDER_DEFAULTS.show_provider_status
+			mode: (llmConfig.mode as LlmProviderMode) || LLM_PROVIDER_DEFAULTS.mode,
+			codex_model: (llmConfig.codex_model as string) || LLM_PROVIDER_DEFAULTS.codex_model,
+			api_model: (llmConfig.api_model as string) || LLM_PROVIDER_DEFAULTS.api_model,
+			cli_model:
+				((llmConfig.cli_model as LlmConfig['cli_model']) || LLM_PROVIDER_DEFAULTS.cli_model) as LlmConfig['cli_model'],
+			cli_timeout_ms: (llmConfig.cli_timeout_ms as number) ?? LLM_PROVIDER_DEFAULTS.cli_timeout_ms,
+			show_provider_status:
+				(llmConfig.show_provider_status as boolean) ?? LLM_PROVIDER_DEFAULTS.show_provider_status
 		};
 	} catch (err) {
 		console.error('[llmService] Failed to load config:', err);
@@ -113,7 +124,7 @@ export function getLlmConfig(): LlmConfig {
 }
 
 /**
- * Check if API key is available
+ * Check if Anthropic API key is available
  */
 export function isApiKeyAvailable(): boolean {
 	const apiKey = getApiKeyWithFallback('anthropic', 'ANTHROPIC_API_KEY');
@@ -125,20 +136,37 @@ export function isApiKeyAvailable(): boolean {
  */
 export async function getLlmProviderStatus(): Promise<LlmProviderStatus> {
 	const config = getLlmConfig();
-	const apiAvailable = isApiKeyAvailable();
-	const cliAvailable = await isClaudeCliAvailable();
 
-	// Determine which provider would be used
-	let activeProvider: 'api' | 'cli' | 'none' = 'none';
+	const [codexNativeAvailable, cliAvailable] = await Promise.all([
+		isCodexNativeCliAvailable(),
+		isClaudeCliAvailable()
+	]);
+	const codexNativeAuthAvailable = isCodexNativeAuthAvailable();
+	const apiAvailable = isApiKeyAvailable();
+
+	let activeProvider: LlmProviderStatus['activeProvider'] = 'none';
 	let statusMessage = '';
 
 	switch (config.mode) {
+		case 'codex-native':
+			if (!codexNativeAvailable) {
+				statusMessage = 'codex-native mode selected but codex-native is not installed';
+				break;
+			}
+			if (!codexNativeAuthAvailable) {
+				statusMessage = 'codex-native mode selected but no Codex auth available (set OPENAI_API_KEY or create ~/.codex/auth.json)';
+				break;
+			}
+			activeProvider = 'codex-native';
+			statusMessage = 'Using codex-native';
+			break;
+
 		case 'api':
 			if (apiAvailable) {
 				activeProvider = 'api';
 				statusMessage = 'Using Anthropic API';
 			} else {
-				statusMessage = 'API mode selected but no API key available';
+				statusMessage = 'API mode selected but no Anthropic API key available';
 			}
 			break;
 
@@ -153,20 +181,29 @@ export async function getLlmProviderStatus(): Promise<LlmProviderStatus> {
 
 		case 'auto':
 		default:
+			if (codexNativeAvailable && codexNativeAuthAvailable) {
+				activeProvider = 'codex-native';
+				statusMessage = 'Using codex-native (auto mode)';
+				break;
+			}
 			if (apiAvailable) {
 				activeProvider = 'api';
-				statusMessage = 'Using Anthropic API (auto mode)';
-			} else if (cliAvailable) {
-				activeProvider = 'cli';
-				statusMessage = 'Using Claude CLI as fallback (no API key)';
-			} else {
-				statusMessage = 'No LLM provider available - configure API key or install Claude Code';
+				statusMessage = 'Using Anthropic API (auto fallback)';
+				break;
 			}
+			if (cliAvailable) {
+				activeProvider = 'cli';
+				statusMessage = 'Using Claude CLI (auto fallback)';
+				break;
+			}
+			statusMessage = 'No LLM provider available - install codex-native, configure OPENAI_API_KEY, set ANTHROPIC_API_KEY, or install Claude Code';
 			break;
 	}
 
 	return {
 		mode: config.mode,
+		codexNativeAvailable,
+		codexNativeAuthAvailable,
 		apiAvailable,
 		cliAvailable,
 		activeProvider,
@@ -204,9 +241,17 @@ async function callApi(
 		throw new Error(`Anthropic API error: ${response.status} - ${errorText.slice(0, 200)}`);
 	}
 
-	const result = await response.json();
-	const textContent = result.content?.find((c: { type?: string; text?: string }) => c.type === 'text');
+	const result = (await response.json()) as {
+		content?: Array<{ type?: string; text?: string }>;
+		usage?: {
+			input_tokens?: number;
+			output_tokens?: number;
+			cache_creation_input_tokens?: number;
+			cache_read_input_tokens?: number;
+		};
+	};
 
+	const textContent = result.content?.find((c) => c.type === 'text');
 	if (!textContent?.text) {
 		throw new Error('No text response from Anthropic API');
 	}
@@ -214,110 +259,179 @@ async function callApi(
 	return {
 		result: textContent.text,
 		provider: 'api',
-		usage: result.usage ? {
-			input_tokens: result.usage.input_tokens || 0,
-			output_tokens: result.usage.output_tokens || 0,
-			cache_creation_input_tokens: result.usage.cache_creation_input_tokens,
-			cache_read_input_tokens: result.usage.cache_read_input_tokens
-		} : undefined,
+		usage: result.usage
+			? {
+					input_tokens: result.usage.input_tokens || 0,
+					output_tokens: result.usage.output_tokens || 0,
+					cache_creation_input_tokens: result.usage.cache_creation_input_tokens,
+					cache_read_input_tokens: result.usage.cache_read_input_tokens
+				}
+			: undefined,
 		model: options.model
+	};
+}
+
+async function callCodexNative(
+	prompt: string,
+	options: {
+		model: string;
+		schemaPath?: string;
+		timeoutMs?: number;
+		cwd?: string;
+	}
+): Promise<LlmResponse> {
+	const start = Date.now();
+	const response = await codexNativeCliCall(prompt, {
+		model: options.model,
+		schemaPath: options.schemaPath,
+		timeout: options.timeoutMs,
+		cwd: options.cwd
+	} satisfies CodexNativeCliOptions);
+
+	return {
+		result: response.result,
+		provider: 'codex-native',
+		usage: response.usage,
+		duration_ms: Date.now() - start,
+		model: options.model
+	};
+}
+
+async function callClaudeCli(
+	prompt: string,
+	options: {
+		model: ClaudeCliOptions['model'];
+		timeoutMs?: number;
+	}
+): Promise<LlmResponse> {
+	const start = Date.now();
+	const cliResponse = await claudeCliCall(prompt, {
+		model: options.model,
+		timeout: options.timeoutMs
+	});
+
+	return {
+		result: cliResponse.result,
+		provider: 'cli',
+		usage: cliResponse.usage,
+		cost_usd: cliResponse.cost_usd,
+		duration_ms: cliResponse.duration_ms ?? Date.now() - start,
+		model: cliResponse.model
 	};
 }
 
 /**
  * Make an LLM call using the configured provider
- *
- * @param prompt - The prompt to send to the LLM
- * @param options - Optional overrides for model, tokens, provider mode
- * @returns The response with result, provider info, and usage stats
- * @throws Error if no provider is available or call fails
  */
 export async function llmCall(prompt: string, options?: LlmCallOptions): Promise<LlmResponse> {
 	const config = getLlmConfig();
 	const mode = options?.providerMode || config.mode;
 	const maxTokens = options?.maxTokens || 1024;
 
-	// Check availability
+	const codexModel = options?.codexModel || config.codex_model;
+	const apiModel = options?.apiModel || config.api_model;
+	const cliModel = options?.cliModel || config.cli_model;
+	const schemaPath = options?.schemaPath;
+	const timeoutMs = options?.timeout ?? config.cli_timeout_ms;
+
+	// Availability
 	const apiKey = getApiKeyWithFallback('anthropic', 'ANTHROPIC_API_KEY');
 	const apiAvailable = !!apiKey;
 
-	// Determine provider based on mode
 	switch (mode) {
+		case 'codex-native': {
+			const codexAvailable = await isCodexNativeCliAvailable();
+			if (!codexAvailable) {
+				throw new Error('codex-native mode selected but codex-native is not available on PATH.');
+			}
+			if (!isCodexNativeAuthAvailable()) {
+				throw new Error(
+					'codex-native mode selected but no Codex auth is available. Set OPENAI_API_KEY or create ~/.codex/auth.json (e.g., via "codex login").'
+				);
+			}
+			return await callCodexNative(prompt, {
+				model: codexModel,
+				schemaPath,
+				timeoutMs,
+				cwd: options?.cwd
+			});
+		}
+
 		case 'api':
 			if (!apiAvailable) {
-				throw new Error('API mode selected but no Anthropic API key available. Configure in Settings → API Keys or set ANTHROPIC_API_KEY environment variable.');
+				throw new Error(
+					'API mode selected but no Anthropic API key available. Configure in Settings → API Keys or set ANTHROPIC_API_KEY.'
+				);
 			}
-			return callApi(prompt, {
+			return await callApi(prompt, {
 				apiKey: apiKey!,
-				model: options?.model || config.api_model,
+				model: apiModel,
 				maxTokens
 			});
 
 		case 'cli': {
 			const cliAvailable = await isClaudeCliAvailable();
 			if (!cliAvailable) {
-				throw new Error('CLI mode selected but Claude CLI not available. Install Claude Code or switch to API mode.');
+				throw new Error('CLI mode selected but Claude CLI not available. Install Claude Code or switch providers.');
 			}
-			const cliModel = (options?.model as ClaudeCliOptions['model']) || config.cli_model;
-			const cliResponse = await claudeCliCall(prompt, {
+			return await callClaudeCli(prompt, {
 				model: cliModel,
-				timeout: options?.timeout || config.cli_timeout_ms
+				timeoutMs
 			});
-			return {
-				result: cliResponse.result,
-				provider: 'cli',
-				usage: cliResponse.usage,
-				cost_usd: cliResponse.cost_usd,
-				duration_ms: cliResponse.duration_ms,
-				model: cliResponse.model
-			};
 		}
 
 		case 'auto':
-		default:
-			// Try API first, fall back to CLI
+		default: {
+			// 1) codex-native
+			try {
+				const codexAvailable = await isCodexNativeCliAvailable();
+				if (codexAvailable && isCodexNativeAuthAvailable()) {
+					return await callCodexNative(prompt, {
+						model: codexModel,
+						schemaPath,
+						timeoutMs,
+						cwd: options?.cwd
+					});
+				}
+			} catch (codexErr) {
+				console.warn('[llmService] codex-native call failed, falling back:', codexErr);
+			}
+
+			// 2) Anthropic API
 			if (apiAvailable) {
 				try {
 					return await callApi(prompt, {
 						apiKey: apiKey!,
-						model: options?.model || config.api_model,
+						model: apiModel,
 						maxTokens
 					});
-				} catch (apiError) {
-					console.warn('[llmService] API call failed, trying CLI fallback:', apiError);
-					// Fall through to CLI
+				} catch (apiErr) {
+					console.warn('[llmService] API call failed, falling back:', apiErr);
 				}
 			}
 
-			// Try CLI as fallback
+			// 3) Claude CLI
 			const cliAvailable = await isClaudeCliAvailable();
 			if (cliAvailable) {
 				try {
-					const cliModel = (options?.model as ClaudeCliOptions['model']) || config.cli_model;
-					const cliResponse = await claudeCliCall(prompt, {
+					return await callClaudeCli(prompt, {
 						model: cliModel,
-						timeout: options?.timeout || config.cli_timeout_ms
+						timeoutMs
 					});
-					return {
-						result: cliResponse.result,
-						provider: 'cli',
-						usage: cliResponse.usage,
-						cost_usd: cliResponse.cost_usd,
-						duration_ms: cliResponse.duration_ms,
-						model: cliResponse.model
-					};
-				} catch (cliError) {
-					throw new Error(`Both API and CLI failed. API: ${apiAvailable ? 'failed' : 'no key'}. CLI error: ${(cliError as Error).message}`);
+				} catch (cliErr) {
+					throw new Error(
+						`All providers failed. codex-native: ${String(cliErr instanceof Error ? cliErr.message : cliErr)}`
+					);
 				}
 			}
 
-			// Neither available
 			throw new Error(
 				'No LLM provider available. Either:\n' +
-				'1. Configure Anthropic API key in Settings → API Keys\n' +
-				'2. Install Claude Code CLI (https://claude.ai/code)\n' +
-				'3. Set ANTHROPIC_API_KEY environment variable'
+				'1. Install codex-native and authenticate (OPENAI_API_KEY or ~/.codex/auth.json)\n' +
+				'2. Configure Anthropic API key in Settings → API Keys\n' +
+				'3. Install Claude Code CLI and authenticate'
 			);
+		}
 	}
 }
 
@@ -337,5 +451,33 @@ export function stripCodeBlocks(text: string): string {
  */
 export function parseJsonResponse<T>(text: string): T {
 	const cleaned = stripCodeBlocks(text);
-	return JSON.parse(cleaned);
+	return JSON.parse(cleaned) as T;
+}
+
+/**
+ * Resolve the JAT repo root (directory containing tools/llm).
+ * Useful for stable schema path resolution when IDE runs with cwd=ide/.
+ */
+export function getJatRepoRootPath(): string | null {
+	let current = process.cwd();
+	for (let i = 0; i < 10; i++) {
+		const candidate = join(current, 'tools', 'llm');
+		if (existsSync(candidate)) {
+			return current;
+		}
+		const parent = dirname(current);
+		if (parent === current) break;
+		current = parent;
+	}
+	return null;
+}
+
+/**
+ * Resolve an absolute schema path from tools/llm/{schemaFile}.
+ */
+export function getLlmSchemaPath(schemaFile: string): string | null {
+	const root = getJatRepoRootPath();
+	if (!root) return null;
+	const fullPath = join(root, 'tools', 'llm', schemaFile);
+	return existsSync(fullPath) ? fullPath : null;
 }

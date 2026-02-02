@@ -28,7 +28,8 @@
 import { json } from '@sveltejs/kit';
 import { getAgents, getReservations, getBeadsActivities, getAgentCounts } from '$lib/server/agent-mail.js';
 import { getTasks } from '$lib/server/beads.js';
-import { getAllAgentUsageAsync, getHourlyUsageAsync, getAgentHourlyUsageAsync, getAgentContextPercent } from '$lib/utils/tokenUsage.js';
+import { getAgentContextPercent } from '$lib/utils/tokenUsage.js';
+import { getHourlyBreakdown, getUsageByAgent } from '$lib/server/tokenUsageDb.js';
 import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -289,10 +290,10 @@ export async function GET({ url, locals }) {
 		// For backward compat: create Set for hasSession check
 		const agentsWithSessions = new Set(agentSessionCreatedAt.keys());
 
-		// Optionally fetch token usage data (using worker threads to avoid blocking)
-		/** @type {Map<string, import('$lib/utils/tokenUsage.js').TokenUsage> | null} */
+		// Optionally fetch token usage data (SQLite-backed; agent-agnostic)
+		/** @type {Map<string, { total_tokens: number, cost: number, sessionCount: number }> | null} */
 		let usageToday = null;
-		/** @type {Map<string, import('$lib/utils/tokenUsage.js').TokenUsage> | null} */
+		/** @type {Map<string, { total_tokens: number, cost: number, sessionCount: number }> | null} */
 		let usageWeek = null;
 		/** @type {Map<string, import('$lib/utils/tokenUsage.js').HourlyUsage[]>} */
 		const agentSparklineData = new Map();
@@ -303,29 +304,57 @@ export async function GET({ url, locals }) {
 			locals.logger?.debug('Fetching token usage data...');
 			const usageStart = Date.now();
 
-			// Fetch aggregated usage data
-			[usageToday, usageWeek] = await Promise.all([
-				getAllAgentUsageAsync('today', projectPath),
-				getAllAgentUsageAsync('week', projectPath)
-			]);
+			const now = new Date();
+			const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+			const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+			const start24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-			// Fetch per-agent sparklineData and contextPercent for agents with active sessions
-			// (only for agents that have tmux sessions - others don't need sparklines)
+			const projectName = projectPath.split('/').filter(Boolean).pop();
+
+			// Fetch aggregated usage data by agent (fast SQLite query)
+			const todayRows = getUsageByAgent(startOfDay, now, projectName ? { project: projectName } : undefined);
+			const weekRows = getUsageByAgent(startOfWeek, now, projectName ? { project: projectName } : undefined);
+
+			usageToday = new Map();
+			usageWeek = new Map();
+
+			for (const row of todayRows) {
+				if (!row.agent) continue;
+				usageToday.set(row.agent, { total_tokens: row.total_tokens, cost: row.cost_usd, sessionCount: row.session_count });
+			}
+			for (const row of weekRows) {
+				if (!row.agent) continue;
+				usageWeek.set(row.agent, { total_tokens: row.total_tokens, cost: row.cost_usd, sessionCount: row.session_count });
+			}
+
+			// Fetch per-agent sparklines for agents with active tmux sessions
 			const agentsWithActiveSessions = agents.filter(a => agentsWithSessions.has(a.name));
-			await Promise.all(
-				agentsWithActiveSessions.map(async (agent) => {
-					try {
-						const [sparkline, contextPct] = await Promise.all([
-							getAgentHourlyUsageAsync(agent.name, projectPath),
-							getAgentContextPercent(agent.name, projectPath)
-						]);
-						agentSparklineData.set(agent.name, sparkline);
+			for (const agent of agentsWithActiveSessions) {
+				try {
+					const breakdown = getHourlyBreakdown(start24h, now, {
+						project: projectName,
+						agent: agent.name,
+						bucketMinutes: 30
+					});
+
+					const sparkline = breakdown.map((b) => ({
+						timestamp: b.timestamp,
+						tokens: b.total_tokens,
+						cost: b.cost_usd
+					}));
+					agentSparklineData.set(agent.name, sparkline);
+
+					// Context percent is Claude JSONL-only today; skip for non-Claude agents
+					if (agent.program && String(agent.program).includes('claude')) {
+						const contextPct = await getAgentContextPercent(agent.name, projectPath);
 						agentContextPercent.set(agent.name, contextPct);
-					} catch (err) {
-						locals.logger?.debug({ agent: agent.name, error: err }, 'Failed to fetch agent usage data');
+					} else {
+						agentContextPercent.set(agent.name, null);
 					}
-				})
-			);
+				} catch (err) {
+					locals.logger?.debug({ agent: agent.name, error: err }, 'Failed to fetch agent usage data');
+				}
+			}
 
 			locals.logger?.info({
 				duration: Date.now() - usageStart,
@@ -333,11 +362,15 @@ export async function GET({ url, locals }) {
 			}, 'Token usage data fetched');
 		}
 
-		// Optionally fetch hourly token usage data (raw data for sparklines, using worker threads)
+		// Optionally fetch hourly token usage data (raw data for sparklines)
 		/** @type {import('$lib/utils/tokenUsage.js').HourlyUsage[] | null} */
 		let hourlyUsage = null;
 		if (includeHourly) {
-			hourlyUsage = await getHourlyUsageAsync(projectPath);
+			const now = new Date();
+			const start24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+			const projectName = projectPath.split('/').filter(Boolean).pop();
+			const breakdown = getHourlyBreakdown(start24h, now, { project: projectName, bucketMinutes: 30 });
+			hourlyUsage = breakdown.map((b) => ({ timestamp: b.timestamp, tokens: b.total_tokens, cost: b.cost_usd }));
 		}
 
 		// Calculate agent statistics

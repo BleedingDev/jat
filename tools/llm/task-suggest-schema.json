@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "priority": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "type": { "type": "string", "enum": ["task", "bug", "feature", "epic", "chore"] },
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 0,
+      "maxItems": 5
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 0,
+      "maxItems": 10
+    },
+    "reasoning": { "type": "string" }
+  },
+  "required": ["priority", "type", "labels", "dependencies", "reasoning"]
+}

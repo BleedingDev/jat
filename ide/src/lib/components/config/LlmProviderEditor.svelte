@@ -2,12 +2,12 @@
 	/**
 	 * LLM Provider Settings Editor
 	 *
-	 * Configuration UI for LLM provider selection:
-	 * - Provider mode: auto (API with CLI fallback), API only, CLI only
+	 * Configuration UI for IDE helper LLM provider selection:
+	 * - Provider mode: auto (codex-native → API → Claude CLI), codex-native only, API only, CLI only
 	 * - Shows current provider status and availability
-	 * - Model selection for both API and CLI
+	 * - Model selection for codex-native + API + CLI
 	 *
-	 * Task: jat-ce8x8 - Implement Claude CLI Fallback Configuration System
+	 * Task: jat-2af.4 - Make IDE helper LLM provider pluggable (Codex-native-first)
 	 */
 
 	import { onMount } from 'svelte';
@@ -17,15 +17,18 @@
 	// Provider status (fetched from API)
 	let status = $state<{
 		mode: LlmProviderMode;
+		codexNativeAvailable: boolean;
+		codexNativeAuthAvailable: boolean;
 		apiAvailable: boolean;
 		cliAvailable: boolean;
-		activeProvider: 'api' | 'cli' | 'none';
+		activeProvider: 'codex-native' | 'api' | 'cli' | 'none';
 		statusMessage: string;
 	} | null>(null);
 
 	// Form state
 	let config = $state({
 		mode: LLM_PROVIDER_DEFAULTS.mode as LlmProviderMode,
+		codex_model: LLM_PROVIDER_DEFAULTS.codex_model,
 		api_model: LLM_PROVIDER_DEFAULTS.api_model,
 		cli_model: LLM_PROVIDER_DEFAULTS.cli_model as 'haiku' | 'sonnet' | 'opus',
 		cli_timeout_ms: LLM_PROVIDER_DEFAULTS.cli_timeout_ms,
@@ -34,6 +37,7 @@
 
 	let originalConfig = $state({
 		mode: LLM_PROVIDER_DEFAULTS.mode as LlmProviderMode,
+		codex_model: LLM_PROVIDER_DEFAULTS.codex_model,
 		api_model: LLM_PROVIDER_DEFAULTS.api_model,
 		cli_model: LLM_PROVIDER_DEFAULTS.cli_model as 'haiku' | 'sonnet' | 'opus',
 		cli_timeout_ms: LLM_PROVIDER_DEFAULTS.cli_timeout_ms,
@@ -47,11 +51,26 @@
 	// Check if form has changes
 	const hasChanges = $derived(
 		config.mode !== originalConfig.mode ||
+		config.codex_model !== originalConfig.codex_model ||
 		config.api_model !== originalConfig.api_model ||
 		config.cli_model !== originalConfig.cli_model ||
 		config.cli_timeout_ms !== originalConfig.cli_timeout_ms ||
 		config.show_provider_status !== originalConfig.show_provider_status
 	);
+
+	const codexNativeStatusLabel = $derived(() => {
+		if (!status) return 'Unknown';
+		if (!status.codexNativeAvailable) return 'Not installed';
+		if (!status.codexNativeAuthAvailable) return 'Needs auth';
+		return 'Ready';
+	});
+
+	const codexNativeDotClass = $derived(() => {
+		if (!status) return 'bg-warning';
+		if (!status.codexNativeAvailable) return 'bg-error';
+		if (!status.codexNativeAuthAvailable) return 'bg-warning';
+		return 'bg-success';
+	});
 
 	// Load current config and status
 	async function loadConfig() {
@@ -112,6 +131,7 @@
 	function resetToDefaults() {
 		config = {
 			mode: LLM_PROVIDER_DEFAULTS.mode,
+			codex_model: LLM_PROVIDER_DEFAULTS.codex_model,
 			api_model: LLM_PROVIDER_DEFAULTS.api_model,
 			cli_model: LLM_PROVIDER_DEFAULTS.cli_model as 'haiku' | 'sonnet' | 'opus',
 			cli_timeout_ms: LLM_PROVIDER_DEFAULTS.cli_timeout_ms,
@@ -146,11 +166,19 @@
 				<div class="card-body p-4">
 					<h3 class="card-title text-sm font-medium">Current Status</h3>
 					<div class="flex flex-wrap gap-4 mt-2">
+						<!-- codex-native Status -->
+						<div class="flex items-center gap-2">
+							<div class="w-3 h-3 rounded-full {codexNativeDotClass()}"></div>
+							<span class="text-sm">
+								codex-native: {codexNativeStatusLabel()}
+							</span>
+						</div>
+
 						<!-- API Status -->
 						<div class="flex items-center gap-2">
 							<div class="w-3 h-3 rounded-full {status.apiAvailable ? 'bg-success' : 'bg-error'}"></div>
 							<span class="text-sm">
-								API Key: {status.apiAvailable ? 'Available' : 'Not configured'}
+								Anthropic API key: {status.apiAvailable ? 'Available' : 'Not configured'}
 							</span>
 						</div>
 
@@ -165,10 +193,12 @@
 						<!-- Active Provider -->
 						<div class="flex items-center gap-2">
 							<span class="text-sm text-base-content/70">Active:</span>
-							{#if status.activeProvider === 'api'}
+							{#if status.activeProvider === 'codex-native'}
+								<span class="badge badge-accent badge-sm">Codex</span>
+							{:else if status.activeProvider === 'api'}
 								<span class="badge badge-primary badge-sm">API</span>
 							{:else if status.activeProvider === 'cli'}
-								<span class="badge badge-secondary badge-sm">CLI</span>
+								<span class="badge badge-secondary badge-sm">Claude CLI</span>
 							{:else}
 								<span class="badge badge-error badge-sm">None</span>
 							{/if}
@@ -188,14 +218,17 @@
 					<span class="label-text font-medium">Provider Mode</span>
 				</label>
 				<select class="select select-bordered w-full max-w-md" bind:value={config.mode}>
-					<option value="auto">Auto (API with CLI fallback)</option>
-					<option value="api">API Only (requires API key)</option>
-					<option value="cli">CLI Only (requires Claude Code)</option>
+					<option value="auto">Auto (codex-native → API → Claude CLI)</option>
+					<option value="codex-native">codex-native only</option>
+					<option value="api">Anthropic API only</option>
+					<option value="cli">Claude CLI only</option>
 				</select>
 				<label class="label">
 					<span class="label-text-alt text-base-content/60">
 						{#if config.mode === 'auto'}
-							Uses Anthropic API when available, falls back to Claude CLI if API is unavailable.
+							Prefers codex-native when installed + authenticated, falls back to Anthropic API, then Claude CLI.
+						{:else if config.mode === 'codex-native'}
+							Requires codex-native installed and authenticated (OPENAI_API_KEY or ~/.codex/auth.json).
 						{:else if config.mode === 'api'}
 							Requires an Anthropic API key. Fails if key is not configured.
 						{:else}
@@ -205,10 +238,28 @@
 				</label>
 			</div>
 
+			<!-- codex-native Model -->
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text font-medium">codex-native Model</span>
+				</label>
+				<input
+					type="text"
+					class="input input-bordered w-full max-w-md"
+					bind:value={config.codex_model}
+					placeholder="gpt-5.2-codex"
+				/>
+				<label class="label">
+					<span class="label-text-alt text-base-content/60">
+						Model slug passed to <code class="text-xs bg-base-200 px-1 rounded">codex-native run --model</code>.
+					</span>
+				</label>
+			</div>
+
 			<!-- API Model -->
 			<div class="form-control">
 				<label class="label">
-					<span class="label-text font-medium">API Model</span>
+					<span class="label-text font-medium">Anthropic API Model</span>
 				</label>
 				<select class="select select-bordered w-full max-w-md" bind:value={config.api_model}>
 					<option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fast, Cost-effective)</option>
@@ -216,7 +267,7 @@
 				</select>
 				<label class="label">
 					<span class="label-text-alt text-base-content/60">
-						Model used when making direct API calls. Haiku recommended for suggestions and summaries.
+						Model used when making direct Anthropic API calls.
 					</span>
 				</label>
 			</div>
@@ -224,7 +275,7 @@
 			<!-- CLI Model -->
 			<div class="form-control">
 				<label class="label">
-					<span class="label-text font-medium">CLI Model</span>
+					<span class="label-text font-medium">Claude CLI Model</span>
 				</label>
 				<select class="select select-bordered w-full max-w-md" bind:value={config.cli_model}>
 					<option value="haiku">Haiku (Fast, Cost-effective)</option>
@@ -233,7 +284,7 @@
 				</select>
 				<label class="label">
 					<span class="label-text-alt text-base-content/60">
-						Model used when making CLI calls. CLI uses your Claude Code subscription.
+						Model used when making Claude CLI calls (uses your Claude Code subscription).
 					</span>
 				</label>
 			</div>
@@ -241,7 +292,7 @@
 			<!-- CLI Timeout -->
 			<div class="form-control">
 				<label class="label">
-					<span class="label-text font-medium">CLI Timeout (seconds)</span>
+					<span class="label-text font-medium">CLI Timeout (milliseconds)</span>
 				</label>
 				<input
 					type="number"
@@ -261,16 +312,12 @@
 			<!-- Show Provider Status -->
 			<div class="form-control">
 				<label class="label cursor-pointer justify-start gap-3">
-					<input
-						type="checkbox"
-						class="toggle toggle-primary"
-						bind:checked={config.show_provider_status}
-					/>
+					<input type="checkbox" class="toggle toggle-primary" bind:checked={config.show_provider_status} />
 					<span class="label-text">Show provider status in responses</span>
 				</label>
 				<label class="label pt-0">
 					<span class="label-text-alt text-base-content/60">
-						When enabled, API responses include which provider (API/CLI) was used.
+						When enabled, responses include which provider (Codex/API/Claude CLI) was used.
 					</span>
 				</label>
 			</div>
@@ -279,8 +326,19 @@
 		<!-- Error/Success Messages -->
 		{#if error}
 			<div class="alert alert-error mt-6" transition:fade>
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-5 w-5 shrink-0"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+					/>
 				</svg>
 				<span>{error}</span>
 			</div>
@@ -288,8 +346,19 @@
 
 		{#if successMessage}
 			<div class="alert alert-success mt-6" transition:fade>
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					class="h-5 w-5 shrink-0"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+					/>
 				</svg>
 				<span>{successMessage}</span>
 			</div>
@@ -297,30 +366,18 @@
 
 		<!-- Action Buttons -->
 		<div class="flex flex-wrap gap-3 mt-8 pt-6 border-t border-base-300">
-			<button
-				class="btn btn-primary"
-				onclick={saveConfig}
-				disabled={!hasChanges || isSaving}
-			>
+			<button class="btn btn-primary" onclick={saveConfig} disabled={!hasChanges || isSaving}>
 				{#if isSaving}
 					<span class="loading loading-spinner loading-sm"></span>
 				{/if}
 				Save Changes
 			</button>
 
-			<button
-				class="btn btn-ghost"
-				onclick={discardChanges}
-				disabled={!hasChanges || isSaving}
-			>
+			<button class="btn btn-ghost" onclick={discardChanges} disabled={!hasChanges || isSaving}>
 				Discard
 			</button>
 
-			<button
-				class="btn btn-outline btn-sm ml-auto"
-				onclick={resetToDefaults}
-				disabled={isSaving}
-			>
+			<button class="btn btn-outline btn-sm ml-auto" onclick={resetToDefaults} disabled={isSaving}>
 				Reset to Defaults
 			</button>
 		</div>
@@ -330,17 +387,25 @@
 			<h3 class="text-sm font-medium mb-3">Need Help?</h3>
 			<div class="text-sm text-base-content/70 space-y-2">
 				<p>
-					<strong>API Key:</strong> Get one from
-					<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="link link-primary">
+					<strong>codex-native:</strong> Ensure <code class="text-xs bg-base-200 px-1 rounded">codex-native</code> is on your PATH.
+					Authenticate by setting <code class="text-xs bg-base-200 px-1 rounded">OPENAI_API_KEY</code> or creating
+					<code class="text-xs bg-base-200 px-1 rounded">~/.codex/auth.json</code> (e.g. via <code class="text-xs bg-base-200 px-1 rounded">codex login</code>).
+				</p>
+				<p>
+					<strong>Anthropic API Key:</strong> Get one from
+					<a
+						href="https://console.anthropic.com/settings/keys"
+						target="_blank"
+						rel="noopener"
+						class="link link-primary"
+					>
 						console.anthropic.com
 					</a>
 					and configure in Settings → API Keys.
 				</p>
 				<p>
 					<strong>Claude CLI:</strong> Install Claude Code from
-					<a href="https://claude.ai/code" target="_blank" rel="noopener" class="link link-primary">
-						claude.ai/code
-					</a>
+					<a href="https://claude.ai/code" target="_blank" rel="noopener" class="link link-primary">claude.ai/code</a>
 					and authenticate with <code class="text-xs bg-base-200 px-1 rounded">claude auth</code>.
 				</p>
 			</div>

@@ -1,5 +1,5 @@
 #!/bin/bash
-# jat-doctor - Diagnose jat installation health
+# jat-doctor - Diagnose JAT installation health
 # Run this when jat features aren't working
 
 set -euo pipefail
@@ -15,58 +15,92 @@ warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 
 ISSUES=()
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+JAT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  jat Doctor Report"
+echo "  JAT Doctor Report"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# 1. Check jat repo
-if [[ -d ~/code/jat ]]; then
-    pass "jat repo exists"
+# 1. Check JAT repo (path-agnostic)
+if [[ -d "${JAT_DIR}/.git" ]]; then
+    pass "JAT repo detected (${JAT_DIR})"
 else
-    fail "jat repo missing - run: git clone https://github.com/joewinke/jat ~/code/jat"
+    fail "JAT repo not detected near jat-doctor (${JAT_DIR})"
 fi
 
 # 2. Check shared docs
-SHARED_COUNT=$(ls ~/code/jat/shared/*.md 2>/dev/null | wc -l)
-if [[ $SHARED_COUNT -ge 10 ]]; then
-    pass "$SHARED_COUNT shared docs found"
+SHARED_COUNT=$(ls "${JAT_DIR}/shared"/*.md 2>/dev/null | wc -l | tr -d ' ')
+if [[ ${SHARED_COUNT:-0} -ge 10 ]]; then
+    pass "${SHARED_COUNT} shared docs found"
 else
-    fail "Only $SHARED_COUNT shared docs (expected 10+)"
+    fail "Only ${SHARED_COUNT:-0} shared docs (expected 10+)"
 fi
 
-# 3. Check statusline
-if [[ -f ~/.claude/statusline.sh ]]; then
-    pass "Statusline installed"
-else
-    fail "Statusline missing - run: cp ~/code/jat/.claude/statusline.sh ~/.claude/"
-fi
+# 3. Check agent harnesses (Codex-first, Claude-compatible)
+echo ""
+echo "Agent Harnesses:"
 
-# 4. Check agent commands
-if [[ -d ~/.claude/commands/jat ]]; then
-    CMD_COUNT=$(ls ~/.claude/commands/jat/*.md 2>/dev/null | wc -l)
-    BROKEN=$(find ~/.claude/commands/jat -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l)
-    if [[ $BROKEN -gt 0 ]]; then
-        warn "$CMD_COUNT commands installed ($BROKEN broken symlinks)"
-        echo "    Broken symlinks:"
-        find ~/.claude/commands/jat -type l ! -exec test -e {} \; -print 2>/dev/null | while read f; do
-            echo "      - $(basename "$f")"
-        done
-        echo "    Fix: rm ~/.claude/commands/jat/*.md && cd ~/code/jat && ./install.sh"
+if command -v codex-native &>/dev/null; then
+    pass "codex-native"
+    if [[ -d "${HOME}/.codex" ]]; then
+        pass "~/.codex exists"
     else
-        pass "$CMD_COUNT agent commands installed"
+        warn "~/.codex missing (Codex auth/session history may be unavailable)"
+    fi
+    if [[ -f "${HOME}/.codex/auth.json" ]]; then
+        pass "~/.codex/auth.json present"
+    else
+        warn "~/.codex/auth.json missing (Codex may need login or API key)"
     fi
 else
-    fail "Agent commands not installed - run: cd ~/code/jat && ./install.sh"
+    warn "codex-native not found"
 fi
 
-# 5. Check core tools
+if command -v codex &>/dev/null; then
+    pass "codex"
+else
+    warn "codex not found"
+fi
+
+if command -v claude &>/dev/null; then
+    pass "claude (Claude Code)"
+
+    # Claude-only extras (optional)
+    if [[ -f "${HOME}/.claude/statusline.sh" ]]; then
+        pass "~/.claude/statusline.sh installed"
+    else
+        warn "~/.claude/statusline.sh missing (Claude-only UI enhancement)"
+    fi
+
+    if [[ -d "${HOME}/.claude/commands/jat" ]]; then
+        CMD_COUNT=$(ls "${HOME}/.claude/commands/jat"/*.md 2>/dev/null | wc -l | tr -d ' ')
+        BROKEN=$(find "${HOME}/.claude/commands/jat" -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l | tr -d ' ')
+        if [[ ${BROKEN:-0} -gt 0 ]]; then
+            warn "${CMD_COUNT:-0} Claude slash-commands installed (${BROKEN} broken symlinks)"
+            echo "    Broken symlinks:"
+            find "${HOME}/.claude/commands/jat" -type l ! -exec test -e {} \; -print 2>/dev/null | while read -r f; do
+                echo "      - $(basename "$f")"
+            done
+            echo "    Fix: rm ~/.claude/commands/jat/*.md && cd \"${JAT_DIR}\" && ./install.sh"
+        else
+            pass "${CMD_COUNT:-0} Claude slash-commands installed"
+        fi
+    else
+        warn "Claude slash-commands not installed (~/.claude/commands/jat)"
+    fi
+else
+    warn "claude (Claude Code) not found"
+fi
+
+# 4. Check core tools
 echo ""
 echo "Tools:"
 TOOLS_OK=true
 for tool in am-register am-inbox am-send bd jat-signal; do
-    if command -v $tool &>/dev/null; then
+    if command -v "$tool" &>/dev/null; then
         pass "$tool"
     else
         fail "$tool missing"
@@ -75,35 +109,44 @@ for tool in am-register am-inbox am-send bd jat-signal; do
 done
 
 if [[ "$TOOLS_OK" == "false" ]]; then
-    echo "    Fix: cd ~/code/jat && ./install.sh"
+    echo "    Fix: cd \"${JAT_DIR}\" && ./install.sh"
 fi
 
-# 6. Check Beads in current project
+# 5. Check Beads in current project
 echo ""
-echo "Current Project ($(basename "$PWD")):"
+echo "Current Project ($(basename "$PWD")) :"
 if [[ -d .beads ]]; then
     TASK_COUNT=$(bd list --json 2>/dev/null | jq length 2>/dev/null || echo "?")
-    pass "Beads initialized ($TASK_COUNT tasks)"
+    pass "Beads initialized (${TASK_COUNT} tasks)"
 else
     warn "Beads not initialized - run: bd init"
 fi
 
-# 7. Check CLAUDE.md imports
+# 6. Check instruction files in current directory
+echo ""
+echo "Agent Instructions:"
+if [[ -f AGENTS.md ]]; then
+    pass "AGENTS.md present"
+else
+    warn "No AGENTS.md in current directory (Codex/Codex-native will rely on defaults)"
+fi
+
 if [[ -f CLAUDE.md ]]; then
-    IMPORTS=$(grep -c "^@~/code/jat/shared/" CLAUDE.md 2>/dev/null || echo "0")
-    if [[ $IMPORTS -ge 5 ]]; then
-        pass "CLAUDE.md has $IMPORTS jat imports"
+    # Best-effort: count JAT shared doc imports, but don't hardcode install path.
+    IMPORTS=$(grep -c "^@.*jat/shared/" CLAUDE.md 2>/dev/null || echo "0")
+    if [[ ${IMPORTS:-0} -ge 5 ]]; then
+        pass "CLAUDE.md has ${IMPORTS} JAT imports"
     else
-        warn "CLAUDE.md has only $IMPORTS jat imports (expected 5+)"
+        warn "CLAUDE.md has only ${IMPORTS:-0} JAT imports (expected 5+)"
         echo "    Add to CLAUDE.md:"
-        echo "      @~/code/jat/shared/overview.md"
-        echo "      @~/code/jat/shared/agent-mail.md"
-        echo "      @~/code/jat/shared/beads.md"
-        echo "      @~/code/jat/shared/tools.md"
-        echo "      @~/code/jat/shared/workflow-commands.md"
+        echo "      @${JAT_DIR}/shared/overview.md"
+        echo "      @${JAT_DIR}/shared/agent-mail.md"
+        echo "      @${JAT_DIR}/shared/beads.md"
+        echo "      @${JAT_DIR}/shared/tools.md"
+        echo "      @${JAT_DIR}/shared/workflow-commands.md"
     fi
 else
-    warn "No CLAUDE.md in current directory"
+    warn "No CLAUDE.md in current directory (Claude Code can still run, but may be missing docs)"
 fi
 
 # Summary

@@ -8,6 +8,8 @@ set -e
 # Config location
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jat"
 CONFIG_FILE="$CONFIG_DIR/projects.json"
+AGENTS_CONFIG_FILE="$CONFIG_DIR/agents.json"
+AGENT_MAIL_DB="${AGENT_MAIL_DB:-$HOME/.agent-mail.db}"
 
 # JAT source directory (detect where jat is installed)
 # Priority: JAT_INSTALL_DIR env > XDG standard > ~/code/jat > follow symlink
@@ -591,6 +593,388 @@ apply_all_colors() {
 # Launch Functions
 #------------------------------------------------------------------------------
 
+
+#------------------------------------------------------------------------------
+# Agent Programs (agent-agnostic launcher)
+#------------------------------------------------------------------------------
+
+agents_config_exists() {
+    [[ -f "$AGENTS_CONFIG_FILE" ]]
+}
+
+get_fallback_agent_id() {
+    if agents_config_exists; then
+        jq -r '.defaults.fallbackAgent // empty' "$AGENTS_CONFIG_FILE" 2>/dev/null || true
+    fi
+}
+
+get_agent_program_json() {
+    local id="$1"
+    if agents_config_exists; then
+        jq -c --arg id "$id" '.programs[$id] // empty' "$AGENTS_CONFIG_FILE" 2>/dev/null || true
+    fi
+}
+
+resolve_agent_program_id() {
+    local override="${1:-}"
+    local id=""
+
+    if [[ -n "$override" ]]; then
+        id="$override"
+    else
+        id="$(get_fallback_agent_id)"
+    fi
+
+    # Sensible fallback when config missing
+    if [[ -z "$id" ]] || [[ "$id" == "null" ]]; then
+        if command -v codex-native &>/dev/null; then
+            id="codex-native"
+        else
+            id="claude-code"
+        fi
+    fi
+
+    # Legacy aliases
+    case "$id" in
+        claude) id="claude-code" ;;
+        codex) id="codex-cli" ;;
+    esac
+
+    echo "$id"
+}
+
+resolve_agent_command() {
+    local id="$1"
+    local program_json
+    program_json="$(get_agent_program_json "$id")"
+
+    local cmd=""
+    if [[ -n "$program_json" ]] && [[ "$program_json" != "null" ]]; then
+        cmd="$(echo "$program_json" | jq -r '.command // empty' 2>/dev/null || true)"
+    fi
+
+    if [[ -z "$cmd" ]] || [[ "$cmd" == "null" ]]; then
+        case "$id" in
+            codex-native) cmd="codex-native" ;;
+            codex-cli) cmd="codex" ;;
+            claude-code) cmd="claude" ;;
+            *) cmd="$id" ;;
+        esac
+    fi
+
+    echo "$cmd"
+}
+
+resolve_agent_flags() {
+    local id="$1"
+    local program_json
+    program_json="$(get_agent_program_json "$id")"
+
+    if [[ -z "$program_json" ]] || [[ "$program_json" == "null" ]]; then
+        echo ""
+        return 0
+    fi
+
+    echo "$program_json" | jq -r '.flags // [] | .[]' 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^ *//; s/ *$//'
+}
+
+resolve_agent_model_short() {
+    local id="$1"
+    local override="${2:-}"
+
+    local program_json
+    program_json="$(get_agent_program_json "$id")"
+
+    local configured_default=""
+    if [[ -n "$program_json" ]] && [[ "$program_json" != "null" ]]; then
+        configured_default="$(echo "$program_json" | jq -r '.defaultModel // empty' 2>/dev/null || true)"
+    fi
+
+    local chosen="${override:-$configured_default}"
+
+    if [[ -z "$chosen" ]] || [[ "$chosen" == "null" ]]; then
+        case "$id" in
+            codex-native|codex-cli) chosen="${JAT_CODEX_MODEL:-gpt5.2-codex}" ;;
+            claude-code) chosen="${JAT_CLAUDE_MODEL:-sonnet}" ;;
+            *) chosen="" ;;
+        esac
+    fi
+
+    echo "$chosen"
+}
+
+resolve_agent_model_id() {
+    local id="$1"
+    local model_short="$2"
+
+    local program_json
+    program_json="$(get_agent_program_json "$id")"
+
+    if [[ -n "$program_json" ]] && [[ "$program_json" != "null" ]]; then
+        local model_id
+        model_id="$(echo "$program_json" | jq -r --arg m "$model_short" '.models[]? | select(.shortName==$m or .id==$m) | .id' 2>/dev/null | head -n 1)"
+        if [[ -n "$model_id" ]] && [[ "$model_id" != "null" ]]; then
+            echo "$model_id"
+            return 0
+        fi
+    fi
+
+    # Fallback: accept the provided value as an id
+    echo "$model_short"
+}
+
+# Name generation similar to IDE spawn (small list; enough for uniqueness)
+AGENT_ADJECTIVES=(Swift Calm Bright Dark Bold Wild Clear Misty Sunny Windy Grand Deep High Wide Silver Golden)
+AGENT_NOUNS=(River Ocean Lake Stream Mountain Valley Canyon Forest Shore Cloud Storm Stone Dawn Dusk Horizon Garden)
+
+tmux_session_exists() {
+    local session="$1"
+    tmux has-session -t "$session" 2>/dev/null
+}
+
+agent_exists_in_db() {
+    local agent_name="$1"
+    [[ -f "$AGENT_MAIL_DB" ]] || return 1
+    command -v sqlite3 &>/dev/null || return 1
+    local found
+    found=$(sqlite3 "$AGENT_MAIL_DB" "SELECT 1 FROM agents WHERE name = '$agent_name' LIMIT 1;" 2>/dev/null || true)
+    [[ -n "$found" ]]
+}
+
+generate_unique_agent_name() {
+    local max_attempts=200
+    for ((attempt=0; attempt<max_attempts; attempt++)); do
+        local adj=${AGENT_ADJECTIVES[$((RANDOM % ${#AGENT_ADJECTIVES[@]}))]}
+        local noun=${AGENT_NOUNS[$((RANDOM % ${#AGENT_NOUNS[@]}))]}
+        local name="${adj}${noun}"
+        local session="jat-${name}"
+
+        if tmux_session_exists "$session"; then
+            continue
+        fi
+        if agent_exists_in_db "$name"; then
+            continue
+        fi
+        echo "$name"
+        return 0
+    done
+
+    echo "Agent$RANDOM"
+}
+
+escape_for_double_quotes() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    echo "$s"
+}
+
+emit_starting_signal_best_effort() {
+    local session_name="$1"
+    local agent_name="$2"
+    local project_name="$3"
+    local model="$4"
+    local agent_program="$5"
+
+    command -v jat-signal &>/dev/null || return 0
+    command -v jq &>/dev/null || return 0
+
+    local ts
+    ts=$(date -Iseconds)
+
+    JAT_TMUX_SESSION="$session_name" jat-signal starting "$(jq -n -c         --arg agentName "$agent_name"         --arg project "$project_name"         --arg model "$model"         --arg agentProgram "$agent_program"         --arg timestamp "$ts"         '{agentName:$agentName,project:$project,model:$model,agentProgram:$agentProgram,timestamp:$timestamp}')" >/dev/null 2>&1 || true
+}
+
+register_agent_best_effort() {
+    local project_path="$1"
+    local agent_name="$2"
+    local agent_program="$3"
+    local model_short="$4"
+
+    command -v am-register &>/dev/null || return 0
+
+    (cd "$project_path" && AGENT_MAIL_DB="$AGENT_MAIL_DB" am-register         --name "$agent_name"         --program "$agent_program"         --model "$model_short"         --project "$project_path"         --json >/dev/null 2>&1) || true
+}
+
+build_codex_bootstrap_prompt() {
+    local project_path="$1"
+    local agent_name="$2"
+    local session_name="$3"
+    local auto_mode="${4:-false}"
+
+    local prompt="You are a JAT agent working in a tmux session. Your agent name is: ${agent_name}. [JAT_AGENT_NAME:${agent_name}] [JAT_TMUX_SESSION:${session_name}] [JAT_PROJECT_PATH:${project_path}] Read AGENTS.md in the repo root for Codex/Codex-native workflow instructions (and CLAUDE.md for Claude Code slash-command workflows, if present)."
+
+    if [[ "$auto_mode" == "true" ]]; then
+        prompt="${prompt} Start by running 'bd ready' to pick a task, then begin work."
+    else
+        prompt="${prompt} Start by checking 'bd ready' for tasks (or wait for the user to assign one)."
+    fi
+
+    prompt="${prompt} Use 'jat-signal' to report state to the IDE."
+
+    echo "$prompt"
+}
+
+launch_codex_family() {
+    local codex_cmd="$1"          # codex-native | codex
+    local model_id="$2"
+    local flags="$3"
+    local project_path="$4"
+    local project_label="$5"
+    local db_url="$6"
+    local tools_path="$7"
+    local count="${8:-1}"
+    local skip_agent="${9:-false}"
+    local auto_mode="${10:-false}"
+    local agent_program_id="${11:-}"
+    local model_short="${12:-}"
+
+    local env_vars="PATH=$PATH:$tools_path"
+    env_vars="$env_vars AGENT_MAIL_URL=http://localhost:8765"
+    env_vars="$env_vars AGENT_MAIL_DB=\"$AGENT_MAIL_DB\""
+    [[ -n "$db_url" ]] && env_vars="$env_vars DATABASE_URL=$db_url"
+
+    local base_cmd="$codex_cmd"
+    if [[ "$codex_cmd" == "codex-native" ]]; then
+        base_cmd="codex-native tui"
+    fi
+
+    # Normalize approval flag naming between Codex CLI and codex-native.
+    # - codex uses --ask-for-approval
+    # - codex-native uses --approval
+    if [[ "$codex_cmd" == "codex" ]]; then
+        flags="${flags//--approval/--ask-for-approval}"
+    else
+        flags="${flags//--ask-for-approval/--approval}"
+    fi
+
+    # Codex-family default: run with full permissions unless the user explicitly configured sandboxing.
+    # JAT writes runtime state to /tmp (signals) and uses the Agent Mail DB at ~/.agent-mail.db by default.
+    local can_set_codex_sandbox="false"
+    if [[ "$codex_cmd" == "codex-native" ]]; then
+        can_set_codex_sandbox="true"
+    elif [[ "$codex_cmd" == "codex" ]]; then
+        if command -v codex &>/dev/null; then
+            if codex --help 2>/dev/null | grep -q -- '--sandbox'; then
+                can_set_codex_sandbox="true"
+            fi
+        fi
+    fi
+
+    if [[ "$can_set_codex_sandbox" == "true" ]]; then
+        if [[ "$flags" != *"--dangerously-bypass-approvals-and-sandbox"* ]]; then
+            if [[ "$flags" != *"--sandbox"* ]]; then
+                flags="$flags --sandbox danger-full-access"
+            fi
+            if [[ "$codex_cmd" == "codex" ]]; then
+                if [[ "$flags" != *"--ask-for-approval"* ]] && [[ "$flags" != *"-a "* ]]; then
+                    flags="$flags --ask-for-approval never"
+                fi
+            else
+                if [[ "$flags" != *"--approval"* ]]; then
+                    flags="$flags --approval never"
+                fi
+            fi
+        fi
+    fi
+
+    for ((i=1; i<=count; i++)); do
+        local agent_name
+        agent_name="$(generate_unique_agent_name)"
+        local session_name="jat-${agent_name}"
+
+        local window_title
+        if [[ $count -eq 1 ]]; then
+            window_title="$project_label: ${codex_cmd}"
+            echo -e "${DIM}  → ${codex_cmd}${NC}"
+        else
+            window_title="$project_label: ${codex_cmd} #$i"
+            echo -e "${DIM}  → ${codex_cmd} #$i${NC}"
+        fi
+
+        # Create logs directory if it doesn't exist
+        local logs_dir="$project_path/.beads/logs"
+        mkdir -p "$logs_dir"
+        local log_file="$logs_dir/session-${session_name}-$(date +%Y%m%d-%H%M%S).log"
+
+        register_agent_best_effort "$project_path" "$agent_name" "$agent_program_id" "$model_short"
+        emit_starting_signal_best_effort "$session_name" "$agent_name" "$project_path" "$model_id" "$agent_program_id"
+
+        local cmd="${base_cmd} --model ${model_id} ${flags}"
+
+        if [[ "$skip_agent" != "true" ]]; then
+            local prompt
+            prompt="$(build_codex_bootstrap_prompt "$project_path" "$agent_name" "$session_name" "$auto_mode")"
+            cmd="$cmd \"$(escape_for_double_quotes "$prompt")\""
+        fi
+
+        # Launch terminal with tmux session containing Codex
+        launch_terminal_window "$window_title" "
+            cd '$project_path'
+            tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$project_path'
+            tmux set-option -t '$session_name' history-limit 50000
+            sleep 0.3
+            tmux send-keys -t '$session_name' '$env_vars $cmd' Enter
+            tmux attach-session -t '$session_name'
+            tmux capture-pane -t '$session_name' -p -S -50000 > "$log_file" 2>/dev/null || true
+        "
+
+        # Stagger launches so each agent sees previous agents' reservations
+        if [[ $i -lt $count ]]; then
+            local stagger
+            stagger=$(jq -r '.defaults.agent_stagger // 15' "$CONFIG_FILE")
+            sleep "$stagger"
+        fi
+    done
+}
+
+launch_agent() {
+    local project_path="$1"
+    local project_label="$2"
+    local db_url="$3"
+    local tools_path="$4"
+    local count="${5:-1}"
+    local skip_agent="${6:-false}"
+    local auto_mode="${7:-false}"
+    local agent_override="${8:-}"
+    local model_override="${9:-}"
+
+    local agent_program_id
+    agent_program_id="$(resolve_agent_program_id "$agent_override")"
+
+    local cmd
+    cmd="$(resolve_agent_command "$agent_program_id")"
+
+    # Best-effort availability check
+    if ! command -v "$cmd" &>/dev/null; then
+        echo -e "${YELLOW}  ⊘ Agent command not found: $cmd (falling back to Claude)${NC}"
+        agent_program_id="claude-code"
+        cmd="claude"
+    fi
+
+    local flags
+    flags="$(resolve_agent_flags "$agent_program_id")"
+
+    local model_short
+    model_short="$(resolve_agent_model_short "$agent_program_id" "$model_override")"
+
+    local model_id
+    model_id="$(resolve_agent_model_id "$agent_program_id" "$model_short")"
+
+    case "$cmd" in
+        claude)
+            launch_claude "$project_path" "$project_label" "$db_url" "$tools_path" "$count" "$skip_agent" "$auto_mode" "$model_short" "$flags"
+            ;;
+        codex-native|codex)
+            launch_codex_family "$cmd" "$model_id" "$flags" "$project_path" "$project_label" "$db_url" "$tools_path" "$count" "$skip_agent" "$auto_mode" "$agent_program_id" "$model_short"
+            ;;
+        *)
+            echo -e "${YELLOW}  ⊘ Unsupported agent command for CLI launcher: $cmd (falling back to Claude)${NC}"
+            launch_claude "$project_path" "$project_label" "$db_url" "$tools_path" "$count" "$skip_agent" "$auto_mode" "$model_short" "$flags"
+            ;;
+    esac
+}
+
 launch_code() {
     local path="$1"
     local name="$2"
@@ -607,19 +991,32 @@ launch_claude() {
     local count="${5:-1}"
     local skip_agent="${6:-false}"
     local auto_mode="${7:-false}"
+    local model_override="${8:-}"
+    local agent_program_flags="${9:-}"
 
     # Build environment
     local env_vars="PATH=$PATH:$tools_path:$path/.claude/tools"
     env_vars="$env_vars AGENT_MAIL_URL=http://localhost:8765"
+    env_vars="$env_vars AGENT_MAIL_DB=\"$AGENT_MAIL_DB\""
     [[ -n "$db_url" ]] && env_vars="$env_vars DATABASE_URL=$db_url"
 
     # Get claude flags from config
     local claude_flags
     claude_flags=$(jq -r '.defaults.claude_flags // "--dangerously-skip-permissions"' "$CONFIG_FILE")
 
+    # Merge Agent Program flags (best-effort)
+    if [[ -n "$agent_program_flags" ]]; then
+        claude_flags="$claude_flags $agent_program_flags"
+    fi
+
     # JAT bootstrap prompt - minimal identity, commands load full docs on-demand
+    # If model override provided, pass it via --model unless config already includes one
+    if [[ -n "$model_override" ]] && ! echo "$claude_flags" | grep -q "--model"; then
+        claude_flags="$claude_flags --model $model_override"
+    fi
+
     local jat_bootstrap='You are a JAT agent. Run /jat:start to begin work.'
-    claude_flags="$claude_flags --append-system-prompt '$jat_bootstrap'"
+    claude_flags="$claude_flags --append-system-prompt \"$(escape_for_double_quotes "$jat_bootstrap")\""
 
     # Build initial prompt (without -p flag which makes it non-interactive)
     local initial_prompt=""
@@ -787,7 +1184,7 @@ launch_project() {
     # Parse options
     local do_all=true
     local do_code=false
-    local do_claude=false
+    local do_agent=false
     local do_npm=false
     local do_browser=false
     local do_ide=false
@@ -795,11 +1192,23 @@ launch_project() {
     local skip_agent=false
     local skip_ide=false
     local auto_mode=false
+    local agent_override=""
+    local model_override=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --agent)
+                agent_override="$2"
+                shift 2
+                continue
+                ;;
+            --model)
+                model_override="$2"
+                shift 2
+                continue
+                ;;
             --code|-c)       do_all=false; do_code=true ;;
-            --claude|-l)     do_all=false; do_claude=true ;;
+            --claude|-l)     do_all=false; do_agent=true; agent_override="claude-code" ;;
             --npm|-n)        do_all=false; do_npm=true ;;
             --browser|-b)    do_all=false; do_browser=true ;;
             --ide|-i)        do_all=false; do_ide=true ;;
@@ -857,7 +1266,7 @@ launch_project() {
     echo ""
 
     # Launch components
-    # Order: npm/browser/IDE first (need time to start), then Claude sessions last
+    # Order: npm/browser/IDE first (need time to start), then agent sessions last
     if $do_all; then
         launch_code "$path" "$name"
         sleep 0.3
@@ -868,12 +1277,12 @@ launch_project() {
             sleep 0.3
             launch_ide "$name"
         fi
-        # Launch Claude sessions last (gives servers time to start)
+        # Launch agent sessions last (gives servers time to start)
         sleep 0.3
-        launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent" "$auto_mode"
+        launch_agent "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent" "$auto_mode" "$agent_override" "$model_override"
     else
         $do_code && launch_code "$path" "$name"
-        $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent" "$auto_mode"
+        $do_agent && launch_agent "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent" "$auto_mode" "$agent_override" "$model_override"
         $do_npm && launch_npm "$path" "$name" "$port"
         $do_browser && launch_browser "$port" "$name"
         $do_ide && launch_ide "$name"
@@ -1312,7 +1721,7 @@ list_all() {
     done
 
     echo ""
-    echo -e "${DIM}Usage: jat <project> [N] [--code|--claude|--npm|--browser|--no-agent]${NC}"
+    echo -e "${DIM}Usage: jat <project> [N] [--agent <id>] [--model <name>] [--code|--claude|--npm|--browser|--no-agent]${NC}"
     echo ""
 }
 
@@ -1334,6 +1743,13 @@ USAGE:
 QUICK START:
     jat init               Auto-detect and add projects
     jat                    Launch IDE to manage agents
+
+PROJECT LAUNCH (agent-agnostic):
+    jat <project> [N]                       Full env + default agent (from ~/.config/jat/agents.json)
+    jat <project> --agent <id>              Full env + specific agent program (e.g., codex-native)
+    jat <project> --model <name>            Override model short name (best-effort)
+    jat <project> --claude                  Claude-only (backwards compatible)
+    jat <project> 4 --auto                  Spawn 4 agents that auto-pick tasks
 
 PROJECT MANAGEMENT:
     init                   Auto-detect projects in ~/code
@@ -1775,6 +2191,21 @@ find_session_by_agent() {
     local found_project=""
     local found_mtime=0
 
+
+    # Method 0: Agent Mail DB mapping (durable)
+    # If available, prefer the most recently seen provider session id for this agent.
+    if [[ -z "$found_session" ]]; then
+        if [[ -f "$AGENT_MAIL_DB" ]] && command -v sqlite3 &>/dev/null; then
+            local esc
+            esc=$(printf %s "$target_agent" | sed "s/'/''/g")
+            local db_session
+            db_session=$(sqlite3 "$AGENT_MAIL_DB" "SELECT s.provider_session_id FROM agent_sessions s JOIN agents a ON s.agent_id = a.id WHERE a.name = '$esc' ORDER BY s.last_seen_ts DESC LIMIT 1;" 2>/dev/null || true)
+            if [[ -n "$db_session" ]]; then
+                found_session="$db_session"
+            fi
+        fi
+    fi
+
     # Method 1: Search .claude/sessions/agent-*.txt files in all projects
     # These files contain the agent name, filename contains session ID
     for project in $(list_projects 2>/dev/null); do
@@ -1900,6 +2331,40 @@ find_session_by_agent() {
         done
     fi
 
+    # Method 5: Search Codex saved sessions (~/.codex/sessions)
+    # Uses stable JAT markers embedded in the prompt:
+    #   [JAT_AGENT_NAME:Name] and [JAT_TMUX_SESSION:jat-Name]
+    if [[ -z "$found_session" ]]; then
+        local index_file="$HOME/.codex/sessions/_schaltwerk_session_index_cache.json"
+        if [[ -f "$index_file" ]] && command -v jq &>/dev/null; then
+            local marker1="[JAT_AGENT_NAME:${target_agent}]"
+            local marker2="[JAT_TMUX_SESSION:jat-${target_agent}]"
+            local legacy_needle="Your agent name is: ${target_agent}"
+
+            # Prefer sessions from the same cwd when we can resolve a project path.
+            local candidates
+            if [[ -n "$found_project" ]] && [[ "$found_project" == /* ]]; then
+                candidates=$(jq -r --arg cwd "$found_project" '.entries[]? | select((.cwds // []) | index($cwd)) | "(.modified_millis)|(.path)"' "$index_file" 2>/dev/null | sort -t'|' -k1 -nr | head -n 200)
+            else
+                candidates=$(jq -r '.entries[]? | "(.modified_millis)|(.path)"' "$index_file" 2>/dev/null | sort -t'|' -k1 -nr | head -n 200)
+            fi
+
+            while IFS='|' read -r _mtime session_path; do
+                [[ -z "$session_path" ]] && continue
+                [[ ! -f "$session_path" ]] && continue
+
+                local prefix
+                prefix=$(head -c 1048576 "$session_path" 2>/dev/null || true)
+                if echo "$prefix" | grep -qF "$marker1" || echo "$prefix" | grep -qF "$marker2" || echo "$prefix" | grep -qF "$legacy_needle"; then
+                    found_session=$(echo "$session_path" | grep -oE "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" | tail -1)
+                    if [[ -n "$found_session" ]]; then
+                        break
+                    fi
+                fi
+            done <<< "$candidates"
+        fi
+    fi
+
     # Output results
     if [[ -n "$found_session" ]]; then
         echo "$found_session"
@@ -1951,13 +2416,16 @@ resume_session() {
     local session_id="$1"
     local project="${2:-}"
 
+    local explicit_agent_name=""
+
     # Handle help and list flags first
     if [[ -z "$session_id" ]] || [[ "$session_id" == "--help" ]] || [[ "$session_id" == "-h" ]]; then
-        echo -e "${BOLD}Resume a Claude Code session${NC}"
+        echo -e "${BOLD}Resume an agent session${NC}"
         echo ""
         echo -e "${DIM}Usage:${NC}"
         echo "  jat resume <agent-name>          # Resume by agent name"
-        echo "  jat resume <session-id>          # Resume by session ID"
+        echo "  jat resume <session-id>          # Resume by provider session ID"
+        echo "  jat resume <partial-id> [project] # Resume by partial ID (best-effort)"
         echo "  jat resume --list [project]      # List recent sessions"
         echo ""
         echo -e "${DIM}Examples:${NC}"
@@ -1975,82 +2443,127 @@ resume_session() {
         return $?
     fi
 
+    sqlite_escape() {
+        local s="$1"
+        s="${s//\'/\'\'}"
+        echo "$s"
+    }
+
+    # Best-effort query: agent -> (project_path, program_id, model_short)
+    get_agent_db_row_best_effort() {
+        local agent="$1"
+        [[ -f "$AGENT_MAIL_DB" ]] || return 0
+        command -v sqlite3 &>/dev/null || return 0
+        local esc
+        esc="$(sqlite_escape "$agent")"
+        sqlite3 -separator '|' "$AGENT_MAIL_DB" "SELECT p.human_key, a.program, a.model FROM agents a JOIN projects p ON a.project_id=p.id WHERE a.name='$esc' ORDER BY a.last_active_ts DESC LIMIT 1;" 2>/dev/null || true
+    }
+
+    find_codex_session_file_by_id_best_effort() {
+        local sid="$1"
+        local index_file="$HOME/.codex/sessions/_schaltwerk_session_index_cache.json"
+        if [[ -f "$index_file" ]] && command -v jq &>/dev/null; then
+            jq -r --arg sid "$sid" '.entries[]? | select((.path // "") | contains($sid)) | "(.modified_millis)|(.path)"' "$index_file" 2>/dev/null | sort -t'|' -k1 -nr | head -n 1 | cut -d'|' -f2-
+            return 0
+        fi
+        # Slow fallback
+        find "$HOME/.codex/sessions" -type f -name "*${sid}*.jsonl" 2>/dev/null | head -n 1
+    }
+
+    extract_marker_value_best_effort() {
+        local prefix="$1"
+        local key="$2"  # e.g. JAT_AGENT_NAME
+        echo "$prefix" | sed -n "s/.*\[${key}:\([^]]*\)\].*/\1/p" | head -n 1
+    }
+
+    extract_agent_name_from_codex_session_best_effort() {
+        local session_file="$1"
+        [[ -f "$session_file" ]] || return 0
+        local prefix
+        prefix=$(head -c 1048576 "$session_file" 2>/dev/null || true)
+
+        local agent
+        agent=$(extract_marker_value_best_effort "$prefix" "JAT_AGENT_NAME")
+        if [[ -n "$agent" ]]; then
+            echo "$agent"
+            return 0
+        fi
+
+        # Legacy fallback
+        agent=$(echo "$prefix" | grep -oE "Your agent name is: [A-Za-z0-9_-]+" | head -n 1 | sed 's/Your agent name is: //')
+        echo "$agent"
+    }
+
+    extract_project_path_from_codex_session_best_effort() {
+        local session_file="$1"
+        [[ -f "$session_file" ]] || return 0
+        local prefix
+        prefix=$(head -c 1048576 "$session_file" 2>/dev/null || true)
+        extract_marker_value_best_effort "$prefix" "JAT_PROJECT_PATH"
+    }
+
     # Check if input looks like an agent name (not a UUID or partial UUID)
     # Agent names are PascalCase words, UUIDs have dashes and hex chars
     local is_agent_name=false
     if [[ ! "$session_id" =~ ^[0-9a-f-]+$ ]]; then
-        # Doesn't look like a UUID - try as agent name
         is_agent_name=true
     fi
 
-    # If it looks like an agent name, try to find the session ID
+    # If it looks like an agent name, resolve provider session id
     if [[ "$is_agent_name" == "true" ]]; then
+        explicit_agent_name="$session_id"
+
         local looked_up_session
-        looked_up_session=$(find_session_by_agent "$session_id")
+        looked_up_session=$(find_session_by_agent "$explicit_agent_name")
         if [[ -n "$looked_up_session" ]]; then
-            echo -e "${DIM}Found session for agent $session_id: ${looked_up_session:0:8}...${NC}"
-            # Shift project to $2 position if agent name was in $1
-            project="${project:-}"
+            echo -e "${DIM}Found session for agent $explicit_agent_name: ${looked_up_session:0:8}...${NC}"
             session_id="$looked_up_session"
         else
-            echo -e "${RED}No session found for agent: $session_id${NC}"
+            echo -e "${RED}No session found for agent: $explicit_agent_name${NC}"
             echo ""
             echo "Use 'jat resume --list' to see recent sessions"
             return 1
         fi
     fi
 
-    # Find full session ID if partial provided
+    # Resolve full provider session id if partial provided
     local full_session_id=""
+    local agent_name="${explicit_agent_name:-}"
     local found_project=""
-    local agent_name=""
     local task_id=""
 
-    # Search through signal files in /tmp for matching session
+    # 1) Try /tmp signal files (provider-session keyed)
     for signal_file in /tmp/jat-signal-*.json; do
         [[ ! -f "$signal_file" ]] && continue
-        [[ "$signal_file" == *"-tmux-"* ]] && continue  # Skip tmux-keyed files
+        [[ "$signal_file" == *"-tmux-"* ]] && continue
 
-        local file_session_id file_project file_agent file_task file_tmux
+        local file_session_id
         file_session_id=$(jq -r '.session_id // empty' "$signal_file" 2>/dev/null)
 
         if [[ -n "$file_session_id" ]] && [[ "$file_session_id" == "$session_id"* ]]; then
             full_session_id="$file_session_id"
             found_project=$(jq -r '.data.project // empty' "$signal_file" 2>/dev/null)
-            agent_name=$(jq -r '.data.agentName // empty' "$signal_file" 2>/dev/null)
+            agent_name=${agent_name:-$(jq -r '.data.agentName // empty' "$signal_file" 2>/dev/null)}
             task_id=$(jq -r '.task_id // empty' "$signal_file" 2>/dev/null)
-            # If agent name not in data, extract from tmux_session (format: jat-AgentName)
-            if [[ -z "$agent_name" ]]; then
-                file_tmux=$(jq -r '.tmux_session // empty' "$signal_file" 2>/dev/null)
-                if [[ "$file_tmux" == jat-* ]]; then
-                    agent_name="${file_tmux#jat-}"
-                fi
-            fi
             break
         fi
     done
 
-    # Also search timeline files for historical sessions or to fill in missing data
-    # Even if we found the session in signal files, we may need more data from timeline
+    # 2) Try /tmp timeline (tmux-keyed)
     if [[ -z "$full_session_id" ]] || [[ -z "$found_project" ]] || [[ -z "$agent_name" ]]; then
         local search_id="${full_session_id:-$session_id}"
         for timeline_file in /tmp/jat-timeline-*.jsonl; do
             [[ ! -f "$timeline_file" ]] && continue
 
-            # Search for session_id that starts with the provided prefix
-            # Prefer "starting" signals as they have the most complete data
             local line
             line=$(grep "\"session_id\":\"$search_id" "$timeline_file" 2>/dev/null | grep '"state":"starting"' | head -1)
-            # Fall back to any matching line if no starting signal
             if [[ -z "$line" ]]; then
                 line=$(grep "\"session_id\":\"$search_id" "$timeline_file" 2>/dev/null | head -1)
             fi
             if [[ -n "$line" ]]; then
-                # Only update values we don't have yet
                 [[ -z "$full_session_id" ]] && full_session_id=$(echo "$line" | jq -r '.session_id // empty')
                 [[ -z "$found_project" ]] && found_project=$(echo "$line" | jq -r '.data.project // empty')
                 [[ -z "$task_id" ]] && task_id=$(echo "$line" | jq -r '.task_id // empty')
-                # For agent name, check data first, then tmux_session
                 if [[ -z "$agent_name" ]]; then
                     agent_name=$(echo "$line" | jq -r '.data.agentName // empty')
                     if [[ -z "$agent_name" ]]; then
@@ -2066,38 +2579,45 @@ resume_session() {
         done
     fi
 
-    # If still not found, try using the session ID directly (might be complete)
+    # 3) If still no full id, accept full UUID input or try provider-specific lookups
     if [[ -z "$full_session_id" ]]; then
-        # Check if it looks like a UUID
         if [[ "$session_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
             full_session_id="$session_id"
         else
-            echo -e "${RED}Error: Session not found: $session_id${NC}"
-            echo ""
-            echo "Use 'jat resume --list' to see recent sessions"
-            return 1
-        fi
-    fi
-
-    # Fallback: If we have a session ID but no project, find it from JSONL files
-    # The JSONL file location tells us the project
-    if [[ -n "$full_session_id" ]] && [[ -z "$found_project" ]]; then
-        for project_dir in ~/.claude/projects/-home-jw-code-*; do
-            [[ ! -d "$project_dir" ]] && continue
-            if [[ -f "$project_dir/${full_session_id}.jsonl" ]]; then
-                local dir_name
-                dir_name=$(basename "$project_dir")
-                # dir_name is like "-home-jw-code-jat" -> extract "jat"
-                found_project=$(echo "$dir_name" | sed 's/.*-code-//' | sed 's/-.*$//')
-                break
+            # Try Claude projects (find most recent matching prefix)
+            local claude_match
+            claude_match=$(ls "$HOME"/.claude/projects/*/${session_id}*.jsonl 2>/dev/null | head -n 1 || true)
+            if [[ -n "$claude_match" ]]; then
+                full_session_id=$(basename "$claude_match" .jsonl)
             fi
-        done
+
+            # Try Codex sessions (index + markers)
+            if [[ -z "$full_session_id" ]]; then
+                local codex_file
+                codex_file=$(find_codex_session_file_by_id_best_effort "$session_id")
+                if [[ -n "$codex_file" ]]; then
+                    full_session_id=$(echo "$codex_file" | grep -oE "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" | tail -1)
+                    if [[ -z "$agent_name" ]]; then
+                        agent_name=$(extract_agent_name_from_codex_session_best_effort "$codex_file")
+                    fi
+                    if [[ -z "$found_project" ]]; then
+                        found_project=$(extract_project_path_from_codex_session_best_effort "$codex_file")
+                    fi
+                fi
+            fi
+
+            if [[ -z "$full_session_id" ]]; then
+                echo -e "${RED}Error: Session not found: $session_id${NC}"
+                echo ""
+                echo "Use 'jat resume --list' to see recent sessions"
+                return 1
+            fi
+        fi
     fi
 
     # Determine project path
     local project_path=""
     if [[ -n "$project" ]]; then
-        # User specified project
         local config
         config=$(get_project_config "$project")
         if [[ -z "$config" ]]; then
@@ -2106,12 +2626,32 @@ resume_session() {
         fi
         project_path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
     elif [[ -n "$found_project" ]]; then
-        # Use project from signal
-        local config
-        config=$(get_project_config "$found_project")
-        if [[ -n "$config" ]]; then
-            project_path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
-            project="$found_project"
+        # found_project can be a path (Codex) or a project key (Claude/legacy)
+        if [[ "$found_project" == /* ]]; then
+            project_path="$found_project"
+            project=$(basename "$project_path")
+        else
+            local config
+            config=$(get_project_config "$found_project")
+            if [[ -n "$config" ]]; then
+                project_path=$(echo "$config" | jq -r '.path' | sed "s|^~|$HOME|")
+                project="$found_project"
+            fi
+        fi
+    fi
+
+    # Agent Mail DB can recover project for the agent (survives restarts)
+    local agent_program_id=""
+    local model_short=""
+    if [[ -n "$agent_name" ]]; then
+        local row
+        row=$(get_agent_db_row_best_effort "$agent_name")
+        if [[ -n "$row" ]]; then
+            local db_project db_program db_model
+            IFS='|' read -r db_project db_program db_model <<< "$row"
+            [[ -z "$project_path" ]] && project_path="$db_project"
+            agent_program_id="$db_program"
+            model_short="$db_model"
         fi
     fi
 
@@ -2121,30 +2661,48 @@ resume_session() {
         project=$(basename "$project_path")
     fi
 
-    echo ""
-    echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║  ${CYAN}🔄 Resuming Session${NC}${BOLD}                                        ║${NC}"
-    echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "  ${DIM}Session:${NC} ${full_session_id:0:8}..."
-    [[ -n "$agent_name" ]] && echo -e "  ${DIM}Agent:${NC} $agent_name"
-    [[ -n "$task_id" ]] && echo -e "  ${DIM}Task:${NC} $task_id"
-    echo -e "  ${DIM}Project:${NC} $project_path"
-    echo ""
+    # Determine agent program / command (default to Claude for legacy)
+    if [[ -z "$agent_program_id" ]]; then
+        agent_program_id="claude-code"
+    fi
+
+    local cmd
+    cmd="$(resolve_agent_command "$agent_program_id")"
+
+    # Best-effort availability check
+    if ! command -v "$cmd" &>/dev/null; then
+        # If codex CLI isn't installed, codex-native can often resume the same session store.
+        if [[ "$cmd" == "codex" ]] && command -v codex-native &>/dev/null; then
+            cmd="codex-native"
+            agent_program_id="codex-native"
+        else
+            cmd="claude"
+            agent_program_id="claude-code"
+        fi
+    fi
+
+    local flags
+    flags="$(resolve_agent_flags "$agent_program_id")"
+
+    # Resolve model info best-effort
+    if [[ -z "$model_short" ]]; then
+        model_short="$(resolve_agent_model_short "$agent_program_id" "")"
+    fi
+    local model_id
+    model_id="$(resolve_agent_model_id "$agent_program_id" "$model_short")"
 
     # Build environment
     local tools_path
     tools_path=$(jq -r '.defaults.tools_path // "~/.local/bin"' "$CONFIG_FILE" | sed "s|^~|$HOME|")
-    local env_vars="PATH=$PATH:$tools_path:$project_path/.claude/tools"
+
+    local env_path="PATH=$PATH:$tools_path"
+    if [[ "$cmd" == "claude" ]]; then
+        env_path="$env_path:$project_path/.claude/tools"
+    fi
+
+    local env_vars="$env_path"
     env_vars="$env_vars AGENT_MAIL_URL=http://localhost:8765"
-
-    # Get claude flags from config
-    local claude_flags
-    claude_flags=$(jq -r '.defaults.claude_flags // "--dangerously-skip-permissions"' "$CONFIG_FILE")
-
-    # JAT bootstrap prompt
-    local jat_bootstrap='You are a JAT agent. Run /jat:start to begin work.'
-    claude_flags="$claude_flags --append-system-prompt '$jat_bootstrap'"
+    env_vars="$env_vars AGENT_MAIL_DB=\"$AGENT_MAIL_DB\""
 
     # Create session name - use agent name if available, fallback to resume-{short-id}
     local session_name
@@ -2155,37 +2713,140 @@ resume_session() {
     fi
 
     # Window title
-    local window_title="${project^^}: Claude (resumed)"
+    local window_title="${project^^}: ${cmd} (resumed)"
     [[ -n "$agent_name" ]] && window_title="${project^^}: $agent_name (resumed)"
 
-    echo -e "${DIM}  → Launching Claude Code with session resume...${NC}"
+    echo ""
+    echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║  ${CYAN}🔄 Resuming Session${NC}${BOLD}                                        ║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  ${DIM}Session:${NC} ${full_session_id:0:8}..."
+    [[ -n "$agent_name" ]] && echo -e "  ${DIM}Agent:${NC} $agent_name"
+    [[ -n "$task_id" ]] && echo -e "  ${DIM}Task:${NC} $task_id"
+    echo -e "  ${DIM}Project:${NC} $project_path"
+    echo -e "  ${DIM}Agent Program:${NC} $agent_program_id"
+    echo ""
 
     # Write resume marker file so IDE can show "RESUMED" badge
     local resume_marker="/tmp/jat-resumed-${session_name}.json"
     cat > "$resume_marker" <<EOF
 {
     "resumed": true,
-    "originalSessionId": "$full_session_id",
+    "originalSessionId": "${full_session_id}",
     "agentName": "${agent_name:-unknown}",
-    "project": "$found_project",
+    "agentProgram": "${agent_program_id}",
+    "project": "${project_path}",
     "resumedAt": "$(date -Iseconds)"
 }
 EOF
 
-    # Launch terminal with tmux session containing resumed Claude
+    # Persist provider session id mapping for reliable future resumes (best-effort).
+    if [[ -n "$agent_name" ]] && [[ -n "$full_session_id" ]] && [[ -f "$AGENT_MAIL_DB" ]] && command -v sqlite3 &>/dev/null; then
+        local esc_agent esc_provider esc_session esc_tmux esc_project
+        esc_agent="$(sqlite_escape "$agent_name")"
+        esc_provider="$(sqlite_escape "$cmd")"
+        esc_session="$(sqlite_escape "$full_session_id")"
+        esc_tmux="$(sqlite_escape "$session_name")"
+        esc_project="$(sqlite_escape "$project_path")"
+
+        (
+            sqlite3 "$AGENT_MAIL_DB" <<SQL
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL,
+    tmux_session TEXT,
+    provider TEXT NOT NULL,
+    provider_session_id TEXT NOT NULL,
+    created_ts TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_ts TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (agent_id) REFERENCES agents(id),
+    UNIQUE (agent_id, provider, provider_session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_id ON agent_sessions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_provider ON agent_sessions(provider);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_last_seen_ts ON agent_sessions(last_seen_ts);
+
+INSERT INTO agent_sessions (agent_id, tmux_session, provider, provider_session_id, created_ts, last_seen_ts)
+SELECT a.id, '$esc_tmux', '$esc_provider', '$esc_session', datetime('now'), datetime('now')
+FROM agents a
+JOIN projects p ON a.project_id = p.id
+WHERE a.name = '$esc_agent' AND p.human_key = '$esc_project'
+LIMIT 1
+ON CONFLICT(agent_id, provider, provider_session_id) DO UPDATE SET
+    tmux_session = excluded.tmux_session,
+    last_seen_ts = datetime('now');
+SQL
+        ) 2>/dev/null || true
+    fi
+
+    local resume_cmd=""
+
+    case "$cmd" in
+        claude)
+            # Merge Agent Program flags with config claude_flags (best-effort)
+            local claude_flags
+            claude_flags=$(jq -r '.defaults.claude_flags // "--dangerously-skip-permissions"' "$CONFIG_FILE")
+            if [[ -n "$flags" ]]; then
+                claude_flags="$claude_flags $flags"
+            fi
+            local jat_bootstrap='You are a JAT agent. Run /jat:start to begin work.'
+            claude_flags="$claude_flags --append-system-prompt \"$(escape_for_double_quotes "$jat_bootstrap")\""
+            resume_cmd="claude $claude_flags -r \"$full_session_id\""
+            ;;
+        codex-native)
+            # Normalize approval flag naming: codex-native uses --approval (Codex CLI uses --ask-for-approval).
+            flags="${flags//--ask-for-approval/--approval}"
+
+            # Ensure codex-native runs with full permissions by default (unless user explicitly configured sandboxing).
+            if [[ "$flags" != *"--dangerously-bypass-approvals-and-sandbox"* ]]; then
+                if [[ "$flags" != *"--sandbox"* ]]; then
+                    flags="$flags --sandbox danger-full-access"
+                fi
+                if [[ "$flags" != *"--approval"* ]]; then
+                    flags="$flags --approval never"
+                fi
+            fi
+            resume_cmd="codex-native tui --model ${model_id} ${flags} --resume ${full_session_id}"
+            ;;
+        codex)
+            # Normalize approval flag naming: Codex CLI uses --ask-for-approval (codex-native uses --approval).
+            flags="${flags//--approval/--ask-for-approval}"
+
+            # Ensure Codex runs with full permissions by default (unless user explicitly configured sandboxing).
+            if [[ "$flags" != *"--dangerously-bypass-approvals-and-sandbox"* ]]; then
+                if [[ "$flags" != *"--sandbox"* ]]; then
+                    flags="$flags --sandbox danger-full-access"
+                fi
+                if [[ "$flags" != *"--ask-for-approval"* ]] && [[ "$flags" != *"-a "* ]]; then
+                    flags="$flags --ask-for-approval never"
+                fi
+            fi
+
+            # Best-effort: Codex CLI resume. If session id is missing, fall back to --last.
+            resume_cmd="codex resume --model ${model_id} ${flags} ${full_session_id:- --last}"
+            ;;
+        *)
+            echo -e "${RED}Unsupported agent command for resume: $cmd${NC}"
+            return 1
+            ;;
+    esac
+
+    echo -e "${DIM}  → Launching ${cmd} with session resume...${NC}"
+
+    # Launch terminal with tmux session containing resumed agent
     launch_terminal_window "$window_title" "
         cd '$project_path'
         tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$project_path'
         tmux set-option -t '$session_name' history-limit 50000
         sleep 0.3
-        tmux send-keys -t '$session_name' '$env_vars claude $claude_flags -r \"$full_session_id\"' Enter
+        tmux send-keys -t '$session_name' '$env_vars $resume_cmd' Enter
         tmux attach-session -t '$session_name'
     "
 
     echo ""
     echo -e "${GREEN}✓ Session resume launched${NC}"
     echo ""
-    echo -e "${DIM}Claude will resume from the previous conversation state.${NC}"
 }
 
 list_sessions() {
@@ -2252,10 +2913,10 @@ list_sessions() {
 
     # Sort by timestamp descending and print
     echo "$sessions" | sort -t'|' -k1 -rn | head -20 | while IFS='|' read -r ts session_id agent_name task_id project status formatted_time; do
-        [[ -z "$session_id" ]] && continue
 
         # Truncate fields for display
-        local short_id="${session_id:0:8}"
+        local short_id="-"
+        [[ -n "$session_id" ]] && short_id="${session_id:0:8}"
         local short_agent="${agent_name:0:11}"
         local short_task="${task_id:0:11}"
         local short_project="${project:0:14}"
@@ -2456,9 +3117,6 @@ main() {
             local config
             config=$(get_project_config "$cmd")
             if [[ -n "$config" ]]; then
-                echo -e "${YELLOW}Note: Direct project launching is deprecated.${NC}"
-                echo -e "${YELLOW}Please use the IDE to manage agents.${NC}"
-                echo ""
                 launch_project "$cmd" "$@"
             else
                 echo -e "${RED}Unknown command: $cmd${NC}"
