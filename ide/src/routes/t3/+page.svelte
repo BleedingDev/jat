@@ -19,6 +19,8 @@
 		assignee?: string;
 		created_at?: string;
 		updated_at?: string;
+		project?: string;
+		project_path?: string;
 	}
 
 	let tasks = $state<Task[]>([]);
@@ -216,7 +218,7 @@
 						</div>
 
 						<div class="day-tasks">
-							{#each dateTasks as task (task.id)}
+							{#each dateTasks as task ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 								<div
 									class="task-card"
 									style="--status-color: {statusColors[task.status] || statusColors.open}"

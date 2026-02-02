@@ -52,6 +52,10 @@ export interface EpicChild {
 	title: string;
 	priority: number;
 	status: ChildStatus;
+	/** Optional project identifier (for stable cross-project keys) */
+	project?: string;
+	/** Optional project path (for stable cross-project keys) */
+	project_path?: string;
 	assignee?: string;
 	dependsOn?: string[]; // Task IDs this child depends on
 }
@@ -250,6 +254,8 @@ export function startEpic(
 		title: task.title,
 		priority: task.priority,
 		status: determineInitialStatus(task, children),
+		project: task.project,
+		project_path: task.project_path,
 		assignee: task.assignee,
 		dependsOn: task.depends_on?.map((d) => d.id)
 	}));

@@ -6,7 +6,7 @@
  *
  * Watched files:
  * - .beads/issues.jsonl - Task changes (new, removed, updated)
- * - .claude/sessions/agent-*.txt - Agent state changes
+ * - /tmp/jat-signal-tmux-*.json - Agent state changes (agent-agnostic, written by jat-signal and Claude hooks)
  *
  * Usage:
  *   import { startWatchers, stopWatchers } from '$lib/server/websocket/watchers';
@@ -38,7 +38,8 @@ const BEADS_FILE = join(PROJECT_ROOT, '.beads', 'issues.jsonl');
 const BEADS_DIR = dirname(BEADS_FILE);
 const BEADS_FILENAME = basename(BEADS_FILE);
 
-const SESSIONS_DIR = join(PROJECT_ROOT, '.claude', 'sessions');
+const SIGNAL_DIR = '/tmp';
+const SIGNAL_PREFIX = 'jat-signal-tmux-';
 
 // ============================================================================
 // State
@@ -162,83 +163,91 @@ function startBeadsWatcher(): void {
 }
 
 // ============================================================================
-// Agent Sessions Watcher
+// Agent Signal Watcher (agent-agnostic)
 // ============================================================================
 
 /**
- * Parse agent name from session file
+ * Read and parse a jat-signal tmux signal file
  */
-async function readAgentName(filepath: string): Promise<string | null> {
+async function readSignalFile(filepath: string): Promise<any | null> {
 	try {
 		const content = await readFile(filepath, 'utf-8');
-		return content.trim() || null;
+		return JSON.parse(content);
 	} catch {
 		return null;
 	}
 }
 
-/**
- * Handle agent session file change
- */
-async function handleSessionChange(filename: string): Promise<void> {
-	if (!isInitialized()) return;
-
-	// Extract session ID from filename (agent-{sessionId}.txt)
-	const match = filename.match(/^agent-(.+)\.txt$/);
-	if (!match) return;
-
-	const sessionId = match[1];
-	const filepath = join(SESSIONS_DIR, filename);
-	const agentName = await readAgentName(filepath);
-
-	if (agentName) {
-		console.log(`[WS Watcher] Agent session change: ${agentName} (${sessionId})`);
-		broadcastAgentState(agentName, 'active', { sessionId });
-	}
+function inferAgentStateFromSignal(signal: any): string {
+	if (!signal || typeof signal !== 'object') return 'unknown';
+	// jat-signal canonical envelope
+	if (signal.type === 'state' && typeof signal.state === 'string') return signal.state;
+	if (signal.type === 'complete') return 'completed';
+	// IDE-initiated signal shape: { type: 'starting' | 'planning' | ... }
+	if (typeof signal.type === 'string') return signal.type;
+	return 'unknown';
 }
 
 /**
- * Start watching agent session files
+ * Handle jat-signal file change (written to /tmp)
+ */
+async function handleSignalChange(filename: string): Promise<void> {
+	if (!isInitialized()) return;
+	if (!filename.startsWith(SIGNAL_PREFIX) || !filename.endsWith('.json')) return;
+
+	const sessionName = filename.replace(SIGNAL_PREFIX, '').replace(/\.json$/, '');
+	if (!sessionName) return;
+
+	const agentName = sessionName.startsWith('jat-') ? sessionName.replace(/^jat-/, '') : sessionName;
+	const filepath = join(SIGNAL_DIR, filename);
+	const signal = await readSignalFile(filepath);
+	if (!signal) return;
+
+	const state = inferAgentStateFromSignal(signal);
+	console.log(`[WS Watcher] Signal change: ${agentName} (${state})`);
+
+	broadcastAgentState(agentName, state, {
+		sessionName,
+		tmux_session: signal.tmux_session ?? null,
+		session_id: signal.session_id ?? signal.sessionId ?? null,
+		task_id: signal.task_id ?? signal.taskId ?? signal.data?.taskId ?? null
+	});
+}
+
+/**
+ * Start watching /tmp for jat-signal-tmux-*.json updates
  */
 function startSessionsWatcher(): void {
 	if (sessionsWatcher) {
-		console.log('[WS Watcher] Sessions watcher already running');
+		console.log('[WS Watcher] Signal watcher already running');
 		return;
 	}
 
-	console.log(`[WS Watcher] Starting sessions watcher: ${SESSIONS_DIR}`);
+	console.log(`[WS Watcher] Starting signal watcher: ${SIGNAL_DIR}`);
 
 	try {
-		sessionsWatcher = watch(SESSIONS_DIR, { persistent: false }, (eventType, filename) => {
-			if (filename && filename.startsWith('agent-') && filename.endsWith('.txt')) {
-				// Debounce per-file
-				const key = `session-${filename}`;
-				const existingTimer = debounceTimers.get(key);
-				if (existingTimer) clearTimeout(existingTimer);
+		sessionsWatcher = watch(SIGNAL_DIR, { persistent: false }, (_eventType, filename) => {
+			if (!filename) return;
+			if (!filename.startsWith(SIGNAL_PREFIX) || !filename.endsWith('.json')) return;
 
-				debounceTimers.set(key, setTimeout(() => {
-					handleSessionChange(filename);
-					debounceTimers.delete(key);
-				}, 100));
-			}
+			// Debounce per-file
+			const key = `signal-${filename}`;
+			const existingTimer = debounceTimers.get(key);
+			if (existingTimer) clearTimeout(existingTimer);
+
+			debounceTimers.set(key, setTimeout(() => {
+				handleSignalChange(filename).catch(() => {});
+				debounceTimers.delete(key);
+			}, 75));
 		});
 
 		sessionsWatcher.on('error', (err) => {
-			// Sessions directory might not exist initially
-			if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-				console.log('[WS Watcher] Sessions directory does not exist yet');
-			} else {
-				console.error('[WS Watcher] Sessions watcher error:', err);
-			}
+			console.error('[WS Watcher] Signal watcher error:', err);
 		});
 
-		console.log('[WS Watcher] Sessions watcher started');
+		console.log('[WS Watcher] Signal watcher started');
 	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-			console.log('[WS Watcher] Sessions directory does not exist yet');
-		} else {
-			console.error('[WS Watcher] Failed to start sessions watcher:', err);
-		}
+		console.error('[WS Watcher] Failed to start signal watcher:', err);
 	}
 }
 

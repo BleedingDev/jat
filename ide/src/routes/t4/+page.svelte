@@ -20,6 +20,8 @@
 		parent_id?: string;
 		depends_on?: string[];
 		blocked_by?: string[];
+		project?: string;
+		project_path?: string;
 	}
 
 	let tasks = $state<Task[]>([]);
@@ -207,7 +209,7 @@
 	{:else}
 		<div class="tree-container">
 			<div class="tree-content">
-				{#each rootTasks() as task (task.id)}
+				{#each rootTasks() as task ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 					{@const children = getChildren(task.id)}
 					{@const isExpanded = expandedNodes.has(task.id)}
 					{@const hasKids = children.length > 0}
@@ -255,7 +257,7 @@
 
 						{#if isExpanded && hasKids}
 							<div class="node-children">
-								{#each children as child (child.id)}
+								{#each children as child ((child.project_path ?? child.project ?? '') + ':' + child.id)}
 									{@const grandchildren = getChildren(child.id)}
 									{@const childExpanded = expandedNodes.has(child.id)}
 									{@const childHasKids = grandchildren.length > 0}
@@ -303,7 +305,7 @@
 
 										{#if childExpanded && childHasKids}
 											<div class="node-children">
-												{#each grandchildren as grandchild (grandchild.id)}
+												{#each grandchildren as grandchild ((grandchild.project_path ?? grandchild.project ?? '') + ':' + grandchild.id)}
 													<div class="tree-node grandchild">
 														<div
 															class="node-row"

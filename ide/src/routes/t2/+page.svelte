@@ -18,6 +18,8 @@
 		issue_type?: string;
 		assignee?: string;
 		labels?: string[];
+		project?: string;
+		project_path?: string;
 	}
 
 	let tasks = $state<Task[]>([]);
@@ -152,7 +154,7 @@
 					</div>
 
 					<div class="quadrant-tasks">
-						{#each quadrantTasks as task (task.id)}
+						{#each quadrantTasks as task ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 							<button
 								class="task-item"
 								class:selected={selectedTask?.id === task.id}

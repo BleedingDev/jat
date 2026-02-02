@@ -58,6 +58,7 @@
 		priority: number;
 		issue_type: 'task' | 'bug' | 'feature' | 'epic' | 'chore';
 		project: string;
+		project_path?: string;
 		assignee?: string;
 		labels: string[];
 		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
@@ -3319,7 +3320,7 @@
 								<!-- Tasks within epic -->
 								{#if !showEpicHeader || !isEpicCollapsed}
 									<tbody transition:fade={{ duration: 150 }}>
-										{#each epicTasks as task, taskIndex (task.id)}
+										{#each epicTasks as task, taskIndex ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 											{@const depStatus = analyzeDependencies(task)}
 											{@const taskIsActive = task.status === 'in_progress' && task.assignee}
 											{@const isNewTask = newTaskIds.includes(task.id)}
@@ -3781,7 +3782,7 @@
 						<!-- Show tasks if: no header (standalone task), or header exists and not collapsed -->
 						{#if !showGroupHeader || !isCollapsed}
 						<tbody transition:fade={{ duration: 150 }}>
-							{#each typeTasks as task, taskIndex (task.id)}
+							{#each typeTasks as task, taskIndex ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 								{@const depStatus = analyzeDependencies(task)}
 									{@const taskIsActive = task.status === 'in_progress' && task.assignee}
 									{@const isNewTask = newTaskIds.includes(task.id)}
@@ -4062,7 +4063,7 @@
 				<!-- Render exiting tasks with exit animation -->
 				{#if exitingTasks.length > 0}
 					<tbody>
-						{#each exitingTasks as task (task.id)}
+						{#each exitingTasks as task ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 							{@const isTaskCompleted = task.status === 'closed'}
 							{@const blockedTasks = blockedByMap.get(task.id) || []}
 							<tr

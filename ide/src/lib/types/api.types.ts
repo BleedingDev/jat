@@ -85,6 +85,7 @@ export interface Task {
 	priority: number;
 	issue_type: 'task' | 'bug' | 'feature' | 'epic' | 'chore';
 	project: string;
+	project_path?: string;
 	assignee?: string;
 	labels: string[];
 	depends_on?: TaskDependency[];

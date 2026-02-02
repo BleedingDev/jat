@@ -651,7 +651,7 @@
 
 					<!-- Task list -->
 					<div class="max-h-[300px] overflow-y-auto">
-						{#each children as task (task.id)}
+						{#each children as task ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 							<div
 								class="task-row"
 								style="border-left: 2px solid {getStatusColor(task.status)};"

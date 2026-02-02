@@ -10,6 +10,7 @@ import { json } from '@sveltejs/kit';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { execSync } from 'child_process';
 import { join } from 'path';
+import { getLatestProviderSessionIdForAgent } from '$lib/server/agentSessions.js';
 import type { RequestHandler } from './$types';
 
 interface TaskSession {
@@ -56,6 +57,12 @@ function findSessionIdForAgent(agentName: string, projectPath: string, signalCac
 	const cached = signalCache.get(agentName);
 	if (cached?.session_id) {
 		return cached.session_id;
+	}
+
+	// Prefer Agent Mail DB provider session mapping (Codex / codex-native)
+	const mapped = getLatestProviderSessionIdForAgent(agentName);
+	if (mapped?.sessionId) {
+		return mapped.sessionId;
 	}
 
 	// Try persistent session files

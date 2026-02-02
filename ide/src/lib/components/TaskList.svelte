@@ -13,6 +13,7 @@
 	 * @property {string} title
 	 * @property {string} [description]
 	 * @property {string} project
+	 * @property {string} [project_path]
 	 * @property {number} priority
 	 * @property {string} status
 	 * @property {string[]} [labels]
@@ -154,7 +155,7 @@
 		</div>
 
 		<div class="flex flex-col gap-3">
-			{#each filteredTasks as task, index (task.id)}
+			{#each filteredTasks as task, index ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 				{@const priorityClass = priorityClasses[task.priority] || priorityClasses[2]}
 				{@const priorityLabel = priorityLabels[task.priority] || 'P2'}
 

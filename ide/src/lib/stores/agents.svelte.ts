@@ -186,8 +186,19 @@ class AgentsStore {
 				this.error = null;
 			}
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : 'Unknown error occurred';
-			console.error('Failed to fetch agent data:', err);
+			const message = err instanceof Error ? err.message : String(err);
+			this.error = message || 'Unknown error occurred';
+
+			// Avoid noisy console errors for transient fetch aborts (e.g. rapid page reload/navigation).
+			const isAbortError =
+				(typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') ||
+				/^(aborted|aborterror)$/i.test(message) ||
+				/failed to fetch/i.test(message) ||
+				/net::err_aborted/i.test(message);
+
+			if (!isAbortError) {
+				console.error('Failed to fetch agent data:', err);
+			}
 		} finally {
 			this.loading = false;
 		}

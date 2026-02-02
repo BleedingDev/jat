@@ -33,6 +33,8 @@
 		status: string;
 		priority: number;
 		issue_type?: string;
+		project?: string;
+		project_path?: string;
 		assignee?: string;
 		labels?: string[];
 		created_at?: string;
@@ -512,7 +514,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each orderedTasks() as { task, isExiting, isNew } (task.id)}
+					{#each orderedTasks() as { task, isExiting, isNew } ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 						{@const projectColor = getProjectColorReactive(task.id)}
 						{@const isBlocked = hasUnresolvedBlockers(task)}
 						{@const blockReason = isBlocked ? getBlockingReason(task) : ''}

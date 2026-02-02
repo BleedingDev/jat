@@ -20,6 +20,8 @@
 		labels?: string[];
 		created_at?: string;
 		updated_at?: string;
+		project?: string;
+		project_path?: string;
 	}
 
 	// State
@@ -162,7 +164,7 @@
 					</div>
 
 					<div class="column-cards">
-						{#each columnTasks as task (task.id)}
+						{#each columnTasks as task ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 							<div
 								class="task-card"
 								class:dragging={draggedTask?.id === task.id}

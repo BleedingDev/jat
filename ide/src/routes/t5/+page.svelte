@@ -6,7 +6,7 @@
 	 * Vim-style navigation (j/k), inline actions, rapid workflow.
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 
 	interface Task {
@@ -19,6 +19,8 @@
 		assignee?: string;
 		labels?: string[];
 		created_at?: string;
+		project?: string;
+		project_path?: string;
 	}
 
 	let tasks = $state<Task[]>([]);
@@ -49,7 +51,7 @@
 
 	// Filtered tasks
 	const filteredTasks = $derived(() => {
-		let result = tasks;
+		let result = tasks.slice();
 
 		// Status filter
 		if (filterStatus !== 'all') {
@@ -184,10 +186,9 @@
 	onMount(() => {
 		fetchTasks();
 		window.addEventListener('keydown', handleKeydown);
-	});
-
-	onDestroy(() => {
-		window.removeEventListener('keydown', handleKeydown);
+		return () => {
+			window.removeEventListener('keydown', handleKeydown);
+		};
 	});
 </script>
 
@@ -258,7 +259,7 @@
 		</div>
 	{:else}
 		<div class="task-list">
-			{#each filteredTasks() as task, index (task.id)}
+			{#each filteredTasks() as task, index ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 				<div
 					class="task-row"
 					class:selected={index === selectedIndex}

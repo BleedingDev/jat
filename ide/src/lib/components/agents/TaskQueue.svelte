@@ -448,7 +448,7 @@
 				{/if}
 			</div>
 		{:else}
-			{#each filteredTasks as task (task.id)}
+			{#each filteredTasks as task ((task.project_path ?? task.project ?? '') + ':' + task.id)}
 				{@const depStatus = analyzeDependencies(task)}
 				<div
 					class="card bg-base-100 border border-base-300 hover:border-primary cursor-pointer transition-all mb-4 {!dragDisabled ? 'opacity-50' : ''} {depStatus.hasBlockers ? 'opacity-60 border-error/30' : ''}"

@@ -18,6 +18,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
 import { rgbToHex } from '$lib/utils/projectConfig';
+import { getAgentNamesForProjectPath, getLatestAgentActivityMsForProject } from '$lib/server/agentSessions.js';
 
 const execAsync = promisify(exec);
 
@@ -241,73 +242,79 @@ async function getProjectTaskCounts(projectPath) {
  */
 async function getProjectAgentCount(projectPath) {
 	try {
-		// Get project name from path (e.g., /home/jw/code/jat -> jat)
-		const projectName = projectPath.split('/').pop();
-
-		// Count active tmux sessions with jat-* prefix for this project
-		// Sessions are named jat-{AgentName}, and we need to check which ones
-		// are working on this project
-		let active = 0;
-
-		try {
-			const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}" 2>/dev/null', { timeout: 2000 });
-			const sessions = stdout.trim().split('\n').filter(s => s.startsWith('jat-'));
-
-			// For each session, check if it's working on this project by reading its agent file
-			for (const sessionName of sessions) {
-				const agentName = sessionName.replace('jat-', '');
-				// Check if this agent has an agent file in this project's .claude/sessions/
-				const sessionsDir = join(projectPath, '.claude', 'sessions');
-				const claudeDir = join(projectPath, '.claude');
-
-				// Look for any agent file containing this agent name
-				let foundInProject = false;
-
-				// Check sessions directory
-				if (existsSync(sessionsDir)) {
-					const entries = await readdir(sessionsDir);
-					for (const file of entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'))) {
-						const content = await readFile(join(sessionsDir, file), 'utf-8');
-						if (content.trim() === agentName) {
-							foundInProject = true;
-							break;
-						}
-					}
+		// Agent-agnostic path: Agent Mail DB is authoritative for agent→project mapping.
+		const agentNamesFromDb = getAgentNamesForProjectPath(projectPath);
+		if (agentNamesFromDb.length > 0) {
+			const agentSet = new Set(agentNamesFromDb);
+			let active = 0;
+			try {
+				const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}" 2>/dev/null', { timeout: 2000 });
+				const sessions = stdout.trim().split('\n').filter(s => s.startsWith('jat-'));
+				for (const sessionName of sessions) {
+					const agentName = sessionName.replace('jat-', '');
+					if (agentSet.has(agentName)) active++;
 				}
-
-				// Check legacy location if not found
-				if (!foundInProject && existsSync(claudeDir)) {
-					const entries = await readdir(claudeDir);
-					for (const file of entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'))) {
-						const content = await readFile(join(claudeDir, file), 'utf-8');
-						if (content.trim() === agentName) {
-							foundInProject = true;
-							break;
-						}
-					}
-				}
-
-				if (foundInProject) {
-					active++;
-				}
+			} catch {
+				// tmux not available or no sessions
 			}
-		} catch {
-			// tmux not available or no sessions
+			return { active, total: agentNamesFromDb.length };
 		}
 
-		// Count total registered agents (all agent files)
+		// Legacy fallback (Claude-centric projects without Agent Mail DB entries yet)
+		let active = 0;
 		let total = 0;
 		const sessionsDir = join(projectPath, '.claude', 'sessions');
 		const claudeDir = join(projectPath, '.claude');
 
-		if (existsSync(sessionsDir)) {
-			const entries = await readdir(sessionsDir);
-			total += entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt')).length;
+		/** @type {Set<string>} */
+		const agentsInProject = new Set();
+
+		try {
+			if (existsSync(sessionsDir)) {
+				const entries = await readdir(sessionsDir);
+				for (const file of entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt') && !f.includes('-activity.'))) {
+					try {
+						const content = await readFile(join(sessionsDir, file), 'utf-8');
+						const name = content.trim();
+						if (name) agentsInProject.add(name);
+					} catch {
+						// ignore
+					}
+				}
+			}
+		} catch {
+			// ignore
 		}
 
-		if (existsSync(claudeDir)) {
-			const entries = await readdir(claudeDir);
-			total += entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt')).length;
+		// Legacy location (.claude/agent-*.txt)
+		try {
+			if (existsSync(claudeDir)) {
+				const entries = await readdir(claudeDir);
+				for (const file of entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt') && !f.includes('-activity.'))) {
+					try {
+						const content = await readFile(join(claudeDir, file), 'utf-8');
+						const name = content.trim();
+						if (name) agentsInProject.add(name);
+					} catch {
+						// ignore
+					}
+				}
+			}
+		} catch {
+			// ignore
+		}
+
+		total = agentsInProject.size;
+
+		try {
+			const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}" 2>/dev/null', { timeout: 2000 });
+			const sessions = stdout.trim().split('\n').filter(s => s.startsWith('jat-'));
+			for (const sessionName of sessions) {
+				const agentName = sessionName.replace('jat-', '');
+				if (agentsInProject.has(agentName)) active++;
+			}
+		} catch {
+			// ignore
 		}
 
 		return { active, total };
@@ -389,6 +396,17 @@ async function getServerStatus(projectName, port) {
 async function getLastActivity(projectPath) {
 	let mostRecentMs = 0;
 	let agentActivityMs = 0;
+
+	// Agent-agnostic: Agent Mail DB agent last_active_ts (Codex/codex-native/Claude)
+	try {
+		const agentMailMs = getLatestAgentActivityMsForProject(projectPath);
+		if (agentMailMs && agentMailMs > mostRecentMs) {
+			mostRecentMs = agentMailMs;
+			agentActivityMs = agentMailMs;
+		}
+	} catch {
+		// Ignore Agent Mail DB errors
+	}
 
 	// Check .beads/issues.jsonl first (most meaningful for task activity)
 	try {

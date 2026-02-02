@@ -12,6 +12,7 @@
 import { json } from '@sveltejs/kit';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
+import { getLatestProviderSessionIdForAgent } from '$lib/server/agentSessions.js';
 import type { RequestHandler } from './$types';
 
 interface TaskSession {
@@ -59,6 +60,12 @@ function findSessionIdForAgent(agentName: string, projectPath: string): string |
 		} catch {
 			// Continue to fallback
 		}
+	}
+
+	// Prefer Agent Mail DB provider session mapping (Codex / codex-native)
+	const mapped = getLatestProviderSessionIdForAgent(agentName);
+	if (mapped?.sessionId) {
+		return mapped.sessionId;
 	}
 
 	// Try persistent session files

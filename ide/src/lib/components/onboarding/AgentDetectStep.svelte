@@ -44,6 +44,42 @@
 	const anySelected = $derived(agents.some((a) => a.selected));
 	const anyInstalled = $derived(agents.some((a) => a.status?.commandInstalled));
 
+	// Codex-first default selection during onboarding
+	const DEFAULT_AGENT_PRIORITY = [
+		'codex-native',
+		'codex-cli',
+		'claude-code',
+		'gemini-cli',
+		'aider',
+		'opencode'
+	] as const;
+
+	function getPriorityIndex(presetId: string): number {
+		const idx = DEFAULT_AGENT_PRIORITY.indexOf(presetId as any);
+		return idx === -1 ? 999 : idx;
+	}
+
+	function pickDefaultAgentId(list: DetectedAgent[]): string | null {
+		const selected = list.filter((a) => a.selected);
+		if (selected.length === 0) return null;
+
+		const sortByPriority = (a: DetectedAgent, b: DetectedAgent) =>
+			getPriorityIndex(a.preset.id) - getPriorityIndex(b.preset.id);
+
+		const ready = selected.filter((a) => a.status?.ready).sort(sortByPriority);
+		if (ready.length > 0) return ready[0].preset.id;
+
+		const installed = selected.filter((a) => a.status?.commandInstalled).sort(sortByPriority);
+		if (installed.length > 0) return installed[0].preset.id;
+
+		return selected[0]?.preset.id ?? null;
+	}
+
+	function applyDefaultSelection(list: DetectedAgent[]): DetectedAgent[] {
+		const defaultId = pickDefaultAgentId(list);
+		return list.map((a) => ({ ...a, isDefault: defaultId ? a.preset.id === defaultId : false }));
+	}
+
 	onMount(() => {
 		detect();
 	});
@@ -74,23 +110,18 @@
 			}
 
 			const results = data.agents as DetectionResult[];
-			let firstReadySet = false;
 
-			agents = AGENT_PRESETS.map((preset) => {
+			const detected = AGENT_PRESETS.map((preset) => {
 				const status = results.find((r) => r.presetId === preset.id) || null;
 				const isReady = status?.ready ?? false;
 				const isInstalled = status?.commandInstalled ?? false;
 
-				// Pre-select ready agents, mark first ready as default
+				// Pre-select ready/installed agents; default is picked by priority below
 				const selected = isReady || isInstalled;
-				let isDefault = false;
-				if (isReady && !firstReadySet) {
-					isDefault = true;
-					firstReadySet = true;
-				}
-
-				return { preset, status, selected, isDefault };
+				return { preset, status, selected, isDefault: false };
 			});
+
+			agents = applyDefaultSelection(detected);
 		} catch {
 			error = 'Failed to detect agent harnesses';
 		} finally {
@@ -103,27 +134,7 @@
 		if (!agent.status?.commandInstalled) return; // Can't select uninstalled
 
 		agents[index] = { ...agent, selected: !agent.selected };
-
-		// Recalculate default - first selected ready agent
-		let foundDefault = false;
-		agents = agents.map((a) => {
-			if (a.selected && a.status?.ready && !foundDefault) {
-				foundDefault = true;
-				return { ...a, isDefault: true };
-			}
-			return { ...a, isDefault: false };
-		});
-
-		// If no ready agent is default, pick first selected installed
-		if (!foundDefault) {
-			agents = agents.map((a, i) => {
-				if (a.selected && a.status?.commandInstalled && !foundDefault) {
-					foundDefault = true;
-					return { ...a, isDefault: true };
-				}
-				return a;
-			});
-		}
+		agents = applyDefaultSelection(agents);
 	}
 
 	async function handleConfirm() {

@@ -20,6 +20,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import { getLatestProviderSessionIdForAgent } from '$lib/server/agentSessions.js';
 import type { RequestHandler } from './$types';
 
 const execAsync = promisify(exec);
@@ -270,6 +271,17 @@ export const GET: RequestHandler = async ({ url }) => {
 				// Check if we have a session ID for this agent (from agent-*.txt files)
 				let sessionInfo = agentSessionMap.get(agentName);
 
+				// Agent-agnostic fallback: provider session id mapping in Agent Mail DB (Codex / codex-native)
+				if (!sessionInfo) {
+					const mapped = getLatestProviderSessionIdForAgent(agentName);
+					if (mapped?.sessionId) {
+						sessionInfo = {
+							sessionId: mapped.sessionId,
+							lastActivity: mapped.lastSeenTs || new Date().toISOString()
+						};
+					}
+				}
+
 				// Fallback: search JSONL files if no agent-*.txt mapping exists
 				if (!sessionInfo) {
 					sessionInfo = findSessionIdFromJsonl(agentName, projectPath) || undefined;
@@ -344,6 +356,17 @@ export const POST: RequestHandler = async ({ request, url, fetch }) => {
 
 				// Check if we have a session ID for this agent (from agent-*.txt files)
 				let sessionInfo = agentSessionMap.get(agentName);
+
+				// Agent-agnostic fallback: provider session id mapping in Agent Mail DB (Codex / codex-native)
+				if (!sessionInfo) {
+					const mapped = getLatestProviderSessionIdForAgent(agentName);
+					if (mapped?.sessionId) {
+						sessionInfo = {
+							sessionId: mapped.sessionId,
+							lastActivity: mapped.lastSeenTs || new Date().toISOString()
+						};
+					}
+				}
 
 				// Fallback: search JSONL files if no agent-*.txt mapping exists
 				if (!sessionInfo) {
