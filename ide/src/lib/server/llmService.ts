@@ -332,7 +332,11 @@ export async function llmCall(prompt: string, options?: LlmCallOptions): Promise
 	const apiModel = options?.apiModel || config.api_model;
 	const cliModel = options?.cliModel || config.cli_model;
 	const schemaPath = options?.schemaPath;
-	const timeoutMs = options?.timeout ?? config.cli_timeout_ms;
+
+	// codex-native runs an agent loop and can take longer than typical CLI calls.
+	// Use a higher floor to avoid spurious timeouts and unnecessary provider fallbacks.
+	const cliTimeoutMs = options?.timeout ?? config.cli_timeout_ms;
+	const codexTimeoutMs = options?.timeout ?? Math.max(config.cli_timeout_ms, 60000);
 
 	// Availability
 	const apiKey = getApiKeyWithFallback('anthropic', 'ANTHROPIC_API_KEY');
@@ -352,7 +356,7 @@ export async function llmCall(prompt: string, options?: LlmCallOptions): Promise
 			return await callCodexNative(prompt, {
 				model: codexModel,
 				schemaPath,
-				timeoutMs,
+				timeoutMs: codexTimeoutMs,
 				cwd: options?.cwd
 			});
 		}
@@ -376,24 +380,34 @@ export async function llmCall(prompt: string, options?: LlmCallOptions): Promise
 			}
 			return await callClaudeCli(prompt, {
 				model: cliModel,
-				timeoutMs
+				timeoutMs: cliTimeoutMs
 			});
 		}
 
 		case 'auto':
 		default: {
+			const formatErr = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+			let codexError: string | undefined;
+			let apiError: string | undefined;
+
 			// 1) codex-native
 			try {
 				const codexAvailable = await isCodexNativeCliAvailable();
-				if (codexAvailable && isCodexNativeAuthAvailable()) {
+				if (!codexAvailable) {
+					codexError = 'not installed';
+				} else if (!isCodexNativeAuthAvailable()) {
+					codexError = 'missing auth (set OPENAI_API_KEY or create ~/.codex/auth.json)';
+				} else {
 					return await callCodexNative(prompt, {
 						model: codexModel,
 						schemaPath,
-						timeoutMs,
+						timeoutMs: codexTimeoutMs,
 						cwd: options?.cwd
 					});
 				}
 			} catch (codexErr) {
+				codexError = formatErr(codexErr);
 				console.warn('[llmService] codex-native call failed, falling back:', codexErr);
 			}
 
@@ -406,8 +420,11 @@ export async function llmCall(prompt: string, options?: LlmCallOptions): Promise
 						maxTokens
 					});
 				} catch (apiErr) {
+					apiError = formatErr(apiErr);
 					console.warn('[llmService] API call failed, falling back:', apiErr);
 				}
+			} else {
+				apiError = 'not configured (set ANTHROPIC_API_KEY)';
 			}
 
 			// 3) Claude CLI
@@ -416,17 +433,25 @@ export async function llmCall(prompt: string, options?: LlmCallOptions): Promise
 				try {
 					return await callClaudeCli(prompt, {
 						model: cliModel,
-						timeoutMs
+						timeoutMs: cliTimeoutMs
 					});
 				} catch (cliErr) {
+					const cliError = formatErr(cliErr);
 					throw new Error(
-						`All providers failed. codex-native: ${String(cliErr instanceof Error ? cliErr.message : cliErr)}`
+						'All providers failed.\n' +
+							`- codex-native: ${codexError || 'unknown'}\n` +
+							`- api: ${apiError || (apiAvailable ? 'unknown' : 'not configured')}\n` +
+							`- cli: ${cliError}`
 					);
 				}
 			}
 
 			throw new Error(
-				'No LLM provider available. Either:\n' +
+				'All providers failed.\n' +
+					`- codex-native: ${codexError || 'unknown'}\n` +
+					`- api: ${apiError || (apiAvailable ? 'unknown' : 'not configured')}\n` +
+					'- cli: not installed\n\n' +
+				'Fix:\n' +
 				'1. Install codex-native and authenticate (OPENAI_API_KEY or ~/.codex/auth.json)\n' +
 				'2. Configure Anthropic API key in Settings → API Keys\n' +
 				'3. Install Claude Code CLI and authenticate'

@@ -110,7 +110,9 @@ export async function codexNativeCliCall(
 		let usage: CodexNativeRunUsage | undefined;
 
 		const timeoutMs = options?.timeout ?? 30000;
+		let didTimeout = false;
 		const timeout = setTimeout(() => {
+			didTimeout = true;
 			try {
 				child.kill('SIGTERM');
 			} catch {
@@ -190,6 +192,10 @@ export async function codexNativeCliCall(
 			clearTimeout(timeout);
 
 			if (signal) {
+				if (didTimeout) {
+					reject(new Error(`codex-native timed out after ${timeoutMs}ms`));
+					return;
+				}
 				reject(new Error(`codex-native was terminated (${signal})`));
 				return;
 			}
