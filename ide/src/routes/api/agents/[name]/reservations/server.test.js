@@ -6,15 +6,19 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { GET, DELETE } from './+server.js';
 import Database from 'better-sqlite3';
+import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { tmpdir } from 'os';
 import { getReservations } from '$lib/server/agent-mail.js';
 
-const TEST_DB_PATH = join(homedir(), '.agent-mail.db');
+const TEST_DB_DIR = mkdtempSync(join(tmpdir(), 'agent-mail-test-'));
+const TEST_DB_PATH = join(TEST_DB_DIR, 'agent-mail.db');
 
 describe('Agent Reservations API', () => {
 	/** @type {import('better-sqlite3').Database} */
 	let db;
+	/** @type {string | undefined} */
+	let previousDbOverride;
 	/** @type {number | bigint} */
 	let testProjectId1;
 	/** @type {number | bigint} */
@@ -31,8 +35,40 @@ describe('Agent Reservations API', () => {
 	let testReservation3;
 
 	beforeAll(() => {
-		// Open the actual Agent Mail database
+		previousDbOverride = (/** @type {any} */ (globalThis)).__agentMailDbPath;
+		(/** @type {any} */ (globalThis)).__agentMailDbPath = TEST_DB_PATH;
+
 		db = new Database(TEST_DB_PATH);
+
+		// Minimal schema for reservation queries
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS projects (
+				id INTEGER PRIMARY KEY,
+				slug TEXT,
+				human_key TEXT,
+				created_at TEXT
+			);
+			CREATE TABLE IF NOT EXISTS agents (
+				id INTEGER PRIMARY KEY,
+				name TEXT,
+				program TEXT,
+				model TEXT,
+				project_id INTEGER,
+				inception_ts TEXT,
+				last_active_ts TEXT
+			);
+			CREATE TABLE IF NOT EXISTS file_reservations (
+				id INTEGER PRIMARY KEY,
+				agent_id INTEGER,
+				project_id INTEGER,
+				path_pattern TEXT,
+				exclusive INTEGER,
+				reason TEXT,
+				created_ts TEXT,
+				expires_ts TEXT,
+				released_ts TEXT
+			);
+		`);
 
 		// Clean up any existing test data
 		db.prepare('DELETE FROM file_reservations WHERE path_pattern LIKE ?').run('test/pattern/%');
@@ -113,6 +149,14 @@ describe('Agent Reservations API', () => {
 		db.prepare('DELETE FROM agents WHERE name LIKE ?').run('TestAgent%');
 		db.prepare('DELETE FROM projects WHERE human_key LIKE ?').run('test-project%');
 		db.close();
+
+		if (previousDbOverride === undefined) {
+			delete (/** @type {any} */ (globalThis)).__agentMailDbPath;
+		} else {
+			(/** @type {any} */ (globalThis)).__agentMailDbPath = previousDbOverride;
+		}
+
+		rmSync(TEST_DB_DIR, { recursive: true, force: true });
 	});
 
 	describe('getReservations() JS function', () => {

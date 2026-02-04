@@ -10,8 +10,17 @@
 import { json } from '@sveltejs/kit';
 import { getReservations } from '$lib/server/agent-mail.js';
 import Database from 'better-sqlite3';
+import { join } from 'path';
+import { homedir } from 'os';
 
-const DB_PATH = process.env.AGENT_MAIL_DB || `${process.env.HOME}/.agent-mail.db`;
+function resolveDbPath() {
+	const globalOverride = (/** @type {any} */ (globalThis)).__agentMailDbPath;
+	if (typeof globalOverride === 'string' && globalOverride.trim().length > 0) {
+		return globalOverride;
+	}
+
+	return process.env.AGENT_MAIL_DB || join(homedir(), '.agent-mail.db');
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
@@ -65,7 +74,7 @@ export async function DELETE({ params, url }) {
 		}
 
 		// Open database and release the reservation
-		const db = new Database(DB_PATH);
+		const db = new Database(resolveDbPath());
 
 		try {
 			// First verify the reservation belongs to this agent
