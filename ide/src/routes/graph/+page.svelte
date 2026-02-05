@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import DAGGraph from '$lib/components/DAGGraph.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { GraphSkeleton } from '$lib/components/skeleton';
@@ -9,6 +10,8 @@
 	import { getProjectsFromTasks, getTaskCountByProject } from '$lib/utils/projectUtils';
 
 	// Task type compatible with DependencyGraph component
+	type GraphView = 'dag' | 'force';
+
 	interface Task {
 		id: string;
 		title?: string;
@@ -17,7 +20,14 @@
 		priority?: number;
 		project?: string;
 		assignee?: string;
-		depends_on?: Array<{ id?: string; depends_on_id?: string; type?: string }>;
+		depends_on?: Array<{
+			id?: string;
+			depends_on_id?: string;
+			type?: string;
+			title?: string;
+			status?: string;
+			priority?: number;
+		}>;
 		labels?: string[];
 	}
 
@@ -30,6 +40,7 @@
 	let drawerOpen = $state(false);
 
 	// Filters
+	let graphView = $state<GraphView>('dag'); // DAG-first default
 	let selectedPriority = $state('all');
 	let selectedStatus = $state('open');
 	let searchQuery = $state('');
@@ -41,6 +52,12 @@
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
 		selectedProject = projectParam || 'All Projects';
+	});
+
+	// Sync graphView from URL params (dag is implicit default)
+	$effect(() => {
+		const viewParam = $page.url.searchParams.get('view');
+		graphView = viewParam === 'force' ? 'force' : 'dag';
 	});
 
 	// Derive projects list from all tasks
@@ -56,6 +73,23 @@
 			: allTasks.filter((task) => task.id.startsWith(selectedProject + '-'))
 	);
 
+	const searchLower = $derived(searchQuery.trim().toLowerCase());
+
+	// Filter tasks by search query (client-side to avoid refetch spam)
+	const searchedTasks = $derived(
+		!searchLower
+			? filteredTasks
+			: filteredTasks.filter((task) => {
+					if (task.id && task.id.toLowerCase().includes(searchLower)) return true;
+					if (task.title && task.title.toLowerCase().includes(searchLower)) return true;
+					if (task.description && task.description.toLowerCase().includes(searchLower)) return true;
+					if (task.labels && Array.isArray(task.labels)) {
+						return task.labels.some((l) => l.toLowerCase().includes(searchLower));
+					}
+					return false;
+				})
+	);
+
 	// Handle project selection change - update URL
 	function handleProjectChange(project: string) {
 		selectedProject = project;
@@ -64,6 +98,19 @@
 			url.searchParams.delete('project');
 		} else {
 			url.searchParams.set('project', project);
+		}
+		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
+	}
+
+	function handleViewChange(view: string) {
+		const next: GraphView = view === 'force' ? 'force' : 'dag';
+		graphView = next;
+
+		const url = new URL(window.location.href);
+		if (next === 'dag') {
+			url.searchParams.delete('view');
+		} else {
+			url.searchParams.set('view', 'force');
 		}
 		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 	}
@@ -99,12 +146,15 @@
 
 	// Refetch tasks when filters change
 	$effect(() => {
+		// Track dependencies for re-fetch
+		selectedStatus;
+		selectedPriority;
 		fetchTasks();
 	});
 
 	// Update displayed tasks when project filter or allTasks change
 	$effect(() => {
-		tasks = filteredTasks;
+		tasks = searchedTasks;
 	});
 
 	onMount(() => {
@@ -125,6 +175,20 @@
 	<!-- Filters Bar -->
 	<div class="bg-base-100 border-b border-base-300 p-4">
 		<div class="flex flex-wrap items-center gap-4">
+			<!-- View Filter -->
+			<div class="flex flex-col">
+				<label class="industrial-label" for="view-filter">View</label>
+				<select
+					id="view-filter"
+					class="industrial-select"
+					value={graphView}
+					on:change={(e) => handleViewChange((e.target as HTMLSelectElement).value)}
+				>
+					<option value="dag">DAG (Sequential)</option>
+					<option value="force">Force (Exploration)</option>
+				</select>
+			</div>
+
 			<!-- Project Filter -->
 			<div class="flex flex-col">
 				<label class="industrial-label" for="project-filter">Project</label>
@@ -209,7 +273,11 @@
 	<!-- Main Content: Dependency Graph -->
 	{:else}
 		<div class="p-4">
-			<DependencyGraph {tasks} onNodeClick={handleNodeClick} />
+			{#if graphView === 'force'}
+				<DependencyGraph {tasks} onNodeClick={handleNodeClick} />
+			{:else}
+				<DAGGraph {tasks} onNodeClick={handleNodeClick} />
+			{/if}
 		</div>
 	{/if}
 
