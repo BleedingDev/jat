@@ -170,6 +170,11 @@ launch_terminal_window() {
     esac
 }
 
+# Portable uppercasing helper (works on macOS Bash 3.2 and newer Bash versions)
+to_upper() {
+    printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
 #------------------------------------------------------------------------------
 # Prerequisites Check
 #------------------------------------------------------------------------------
@@ -1339,9 +1344,11 @@ init_projects() {
 
         # Add to config
         local new_project
+        local repo_display_name
+        repo_display_name="$(to_upper "$repo_name")"
         new_project=$(cat << EOF
 {
-  "name": "${repo_name^^}",
+  "name": "$repo_display_name",
   "path": "~/code/$repo_name",
   "port": ${port:-null},
   "database_url": null,
@@ -1437,9 +1444,11 @@ add_project() {
 
     # Add to config
     local new_project
+    local project_display_name
+    project_display_name="$(to_upper "$project_name")"
     new_project=$(cat << EOF
 {
-  "name": "${project_name^^}",
+  "name": "$project_display_name",
   "path": "$stored_path",
   "port": ${port:-null},
   "database_url": null,
@@ -2713,8 +2722,10 @@ resume_session() {
     fi
 
     # Window title
-    local window_title="${project^^}: ${cmd} (resumed)"
-    [[ -n "$agent_name" ]] && window_title="${project^^}: $agent_name (resumed)"
+    local project_title
+    project_title="$(to_upper "$project")"
+    local window_title="${project_title}: ${cmd} (resumed)"
+    [[ -n "$agent_name" ]] && window_title="${project_title}: $agent_name (resumed)"
 
     echo ""
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
