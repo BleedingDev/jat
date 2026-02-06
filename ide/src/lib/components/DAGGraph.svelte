@@ -82,6 +82,58 @@
 		blocks: { stroke: 'oklch(0.65 0.20 30 / 0.70)', dash: '6,4', width: 2 }
 	};
 
+	function truncateSvgText(
+		el: SVGTextElement,
+		fullText: string,
+		maxWidth: number,
+		suffix = '...'
+	): string {
+		if (!fullText) {
+			el.textContent = '';
+			return '';
+		}
+
+		if (maxWidth <= 0) {
+			el.textContent = '';
+			return '';
+		}
+
+		try {
+			el.textContent = fullText;
+			if (el.getComputedTextLength() <= maxWidth) return fullText;
+
+			el.textContent = suffix;
+			if (el.getComputedTextLength() > maxWidth) {
+				el.textContent = '';
+				return '';
+			}
+
+			let lo = 0;
+			let hi = fullText.length;
+			let best = suffix;
+
+			while (lo <= hi) {
+				const mid = Math.floor((lo + hi) / 2);
+				const candidate = `${fullText.slice(0, mid)}${suffix}`;
+				el.textContent = candidate;
+				if (el.getComputedTextLength() <= maxWidth) {
+					best = candidate;
+					lo = mid + 1;
+				} else {
+					hi = mid - 1;
+				}
+			}
+
+			el.textContent = best;
+			return best;
+		} catch {
+			// Fallback: character-based truncation (best-effort, still clipped by node clipPath)
+			const t = fullText.length > 36 ? `${fullText.slice(0, 33)}${suffix}` : fullText;
+			el.textContent = t;
+			return t;
+		}
+	}
+
 	function getEdgeStyle(edge: GraphEdge): { stroke: string; strokeWidth: number; dash: string | null } {
 		if (edge.isExternal) {
 			return {
@@ -434,31 +486,44 @@
 			.attr('viewBox', `0 0 ${width} ${height}`)
 			.attr('class', 'bg-base-100');
 
-		svgSelection = svg;
-		zoomRoot = svg.append('g');
+			svgSelection = svg;
+			zoomRoot = svg.append('g');
 
-		const zoom = d3.zoom<SVGSVGElement, unknown>()
+			const zoom = d3.zoom<SVGSVGElement, unknown>()
 			.scaleExtent([0.1, 4])
 			.on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
 				zoomRoot?.attr('transform', event.transform.toString());
 			});
 
-		zoomBehavior = zoom;
-		svg.call(zoom as unknown as (selection: Selection<SVGSVGElement, unknown, null, undefined>) => void);
+			zoomBehavior = zoom;
+			svg.call(zoom as unknown as (selection: Selection<SVGSVGElement, unknown, null, undefined>) => void);
 
-		// Arrow marker
-		svg.append('defs')
-			.append('marker')
-			.attr('id', 'dag-arrowhead')
-			.attr('viewBox', '0 -5 10 10')
-			.attr('refX', 12)
-			.attr('refY', 0)
+			const defs = svg.append('defs');
+
+			// Arrow marker
+			defs.append('marker')
+				.attr('id', 'dag-arrowhead')
+				.attr('viewBox', '0 -5 10 10')
+				.attr('refX', 12)
+				.attr('refY', 0)
 			.attr('markerWidth', 6)
 			.attr('markerHeight', 6)
 			.attr('orient', 'auto')
-			.append('path')
-			.attr('d', 'M0,-5L10,0L0,5')
-			.attr('class', 'fill-base-content/50');
+				.append('path')
+				.attr('d', 'M0,-5L10,0L0,5')
+				.attr('class', 'fill-base-content/50');
+
+			// Clip node contents to card bounds (prevents SVG text from leaking outside nodes)
+			defs.append('clipPath')
+				.attr('id', 'dag-node-clip')
+				.attr('clipPathUnits', 'userSpaceOnUse')
+				.append('rect')
+				.attr('x', 0)
+				.attr('y', 0)
+				.attr('width', NODE_WIDTH)
+				.attr('height', NODE_HEIGHT)
+				.attr('rx', NODE_RADIUS)
+				.attr('ry', NODE_RADIUS);
 
 		// Edge paths (simple horizontal link)
 		const edgeGroup = zoomRoot.append('g').attr('class', 'edges');
@@ -519,27 +584,27 @@
 
 		// Nodes
 		const nodeGroup = zoomRoot.append('g').attr('class', 'nodes');
-		const node = nodeGroup.selectAll('g')
-			.data(nodes)
-			.join('g')
-			.attr('transform', (d) => `translate(${d.x - NODE_WIDTH / 2}, ${d.y - NODE_HEIGHT / 2})`)
+			const node = nodeGroup.selectAll('g')
+				.data(nodes)
+				.join('g')
+				.attr('transform', (d) => `translate(${d.x - NODE_WIDTH / 2}, ${d.y - NODE_HEIGHT / 2})`)
 			.attr('class', (d) => `node cursor-pointer${d.isExternal ? ' opacity-75' : ''}`)
 			.attr('data-node-id', (d) => d.id)
-			.on('click', (event: MouseEvent, d: GraphNode) => {
-				event.stopPropagation();
-				focusedTaskId = d.id;
-				centerOnNode(d.id);
-				if (event.altKey && d.canCollapse) {
+				.on('click', (event: MouseEvent, d: GraphNode) => {
+					event.stopPropagation();
+					focusedTaskId = d.id;
+					centerOnNode(d.id);
+					if (event.altKey && d.canCollapse) {
 					toggleCollapse(d.id);
 					return;
 				}
-				onNodeClick?.(d.id);
-			});
+					onNodeClick?.(d.id);
+				});
 
-		// Focus halo (toggled via keyboard navigation)
-		node.append('rect')
-			.attr('class', 'focus-halo')
-			.attr('x', -6)
+				// Focus halo (toggled via keyboard navigation)
+				node.append('rect')
+					.attr('class', 'focus-halo')
+					.attr('x', -6)
 			.attr('y', -6)
 			.attr('width', NODE_WIDTH + 12)
 			.attr('height', NODE_HEIGHT + 12)
@@ -559,92 +624,110 @@
 			.attr('rx', NODE_RADIUS + 2)
 			.attr('ry', NODE_RADIUS + 2)
 			.attr('fill', 'none')
-			.attr('stroke', (d) => (d.isNextUp ? 'oklch(0.75 0.18 60 / 0.85)' : 'oklch(0.70 0.18 145 / 0.65)'))
-			.attr('stroke-width', (d) => (d.isNextUp ? 2.75 : 2))
-			.attr('display', (d) => (!d.isExternal && d.isReady ? null : 'none'));
+				.attr('stroke', (d) => (d.isNextUp ? 'oklch(0.75 0.18 60 / 0.85)' : 'oklch(0.70 0.18 145 / 0.65)'))
+				.attr('stroke-width', (d) => (d.isNextUp ? 2.75 : 2))
+					.attr('display', (d) => (!d.isExternal && d.isReady ? null : 'none'));
 
-		node.append('rect')
-			.attr('width', NODE_WIDTH)
-			.attr('height', NODE_HEIGHT)
-			.attr('rx', NODE_RADIUS)
-			.attr('ry', NODE_RADIUS)
-			.attr('fill', (d) => {
-				if (d.isExternal) return 'oklch(0.22 0.01 250 / 0.50)';
-				return d.isReady ? 'oklch(0.24 0.01 250 / 0.80)' : 'oklch(0.22 0.01 250 / 0.70)';
-			})
-			.attr('stroke', (d) => d.isExternal ? 'oklch(0.60 0.02 250 / 0.55)' : getProjectColor(d.id))
-			.attr('stroke-width', (d) => priorityStroke[d.priority] || 1)
-			.attr('stroke-dasharray', (d) => (d.isExternal ? '6,4' : null));
+				// Card (keep stroke un-clipped for consistent thickness)
+				node.append('rect')
+					.attr('width', NODE_WIDTH)
+					.attr('height', NODE_HEIGHT)
+					.attr('rx', NODE_RADIUS)
+					.attr('ry', NODE_RADIUS)
+					.attr('fill', (d) => {
+						if (d.isExternal) return 'oklch(0.22 0.01 250 / 0.50)';
+						return d.isReady
+							? 'oklch(0.24 0.01 250 / 0.80)'
+							: 'oklch(0.22 0.01 250 / 0.70)';
+					})
+					.attr('stroke', (d) =>
+						d.isExternal ? 'oklch(0.60 0.02 250 / 0.55)' : getProjectColor(d.id)
+					)
+					.attr('stroke-width', (d) => priorityStroke[d.priority] || 1)
+					.attr('stroke-dasharray', (d) => (d.isExternal ? '6,4' : null));
 
-		// Status dot
-		node.append('circle')
-			.attr('cx', 16)
-			.attr('cy', 18)
-			.attr('r', 6)
-			.attr('fill', (d) => statusColors[d.status] || 'oklch(0.60 0.05 250)');
+				// Clip node contents to card bounds (prevents SVG text from leaking outside nodes)
+				const nodeContent = node.append('g')
+					.attr('class', 'node-content')
+					.attr('clip-path', 'url(#dag-node-clip)');
 
-		// Task ID
-		node.append('text')
-			.attr('x', 28)
-			.attr('y', 22)
-			.attr('class', 'fill-base-content/70 text-xs font-mono')
-			.text((d) => d.id);
+			// Status dot
+			nodeContent.append('circle')
+				.attr('cx', 16)
+				.attr('cy', 18)
+				.attr('r', 6)
+				.attr('fill', (d) => statusColors[d.status] || 'oklch(0.60 0.05 250)');
 
-		// External badge (header right)
-		node.append('text')
-			.attr('x', NODE_WIDTH - 16)
-			.attr('y', 22)
-			.attr('text-anchor', 'end')
-			.attr('class', 'fill-base-content/60 text-[10px] font-mono tracking-wider')
-			.attr('display', (d) => (d.isExternal ? null : 'none'))
-			.text('EXTERNAL');
+			// Task ID
+			nodeContent.append('text')
+				.attr('x', 28)
+				.attr('y', 22)
+				.attr('class', 'fill-base-content/70 text-xs font-mono')
+				.each(function (d) {
+					const rightReserve = d.isExternal || d.isNextUp ? 88 : 16;
+					const maxWidth = NODE_WIDTH - 28 - rightReserve - 8;
+					truncateSvgText(this as SVGTextElement, d.id, maxWidth);
+				});
 
-		// Next-up badge (header right)
-		node.append('text')
-			.attr('x', NODE_WIDTH - 16)
-			.attr('y', 22)
-			.attr('text-anchor', 'end')
-			.attr('fill', 'oklch(0.75 0.18 60 / 0.85)')
+			// External badge (header right)
+			nodeContent.append('text')
+				.attr('x', NODE_WIDTH - 16)
+				.attr('y', 22)
+				.attr('text-anchor', 'end')
+				.attr('class', 'fill-base-content/60 text-[10px] font-mono tracking-wider')
+				.attr('display', (d) => (d.isExternal ? null : 'none'))
+				.text('EXTERNAL');
+
+			// Next-up badge (header right)
+			nodeContent.append('text')
+				.attr('x', NODE_WIDTH - 16)
+				.attr('y', 22)
+				.attr('text-anchor', 'end')
+				.attr('fill', 'oklch(0.75 0.18 60 / 0.85)')
 			.attr('class', 'text-[10px] font-mono tracking-wider')
-			.attr('display', (d) => (!d.isExternal && d.isNextUp ? null : 'none'))
-			.text('NEXT UP');
+				.attr('display', (d) => (!d.isExternal && d.isNextUp ? null : 'none'))
+				.text('NEXT UP');
 
-		// Collapsed indicator (footer right)
-		node.append('text')
-			.attr('x', NODE_WIDTH - 16)
-			.attr('y', 68)
-			.attr('text-anchor', 'end')
-			.attr('fill', 'oklch(0.75 0.18 60 / 0.85)')
+			// Collapsed indicator (footer right)
+			nodeContent.append('text')
+				.attr('x', NODE_WIDTH - 16)
+				.attr('y', 68)
+				.attr('text-anchor', 'end')
+				.attr('fill', 'oklch(0.75 0.18 60 / 0.85)')
 			.attr('class', 'text-[10px] font-mono tracking-wider select-none')
-			.attr('display', (d) => (!d.isExternal && d.isCollapsed && d.hiddenCount > 0 ? null : 'none'))
-			.text((d) => `+${d.hiddenCount}`);
+				.attr('display', (d) => (!d.isExternal && d.isCollapsed && d.hiddenCount > 0 ? null : 'none'))
+				.text((d) => `+${d.hiddenCount}`);
 
-		// Title (truncate)
-		node.append('text')
-			.attr('x', 16)
-			.attr('y', 46)
-			.attr('class', 'fill-base-content text-sm font-semibold')
-			.text((d) => {
-				const t = d.title || d.id;
-				return t.length > 52 ? `${t.slice(0, 49)}...` : t;
-			});
+			// Title (truncate to pixel width)
+			nodeContent.append('text')
+				.attr('x', 16)
+				.attr('y', 46)
+				.attr('class', 'fill-base-content text-sm font-semibold')
+				.each(function (d) {
+					const t = d.title || d.id;
+					const maxWidth = NODE_WIDTH - 16 - 16 - 8;
+					truncateSvgText(this as SVGTextElement, t, maxWidth);
+				});
 
-		// Footer: status + priority + external badge
-		node.append('text')
-			.attr('x', 16)
-			.attr('y', 68)
-			.attr('class', 'fill-base-content/70 text-[11px] font-mono')
-			.text((d) => {
-				const status = d.status || 'open';
-				const pr = d.priority ?? 99;
-				const ready = !d.isExternal && d.isReady ? ' • ready' : '';
-				const external = d.isExternal ? ' • external' : '';
-				return `${status} • P${pr}${ready}${external}`;
-			});
+			// Footer: status + priority + external badge
+			nodeContent.append('text')
+				.attr('x', 16)
+				.attr('y', 68)
+				.attr('class', 'fill-base-content/70 text-[11px] font-mono')
+				.each(function (d) {
+					const status = d.status || 'open';
+					const pr = d.priority ?? 99;
+					const ready = !d.isExternal && d.isReady ? ' • ready' : '';
+					const external = d.isExternal ? ' • external' : '';
+					const t = `${status} • P${pr}${ready}${external}`;
+					const rightReserve = !d.isExternal && d.isCollapsed && d.hiddenCount > 0 ? 48 : 16;
+					const maxWidth = NODE_WIDTH - 16 - rightReserve - 8;
+					truncateSvgText(this as SVGTextElement, t, maxWidth);
+				});
 
-		node.append('title').text((d) => {
-			const collapseHint = !d.isExternal && d.canCollapse ? `\nAlt+Click or Space: ${d.isCollapsed ? 'expand' : 'collapse'}` : '';
-			const hidden = !d.isExternal && d.isCollapsed && d.hiddenCount > 0 ? `\nHidden: ${d.hiddenCount}` : '';
+			node.append('title').text((d) => {
+				const collapseHint = !d.isExternal && d.canCollapse ? `\nAlt+Click or Space: ${d.isCollapsed ? 'expand' : 'collapse'}` : '';
+				const hidden = !d.isExternal && d.isCollapsed && d.hiddenCount > 0 ? `\nHidden: ${d.hiddenCount}` : '';
 			return `${d.id}\n${d.title}\nStatus: ${d.status}\nPriority: P${d.priority}${d.isExternal ? '\n(external node)' : ''}${hidden}${collapseHint}`;
 		});
 
