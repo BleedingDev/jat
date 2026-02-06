@@ -46,6 +46,10 @@
 	// Filters
 	let searchQuery = $state("");
 	let selectedProject = $state("All Projects");
+	type RangePreset = "all" | "1d" | "1w" | "1m" | "custom";
+	let rangePreset = $state<RangePreset>("all");
+	let customFrom = $state<string>(""); // YYYY-MM-DD
+	let customTo = $state<string>(""); // YYYY-MM-DD
 
 	// Task detail drawer
 	let selectedTaskId = $state<string | null>(null);
@@ -55,6 +59,17 @@
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get("project");
 		selectedProject = projectParam || "All Projects";
+	});
+
+	// Sync completion range filters from URL params
+	$effect(() => {
+		const rangeParam = $page.url.searchParams.get("range");
+		rangePreset =
+			rangeParam === "1d" || rangeParam === "1w" || rangeParam === "1m" || rangeParam === "custom"
+				? rangeParam
+				: "all";
+		customFrom = rangePreset === "custom" ? $page.url.searchParams.get("from") || "" : "";
+		customTo = rangePreset === "custom" ? $page.url.searchParams.get("to") || "" : "";
 	});
 
 	// Fetch data on mount
@@ -115,9 +130,106 @@
 		});
 	}
 
+	function handleRangeChange(next: RangePreset) {
+		rangePreset = next;
+		const url = new URL(window.location.href);
+		if (next === "all") {
+			url.searchParams.delete("range");
+			url.searchParams.delete("from");
+			url.searchParams.delete("to");
+		} else {
+			url.searchParams.set("range", next);
+			if (next !== "custom") {
+				url.searchParams.delete("from");
+				url.searchParams.delete("to");
+			}
+		}
+		goto(url.toString(), {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true,
+		});
+	}
+
+	function handleCustomRangeChange(nextFrom: string, nextTo: string) {
+		customFrom = nextFrom;
+		customTo = nextTo;
+		if (rangePreset !== "custom") return;
+		const url = new URL(window.location.href);
+		url.searchParams.set("range", "custom");
+		if (nextFrom) url.searchParams.set("from", nextFrom);
+		else url.searchParams.delete("from");
+		if (nextTo) url.searchParams.set("to", nextTo);
+		else url.searchParams.delete("to");
+		goto(url.toString(), {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true,
+		});
+	}
+
+	function clearAllFilters() {
+		searchQuery = "";
+		selectedProject = "All Projects";
+		rangePreset = "all";
+		customFrom = "";
+		customTo = "";
+
+		const url = new URL(window.location.href);
+		url.searchParams.delete("project");
+		url.searchParams.delete("range");
+		url.searchParams.delete("from");
+		url.searchParams.delete("to");
+		goto(url.toString(), {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true,
+		});
+	}
+
+	function parseDateInput(dateStr: string): Date | null {
+		const parts = dateStr.split("-");
+		if (parts.length !== 3) return null;
+		const year = Number(parts[0]);
+		const month = Number(parts[1]);
+		const day = Number(parts[2]);
+		if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+		if (year < 1970 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+		return new Date(year, month - 1, day, 0, 0, 0, 0);
+	}
+
+	function getCompletionRangeBounds(): { startMs: number | null; endExclusiveMs: number | null } {
+		if (rangePreset === "all") return { startMs: null, endExclusiveMs: null };
+
+		if (rangePreset === "1d") return { startMs: Date.now() - 24 * 60 * 60 * 1000, endExclusiveMs: null };
+		if (rangePreset === "1w") return { startMs: Date.now() - 7 * 24 * 60 * 60 * 1000, endExclusiveMs: null };
+		if (rangePreset === "1m") return { startMs: Date.now() - 30 * 24 * 60 * 60 * 1000, endExclusiveMs: null };
+
+		// custom
+		const fromDate = customFrom ? parseDateInput(customFrom) : null;
+		const toDate = customTo ? parseDateInput(customTo) : null;
+		const startMs = fromDate ? fromDate.getTime() : null;
+		let endExclusiveMs: number | null = null;
+		if (toDate) {
+			const end = new Date(toDate);
+			end.setDate(end.getDate() + 1); // inclusive end date
+			endExclusiveMs = end.getTime();
+		}
+		return { startMs, endExclusiveMs };
+	}
+
 	// Filtered tasks
 	const filteredTasks = $derived.by(() => {
+		const { startMs, endExclusiveMs } = getCompletionRangeBounds();
 		return tasks.filter((task) => {
+			// Completion date range filter (uses closed_at with updated_at fallback)
+			const completionTs = task.closed_at || task.updated_at;
+			const completionMs = completionTs ? new Date(completionTs).getTime() : NaN;
+			if (Number.isFinite(completionMs)) {
+				if (startMs !== null && completionMs < startMs) return false;
+				if (endExclusiveMs !== null && completionMs >= endExclusiveMs) return false;
+			}
+
 			// Project filter
 			if (selectedProject !== "All Projects") {
 				const taskProject = task.project || task.id.split("-")[0];
@@ -440,6 +552,45 @@
 						class="industrial-input w-48"
 						bind:value={searchQuery}
 					/>
+					<select
+						class="industrial-select w-44"
+						aria-label="Completion range"
+						value={rangePreset}
+						onchange={(e) =>
+							handleRangeChange(
+								(e.target as HTMLSelectElement).value as RangePreset,
+							)}
+					>
+						<option value="all">All time</option>
+						<option value="1d">Past 1 day</option>
+						<option value="1w">Past 1 week</option>
+						<option value="1m">Past 1 month</option>
+						<option value="custom">Custom…</option>
+					</select>
+					{#if rangePreset === "custom"}
+						<input
+							type="date"
+							class="industrial-input w-40"
+							aria-label="From date"
+							value={customFrom}
+							onchange={(e) =>
+								handleCustomRangeChange(
+									(e.target as HTMLInputElement).value,
+									customTo,
+								)}
+						/>
+						<input
+							type="date"
+							class="industrial-input w-40"
+							aria-label="To date"
+							value={customTo}
+							onchange={(e) =>
+								handleCustomRangeChange(
+									customFrom,
+									(e.target as HTMLInputElement).value,
+								)}
+						/>
+					{/if}
 					<div class="w-48">
 						<ProjectSelector
 							projects={projectNames}
@@ -450,14 +601,11 @@
 							compact={true}
 						/>
 					</div>
-					{#if searchQuery || selectedProject !== "All Projects"}
+					{#if searchQuery || selectedProject !== "All Projects" || rangePreset !== "all"}
 						<button
 							type="button"
 							class="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
-							onclick={() => {
-								searchQuery = "";
-								handleProjectChange("All Projects");
-							}}
+							onclick={clearAllFilters}
 						>
 							Clear filters
 						</button>
@@ -669,6 +817,7 @@
 	.filters-bar {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 0.75rem;
 		margin-bottom: 1rem;
 		padding: 0.75rem 1rem;
