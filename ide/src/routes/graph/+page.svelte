@@ -4,13 +4,14 @@
 	import { goto } from '$app/navigation';
 	import DAGGraph from '$lib/components/DAGGraph.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
+	import DependencyList from '$lib/components/DependencyList.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { GraphSkeleton } from '$lib/components/skeleton';
 	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 	import { getProjectsFromTasks, getTaskCountByProject } from '$lib/utils/projectUtils';
 
 	// Task type compatible with DependencyGraph component
-	type GraphView = 'dag' | 'force';
+	type GraphView = 'dag' | 'force' | 'list';
 
 	interface Task {
 		id: string;
@@ -57,7 +58,7 @@
 	// Sync graphView from URL params (dag is implicit default)
 	$effect(() => {
 		const viewParam = $page.url.searchParams.get('view');
-		graphView = viewParam === 'force' ? 'force' : 'dag';
+		graphView = viewParam === 'force' ? 'force' : viewParam === 'list' ? 'list' : 'dag';
 	});
 
 	// Derive projects list from all tasks
@@ -103,16 +104,23 @@
 	}
 
 	function handleViewChange(view: string) {
-		const next: GraphView = view === 'force' ? 'force' : 'dag';
+		const next: GraphView = view === 'force' ? 'force' : view === 'list' ? 'list' : 'dag';
 		graphView = next;
 
 		const url = new URL(window.location.href);
 		if (next === 'dag') {
 			url.searchParams.delete('view');
 		} else {
-			url.searchParams.set('view', 'force');
+			url.searchParams.set('view', next);
 		}
 		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
+	}
+
+	function isEditableTarget(target: EventTarget | null): boolean {
+		const el = target as HTMLElement | null;
+		if (!el) return false;
+		const tag = el.tagName?.toLowerCase();
+		return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable === true;
 	}
 
 	// Fetch tasks
@@ -158,7 +166,27 @@
 	});
 
 	onMount(() => {
+		const handleKeydown = (e: KeyboardEvent) => {
+			if (e.defaultPrevented) return;
+			if (isEditableTarget(e.target)) return;
+			if (e.key === 'g') {
+				e.preventDefault();
+				handleViewChange('dag');
+				return;
+			}
+			if (e.key === 'l') {
+				e.preventDefault();
+				handleViewChange('list');
+				return;
+			}
+		};
+
+		window.addEventListener('keydown', handleKeydown);
 		fetchTasks();
+
+		return () => {
+			window.removeEventListener('keydown', handleKeydown);
+		};
 	});
 </script>
 
@@ -185,6 +213,7 @@
 					on:change={(e) => handleViewChange((e.target as HTMLSelectElement).value)}
 				>
 					<option value="dag">DAG (Sequential)</option>
+					<option value="list">List (Sequential)</option>
 					<option value="force">Force (Exploration)</option>
 				</select>
 			</div>
@@ -271,15 +300,17 @@
 		</div>
 
 	<!-- Main Content: Dependency Graph -->
-	{:else}
-		<div class="p-4">
-			{#if graphView === 'force'}
-				<DependencyGraph {tasks} onNodeClick={handleNodeClick} />
-			{:else}
-				<DAGGraph {tasks} onNodeClick={handleNodeClick} />
-			{/if}
-		</div>
-	{/if}
+		{:else}
+			<div class="p-4">
+				{#if graphView === 'force'}
+					<DependencyGraph {tasks} onNodeClick={handleNodeClick} />
+				{:else if graphView === 'list'}
+					<DependencyList {tasks} onNodeClick={handleNodeClick} />
+				{:else}
+					<DAGGraph {tasks} onNodeClick={handleNodeClick} />
+				{/if}
+			</div>
+		{/if}
 
 	<!-- Task Detail Modal -->
 	<TaskDetailDrawer bind:taskId={selectedTaskId} bind:isOpen={drawerOpen} />
