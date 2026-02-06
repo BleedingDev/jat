@@ -74,6 +74,8 @@
 	// Local state
 	let releasing = $state(false);
 	let resuming = $state(false);
+	let messageSending = $state(false);
+	let killingSession = $state(false);
 	let resumeError = $state<string | null>(null);
 	let dropdownOpen = $state(false);
 	let agentPickerOpen = $state(false);
@@ -196,6 +198,66 @@
 		dropdownOpen = false;
 		if (sessionName) {
 			onattach(sessionName);
+		}
+	}
+
+	async function handleSendMessage() {
+		if (messageSending || !task.assignee) return;
+
+		const message = prompt(`Message for ${task.assignee}:`);
+		if (!message || !message.trim()) return;
+
+		messageSending = true;
+		try {
+			const response = await fetch(`/api/agents/${encodeURIComponent(task.assignee)}/message`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					subject: `Re: ${task.id}`,
+					body: message.trim()
+				})
+			});
+
+			if (!response.ok) {
+				const data = await response.json().catch(() => ({}));
+				throw new Error(data.message || data.error || 'Could not send message');
+			}
+
+			successToast('Message sent', `Delivered to ${task.assignee}`);
+			dropdownOpen = false;
+		} catch (err) {
+			const messageText = err instanceof Error ? err.message : 'Network error';
+			errorToast('Send failed', messageText);
+			console.error('Send message error:', err);
+		} finally {
+			messageSending = false;
+		}
+	}
+
+	async function handleKillSession() {
+		if (killingSession || !task.assignee) return;
+		const confirmed = confirm(`Kill ${task.assignee}'s session and release task ${task.id}?`);
+		if (!confirmed) return;
+
+		killingSession = true;
+		try {
+			const response = await fetch(`/api/sessions/${encodeURIComponent(task.assignee)}`, {
+				method: 'DELETE'
+			});
+			if (!response.ok) {
+				const data = await response.json().catch(() => ({}));
+				throw new Error(data.message || data.error || 'Failed to kill session');
+			}
+
+			successToast('Session killed', `Stopped ${task.assignee}`);
+			broadcastTaskEvent('task-released', task.id);
+			dropdownOpen = false;
+		} catch (err) {
+			const messageText = err instanceof Error ? err.message : 'Network error';
+			errorToast('Kill failed', messageText);
+			console.error('Kill session error:', err);
+		} finally {
+			killingSession = false;
 		}
 	}
 
@@ -396,11 +458,16 @@
 							</button>
 						</li>
 						<li>
-							<button onclick={() => { dropdownOpen = false; /* TODO: implement message modal */ }} class="gap-2">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-								</svg>
-								Send Message
+							<button onclick={handleSendMessage} disabled={messageSending} class="gap-2">
+								{#if messageSending}
+									<span class="loading loading-spinner loading-xs"></span>
+									Sending...
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+									</svg>
+									Send Message
+								{/if}
 							</button>
 						</li>
 						<div class="divider my-0 py-0"></div>
@@ -453,17 +520,22 @@
 						</button>
 					</li>
 
-					{#if task.status === 'in_progress' && isAgentOnline && sessionName}
-						<div class="divider my-0 py-0"></div>
-						<li>
-							<button onclick={() => { dropdownOpen = false; /* TODO: implement kill session */ }} class="gap-2 text-error hover:bg-error hover:text-error-content">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-								</svg>
-								Kill Session
-							</button>
-						</li>
-					{/if}
+						{#if task.status === 'in_progress' && isAgentOnline && sessionName}
+							<div class="divider my-0 py-0"></div>
+							<li>
+								<button onclick={handleKillSession} disabled={killingSession} class="gap-2 text-error hover:bg-error hover:text-error-content">
+									{#if killingSession}
+										<span class="loading loading-spinner loading-xs"></span>
+										Killing...
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+										Kill Session
+									{/if}
+								</button>
+							</li>
+						{/if}
 				</ul>
 			{/if}
 		</div>
