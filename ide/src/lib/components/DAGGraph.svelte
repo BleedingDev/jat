@@ -32,6 +32,9 @@
 		isExternal: boolean;
 		isReady: boolean;
 		isNextUp: boolean;
+		canCollapse: boolean;
+		isCollapsed: boolean;
+		hiddenCount: number;
 	}
 
 	interface GraphEdge {
@@ -52,6 +55,7 @@
 	let width = $state(800);
 	let height = $state(600);
 	let focusedTaskId = $state<string | null>(null);
+	let collapsedTaskIds = $state<Set<string>>(new Set());
 
 	const NODE_WIDTH = 280;
 	const NODE_HEIGHT = 84;
@@ -101,6 +105,16 @@
 		return edge.isExternal ? 'external' : '';
 	}
 
+	function toggleCollapse(taskId: string): void {
+		const next = new Set(collapsedTaskIds);
+		if (next.has(taskId)) {
+			next.delete(taskId);
+		} else {
+			next.add(taskId);
+		}
+		collapsedTaskIds = next;
+	}
+
 	function buildGraphModel(): { nodes: GraphNode[]; edges: GraphEdge[] } {
 		const nodeMap = new Map<string, GraphNode>();
 
@@ -114,7 +128,10 @@
 				project: task.project || 'unknown',
 				isExternal: false,
 				isReady: false,
-				isNextUp: false
+				isNextUp: false,
+				canCollapse: false,
+				isCollapsed: false,
+				hiddenCount: 0
 			});
 		}
 
@@ -133,16 +150,13 @@
 					project: 'unknown',
 					isExternal: true,
 					isReady: false,
-					isNextUp: false
+					isNextUp: false,
+					canCollapse: false,
+					isCollapsed: false,
+					hiddenCount: 0
 				});
 			}
 		}
-
-		// Stable ordering helps keep layout deterministic across refreshes
-		const nodes = [...nodeMap.values()].sort((a, b) => {
-			if (a.priority !== b.priority) return a.priority - b.priority;
-			return a.id.localeCompare(b.id);
-		});
 
 		const edges: GraphEdge[] = [];
 		for (const task of tasks) {
@@ -155,7 +169,8 @@
 					source: depId,
 					target: task.id,
 					type: dep.type || 'depends',
-					isExternal: nodeMap.get(depId)?.isExternal === true || nodeMap.get(task.id)?.isExternal === true
+					isExternal:
+						nodeMap.get(depId)?.isExternal === true || nodeMap.get(task.id)?.isExternal === true
 				});
 			}
 		}
@@ -168,6 +183,40 @@
 			if (byTarget !== 0) return byTarget;
 			return a.type.localeCompare(b.type);
 		});
+
+		// Build outgoing adjacency for collapse (dependency -> dependents)
+		const outgoing = new Map<string, string[]>();
+		for (const edge of edges) {
+			const list = outgoing.get(edge.source) ?? [];
+			list.push(edge.target);
+			outgoing.set(edge.source, list);
+		}
+
+		// 2.5) Collapse model: collapsing a node hides all downstream dependents (transitive)
+		const hiddenIds = new Set<string>();
+		const hiddenCountByRoot = new Map<string, number>();
+
+		for (const rootId of collapsedTaskIds) {
+			const root = nodeMap.get(rootId);
+			if (!root || root.isExternal) continue;
+			const stack = [...(outgoing.get(rootId) ?? [])];
+			const visited = new Set<string>();
+
+			let id = stack.pop();
+			while (id !== undefined) {
+				if (!visited.has(id)) {
+					visited.add(id);
+					hiddenIds.add(id);
+					const nextTargets = outgoing.get(id);
+					if (nextTargets && nextTargets.length > 0) {
+						stack.push(...nextTargets);
+					}
+				}
+				id = stack.pop();
+			}
+
+			hiddenCountByRoot.set(rootId, visited.size);
+		}
 
 		// 3) Derived readiness + next-up (does not affect layout)
 		for (const task of tasks) {
@@ -184,8 +233,25 @@
 			node.isReady = node.status !== 'closed' && allDepsClosed;
 		}
 
-		// Pick one "Next Up" task: highest priority (lowest number) among ready, non-external tasks
-		const nextUp = [...nodeMap.values()]
+		// Filter model down to visible nodes/edges (after collapse)
+		const nodes = [...nodeMap.values()]
+			.filter((n) => !hiddenIds.has(n.id))
+			.map((n) => ({
+				...n,
+				canCollapse: !n.isExternal && (outgoing.get(n.id)?.length ?? 0) > 0,
+				isCollapsed: collapsedTaskIds.has(n.id),
+				hiddenCount: hiddenCountByRoot.get(n.id) ?? 0
+			}))
+			.sort((a, b) => {
+				if (a.priority !== b.priority) return a.priority - b.priority;
+				return a.id.localeCompare(b.id);
+			});
+
+		const visibleIds = new Set(nodes.map((n) => n.id));
+		const visibleEdges = edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
+
+		// Pick one "Next Up" task: highest priority (lowest number) among *visible* ready tasks
+		const nextUp = nodes
 			.filter((n) => !n.isExternal && n.isReady)
 			.sort((a, b) => {
 				if (a.priority !== b.priority) return a.priority - b.priority;
@@ -193,11 +259,13 @@
 			})[0];
 
 		if (nextUp) {
-			const n = nodeMap.get(nextUp.id);
-			if (n) n.isNextUp = true;
+			const idx = nodes.findIndex((n) => n.id === nextUp.id);
+			if (idx >= 0) {
+				nodes[idx] = { ...nodes[idx], isNextUp: true };
+			}
 		}
 
-		return { nodes, edges };
+		return { nodes, edges: visibleEdges };
 	}
 
 	function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]) {
@@ -243,6 +311,7 @@
 	let zoomBehavior: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null;
 	let nodePositions = new Map<string, { x: number; y: number }>();
 	let navOrder: string[] = [];
+	let collapsibleNodeIds = new Set<string>();
 	let layoutBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
 
 	function applyFocusStyles(): void {
@@ -329,6 +398,7 @@
 
 		const { nodes: modelNodes, edges: modelEdges } = buildGraphModel();
 		const { nodes, edges } = layoutGraph(modelNodes, modelEdges);
+		collapsibleNodeIds = new Set(nodes.filter((n) => n.canCollapse).map((n) => n.id));
 
 		// Compute viewbox bounds from laid-out nodes for a nicer initial fit
 		const minX = Math.min(...nodes.map((n) => n.x)) - NODE_WIDTH / 2 - 40;
@@ -456,6 +526,10 @@
 				event.stopPropagation();
 				focusedTaskId = d.id;
 				centerOnNode(d.id);
+				if (event.altKey && d.canCollapse) {
+					toggleCollapse(d.id);
+					return;
+				}
 				onNodeClick?.(d.id);
 			});
 
@@ -532,6 +606,16 @@
 			.attr('display', (d) => (!d.isExternal && d.isNextUp ? null : 'none'))
 			.text('NEXT UP');
 
+		// Collapsed indicator (footer right)
+		node.append('text')
+			.attr('x', NODE_WIDTH - 16)
+			.attr('y', 68)
+			.attr('text-anchor', 'end')
+			.attr('fill', 'oklch(0.75 0.18 60 / 0.85)')
+			.attr('class', 'text-[10px] font-mono tracking-wider select-none')
+			.attr('display', (d) => (!d.isExternal && d.isCollapsed && d.hiddenCount > 0 ? null : 'none'))
+			.text((d) => `+${d.hiddenCount}`);
+
 		// Title (truncate)
 		node.append('text')
 			.attr('x', 16)
@@ -555,7 +639,11 @@
 				return `${status} • P${pr}${ready}${external}`;
 			});
 
-		node.append('title').text((d) => `${d.id}\n${d.title}\nStatus: ${d.status}\nPriority: P${d.priority}${d.isExternal ? '\n(external node)' : ''}`);
+		node.append('title').text((d) => {
+			const collapseHint = !d.isExternal && d.canCollapse ? `\nAlt+Click or Space: ${d.isCollapsed ? 'expand' : 'collapse'}` : '';
+			const hidden = !d.isExternal && d.isCollapsed && d.hiddenCount > 0 ? `\nHidden: ${d.hiddenCount}` : '';
+			return `${d.id}\n${d.title}\nStatus: ${d.status}\nPriority: P${d.priority}${d.isExternal ? '\n(external node)' : ''}${hidden}${collapseHint}`;
+		});
 
 		// Fit-to-contents initial transform (center graph)
 		fitToGraph();
@@ -598,6 +686,11 @@
 			if (e.key === 'f') {
 				e.preventDefault();
 				fitToGraph();
+				return;
+			}
+			if (e.code === 'Space' && focusedTaskId && collapsibleNodeIds.has(focusedTaskId)) {
+				e.preventDefault();
+				toggleCollapse(focusedTaskId);
 				return;
 			}
 			if (e.key === 'c' && focusedTaskId) {
@@ -690,7 +783,9 @@
 			<p class="font-semibold">Keyboard</p>
 			<p><span class="font-mono">j/k</span> or <span class="font-mono">↑/↓</span>: move focus</p>
 			<p><span class="font-mono">Enter</span>: open task</p>
+			<p><span class="font-mono">Space</span>: collapse/expand</p>
 			<p><span class="font-mono">f</span>: fit graph • <span class="font-mono">c</span>: center</p>
+			<p><span class="font-mono">Alt+Click</span>: collapse/expand</p>
 		</div>
 	</div>
 	<svg bind:this={svgElement} class="w-full h-full"></svg>
