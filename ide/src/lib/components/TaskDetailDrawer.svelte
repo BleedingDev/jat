@@ -30,6 +30,7 @@
 	import EventStack from '$lib/components/work/EventStack.svelte';
 	import type { SuggestedTaskWithState } from '$lib/types/signals';
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
+	import { buildAgentMessageRequest } from '$lib/utils/agentMessageRequest';
 	import { availableProjects as availableProjectsStore } from '$lib/stores/drawerStore';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
@@ -1575,15 +1576,11 @@
 
 		isSendingMessage = true;
 		try {
-			const response = await fetch('/api/agents/message', {
+			const requestData = buildAgentMessageRequest(task.assignee, taskId, messageText);
+			const response = await fetch(requestData.endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					to: task.assignee,
-					subject: `Re: ${taskId}`,
-					body: messageText.trim(),
-					thread: taskId
-				})
+				body: JSON.stringify(requestData.payload)
 			});
 
 			if (!response.ok) {
