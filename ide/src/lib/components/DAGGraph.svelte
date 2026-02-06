@@ -3,7 +3,7 @@
 	import * as d3 from 'd3';
 	import dagre from '@dagrejs/dagre';
 	import { getProjectColor } from '$lib/utils/projectColors';
-	import type { Selection } from 'd3';
+	import type { Selection, Transition } from 'd3';
 
 	interface TaskDep {
 		id?: string;
@@ -354,14 +354,17 @@
 		const tx = width / 2 - k * pos.x;
 		const ty = height / 2 - k * pos.y;
 
-		svgSelection
-			.transition()
-			.duration(160)
-			.call(
-				zoomBehavior.transform as unknown as (selection: Selection<SVGSVGElement, unknown, null, undefined>, transform: d3.ZoomTransform) => void,
-				d3.zoomIdentity.translate(tx, ty).scale(k)
-			);
-	}
+			svgSelection
+				.transition()
+				.duration(160)
+				.call(
+					zoomBehavior.transform as unknown as (
+						transition: Transition<SVGSVGElement, unknown, null, undefined>,
+						transform: d3.ZoomTransform
+					) => void,
+					d3.zoomIdentity.translate(tx, ty).scale(k)
+				);
+		}
 
 	function isEditableTarget(target: EventTarget | null): boolean {
 		const el = target as HTMLElement | null;
