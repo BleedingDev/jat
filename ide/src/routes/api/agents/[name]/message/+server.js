@@ -6,10 +6,10 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -24,16 +24,13 @@ export async function POST({ params, request }) {
 			}, { status: 400 });
 		}
 
-		// Escape quotes in subject and body for shell
-		const escapedSubject = subject.replace(/"/g, '\\"');
-		const escapedBody = body.replace(/"/g, '\\"');
-
-		// Use am-send command
+		// Use am-send command without shell interpolation.
 		// From: IDE, To: agentName
-		const command = `${process.env.HOME}/.local/bin/am-send "${escapedSubject}" "${escapedBody}" --from IDE --to "${agentName}"`;
+		const commandPath = `${process.env.HOME}/.local/bin/am-send`;
+		const commandArgs = [subject, body, '--from', 'IDE', '--to', agentName];
 
 		try {
-			const { stdout } = await execAsync(command);
+			const { stdout } = await execFileAsync(commandPath, commandArgs);
 
 			return json({
 				success: true,

@@ -6,10 +6,10 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** @type {import('./$types').RequestHandler} */
 export async function DELETE({ params }) {
@@ -23,13 +23,13 @@ export async function DELETE({ params }) {
 			}, { status: 400 });
 		}
 
-		// Use am-delete-agent command with --force to skip confirmation
-		// Note: Agents are globally unique - no project specification needed
-		// Use full path since Node doesn't inherit ~/.local/bin in PATH
-		const command = `${process.env.HOME}/.local/bin/am-delete-agent "${agentName}" --force`;
+		// Use am-delete-agent command with --force to skip confirmation.
+		// No shell interpolation: agentName is passed as a direct argument.
+		const commandPath = `${process.env.HOME}/.local/bin/am-delete-agent`;
+		const commandArgs = [agentName, '--force'];
 
 		try {
-			const { stdout, stderr } = await execAsync(command);
+			const { stdout, stderr } = await execFileAsync(commandPath, commandArgs);
 
 			// am-delete-agent outputs status messages to stderr (not errors)
 			// Only treat it as an error if the command actually failed or stderr contains "Error:"

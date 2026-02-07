@@ -6,12 +6,12 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getProjectPath } from '$lib/utils/projectUtils.js';
 import { getTasks } from '$lib/server/beads.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params }) {
@@ -50,7 +50,7 @@ export async function POST({ params }) {
 				if (!projectPath) {
 					throw new Error(`Could not determine project path for task ${task.id}`);
 				}
-				return execAsync(`bd update ${task.id} --assignee ""`, { cwd: projectPath });
+				return execFileAsync('bd', ['update', task.id, '--assignee', ''], { cwd: projectPath });
 			});
 
 			await Promise.all(updatePromises);

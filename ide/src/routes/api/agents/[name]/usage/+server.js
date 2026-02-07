@@ -26,10 +26,10 @@
 
 import { json } from '@sveltejs/kit';
 import { getAgentUsage } from '$lib/utils/tokenUsage';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Simple in-memory cache with 1-minute TTL
 const cache = new Map();
@@ -62,7 +62,7 @@ export async function GET({ params, url }) {
 
 	try {
 		// Verify agent exists using am-agents
-		const { stdout } = await execAsync('am-agents --json');
+		const { stdout } = await execFileAsync('am-agents', ['--json']);
 		/** @type {Array<{name: string}>} */
 		const agents = JSON.parse(stdout);
 		const agentExists = agents.some((/** @type {{name: string}} */ agent) => agent.name === agentName);

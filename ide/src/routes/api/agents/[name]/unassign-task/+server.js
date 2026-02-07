@@ -6,11 +6,11 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getProjectPath } from '$lib/utils/projectUtils.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -35,11 +35,9 @@ export async function POST({ params, request }) {
 			}, { status: 400 });
 		}
 
-		// Verify task exists and is assigned to this agent
-		const showCommand = `bd show ${taskId} --json`;
-
 		try {
-			const { stdout } = await execAsync(showCommand, { cwd: projectPath });
+			// Verify task exists and is assigned to this agent.
+			const { stdout } = await execFileAsync('bd', ['show', taskId, '--json'], { cwd: projectPath });
 			const taskData = JSON.parse(stdout.trim());
 			// bd show --json returns an array, get the first element
 			const task = Array.isArray(taskData) ? taskData[0] : taskData;
@@ -62,8 +60,7 @@ export async function POST({ params, request }) {
 			}
 
 			// Unassign the task
-			const updateCommand = `bd update ${taskId} --assignee ""`;
-			await execAsync(updateCommand, { cwd: projectPath });
+			await execFileAsync('bd', ['update', taskId, '--assignee', ''], { cwd: projectPath });
 
 			return json({
 				success: true,

@@ -6,10 +6,10 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
@@ -23,11 +23,13 @@ export async function GET({ params }) {
 			}, { status: 400 });
 		}
 
-		// Use am-inbox command with --json flag for structured output
-		const command = `${process.env.HOME}/.local/bin/am-inbox "${agentName}" --json`;
+		// Use am-inbox command with --json flag for structured output.
+		// No shell interpolation: agentName is passed as a direct argument.
+		const commandPath = `${process.env.HOME}/.local/bin/am-inbox`;
+		const commandArgs = [agentName, '--json'];
 
 		try {
-			const { stdout } = await execAsync(command);
+			const { stdout } = await execFileAsync(commandPath, commandArgs);
 
 			// Parse JSON output from am-inbox
 			let messages = [];
