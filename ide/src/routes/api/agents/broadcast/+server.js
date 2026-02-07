@@ -4,11 +4,11 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getAgents } from '$lib/server/agent-mail.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * POST /api/agents/broadcast
@@ -65,22 +65,19 @@ export async function POST({ request }) {
 			recipients = '@active';
 		}
 
-		// Build am-send command
-		const escapedSubject = subject.replace(/"/g, '\\"').replace(/`/g, '\\`');
-		const escapedBody = body.replace(/"/g, '\\"').replace(/`/g, '\\`');
-
-		let command = `am-send "${escapedSubject}" "${escapedBody}" --from "${from}" --to "${recipients}"`;
+		const commandPath = `${process.env.HOME}/.local/bin/am-send`;
+		const commandArgs = [subject, body, '--from', from, '--to', recipients];
 
 		if (importance === 'urgent') {
-			command += ' --importance urgent';
+			commandArgs.push('--importance', 'urgent');
 		}
 
 		if (thread) {
-			command += ` --thread "${thread}"`;
+			commandArgs.push('--thread', thread);
 		}
 
 		try {
-			const { stdout, stderr } = await execAsync(command);
+			const { stdout } = await execFileAsync(commandPath, commandArgs);
 
 			// Parse the output to get message details
 			const messageIdMatch = stdout.match(/Message sent \(ID: (\d+)\)/);
@@ -105,8 +102,7 @@ export async function POST({ request }) {
 
 			return json({
 				error: 'Failed to send broadcast',
-				message: errorMessage,
-				command
+				message: errorMessage
 			}, { status: 500 });
 		}
 	} catch (error) {

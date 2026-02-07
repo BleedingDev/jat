@@ -107,7 +107,7 @@ run_test "Beads SQLite Query Layer" "node test/test-beads.js"
 run_test "Agent Mail SQLite Query Layer" "node test/test-agent-mail.js"
 
 # Run Agent Mail workflow test
-run_test "Agent Mail Workflow" "bash mail/test-workflow.sh"
+run_test "Agent Mail Workflow" "bash tools/mail/test-workflow.sh"
 
 # Run example workflow scripts (these are demonstrative, not strict tests)
 # We'll just verify they execute without errors

@@ -158,6 +158,8 @@ export interface ProjectStats {
 }
 
 export interface ProjectConfig {
+	/** Stable project key used in ~/.config/jat/projects.json (e.g., "jat") */
+	key?: string;
 	/** Display name for the project (e.g., "JAT", "Chimaro") */
 	name: string;
 	/** Absolute path to the project directory */

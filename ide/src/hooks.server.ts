@@ -21,9 +21,11 @@ import logger from '$lib/utils/logger';
 import { shouldLog, getSamplingRate } from '$lib/config/logConfig';
 import { dev } from '$app/environment';
 import { SIGNAL_TTL } from '$lib/config/constants';
+import { parseApiAuthConfig, authorizeApiRequest } from '$lib/server/apiAuth';
 
 // Track aggregation interval
 let aggregationInterval: ReturnType<typeof setInterval> | null = null;
+const apiAuthConfig = parseApiAuthConfig(process.env);
 
 /**
  * Clean up stale JAT signal/activity files from /tmp
@@ -290,6 +292,44 @@ export const handle = async ({ event, resolve }) => {
 		method: event.request.method,
 		query: event.url.search
 	});
+
+	// Enforce API access control before any route logic executes.
+	if (event.url.pathname.startsWith('/api/')) {
+		const authResult = authorizeApiRequest({
+			pathname: event.url.pathname,
+			method: event.request.method,
+			clientAddress: event.getClientAddress(),
+			headers: event.request.headers,
+			config: apiAuthConfig
+		});
+
+		if (!authResult.authorized) {
+			event.locals.logger.warn(
+				{
+					ip: authResult.clientIp,
+					status: authResult.status,
+					authError: authResult.error
+				},
+				`API request blocked: ${event.request.method} ${event.url.pathname}`
+			);
+
+			return new Response(
+				JSON.stringify({
+					error: authResult.error,
+					message: authResult.message
+				}),
+				{
+					status: authResult.status,
+					headers: {
+						'content-type': 'application/json',
+						'x-request-id': requestId
+					}
+				}
+			);
+		}
+
+		event.locals.authRole = authResult.role;
+	}
 
 	// Check if we should log this request based on sampling
 	// In dev mode, still apply sampling for high-frequency endpoints to reduce log spam

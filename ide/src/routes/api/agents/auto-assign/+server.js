@@ -4,12 +4,12 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { listSessionsAsync } from '$lib/server/sessions.js';
 import { getAgents } from '$lib/server/agent-mail.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * POST /api/agents/auto-assign
@@ -32,7 +32,7 @@ export async function POST({ request }) {
 		// Get ready tasks from Beads
 		let readyTasks = [];
 		try {
-			const { stdout } = await execAsync('bd ready --json');
+			const { stdout } = await execFileAsync('bd', ['ready', '--json']);
 			readyTasks = JSON.parse(stdout);
 		} catch {
 			// No ready tasks or bd not available
@@ -66,7 +66,7 @@ export async function POST({ request }) {
 		// Get agents currently working on tasks
 		let busyAgents = new Set();
 		try {
-			const { stdout } = await execAsync('bd list --json');
+			const { stdout } = await execFileAsync('bd', ['list', '--json']);
 			const allTasks = JSON.parse(stdout);
 			const inProgressTasks = allTasks.filter((/** @type {{ status?: string }} */ t) =>
 				t.status === 'in_progress'
@@ -117,7 +117,7 @@ export async function POST({ request }) {
 			} else {
 				// Actually assign the task
 				try {
-					await execAsync(`bd update "${task.id}" --assignee "${agent}" --status in_progress`);
+					await execFileAsync('bd', ['update', task.id, '--assignee', agent, '--status', 'in_progress']);
 					assignments.push({
 						taskId: task.id,
 						taskTitle: task.title,

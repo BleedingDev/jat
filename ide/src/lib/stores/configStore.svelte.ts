@@ -26,6 +26,18 @@ const COMMANDS_API = '/api/commands';
 const PROJECTS_API = '/api/projects';
 const HOOKS_API = '/api/hooks';
 
+function deriveProjectKey(project: Partial<ProjectConfig>): string {
+	if (project.key?.trim()) return project.key.trim();
+	const fromPath = project.path?.split('/').filter(Boolean).pop();
+	const fromName = project.name;
+	const source = fromPath || fromName || 'project';
+	const normalized = source
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+	return normalized || 'project';
+}
+
 // =============================================================================
 // STATE INTERFACES
 // =============================================================================
@@ -244,11 +256,12 @@ export async function loadProjects(): Promise<void> {
 
 		const data = await response.json();
 		// Map API response to ProjectConfig format
-		state.projects = (data.projects || []).map((p: any) => ({
-			name: p.displayName || p.name,
-			path: p.path,
-			port: p.port,
-			server_path: p.serverPath,
+			state.projects = (data.projects || []).map((p: any) => ({
+				key: p.key || p.name,
+				name: p.displayName || p.name,
+				path: p.path,
+				port: p.port,
+				server_path: p.serverPath,
 			description: p.description,
 			colors: {
 				active: p.activeColor,
@@ -279,8 +292,7 @@ export async function loadProjects(): Promise<void> {
  */
 export async function saveProject(project: ProjectConfig): Promise<boolean> {
 	try {
-		// Extract the project key from the path (last segment)
-		const projectKey = project.path.split('/').pop() || project.name.toLowerCase();
+		const projectKey = deriveProjectKey(project);
 
 		const response = await fetch(PROJECTS_API, {
 			method: 'PATCH',
@@ -317,9 +329,51 @@ export async function saveProject(project: ProjectConfig): Promise<boolean> {
  * Note: This would require a new API endpoint to be implemented
  */
 export async function createProject(project: Omit<ProjectConfig, 'name'>): Promise<ProjectConfig | null> {
-	// TODO: Implement when API endpoint is available
-	console.warn('[configStore] createProject not yet implemented - requires API endpoint');
-	return null;
+	try {
+		const projectKey = deriveProjectKey(project);
+
+		const response = await fetch(PROJECTS_API, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				action: 'create',
+				key: projectKey,
+				path: project.path,
+				port: project.port,
+				description: project.description,
+				active_color: project.colors?.active,
+				inactive_color: project.colors?.inactive
+			})
+		});
+
+		if (!response.ok) {
+			const errorData = await response.json().catch(() => ({}));
+			throw new Error(errorData.error || `Failed to create project: ${response.statusText}`);
+		}
+
+		const data = await response.json();
+		const created = data.project || {};
+		const createdProject: ProjectConfig = {
+			key: created.key || projectKey,
+			name: created.name || created.displayName || projectKey.toUpperCase(),
+			path: created.path || project.path,
+			port: created.port ?? project.port,
+			server_path: created.server_path || project.server_path,
+			description: created.description || project.description,
+			colors: {
+				active: created.active_color || project.colors?.active,
+				inactive: created.inactive_color || project.colors?.inactive
+			},
+			database_url: created.database_url || project.database_url,
+			hidden: false
+		};
+
+		state.projects = [...state.projects, createdProject];
+		return createdProject;
+	} catch (error) {
+		console.error('[configStore] Failed to create project:', error);
+		return null;
+	}
 }
 
 /**
@@ -327,9 +381,28 @@ export async function createProject(project: Omit<ProjectConfig, 'name'>): Promi
  * Note: This would require a new API endpoint to be implemented
  */
 export async function deleteProject(project: ProjectConfig): Promise<boolean> {
-	// TODO: Implement when API endpoint is available
-	console.warn('[configStore] deleteProject not yet implemented - requires API endpoint');
-	return false;
+	try {
+		const projectKey = deriveProjectKey(project);
+		const response = await fetch(PROJECTS_API, {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ project: projectKey })
+		});
+
+		if (!response.ok) {
+			const errorData = await response.json().catch(() => ({}));
+			throw new Error(errorData.error || `Failed to delete project: ${response.statusText}`);
+		}
+
+		state.projects = state.projects.filter((p) => deriveProjectKey(p) !== projectKey);
+		if (state.selectedProject && deriveProjectKey(state.selectedProject) === projectKey) {
+			state.selectedProject = null;
+		}
+		return true;
+	} catch (error) {
+		console.error('[configStore] Failed to delete project:', error);
+		return false;
+	}
 }
 
 /**

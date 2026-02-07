@@ -5,13 +5,134 @@
  * Validates that lib/agent-mail.js can retrieve messages by thread ID
  */
 
-import {
+import Database from 'better-sqlite3';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
+import { existsSync, unlinkSync } from 'fs';
+
+const fixtureDbPath = join(tmpdir(), `jat-agent-mail-test-${process.pid}-${randomUUID()}.db`);
+
+function cleanupFixtureDb() {
+  if (existsSync(fixtureDbPath)) {
+    unlinkSync(fixtureDbPath);
+  }
+}
+
+function createFixtureDb(dbPath) {
+  const db = new Database(dbPath);
+
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+
+    CREATE TABLE projects (
+      id INTEGER PRIMARY KEY,
+      human_key TEXT NOT NULL
+    );
+
+    CREATE TABLE agents (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      program TEXT NOT NULL,
+      model TEXT,
+      task_description TEXT,
+      inception_ts TEXT,
+      last_active_ts TEXT,
+      project_id INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id)
+    );
+
+    CREATE TABLE messages (
+      id INTEGER PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body_md TEXT NOT NULL,
+      importance TEXT NOT NULL,
+      ack_required INTEGER NOT NULL DEFAULT 0,
+      created_ts TEXT NOT NULL,
+      sender_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      FOREIGN KEY(sender_id) REFERENCES agents(id),
+      FOREIGN KEY(project_id) REFERENCES projects(id)
+    );
+
+    CREATE TABLE message_recipients (
+      message_id INTEGER NOT NULL,
+      agent_id INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'to',
+      read_ts TEXT,
+      ack_ts TEXT,
+      PRIMARY KEY(message_id, agent_id),
+      FOREIGN KEY(message_id) REFERENCES messages(id),
+      FOREIGN KEY(agent_id) REFERENCES agents(id)
+    );
+
+    CREATE VIRTUAL TABLE messages_fts USING fts5(subject, body_md);
+  `);
+
+  const now = new Date();
+  const ts1 = new Date(now.getTime() - 60000).toISOString();
+  const ts2 = now.toISOString();
+
+  db.prepare('INSERT INTO projects (id, human_key) VALUES (?, ?)').run(1, '/tmp/test-project');
+
+  db.prepare(`
+    INSERT INTO agents (id, name, program, model, task_description, inception_ts, last_active_ts, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(1, 'Alice', 'claude-code', 'sonnet-4.5', 'Frontend development', ts1, ts1, 1);
+
+  db.prepare(`
+    INSERT INTO agents (id, name, program, model, task_description, inception_ts, last_active_ts, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(2, 'Bob', 'codex', 'gpt-5-codex', 'Backend development', ts2, ts2, 1);
+
+  db.prepare(`
+    INSERT INTO messages (id, thread_id, subject, body_md, importance, ack_required, created_ts, sender_id, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(1, 'bd-101', '[bd-101] Starting frontend refactor', 'I am starting frontend work and building components.', 'high', 1, ts1, 1, 1);
+
+  db.prepare(`
+    INSERT INTO messages (id, thread_id, subject, body_md, importance, ack_required, created_ts, sender_id, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(2, 'bd-102', '[bd-102] API changes ready', 'Backend API is completed and ready for review.', 'normal', 0, ts2, 2, 1);
+
+  db.prepare('INSERT INTO message_recipients (message_id, agent_id, kind) VALUES (?, ?, ?)').run(1, 2, 'to');
+  db.prepare('INSERT INTO message_recipients (message_id, agent_id, kind) VALUES (?, ?, ?)').run(2, 1, 'to');
+
+  db.prepare('INSERT INTO messages_fts (rowid, subject, body_md) VALUES (?, ?, ?)').run(
+    1,
+    '[bd-101] Starting frontend refactor',
+    'I am starting frontend work and building components.'
+  );
+  db.prepare('INSERT INTO messages_fts (rowid, subject, body_md) VALUES (?, ?, ?)').run(
+    2,
+    '[bd-102] API changes ready',
+    'Backend API is completed and ready for review.'
+  );
+
+  db.close();
+}
+
+createFixtureDb(fixtureDbPath);
+(/** @type {any} */ (globalThis)).__agentMailDbPath = fixtureDbPath;
+
+const {
   getThreadMessages,
   getInboxForThread,
   getAgents,
   getThreads,
   searchMessages
-} from '../lib/agent-mail.js';
+} = await import('../lib/agent-mail.js');
+
+process.on('exit', cleanupFixtureDb);
+process.on('SIGINT', () => {
+  cleanupFixtureDb();
+  process.exit(130);
+});
+process.on('SIGTERM', () => {
+  cleanupFixtureDb();
+  process.exit(143);
+});
 
 console.log('🧪 Testing Agent Mail SQLite Query Layer\n');
 console.log('═'.repeat(80));
@@ -31,7 +152,8 @@ agents.forEach(agent => {
 });
 
 if (agents.length === 0) {
-  console.log('⚠️  No agents found. Make sure Agent Mail is initialized.');
+  console.log('⚠️  No agents found in fixture database.');
+  cleanupFixtureDb();
   process.exit(1);
 }
 
@@ -127,3 +249,4 @@ console.log(`✓ getAgents() works: ${agents.length} agents found`);
 console.log(`✓ getThreads() works: ${threads.length} threads found`);
 console.log(`✓ searchMessages() works: ${searchResults.length} results found`);
 console.log('\n🎉 Agent Mail SQLite Query Layer is fully functional!\n');
+cleanupFixtureDb();

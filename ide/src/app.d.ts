@@ -9,6 +9,7 @@ declare global {
 		interface Locals {
 			requestId: string;
 			logger: Logger;
+			authRole?: 'read' | 'write' | 'admin';
 		}
 		// interface PageData {}
 		// interface PageState {}

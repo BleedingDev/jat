@@ -20,7 +20,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MAIL_DIR="$(cd "$SCRIPT_DIR/../../mail" && pwd)"
+MAIL_DIR="$(cd "$SCRIPT_DIR/../../tools/mail" && pwd)"
 cd "$MAIL_DIR"
 
 # Use a test database
@@ -122,7 +122,8 @@ echo "Step 9: Bob now reserves src/auth/** (no conflict!) and updates tests"
 ./am-send "[task-790] ✅ Tests updated and passing" \
   "All auth tests updated for new flow. Everything passing!" \
   --from Bob --to Alice --thread task-790 --importance high
-./am-release "src/auth/**" "tests/auth/**" --agent Bob
+./am-release "src/auth/**" --agent Bob
+./am-release "tests/auth/**" --agent Bob
 echo ""
 
 # Step 10: Review the coordination

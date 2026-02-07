@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 
 /**
  * API endpoint for fetching weekly Claude API quota data
@@ -17,28 +18,42 @@ import { json } from '@sveltejs/kit';
  *   estimatedEndOfWeekCost: number (optional)
  * }
  */
-export async function GET({ url }) {
-	// TODO (jat-sk1): Replace with actual Cost Report API integration
-	// For now, return mock data for development
-
+export async function GET() {
+	const claudeMetricsEnabled = env.JAT_ENABLE_CLAUDE_METRICS === 'true';
 	const now = new Date();
 	const weekStart = new Date(now);
 	weekStart.setDate(now.getDate() - now.getDay()); // Sunday of current week
 	const weekEnd = new Date(weekStart);
 	weekEnd.setDate(weekStart.getDate() + 6); // Saturday of current week
 
-	// Mock data (simulating mid-week usage)
-	const mockData = {
-		tokensUsed: 650000, // 650K tokens
-		tokensLimit: 1000000, // 1M tokens per week
-		costUsd: 45.23, // $45.23 spent
-		costLimit: 100, // $100 weekly budget
+	if (!claudeMetricsEnabled) {
+		return json({
+			enabled: false,
+			tokensUsed: 0,
+			tokensLimit: 0,
+			costUsd: 0,
+			costLimit: 0,
+			periodStart: weekStart.toISOString(),
+			periodEnd: weekEnd.toISOString(),
+			estimatedEndOfWeekCost: null,
+			message:
+				'Claude weekly quota metrics are disabled. Set JAT_ENABLE_CLAUDE_METRICS=true to enable this endpoint.'
+		});
+	}
+
+	return json({
+		enabled: true,
+		tokensUsed: 0,
+		tokensLimit: 0,
+		costUsd: 0,
+		costLimit: 0,
 		periodStart: weekStart.toISOString(),
 		periodEnd: weekEnd.toISOString(),
-		estimatedEndOfWeekCost: 64.3 // Projected total
-	};
-
-	return json(mockData);
+		estimatedEndOfWeekCost: null,
+		error: 'Not Implemented',
+		message:
+			'Claude weekly quota integration is not implemented. This endpoint no longer returns mock values.'
+	}, { status: 501 });
 }
 
 /**

@@ -56,6 +56,30 @@ jobs:
           /tmp/example-*.db
         retention-days: 7
 
+  ide:
+    name: IDE Typecheck + Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+        cache-dependency-path: ide/package-lock.json
+
+    - name: Install IDE dependencies
+      run: npm ci --prefix ide
+
+    - name: Run Svelte check
+      run: npm --prefix ide run check
+
+    - name: Run IDE tests
+      run: npm --prefix ide run test -- --run
+
   lint:
     name: Lint Check
     runs-on: ubuntu-latest

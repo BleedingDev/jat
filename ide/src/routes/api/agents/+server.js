@@ -31,11 +31,11 @@ import { getTasks } from '$lib/server/beads.js';
 import { getAgentContextPercent } from '$lib/utils/tokenUsage.js';
 import { getHourlyBreakdown, getUsageByAgent } from '$lib/server/tokenUsageDb.js';
 import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { trackApiPerformance } from '$lib/utils/performance';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // ============================================================================
 // Task Cache - getTasks() is expensive (parses 800+ line JSONL on each call)
@@ -272,9 +272,7 @@ export async function GET({ url, locals }) {
 		/** @type {Map<string, number>} */
 		const agentSessionCreatedAt = new Map();
 		try {
-			const { stdout } = await execAsync(
-				'tmux list-sessions -F "#{session_name}:#{session_created}" 2>/dev/null'
-			);
+			const { stdout } = await execFileAsync('tmux', ['list-sessions', '-F', '#{session_name}:#{session_created}']);
 			stdout.trim().split('\n').forEach(line => {
 				const [sessionName, createdUnix] = line.split(':');
 				// Extract agent name from session name (jat-AgentName -> AgentName)
@@ -686,7 +684,7 @@ export async function POST({ request, locals }) {
 
 		// Verify task exists before assigning
 		try {
-			const { stdout } = await execAsync(`bd show "${taskId}" --json`);
+			const { stdout } = await execFileAsync('bd', ['show', taskId, '--json']);
 			const taskData = JSON.parse(stdout);
 			if (!taskData || taskData.length === 0) {
 				return json({
@@ -703,16 +701,14 @@ export async function POST({ request, locals }) {
 
 		// Assign task to agent using bd CLI
 		try {
-			await execAsync(
-				`bd update "${taskId}" --assignee "${agentName}"`
-			);
+			await execFileAsync('bd', ['update', taskId, '--assignee', agentName]);
 
 			// Invalidate caches since task assignment changed
 			invalidateCache.agents();
 			invalidateCache.tasks();
 
 			// Get updated task data
-			const { stdout: updatedTaskJson } = await execAsync(`bd show "${taskId}" --json`);
+			const { stdout: updatedTaskJson } = await execFileAsync('bd', ['show', taskId, '--json']);
 			const updatedTask = JSON.parse(updatedTaskJson);
 
 			locals.logger?.info({

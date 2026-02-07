@@ -16,6 +16,28 @@ import { getClaudeUsageMetrics } from '$lib/utils/claudeUsageMetrics';
 
 export async function GET({ request }) {
 	try {
+		const claudeMetricsEnabled = env.JAT_ENABLE_CLAUDE_METRICS === 'true';
+		if (!claudeMetricsEnabled) {
+			return json({
+				enabled: false,
+				tier: 'disabled',
+				tierLimits: {
+					tokensPerMin: 0,
+					tokensPerDay: 0,
+					requestsPerMin: 0,
+					requestsPerDay: 0
+				},
+				sessionContext: null,
+				agentMetrics: null,
+				burnRate: null,
+				lastUpdated: new Date(),
+				cacheHit: false,
+				errors: [
+					'Claude usage metrics are disabled. Set JAT_ENABLE_CLAUDE_METRICS=true to enable this endpoint.'
+				]
+			});
+		}
+
 		// Set environment variable for utility to access
 		// SvelteKit requires using $env/dynamic/private to access .env variables
 		if (env.ANTHROPIC_API_KEY) {
@@ -31,11 +53,12 @@ export async function GET({ request }) {
 		console.error('Error fetching Claude usage metrics:', err);
 
 		// Return error response with fallback data
-		return json({
-			tier: 'free',
-			tierLimits: {
-				tokensPerMin: 50_000,
-				tokensPerDay: 150_000,
+			return json({
+				enabled: true,
+				tier: 'free',
+				tierLimits: {
+					tokensPerMin: 50_000,
+					tokensPerDay: 150_000,
 				requestsPerMin: 50,
 				requestsPerDay: 100
 			},

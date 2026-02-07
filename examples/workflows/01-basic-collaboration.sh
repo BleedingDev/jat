@@ -19,7 +19,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MAIL_DIR="$(cd "$SCRIPT_DIR/../../mail" && pwd)"
+MAIL_DIR="$(cd "$SCRIPT_DIR/../../tools/mail" && pwd)"
 cd "$MAIL_DIR"
 
 # Use a test database
@@ -81,7 +81,7 @@ echo ""
 # Step 7: Review thread
 echo "Step 7: Review complete conversation thread"
 echo ""
-./am-search "task-123" --thread task-123
+./am-search "\"task-123\"" --thread task-123
 echo ""
 
 echo "════════════════════════════════════════════════════════════"

@@ -486,9 +486,20 @@ pm2 start build/index.js --name beads-ide
 
 - `PORT` - Server port (default: 3000)
 - `HOST` - Bind address (default: 127.0.0.1)
+- `JAT_API_TOKEN` - Optional single API token (admin role)
+- `JAT_API_TOKENS` - Optional role-scoped tokens (format: `read:tokenA,write:tokenB,admin:tokenC`)
+- `JAT_ALLOW_LOOPBACK_WITHOUT_TOKEN` - When `true`, localhost requests bypass token checks even if tokens are configured
+- `JAT_TRUST_PROXY` - When `true`, auth checks use `X-Forwarded-For` (use only behind a trusted reverse proxy)
+- `JAT_ENABLE_CLAUDE_METRICS` - Set to `true` to enable Claude metrics endpoints; defaults to disabled
 
 ```bash
 PORT=8080 HOST=0.0.0.0 node build/index.js
+```
+
+For token-protected deployments behind a reverse proxy, you can inject a Bearer token header:
+
+```nginx
+proxy_set_header Authorization "Bearer <your-admin-token>";
 ```
 
 ### Reverse Proxy (Nginx)

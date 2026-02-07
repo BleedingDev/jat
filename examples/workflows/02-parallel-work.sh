@@ -21,7 +21,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MAIL_DIR="$(cd "$SCRIPT_DIR/../../mail" && pwd)"
+MAIL_DIR="$(cd "$SCRIPT_DIR/../../tools/mail" && pwd)"
 cd "$MAIL_DIR"
 
 # Use a test database
