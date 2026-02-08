@@ -41,6 +41,7 @@ import {
 } from '$lib/utils/agentConfig.js';
 import { getAgentModel } from '$lib/types/agentProgram.js';
 import { getApiKey, getCustomApiKey, getCustomApiKeyMeta } from '$lib/utils/credentials.js';
+import { isLoopbackAddress } from '$lib/server/apiAuth';
 
 const DB_PATH = process.env.AGENT_MAIL_DB || `${process.env.HOME}/.agent-mail.db`;
 
@@ -816,7 +817,7 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 }
 
 /** @type {import('./$types').RequestHandler} */
-export async function POST({ request }) {
+export async function POST({ request, locals }) {
 	try {
 		const body = await request.json();
 		const {
@@ -828,6 +829,33 @@ export async function POST({ request }) {
 			project = null,
 			mode = 'task'
 		} = body;
+
+		const remoteTerminalControlEnabled = ['1', 'true', 'yes', 'on'].includes(
+			(process.env.JAT_ENABLE_REMOTE_TERMINAL_CONTROL || '').toLowerCase()
+		);
+		const clientIp = locals.clientIp || '';
+		const isLoopback = isLoopbackAddress(clientIp);
+
+		if (attach && !isLoopback && !remoteTerminalControlEnabled) {
+			return json(
+				{
+					error: 'Forbidden',
+					message:
+						'Remote terminal attachment is disabled. Set JAT_ENABLE_REMOTE_TERMINAL_CONTROL=true to allow attach=true.'
+				},
+				{ status: 403 }
+			);
+		}
+
+		if (attach && !isLoopback && locals.authRole !== 'admin') {
+			return json(
+				{
+					error: 'Forbidden',
+					message: 'attach=true requires an admin token for remote access.'
+				},
+				{ status: 403 }
+			);
+		}
 
 		// agentId is optional - if omitted, uses routing rules or fallback
 		// model is optional - if omitted, uses agent default or routing rule override

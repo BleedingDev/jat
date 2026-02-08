@@ -7,7 +7,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 // Name components - nature/geography themed words
 // 72 adjectives × 72 nouns = 5,184 unique combinations
@@ -54,13 +54,10 @@ function getExistingAgentNames() {
 	try {
 		// Query ALL agents globally from the database (not project-filtered like am-agents)
 		const dbPath = `${process.env.HOME}/.agent-mail.db`;
-		const output = execSync(
-			`sqlite3 "${dbPath}" "SELECT name FROM agents;" 2>/dev/null`,
-			{
-				encoding: 'utf-8',
-				timeout: 5000
-			}
-		);
+		const output = execFileSync('sqlite3', [dbPath, 'SELECT name FROM agents;'], {
+			encoding: 'utf-8',
+			timeout: 5000
+		});
 		// Parse newline-separated names into a Set (lowercase for case-insensitive comparison)
 		const names = output.trim().split('\n').filter(Boolean);
 		return new Set(names.map(name => name.toLowerCase()));

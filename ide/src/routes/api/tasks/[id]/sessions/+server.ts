@@ -12,6 +12,7 @@
 import { json } from '@sveltejs/kit';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
+import { spawnSync } from 'child_process';
 import { getLatestProviderSessionIdForAgent } from '$lib/server/agentSessions.js';
 import type { RequestHandler } from './$types';
 
@@ -34,15 +35,10 @@ function getProjectPath(): string {
  * Check if an agent has an active tmux session
  */
 function isAgentOnline(agentName: string): boolean {
-	try {
-		const { execSync } = require('child_process');
-		const result = execSync(`tmux has-session -t "jat-${agentName}" 2>/dev/null && echo "yes" || echo "no"`, {
-			encoding: 'utf-8'
-		}).trim();
-		return result === 'yes';
-	} catch {
-		return false;
-	}
+	const result = spawnSync('tmux', ['has-session', '-t', `jat-${agentName}`], {
+		stdio: 'ignore'
+	});
+	return result.status === 0;
 }
 
 /**

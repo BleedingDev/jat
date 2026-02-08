@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseApiAuthConfig, authorizeApiRequest, type ApiAuthConfig } from './apiAuth';
+import {
+	parseApiAuthConfig,
+	authorizeApiRequest,
+	extractApiToken,
+	type ApiAuthConfig
+} from './apiAuth';
 
 function makeHeaders(init?: Record<string, string>): Headers {
 	return new Headers(init);
@@ -35,6 +40,18 @@ describe('parseApiAuthConfig', () => {
 		expect(config.tokenRoles.get('viewer-token')).toBe('read');
 		expect(config.tokenRoles.get('operator-token')).toBe('write');
 		expect(config.tokenRoles.get('owner-token')).toBe('admin');
+	});
+});
+
+describe('extractApiToken', () => {
+	it('extracts token from authorization header', () => {
+		const token = extractApiToken(makeHeaders({ authorization: 'Bearer secret' }));
+		expect(token).toBe('secret');
+	});
+
+	it('falls back to x-jat-token header', () => {
+		const token = extractApiToken(makeHeaders({ 'x-jat-token': 'header-token' }));
+		expect(token).toBe('header-token');
 	});
 });
 
@@ -112,5 +129,57 @@ describe('authorizeApiRequest', () => {
 			expect(result.status).toBe(403);
 		}
 	});
-});
 
+	it('denies missing token when tokens are configured', () => {
+		const config = parseApiAuthConfig({
+			JAT_API_TOKENS: 'write:operator-token'
+		} as NodeJS.ProcessEnv);
+
+		const result = auth({
+			pathname: '/api/tasks',
+			method: 'GET',
+			clientAddress: '10.0.0.42',
+			config
+		});
+
+		expect(result.authorized).toBe(false);
+		if (!result.authorized) {
+			expect(result.status).toBe(401);
+		}
+	});
+
+	it('supports optional loopback bypass without token when configured', () => {
+		const config = parseApiAuthConfig({
+			JAT_API_TOKENS: 'write:operator-token',
+			JAT_ALLOW_LOOPBACK_WITHOUT_TOKEN: 'true'
+		} as NodeJS.ProcessEnv);
+
+		const result = auth({
+			pathname: '/api/tasks',
+			method: 'GET',
+			clientAddress: '127.0.0.1',
+			config
+		});
+
+		expect(result.authorized).toBe(true);
+	});
+
+	it('normalizes forwarded ip with port when trusting proxy', () => {
+		const config = parseApiAuthConfig({
+			JAT_TRUST_PROXY: 'true'
+		} as NodeJS.ProcessEnv);
+
+		const result = auth({
+			pathname: '/api/tasks',
+			method: 'GET',
+			clientAddress: '127.0.0.1',
+			headers: { 'x-forwarded-for': '203.0.113.9:4321, 10.0.0.1' },
+			config
+		});
+
+		expect(result.authorized).toBe(false);
+		if (!result.authorized) {
+			expect(result.clientIp).toBe('203.0.113.9');
+		}
+	});
+});

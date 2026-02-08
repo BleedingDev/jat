@@ -11,11 +11,11 @@
 import { error } from '@sveltejs/kit';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { env } from '$env/dynamic/private';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Derive paths from IDE location (IDE runs from {project}/ide)
 const PROJECT_ROOT = process.cwd().replace(/\/ide$/, '');
@@ -61,7 +61,7 @@ export async function GET({ params, url }) {
 				throw new Error('No API key');
 			}
 
-			await execAsync(`${AVATAR_GENERATE_SCRIPT} "${name}"`, {
+			await execFileAsync(AVATAR_GENERATE_SCRIPT, [name], {
 				timeout: 30000, // 30 second timeout
 				env: { ...process.env, ANTHROPIC_API_KEY: apiKey }
 			});

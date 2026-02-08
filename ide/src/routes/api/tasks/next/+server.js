@@ -21,13 +21,13 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Get the project path for a given project name from projects.json config
@@ -54,6 +54,19 @@ function getProjectPath(projectName) {
 	}
 
 	return defaultPath;
+}
+
+/**
+ * Execute a bd command with argument-safe invocation.
+ * @param {string[]} args
+ * @param {string} projectPath
+ * @param {number} [timeoutMs=10000]
+ */
+async function runBd(args, projectPath, timeoutMs = 10000) {
+	return execFileAsync('bd', args, {
+		cwd: projectPath,
+		timeout: timeoutMs
+	});
 }
 
 /**
@@ -85,10 +98,7 @@ function getParentEpicIdFromDotNotation(taskId) {
 async function findEpicContainingTask(taskId, projectPath) {
 	try {
 		// First, check if the task itself has a parent field
-		const { stdout: taskStdout } = await execAsync(`bd show "${taskId}" --json`, {
-			cwd: projectPath,
-			timeout: 10000
-		});
+		const { stdout: taskStdout } = await runBd(['show', taskId, '--json'], projectPath, 10000);
 
 		const taskData = JSON.parse(taskStdout);
 		const task = Array.isArray(taskData) ? taskData[0] : taskData;
@@ -96,10 +106,7 @@ async function findEpicContainingTask(taskId, projectPath) {
 		if (task?.parent) {
 			// Task has a parent field - fetch the parent to get its title
 			try {
-				const { stdout: parentStdout } = await execAsync(`bd show "${task.parent}" --json`, {
-					cwd: projectPath,
-					timeout: 10000
-				});
+				const { stdout: parentStdout } = await runBd(['show', task.parent, '--json'], projectPath, 10000);
 				const parentData = JSON.parse(parentStdout);
 				const parent = Array.isArray(parentData) ? parentData[0] : parentData;
 				if (parent) {
@@ -114,12 +121,10 @@ async function findEpicContainingTask(taskId, projectPath) {
 		// No parent field - search for epics that have this task as a dependency
 		// Use bd list to find epics in the same project
 		const projectPrefix = taskId.split('-')[0];
-		const { stdout: epicsStdout } = await execAsync(
-			`bd list --type epic --status open --json`,
-			{
-				cwd: projectPath,
-				timeout: 10000
-			}
+		const { stdout: epicsStdout } = await runBd(
+			['list', '--type', 'epic', '--status', 'open', '--json'],
+			projectPath,
+			10000
 		);
 
 		const epics = JSON.parse(epicsStdout);
@@ -131,10 +136,7 @@ async function findEpicContainingTask(taskId, projectPath) {
 
 			// Fetch full epic with dependencies
 			try {
-				const { stdout: epicFullStdout } = await execAsync(`bd show "${epic.id}" --json`, {
-					cwd: projectPath,
-					timeout: 5000
-				});
+				const { stdout: epicFullStdout } = await runBd(['show', epic.id, '--json'], projectPath, 5000);
 				const epicFull = JSON.parse(epicFullStdout);
 				const epicData = Array.isArray(epicFull) ? epicFull[0] : epicFull;
 
@@ -190,10 +192,7 @@ function isTaskReady(task) {
 async function findNextEpicSibling(completedTaskId, epicId, projectPath, project) {
 	try {
 		// Fetch the epic with its children using bd show
-		const { stdout } = await execAsync(`bd show "${epicId}" --json`, {
-			cwd: projectPath,
-			timeout: 10000
-		});
+		const { stdout } = await runBd(['show', epicId, '--json'], projectPath, 10000);
 
 		const epicData = JSON.parse(stdout);
 		const epic = Array.isArray(epicData) ? epicData[0] : epicData;
@@ -254,10 +253,11 @@ async function findFromBacklog(projectPath, project) {
 		// Use bd ready which returns ready tasks sorted by priority
 		// When filtering by project, we need to fetch more tasks since the top task might not be from the target project
 		const limit = (project && project !== 'All Projects') ? 50 : 1;
-		const { stdout } = await execAsync(`bd ready --json --limit ${limit} --sort hybrid`, {
-			cwd: projectPath,
-			timeout: 10000
-		});
+		const { stdout } = await runBd(
+			['ready', '--json', '--limit', String(limit), '--sort', 'hybrid'],
+			projectPath,
+			10000
+		);
 
 		/** @type {Task[]} */
 		const tasks = JSON.parse(stdout);

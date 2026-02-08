@@ -58,7 +58,7 @@ function normalizeRole(value: string): ApiRole | null {
 	return null;
 }
 
-function isLoopbackAddress(ip: string): boolean {
+export function isLoopbackAddress(ip: string): boolean {
 	return (
 		ip === '::1' ||
 		ip.startsWith('127.') ||
@@ -88,7 +88,7 @@ function resolveClientIp(clientAddress: string, headers: Headers, trustProxy: bo
 	return forwardedIp || clientAddress;
 }
 
-function extractToken(headers: Headers): string | null {
+export function extractApiToken(headers: Headers): string | null {
 	const authHeader = headers.get('authorization');
 	if (authHeader) {
 		const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -180,7 +180,7 @@ export function authorizeApiRequest(params: AuthorizeApiRequestParams): ApiAuthR
 		};
 	}
 
-	const presentedToken = extractToken(headers);
+	const presentedToken = extractApiToken(headers);
 	if (!presentedToken) {
 		if (isLoopback && config.allowLoopbackWithoutToken) {
 			return {
@@ -228,4 +228,3 @@ export function authorizeApiRequest(params: AuthorizeApiRequestParams): ApiAuthR
 		authSource: 'token'
 	};
 }
-

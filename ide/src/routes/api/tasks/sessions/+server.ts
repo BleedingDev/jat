@@ -8,7 +8,7 @@
 
 import { json } from '@sveltejs/kit';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { join } from 'path';
 import { getLatestProviderSessionIdForAgent } from '$lib/server/agentSessions.js';
 import type { RequestHandler } from './$types';
@@ -34,8 +34,9 @@ function getProjectPath(): string {
 function getOnlineAgents(): Set<string> {
 	const online = new Set<string>();
 	try {
-		const result = execSync('tmux list-sessions -F "#{session_name}" 2>/dev/null || true', {
-			encoding: 'utf-8'
+		const result = execFileSync('tmux', ['list-sessions', '-F', '#{session_name}'], {
+			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore']
 		}).trim();
 
 		for (const line of result.split('\n')) {

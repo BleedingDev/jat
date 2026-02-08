@@ -330,6 +330,49 @@ IDE settings at `/config`:
 
 ---
 
+## Backup and Restore
+
+Production deployments should back up these state files:
+- Project issue state: `PROJECT_ROOT/.beads/`
+- Agent Mail DB: `~/.agent-mail.db` (or `$AGENT_MAIL_DB`)
+- IDE/user config: `~/.config/jat/`
+
+### Minimal backup script
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+STAMP="$(date +%Y%m%d-%H%M%S)"
+OUT="${HOME}/backups/jat-${STAMP}"
+mkdir -p "$OUT"
+
+# Replace with your actual project root
+PROJECT_ROOT="${HOME}/code/your-project"
+
+rsync -a "${PROJECT_ROOT}/.beads/" "${OUT}/beads/"
+cp -a "${AGENT_MAIL_DB:-$HOME/.agent-mail.db}" "${OUT}/agent-mail.db"
+rsync -a "${HOME}/.config/jat/" "${OUT}/config-jat/"
+
+echo "Backup written to: ${OUT}"
+```
+
+### Restore checklist
+
+```bash
+# 1) Stop JAT/IDE processes
+# 2) Restore files
+rsync -a backup/beads/ "$PROJECT_ROOT/.beads/"
+cp -a backup/agent-mail.db "${AGENT_MAIL_DB:-$HOME/.agent-mail.db}"
+rsync -a backup/config-jat/ "$HOME/.config/jat/"
+
+# 3) Start JAT and verify
+#    - /api/ready returns ready=true
+#    - tasks + agent inbox data visible in UI
+```
+
+---
+
 ## Documentation
 
 | Doc | Purpose |

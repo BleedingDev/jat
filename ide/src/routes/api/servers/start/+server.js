@@ -5,16 +5,85 @@
  * Request body:
  * - projectName: Name of the project (required)
  * - command: Command to run (optional, defaults to 'npm run dev')
- * - port: Port to use (optional, will be detected from output)
+ * - port: Port to use (optional, will be detected from config)
  *
  * Creates a tmux session named: server-{projectName}
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+const JAT_PROJECTS_CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
+
+/**
+ * @param {string} projectName
+ * @returns {boolean}
+ */
+function isValidProjectName(projectName) {
+	return /^[a-zA-Z0-9_-]+$/.test(projectName);
+}
+
+/**
+ * @param {string} sessionName
+ * @returns {Promise<boolean>}
+ */
+async function hasTmuxSession(sessionName) {
+	try {
+		await execFileAsync('tmux', ['has-session', '-t', sessionName]);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * @typedef {{ path: string | null, serverPath: string | null, port: number | null }} ProjectServerConfig
+ */
+
+/**
+ * @param {string} projectName
+ * @returns {ProjectServerConfig | null}
+ */
+function readProjectServerConfig(projectName) {
+	try {
+		if (!existsSync(JAT_PROJECTS_CONFIG_PATH)) return null;
+
+		const parsed = JSON.parse(readFileSync(JAT_PROJECTS_CONFIG_PATH, 'utf-8'));
+		const entry = parsed?.projects?.[projectName];
+		if (!entry || typeof entry !== 'object') return null;
+
+		const home = process.env.HOME || homedir();
+		const path = typeof entry.path === 'string' && entry.path.length > 0
+			? entry.path.replace(/^~/, home)
+			: null;
+		const serverPath = typeof entry.server_path === 'string' && entry.server_path.length > 0
+			? entry.server_path.replace(/^~/, home)
+			: null;
+		const rawPort = typeof entry.port === 'number' ? entry.port : Number.parseInt(String(entry.port || ''), 10);
+		const port = Number.isFinite(rawPort) && rawPort >= 1 && rawPort <= 65535 ? rawPort : null;
+
+		return { path, serverPath, port };
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * @param {string} path
+ * @returns {boolean}
+ */
+function isDirectory(path) {
+	try {
+		return existsSync(path) && statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ request }) {
@@ -29,8 +98,7 @@ export async function POST({ request }) {
 			);
 		}
 
-		// Validate project name (alphanumeric, hyphens, underscores only)
-		if (!/^[a-zA-Z0-9_-]+$/.test(projectName)) {
+		if (!isValidProjectName(projectName)) {
 			return json(
 				{ error: 'Invalid project name. Use only letters, numbers, hyphens, and underscores.' },
 				{ status: 400 }
@@ -38,124 +106,57 @@ export async function POST({ request }) {
 		}
 
 		const sessionName = `server-${projectName}`;
-
-		// Check if session already exists
-		try {
-			const { stdout } = await execAsync(
-				`tmux has-session -t "${sessionName}" 2>/dev/null && echo "exists" || echo "no"`
-			);
-			if (stdout.trim() === 'exists') {
-				return json(
-					{
-						error: 'Session already exists',
-						message: `Server session "${sessionName}" is already running`
-					},
-					{ status: 409 }
-				);
-			}
-		} catch {
-			// tmux might not be running, continue
-		}
-
-		// Get project settings from jat config
-		let projectPath = null;
-		let serverPath = null;
-		let configPort = null;
-		try {
-			const configPath = `${process.env.HOME}/.config/jat/projects.json`;
-			// Read all project settings at once
-			// Note: \\n creates literal \n for jq to interpret as newline
-			const { stdout: configOutput } = await execAsync(
-				`jq -r '.projects["${projectName}"] | "\\(.path // "")\\n\\(.server_path // "")\\n\\(.port // "")"' "${configPath}" 2>/dev/null`
-			);
-			const [path, srvPath, portStr] = configOutput.trim().split('\n');
-			if (path) {
-				projectPath = path.replace(/^~/, process.env.HOME || '');
-			}
-			if (srvPath) {
-				serverPath = srvPath.replace(/^~/, process.env.HOME || '');
-			}
-			if (portStr && portStr !== 'null') {
-				configPort = parseInt(portStr, 10);
-			}
-		} catch {
-			// Config not available
-		}
-
-		// Fall back to default path
-		if (!projectPath) {
-			projectPath = `${process.env.HOME}/code/${projectName}`;
-		}
-
-		// Use server_path if specified, otherwise use project path
-		const executionPath = serverPath || projectPath;
-
-		// Verify execution path exists
-		try {
-			const { stdout } = await execAsync(`test -d "${executionPath}" && echo "exists" || echo "no"`);
-			if (stdout.trim() !== 'exists') {
-				return json(
-					{
-						error: 'Project directory not found',
-						message: `Directory does not exist: ${executionPath}`
-					},
-					{ status: 404 }
-				);
-			}
-		} catch {
+		const sessionExists = await hasTmuxSession(sessionName);
+		if (sessionExists) {
 			return json(
 				{
-					error: 'Failed to verify project path',
-					message: `Could not check directory: ${executionPath}`
+					error: 'Session already exists',
+					message: `Server session "${sessionName}" is already running`
 				},
-				{ status: 500 }
+				{ status: 409 }
 			);
 		}
 
-		// Use port from request, config, or nothing (let vite pick default)
-		const effectivePort = port || configPort;
+		const projectConfig = readProjectServerConfig(projectName);
+		const projectPath = projectConfig?.path || `${process.env.HOME || homedir()}/code/${projectName}`;
+		const executionPath = projectConfig?.serverPath || projectPath;
 
-		// Build the command with port if specified
-		let serverCommand = command;
-		if (effectivePort && !command.includes('--port')) {
-			serverCommand = `${command} -- --port ${effectivePort}`;
-		}
-
-		// Create tmux session and start the server
-		// Use 80x40 dimensions for consistent output width in IDE
-		// Sleep allows shell to initialize before sending keys - prevents race condition
-		const createCmd = `
-			tmux new-session -d -s "${sessionName}" -x 80 -y 40 -c "${executionPath}" && \
-			sleep 0.3 && \
-			tmux send-keys -t "${sessionName}" "${serverCommand}" Enter
-		`;
-
-		try {
-			await execAsync(createCmd);
-		} catch (err) {
+		if (!isDirectory(executionPath)) {
 			return json(
 				{
-					error: 'Failed to create server session',
-					message: err instanceof Error ? err.message : String(err)
+					error: 'Project directory not found',
+					message: `Directory does not exist: ${executionPath}`
 				},
-				{ status: 500 }
+				{ status: 404 }
 			);
 		}
 
-		// Wait a moment and get initial output
+		const configPort = projectConfig?.port || null;
+		const requestedPort = Number.isFinite(Number(port)) ? Number(port) : null;
+		const effectivePort = requestedPort || configPort;
+
+		let serverCommand = String(command || 'npm run dev').trim();
+		if (effectivePort && !/\b--port\b/.test(serverCommand)) {
+			serverCommand = `${serverCommand} -- --port ${effectivePort}`;
+		}
+
+		await execFileAsync('tmux', ['new-session', '-d', '-s', sessionName, '-x', '80', '-y', '40', '-c', executionPath]);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		await execFileAsync('tmux', ['send-keys', '-t', sessionName, '-l', serverCommand]);
+		await execFileAsync('tmux', ['send-keys', '-t', sessionName, 'Enter']);
+
 		await new Promise((resolve) => setTimeout(resolve, 500));
 
 		let output = '';
 		let lineCount = 0;
 		try {
-			const { stdout } = await execAsync(
-				`tmux capture-pane -p -e -t "${sessionName}" -S -50`,
-				{ maxBuffer: 1024 * 1024 }
-			);
-			output = stdout;
-			lineCount = stdout.split('\n').length;
+			const captured = await execFileAsync('tmux', ['capture-pane', '-p', '-e', '-t', sessionName, '-S', '-50'], {
+				maxBuffer: 1024 * 1024
+			});
+			output = captured.stdout;
+			lineCount = captured.stdout.split('\n').length;
 		} catch {
-			// Session might not have output yet
+			// Session may not have produced output yet.
 		}
 
 		return json({

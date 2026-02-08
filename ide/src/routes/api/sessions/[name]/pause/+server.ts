@@ -18,7 +18,7 @@
 
 import { json } from '@sveltejs/kit';
 import { writeFileSync, appendFileSync, existsSync, readFileSync, mkdirSync } from 'fs';
-import { execSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import path from 'path';
 import type { RequestHandler } from './$types';
 
@@ -36,19 +36,20 @@ function captureSessionLog(sessionName: string, reason: string): string | null {
 	}
 
 	// Check if session exists
-	try {
-		execSync(`tmux has-session -t "${sessionName}" 2>/dev/null`, { encoding: 'utf-8' });
-	} catch {
+	const existsResult = spawnSync('tmux', ['has-session', '-t', sessionName], {
+		stdio: 'ignore'
+	});
+	if (existsResult.status !== 0) {
 		return null; // Session doesn't exist
 	}
 
 	// Capture scrollback
 	let scrollback = '';
 	try {
-		scrollback = execSync(
-			`tmux capture-pane -t "${sessionName}" -p -S - -E -`,
-			{ encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
-		);
+		scrollback = execFileSync('tmux', ['capture-pane', '-t', sessionName, '-p', '-S', '-', '-E', '-'], {
+			encoding: 'utf-8',
+			maxBuffer: 10 * 1024 * 1024
+		});
 	} catch {
 		return null;
 	}
@@ -177,9 +178,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (killSession) {
 			try {
 				// Check if session exists first
-				execSync(`tmux has-session -t "${tmuxSession}" 2>/dev/null`, { encoding: 'utf-8' });
+				execFileSync('tmux', ['has-session', '-t', tmuxSession], { stdio: 'ignore' });
 				// Kill the session
-				execSync(`tmux kill-session -t "${tmuxSession}"`, { encoding: 'utf-8' });
+				execFileSync('tmux', ['kill-session', '-t', tmuxSession], { stdio: 'ignore' });
 				sessionKilled = true;
 			} catch {
 				// Session might not exist or already be dead - that's okay

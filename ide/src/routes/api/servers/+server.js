@@ -25,11 +25,15 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+const JAT_PROJECTS_CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
 
 /**
  * Strip ANSI escape codes from text
@@ -84,13 +88,66 @@ function detectPort(output) {
  */
 async function isPortListening(port) {
 	try {
-		// Use ss (faster) or netstat to check if port is listening
-		const { stdout } = await execAsync(
-			`ss -tlnp 2>/dev/null | grep -q ":${port} " && echo "yes" || echo "no"`
-		);
-		return stdout.trim() === 'yes';
+		const { stdout } = await execFileAsync('ss', ['-tlnp']);
+		return stdout.includes(`:${port} `) || stdout.includes(`:${port}\n`);
 	} catch {
-		return false;
+		try {
+			const { stdout } = await execFileAsync('netstat', ['-tln']);
+			return stdout.includes(`:${port} `) || stdout.includes(`:${port}\n`);
+		} catch {
+			return false;
+		}
+	}
+}
+
+/**
+ * Execute a tmux command using argument-safe invocation.
+ * @param {string[]} args
+ * @param {import('child_process').ExecFileOptions} [options]
+ * @returns {Promise<{stdout: string, stderr: string}>}
+ */
+async function runTmux(args, options = {}) {
+	const result = await execFileAsync('tmux', args, { encoding: 'utf-8', ...options });
+	return {
+		stdout: typeof result.stdout === 'string' ? result.stdout : result.stdout.toString('utf-8'),
+		stderr: typeof result.stderr === 'string' ? result.stderr : result.stderr.toString('utf-8')
+	};
+}
+
+/**
+ * @typedef {{ path: string | null, serverPath: string | null, port: number | null }} ProjectServerConfig
+ */
+
+/**
+ * Read project server config from ~/.config/jat/projects.json.
+ * @param {string} projectName
+ * @returns {ProjectServerConfig | null}
+ */
+function readProjectServerConfig(projectName) {
+	try {
+		if (!existsSync(JAT_PROJECTS_CONFIG_PATH)) {
+			return null;
+		}
+
+		const parsed = JSON.parse(readFileSync(JAT_PROJECTS_CONFIG_PATH, 'utf-8'));
+		const entry = parsed?.projects?.[projectName];
+		if (!entry || typeof entry !== 'object') {
+			return null;
+		}
+
+		const home = process.env.HOME || homedir();
+		const path = typeof entry.path === 'string' && entry.path.length > 0
+			? entry.path.replace(/^~/, home)
+			: null;
+		const serverPath = typeof entry.server_path === 'string' && entry.server_path.length > 0
+			? entry.server_path.replace(/^~/, home)
+			: null;
+		const rawPort = typeof entry.port === 'number' ? entry.port : Number.parseInt(String(entry.port || ''), 10);
+		const port = Number.isFinite(rawPort) && rawPort >= 1 && rawPort <= 65535 ? rawPort : null;
+
+		return { path, serverPath, port };
+	} catch {
+		return null;
 	}
 }
 
@@ -212,11 +269,10 @@ export async function GET({ url }) {
 		}
 
 		// Step 1: List server-* tmux sessions
-		const sessionsCommand = `tmux list-sessions -F "#{session_name}:#{session_created}:#{session_attached}" 2>/dev/null || echo ""`;
 
 		let sessionsOutput = '';
 		try {
-			const { stdout } = await execAsync(sessionsCommand);
+			const { stdout } = await runTmux(['list-sessions', '-F', '#{session_name}:#{session_created}:#{session_attached}']);
 			sessionsOutput = stdout.trim();
 		} catch {
 			// No tmux server or no sessions - return empty
@@ -275,20 +331,23 @@ export async function GET({ url }) {
 				let lineCount = 0;
 				try {
 					// Deep capture for port detection (2000 lines back - vite outputs many warnings)
-					const deepCaptureCommand = `tmux capture-pane -p -t "${session.name}" -S -2000`;
-					const { stdout: deepStdout } = await execAsync(deepCaptureCommand, { maxBuffer: 1024 * 1024 * 5 });
+					const { stdout: deepStdout } = await runTmux(
+						['capture-pane', '-p', '-t', session.name, '-S', '-2000'],
+						{ maxBuffer: 1024 * 1024 * 5 }
+					);
 					deepOutput = deepStdout;
 
 					// Recent capture for display (with ANSI codes for colors)
-					const captureCommand = `tmux capture-pane -p -e -t "${session.name}" -S -${lines}`;
-					const { stdout } = await execAsync(captureCommand, { maxBuffer: 1024 * 1024 * 5 });
+					const { stdout } = await runTmux(
+						['capture-pane', '-p', '-e', '-t', session.name, '-S', `-${lines}`],
+						{ maxBuffer: 1024 * 1024 * 5 }
+					);
 					output = stdout;
 
 					// Get total history line count from tmux for activity tracking
 					// This counts all lines ever written, not just visible buffer
-					const historyCommand = `tmux display-message -p -t "${session.name}" '#{history_size}'`;
 					try {
-						const { stdout: historyStdout } = await execAsync(historyCommand);
+						const { stdout: historyStdout } = await runTmux(['display-message', '-p', '-t', session.name, '#{history_size}']);
 						lineCount = parseInt(historyStdout.trim(), 10) || 0;
 					} catch {
 						// Fallback to deep output line count
@@ -307,20 +366,14 @@ export async function GET({ url }) {
 				// Try to get project config (path, server_path, and port) from jat config
 				let projectPath = null;
 				let configPort = null;
-				try {
-					const configPath = `${process.env.HOME}/.config/jat/projects.json`;
-					// Note: \\( creates literal \( for jq interpolation
-					const { stdout: configOutput } = await execAsync(
-						`jq -r '.projects["${projectName}"] | "\\(.path // empty)|\\(.server_path // empty)|\\(.port // empty)"' "${configPath}" 2>/dev/null`
-					);
-					const [pathPart, serverPathPart, portPart] = configOutput.trim().split('|');
-					// Use server_path if available, otherwise use path
-					const effectivePath = serverPathPart || pathPart;
-					projectPath = effectivePath ? effectivePath.replace(/^~/, process.env.HOME || '') : null;
-					configPort = portPart ? parseInt(portPart, 10) : null;
-				} catch {
-					// Config not available, use default path
-					projectPath = `${process.env.HOME}/code/${projectName}`;
+				const projectConfig = readProjectServerConfig(projectName);
+				if (projectConfig) {
+					projectPath = projectConfig.serverPath || projectConfig.path;
+					configPort = projectConfig.port;
+				}
+
+				if (!projectPath) {
+					projectPath = `${process.env.HOME || homedir()}/code/${projectName}`;
 				}
 
 				// Use config port if output detection failed

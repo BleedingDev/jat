@@ -16,14 +16,14 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { getLatestProviderSessionIdForAgent } from '$lib/server/agentSessions.js';
 import type { RequestHandler } from './$types';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Convert a project path to Claude's project slug format
@@ -113,7 +113,7 @@ interface Task {
  */
 async function getActiveTmuxSessions(): Promise<Set<string>> {
 	try {
-		const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}" 2>/dev/null');
+		const { stdout } = await execFileAsync('tmux', ['list-sessions', '-F', '#{session_name}']);
 		const sessions = new Set(
 			stdout
 				.trim()
@@ -133,7 +133,9 @@ async function getActiveTmuxSessions(): Promise<Set<string>> {
  */
 async function getInProgressTasks(projectPath: string): Promise<Task[]> {
 	try {
-		const { stdout } = await execAsync(`cd "${projectPath}" && bd list --status in_progress --json`);
+		const { stdout } = await execFileAsync('bd', ['list', '--status', 'in_progress', '--json'], {
+			cwd: projectPath
+		});
 		const tasks: Task[] = JSON.parse(stdout);
 		return tasks.filter((t) => t.assignee);
 	} catch {

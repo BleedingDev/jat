@@ -10,6 +10,7 @@ declare global {
 			requestId: string;
 			logger: Logger;
 			authRole?: 'read' | 'write' | 'admin';
+			clientIp?: string;
 		}
 		// interface PageData {}
 		// interface PageState {}

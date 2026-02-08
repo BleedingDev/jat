@@ -10,14 +10,14 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Whisper configuration - check jat path first, then fallback to chezwizper
 const JAT_WHISPER_PATH = `${process.env.HOME}/.local/share/jat/whisper`;
@@ -64,7 +64,10 @@ export async function POST({ request }) {
 		try {
 			// Convert to WAV using ffmpeg (whisper needs specific format)
 			// 16kHz mono is optimal for whisper
-			await execAsync(`ffmpeg -y -i "${inputPath}" -ar 16000 -ac 1 -c:a pcm_s16le "${wavPath}" 2>/dev/null`);
+			await execFileAsync(
+				'ffmpeg',
+				['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wavPath]
+			);
 
 			// Run whisper-cli
 			// -nt: no timestamps (we just want the text)
@@ -72,8 +75,9 @@ export async function POST({ request }) {
 			// --no-prints: minimize output
 			// Increased timeout to 120 seconds (2 minutes) for longer recordings
 			// Large-v3-turbo model processes ~50-100 seconds of audio per minute on average hardware
-			const { stdout, stderr } = await execAsync(
-				`"${WHISPER_CLI}" -m "${WHISPER_MODEL}" -f "${wavPath}" -nt -np --no-prints -l en 2>/dev/null`,
+			const { stdout } = await execFileAsync(
+				WHISPER_CLI,
+				['-m', WHISPER_MODEL, '-f', wavPath, '-nt', '-np', '--no-prints', '-l', 'en'],
 				{ timeout: 120000 } // 120 second timeout (2 minutes)
 			);
 
@@ -129,14 +133,16 @@ export async function POST({ request }) {
 export async function GET() {
 	// Health check - verify whisper is available
 	try {
-		const { stdout } = await execAsync(`"${WHISPER_CLI}" --help 2>&1 | head -1`);
+		const { stdout, stderr } = await execFileAsync(WHISPER_CLI, ['--help'], { timeout: 10000 });
 		const modelExists = existsSync(WHISPER_MODEL);
+		const helpLine = (stdout || stderr || '').split('\n')[0]?.trim() || null;
 
 		return json({
 			status: 'ok',
 			whisper_cli: WHISPER_CLI,
 			model: WHISPER_MODEL,
 			model_exists: modelExists,
+			help_line: helpLine,
 			message: modelExists ? 'Whisper is ready' : 'Model not found'
 		});
 	} catch (error) {

@@ -14,7 +14,7 @@
 import { json } from '@sveltejs/kit';
 import { readFile, writeFile, mkdir, access } from 'fs/promises';
 import { join, resolve } from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import type { RequestHandler } from './$types';
 import { getProjectPath } from '$lib/utils/projectUtils';
 import { getLlmSchemaPath, llmCall, parseJsonResponse } from '$lib/server/llmService';
@@ -96,7 +96,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		// Fetch task data from Beads
 		let taskData: { title: string; description: string; status: string; priority: number; issue_type: string; assignee?: string } | null = null;
 		try {
-			const taskJson = execSync(`cd "${projectRoot}" && bd show "${id}" --json`, { encoding: 'utf-8' });
+			const taskJson = execFileSync('bd', ['show', id, '--json'], {
+				cwd: projectRoot,
+				encoding: 'utf-8'
+			});
 			const tasks = JSON.parse(taskJson);
 			if (tasks && tasks.length > 0) {
 				taskData = {

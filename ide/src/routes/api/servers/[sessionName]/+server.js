@@ -7,10 +7,31 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+/**
+ * @param {string} sessionName
+ * @returns {boolean}
+ */
+function isValidServerSessionName(sessionName) {
+	return /^server-[A-Za-z0-9_-]+$/.test(sessionName);
+}
+
+/**
+ * @param {string} sessionName
+ * @returns {Promise<boolean>}
+ */
+async function hasTmuxSession(sessionName) {
+	try {
+		await execFileAsync('tmux', ['has-session', '-t', sessionName]);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function DELETE({ params }) {
@@ -23,24 +44,19 @@ export async function DELETE({ params }) {
 		);
 	}
 
-	// Validate session name format (must start with server-)
-	if (!sessionName.startsWith('server-')) {
+	if (!isValidServerSessionName(sessionName)) {
 		return json(
 			{
 				error: 'Invalid session name',
-				message: 'Server sessions must have names starting with "server-"'
+				message: 'Server sessions must have names like "server-projectName" (letters, numbers, _, -).'
 			},
 			{ status: 400 }
 		);
 	}
 
 	try {
-		// Check if session exists
-		const { stdout: checkOutput } = await execAsync(
-			`tmux has-session -t "${sessionName}" 2>/dev/null && echo "exists" || echo "no"`
-		);
-
-		if (checkOutput.trim() !== 'exists') {
+		const exists = await hasTmuxSession(sessionName);
+		if (!exists) {
 			return json(
 				{
 					error: 'Session not found',
@@ -50,17 +66,14 @@ export async function DELETE({ params }) {
 			);
 		}
 
-		// Send Ctrl+C first to gracefully stop the server
 		try {
-			await execAsync(`tmux send-keys -t "${sessionName}" C-c`);
-			// Wait a moment for graceful shutdown
+			await execFileAsync('tmux', ['send-keys', '-t', sessionName, 'C-c']);
 			await new Promise((resolve) => setTimeout(resolve, 500));
 		} catch {
-			// Ignore if send-keys fails
+			// Ignore graceful-stop failures and continue with hard kill.
 		}
 
-		// Kill the tmux session
-		await execAsync(`tmux kill-session -t "${sessionName}"`);
+		await execFileAsync('tmux', ['kill-session', '-t', sessionName]);
 
 		return json({
 			success: true,

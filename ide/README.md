@@ -490,6 +490,13 @@ pm2 start build/index.js --name beads-ide
 - `JAT_API_TOKENS` - Optional role-scoped tokens (format: `read:tokenA,write:tokenB,admin:tokenC`)
 - `JAT_ALLOW_LOOPBACK_WITHOUT_TOKEN` - When `true`, localhost requests bypass token checks even if tokens are configured
 - `JAT_TRUST_PROXY` - When `true`, auth checks use `X-Forwarded-For` (use only behind a trusted reverse proxy)
+- `JAT_API_RATE_LIMIT_WINDOW_MS` - Rate-limit window size in milliseconds (default: `60000`)
+- `JAT_API_RATE_LIMIT_READ_MAX` - Max read requests per key per window (default: `240`)
+- `JAT_API_RATE_LIMIT_WRITE_MAX` - Max mutating requests per key per window (default: `120`)
+- `JAT_MAX_API_BODY_BYTES` - Max body size for normal API writes in bytes (default: `10485760`)
+- `JAT_MAX_API_UPLOAD_BODY_BYTES` - Max body size for upload endpoints (currently `/api/transcribe`) in bytes (default: `52428800`)
+- `JAT_API_MUTATING_TIMEOUT_MS` - Timeout for high-risk mutating endpoints (default: `90000`)
+- `JAT_ENABLE_REMOTE_TERMINAL_CONTROL` - When `true`, allows remote access to terminal-control APIs; defaults to disabled for non-loopback clients
 - `JAT_ENABLE_CLAUDE_METRICS` - Set to `true` to enable Claude metrics endpoints; defaults to disabled
 
 ```bash
@@ -501,6 +508,10 @@ For token-protected deployments behind a reverse proxy, you can inject a Bearer 
 ```nginx
 proxy_set_header Authorization "Bearer <your-admin-token>";
 ```
+
+Health and readiness probes:
+- `GET /api/health` - Basic process health
+- `GET /api/ready` - Dependency readiness (`bd`, `tmux`, writable `/tmp`)
 
 ### Reverse Proxy (Nginx)
 

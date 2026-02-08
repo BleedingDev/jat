@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { platform } from 'os';
 
 interface PrerequisiteCheck {
@@ -10,9 +10,13 @@ interface PrerequisiteCheck {
 	fixHint: string;
 }
 
-function checkTool(name: string, versionCmd: string): { installed: boolean; version: string | null } {
+function checkTool(command: string, args: string[]): { installed: boolean; version: string | null } {
 	try {
-		const output = execSync(versionCmd, { timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+		const output = execFileSync(command, args, {
+			timeout: 5000,
+			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'pipe']
+		}).trim();
 		// Extract version number from output
 		const versionMatch = output.match(/(\d+\.\d+[\.\d]*)/);
 		return { installed: true, version: versionMatch ? versionMatch[1] : output.split('\n')[0].slice(0, 30) };
@@ -37,17 +41,17 @@ function getFixHint(name: string, plat: string): string {
 export async function GET() {
 	const plat = platform();
 
-	const tools: Array<{ name: string; cmd: string; required: boolean }> = [
-		{ name: 'tmux', cmd: 'tmux -V', required: true },
-		{ name: 'sqlite3', cmd: 'sqlite3 --version', required: true },
-		{ name: 'jq', cmd: 'jq --version', required: true },
-		{ name: 'git', cmd: 'git --version', required: true },
-		{ name: 'bd', cmd: 'bd --version', required: true },
-		{ name: 'node', cmd: 'node --version', required: false }
+	const tools: Array<{ name: string; command: string; args: string[]; required: boolean }> = [
+		{ name: 'tmux', command: 'tmux', args: ['-V'], required: true },
+		{ name: 'sqlite3', command: 'sqlite3', args: ['--version'], required: true },
+		{ name: 'jq', command: 'jq', args: ['--version'], required: true },
+		{ name: 'git', command: 'git', args: ['--version'], required: true },
+		{ name: 'bd', command: 'bd', args: ['--version'], required: true },
+		{ name: 'node', command: 'node', args: ['--version'], required: false }
 	];
 
 	const checks: PrerequisiteCheck[] = tools.map(tool => {
-		const result = checkTool(tool.name, tool.cmd);
+		const result = checkTool(tool.command, tool.args);
 		return {
 			name: tool.name,
 			installed: result.installed,

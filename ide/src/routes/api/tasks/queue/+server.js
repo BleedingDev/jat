@@ -15,10 +15,10 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * @typedef {{ id: string, title: string, description?: string, status: string, priority: number, issue_type?: string, assignee?: string }} Task
@@ -27,7 +27,8 @@ const execAsync = promisify(exec);
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
 	try {
-		const limit = parseInt(url.searchParams.get('limit') || '5', 10);
+		const parsedLimit = parseInt(url.searchParams.get('limit') || '5', 10);
+		const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 5;
 		const sortParam = url.searchParams.get('sort') || 'hybrid';
 		const project = url.searchParams.get('project');
 
@@ -35,11 +36,16 @@ export async function GET({ url }) {
 		const validSorts = ['hybrid', 'priority', 'oldest'];
 		const sort = validSorts.includes(sortParam) ? sortParam : 'hybrid';
 
-		// Build bd ready command
-		let command = `bd ready --json --limit ${limit} --sort ${sort}`;
-
 		// Execute bd ready to get queue
-		const { stdout } = await execAsync(command);
+		const result = await execFileAsync('bd', [
+			'ready',
+			'--json',
+			'--limit',
+			String(limit),
+			'--sort',
+			sort
+		]);
+		const stdout = typeof result === 'string' ? result : result.stdout;
 		/** @type {Task[]} */
 		const tasks = JSON.parse(stdout);
 

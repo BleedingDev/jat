@@ -1,5 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+
+function getProjectPath() {
+	return process.cwd().replace(/\/ide$/, '');
+}
 
 /**
  * API endpoint for fetching agent statistics
@@ -17,17 +21,19 @@ import { execSync } from 'child_process';
  */
 export async function GET({ url }) {
 	try {
+		const projectPath = getProjectPath();
+
 		// Get all tasks from Beads
-		const tasksJson = execSync('bd list --json', {
+		const tasksJson = execFileSync('bd', ['list', '--json'], {
 			encoding: 'utf-8',
-			cwd: process.env.HOME + '/code/jat'
+			cwd: projectPath
 		});
 		const tasks = JSON.parse(tasksJson);
 
 		// Get all agents from Agent Mail
-		const agentsOutput = execSync('am-agents', {
+		const agentsOutput = execFileSync('am-agents', [], {
 			encoding: 'utf-8',
-			cwd: process.env.HOME + '/code/jat'
+			cwd: projectPath
 		});
 
 		// Parse agent list (format: "AgentName <program> last_active_minutes_ago")

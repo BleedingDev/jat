@@ -21,11 +21,22 @@ import logger from '$lib/utils/logger';
 import { shouldLog, getSamplingRate } from '$lib/config/logConfig';
 import { dev } from '$app/environment';
 import { SIGNAL_TTL } from '$lib/config/constants';
-import { parseApiAuthConfig, authorizeApiRequest } from '$lib/server/apiAuth';
+import { parseApiAuthConfig, authorizeApiRequest, isLoopbackAddress } from '$lib/server/apiAuth';
+import {
+	ApiRateLimiter,
+	buildApiRateLimitKey,
+	isHighRiskMutatingEndpoint,
+	isMutatingMethod,
+	isTerminalControlEndpoint,
+	parseApiSecurityConfig,
+	validateApiBodySize
+} from '$lib/server/apiSecurity';
 
 // Track aggregation interval
 let aggregationInterval: ReturnType<typeof setInterval> | null = null;
 const apiAuthConfig = parseApiAuthConfig(process.env);
+const apiSecurityConfig = parseApiSecurityConfig(process.env);
+const apiRateLimiter = new ApiRateLimiter();
 
 /**
  * Clean up stale JAT signal/activity files from /tmp
@@ -293,8 +304,23 @@ export const handle = async ({ event, resolve }) => {
 		query: event.url.search
 	});
 
-	// Enforce API access control before any route logic executes.
-	if (event.url.pathname.startsWith('/api/')) {
+	const isApiRequest = event.url.pathname.startsWith('/api/');
+	let clientIp = event.getClientAddress();
+	let rateLimitHeaders: Record<string, string> | null = null;
+
+	function blockedApiResponse(payload: { error: string; message: string }, status: number, extraHeaders?: Record<string, string>) {
+		return new Response(JSON.stringify(payload), {
+			status,
+			headers: {
+				'content-type': 'application/json',
+				'x-request-id': requestId,
+				...(extraHeaders || {})
+			}
+		});
+	}
+
+	// Enforce API access control and abuse guardrails before any route logic executes.
+	if (isApiRequest) {
 		const authResult = authorizeApiRequest({
 			pathname: event.url.pathname,
 			method: event.request.method,
@@ -313,22 +339,88 @@ export const handle = async ({ event, resolve }) => {
 				`API request blocked: ${event.request.method} ${event.url.pathname}`
 			);
 
-			return new Response(
-				JSON.stringify({
+			return blockedApiResponse(
+				{
 					error: authResult.error,
 					message: authResult.message
-				}),
-				{
-					status: authResult.status,
-					headers: {
-						'content-type': 'application/json',
-						'x-request-id': requestId
-					}
-				}
+				},
+				authResult.status
 			);
 		}
 
 		event.locals.authRole = authResult.role;
+		event.locals.clientIp = authResult.clientIp;
+		clientIp = authResult.clientIp;
+
+		if (isTerminalControlEndpoint(event.url.pathname)) {
+			const isLoopback = isLoopbackAddress(authResult.clientIp);
+			if (!isLoopback && !apiSecurityConfig.enableRemoteTerminalControl) {
+				return blockedApiResponse(
+					{
+						error: 'Forbidden',
+						message:
+							'Remote terminal-control APIs are disabled. Set JAT_ENABLE_REMOTE_TERMINAL_CONTROL=true to enable.'
+					},
+					403
+				);
+			}
+			if (!isLoopback && authResult.role !== 'admin') {
+				return blockedApiResponse(
+					{
+						error: 'Forbidden',
+						message: 'Terminal-control APIs require an admin token for remote access.'
+					},
+					403
+				);
+			}
+		}
+
+		const bodySizeResult = validateApiBodySize(
+			event.url.pathname,
+			event.request.method,
+			event.request.headers,
+			apiSecurityConfig
+		);
+		if (!bodySizeResult.allowed) {
+			return blockedApiResponse(
+				{
+					error: 'Payload Too Large',
+					message: `Request body exceeds limit (${bodySizeResult.contentLength} bytes > ${bodySizeResult.maxBodyBytes} bytes).`
+				},
+				413,
+				{
+					'x-max-body-bytes': String(bodySizeResult.maxBodyBytes)
+				}
+			);
+		}
+
+		const rateLimit = apiRateLimiter.check(
+			buildApiRateLimitKey(event.request.headers, authResult.clientIp),
+			isMutatingMethod(event.request.method)
+				? apiSecurityConfig.writeRateLimitMax
+				: apiSecurityConfig.readRateLimitMax,
+			apiSecurityConfig.rateLimitWindowMs
+		);
+
+		rateLimitHeaders = {
+			'x-ratelimit-limit': String(rateLimit.limit),
+			'x-ratelimit-remaining': String(rateLimit.remaining),
+			'x-ratelimit-reset': new Date(rateLimit.resetAtMs).toISOString()
+		};
+
+		if (!rateLimit.allowed) {
+			return blockedApiResponse(
+				{
+					error: 'Too Many Requests',
+					message: `Rate limit exceeded. Retry in ${rateLimit.retryAfterSeconds}s.`
+				},
+				429,
+				{
+					...rateLimitHeaders,
+					'retry-after': String(rateLimit.retryAfterSeconds)
+				}
+			);
+		}
 	}
 
 	// Check if we should log this request based on sampling
@@ -342,13 +434,54 @@ export const handle = async ({ event, resolve }) => {
 		event.locals.logger.info({
 			userAgent: event.request.headers.get('user-agent'),
 			referer: event.request.headers.get('referer'),
-			ip: event.getClientAddress()
+			ip: clientIp
 		}, `Request started: ${event.request.method} ${event.url.pathname}`);
 	}
 
 	try {
-		// Process the request
-		const response = await resolve(event);
+		// Process the request (with timeout guardrails for high-risk mutating APIs)
+		let response: Response;
+		if (isApiRequest && isHighRiskMutatingEndpoint(event.url.pathname, event.request.method)) {
+			const timeoutMs = apiSecurityConfig.highRiskMutatingTimeoutMs;
+			let timedOut = false;
+			let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+			const timeoutPromise = new Promise<Response>((resolveTimeout) => {
+				timeoutHandle = setTimeout(() => {
+					timedOut = true;
+					resolveTimeout(
+						blockedApiResponse(
+							{
+								error: 'Gateway Timeout',
+								message: `Request exceeded timeout (${timeoutMs}ms) for high-risk mutating endpoint.`
+							},
+							504
+						)
+					);
+				}, timeoutMs);
+			});
+
+				const resolvePromise: Promise<Response> = Promise.resolve().then(() => resolve(event));
+				void resolvePromise.catch((error: unknown) => {
+					if (timedOut) {
+						event.locals.logger.error(
+							{
+								error,
+								path: event.url.pathname,
+								method: event.request.method
+							},
+							'High-risk endpoint failed after timeout response was returned'
+						);
+					}
+				});
+
+			response = await Promise.race([resolvePromise, timeoutPromise]);
+			if (!timedOut && timeoutHandle) {
+				clearTimeout(timeoutHandle);
+			}
+		} else {
+			response = await resolve(event);
+		}
 
 		// Calculate duration
 		const duration = Date.now() - startTime;
@@ -364,12 +497,34 @@ export const handle = async ({ event, resolve }) => {
 			event.locals.logger[level]({
 				status: response.status,
 				duration,
-				contentType: response.headers.get('content-type')
+				contentType: response.headers.get('content-type'),
+				ip: clientIp
 			}, `Request completed: ${event.request.method} ${event.url.pathname}`);
+		}
+
+		if (isApiRequest && isMutatingMethod(event.request.method)) {
+			event.locals.logger.info(
+				{
+					audit: true,
+					method: event.request.method,
+					path: event.url.pathname,
+					status: response.status,
+					duration,
+					authRole: event.locals.authRole || null,
+					ip: clientIp,
+					contentLength: event.request.headers.get('content-length') || null
+				},
+				'API mutation audit'
+			);
 		}
 
 		// Add request ID to response headers for client correlation
 		response.headers.append('x-request-id', requestId);
+		if (rateLimitHeaders) {
+			for (const [header, value] of Object.entries(rateLimitHeaders)) {
+				response.headers.set(header, value);
+			}
+		}
 
 		return response;
 	} catch (error) {
