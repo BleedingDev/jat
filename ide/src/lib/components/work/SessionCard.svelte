@@ -49,6 +49,7 @@
 	import StatusActionBadge from "./StatusActionBadge.svelte";
 	import ServerStatusBadge from "./ServerStatusBadge.svelte";
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
+	import SessionChatView from "./SessionChatView.svelte";
 	import { workSessionsState } from "$lib/stores/workSessions.svelte";
 	import { autoKillCountdowns, cancelAutoKill } from "$lib/stores/sessionEvents";
 	import { setPendingAutoKill } from "$lib/stores/autoKillConfig";
@@ -89,6 +90,9 @@
 		getTerminalHeight,
 		getCtrlCIntercept,
 		setCtrlCIntercept,
+		getSessionOutputMode,
+		setSessionOutputMode,
+		type SessionOutputMode,
 	} from "$lib/stores/preferences.svelte";
 	import { successToast } from "$lib/stores/toasts.svelte";
 	import { getReviewRules } from "$lib/stores/reviewRules.svelte";
@@ -1605,6 +1609,29 @@
 	// Ctrl+C behavior toggle (reactive from preferences store)
 	// When true, Ctrl+C sends interrupt to tmux; when false, Ctrl+C copies as usual
 	const ctrlCInterceptEnabled = $derived(getCtrlCIntercept());
+
+	// Session output rendering mode: terminal/chat/auto
+	// auto = chat on narrow viewports, terminal on larger screens.
+	let viewportWidth = $state(0);
+	const preferredOutputMode = $derived(getSessionOutputMode());
+	const isNarrowViewport = $derived(viewportWidth > 0 && viewportWidth < 900);
+	const effectiveOutputMode = $derived.by(() => {
+		if (!isAgentMode) return "terminal";
+		if (preferredOutputMode === "auto") {
+			return isNarrowViewport ? "chat" : "terminal";
+		}
+		return preferredOutputMode;
+	});
+
+	$effect(() => {
+		if (typeof window === "undefined") return;
+		const onResize = () => {
+			viewportWidth = window.innerWidth;
+		};
+		onResize();
+		window.addEventListener("resize", onResize);
+		return () => window.removeEventListener("resize", onResize);
+	});
 
 	// Task description hover-expand state
 	let taskHovered = $state(false);
@@ -3576,6 +3603,10 @@
 		if (autoScroll) {
 			userScrolledUp = false; // Reset when user enables auto-scroll
 		}
+	}
+
+	function setOutputMode(mode: SessionOutputMode) {
+		setSessionOutputMode(mode);
 	}
 
 	// Handle status badge actions
@@ -5946,46 +5977,104 @@
 				</div>
 			{/if}
 
+			<!-- View mode switcher (chat vs terminal) -->
+			{#if isAgentMode}
+				<div
+					class="flex items-center justify-between px-3 py-1.5 flex-shrink-0"
+					style="background: oklch(0.19 0.01 250); border-bottom: 1px solid oklch(0.28 0.02 250);"
+				>
+					<span class="text-[10px] uppercase tracking-wider font-mono" style="color: oklch(0.58 0.02 250);">
+						View
+					</span>
+					<div class="join join-horizontal">
+						<button
+							class="btn btn-xs join-item font-mono"
+							class:btn-primary={preferredOutputMode === "chat"}
+							class:btn-ghost={preferredOutputMode !== "chat"}
+							onclick={() => setOutputMode("chat")}
+							title="Chat-first conversation view"
+						>
+							Chat
+						</button>
+						<button
+							class="btn btn-xs join-item font-mono"
+							class:btn-primary={preferredOutputMode === "terminal"}
+							class:btn-ghost={preferredOutputMode !== "terminal"}
+							onclick={() => setOutputMode("terminal")}
+							title="Raw terminal output view"
+						>
+							Terminal
+						</button>
+						<button
+							class="btn btn-xs join-item font-mono"
+							class:btn-primary={preferredOutputMode === "auto"}
+							class:btn-ghost={preferredOutputMode !== "auto"}
+							onclick={() => setOutputMode("auto")}
+							title="Auto: chat on narrow screens, terminal on desktop"
+						>
+							Auto
+						</button>
+					</div>
+					<span class="text-[10px] font-mono" style="color: oklch(0.55 0.02 250);">
+						Now: {effectiveOutputMode}
+					</span>
+				</div>
+			{/if}
+
 			<!-- Output Content with Minimap Sidebar -->
 			<div class="relative flex-1 min-h-0 overflow-hidden">
-				<!-- Terminal Output - Click to center card, add glow effect, and focus input -->
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					bind:this={scrollContainerRef}
-					class="absolute inset-0 overflow-y-auto overflow-x-auto px-3 leading-relaxed cursor-text"
-					style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250); {output && mode === 'agent' && minimapEnabled ? 'right: 60px;' : ''}"
-					onscroll={handleScroll}
-					onclick={handleCardClick}
-				>
-					{#if output}
-						<pre
-							class="whitespace-pre m-0 text-base-content"
-							style="font-family: var(--terminal-font); font-size: var(--terminal-font-size);">{@html renderedOutput}</pre>
-					{:else}
-						<p class="text-base-content/40 italic m-0">No output yet...</p>
-					{/if}
-				</div>
-
-				<!-- Minimap Sidebar (absolute positioned, visible when enabled and there's output) -->
-				{#if output && mode === 'agent' && minimapEnabled}
+				{#if isAgentMode && effectiveOutputMode === "chat"}
+					<SessionChatView
+						{sessionName}
+						{output}
+						{autoScroll}
+						onAutoScrollChange={(enabled) => {
+							autoScroll = enabled;
+							if (enabled) {
+								userScrolledUp = false;
+							}
+						}}
+					/>
+				{:else}
+					<!-- Terminal Output - Click to center card, add glow effect, and focus input -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
-						class="absolute top-0 right-0 bottom-0 w-[60px] border-l overflow-hidden"
-						style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"
-						bind:clientHeight={outputContainerHeight}
+						bind:this={scrollContainerRef}
+						class="absolute inset-0 overflow-y-auto overflow-x-auto px-3 leading-relaxed cursor-text"
+						style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250); {output && mode === 'agent' && minimapEnabled ? 'right: 60px;' : ''}"
+						onscroll={handleScroll}
+						onclick={handleCardClick}
 					>
-						<MinimapCssScale
-							bind:this={minimapRef}
-							output={output}
-							height={outputContainerHeight}
-							onPositionClick={handleMinimapClick}
-						/>
+						{#if output}
+							<pre
+								class="whitespace-pre m-0 text-base-content"
+								style="font-family: var(--terminal-font); font-size: var(--terminal-font-size);">{@html renderedOutput}</pre>
+						{:else}
+							<p class="text-base-content/40 italic m-0">No output yet...</p>
+						{/if}
 					</div>
+
+					<!-- Minimap Sidebar (absolute positioned, visible when enabled and there's output) -->
+					{#if output && mode === 'agent' && minimapEnabled}
+						<div
+							class="absolute top-0 right-0 bottom-0 w-[60px] border-l overflow-hidden"
+							style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"
+							bind:clientHeight={outputContainerHeight}
+						>
+							<MinimapCssScale
+								bind:this={minimapRef}
+								output={output}
+								height={outputContainerHeight}
+								onPositionClick={handleMinimapClick}
+							/>
+						</div>
+					{/if}
 				{/if}
 			</div>
 
 			<!-- Event Timeline Stack (peeks above input, expands on hover) -->
-			{#if mode === "agent" && sessionName}
+			{#if mode === "agent" && sessionName && effectiveOutputMode !== "chat"}
 				<div class="relative px-3 bg-base-300 flex-shrink-0">
 					<EventStack
 						{sessionName}
@@ -7155,7 +7244,7 @@
 										{/if}
 									</button>
 								</li>
-								{#if mode === 'agent'}
+								{#if mode === 'agent' && effectiveOutputMode === 'terminal'}
 									<li>
 										<button
 											onclick={() => { minimapEnabled = !minimapEnabled; }}

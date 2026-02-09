@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
 	terminalFontFamily: 'terminal-font-family',
 	terminalFontSize: 'terminal-font-size',
 	terminalScrollback: 'terminal-scrollback-lines',
+	sessionOutputMode: 'session-output-mode',
 	epicCelebration: 'epic-celebration-enabled',
 	epicAutoClose: 'epic-auto-close-enabled',
 	maxSessions: 'max-concurrent-sessions',
@@ -90,6 +91,7 @@ const DEFAULTS = {
 	terminalFontFamily: 'jetbrains' as TerminalFontFamily,
 	terminalFontSize: 'sm' as TerminalFontSize,
 	terminalScrollback: 2000 as TerminalScrollback,
+	sessionOutputMode: 'auto' as SessionOutputMode, // Auto = chat on narrow screens, terminal on desktop
 	epicCelebration: true, // Show toast + sound when all epic children complete
 	epicAutoClose: false, // Automatically close epic when all children complete
 	maxSessions: 12 as MaxSessions, // Maximum concurrent agent sessions
@@ -107,6 +109,7 @@ export type SparklineMode = 'stacked' | 'overlaid';
 export type TerminalFontFamily = 'jetbrains' | 'fira' | 'cascadia' | 'system';
 export type TerminalFontSize = 'xs' | 'sm' | 'base' | 'lg';
 export type TerminalScrollback = 500 | 1000 | 2000 | 5000 | 10000;
+export type SessionOutputMode = 'auto' | 'terminal' | 'chat';
 export type MaxSessions = 4 | 6 | 8 | 10 | 12 | 16 | 20;
 
 // Reactive state (module-level $state)
@@ -121,6 +124,7 @@ let ctrlCIntercept = $state(DEFAULTS.ctrlCIntercept);
 let terminalFontFamily = $state<TerminalFontFamily>(DEFAULTS.terminalFontFamily);
 let terminalFontSize = $state<TerminalFontSize>(DEFAULTS.terminalFontSize);
 let terminalScrollback = $state<TerminalScrollback>(DEFAULTS.terminalScrollback);
+let sessionOutputMode = $state<SessionOutputMode>(DEFAULTS.sessionOutputMode);
 let epicCelebration = $state(DEFAULTS.epicCelebration);
 let epicAutoClose = $state(DEFAULTS.epicAutoClose);
 let maxSessions = $state<MaxSessions>(DEFAULTS.maxSessions);
@@ -183,6 +187,11 @@ export function initPreferences(): void {
 	terminalScrollback = (parsedScrollback === 500 || parsedScrollback === 1000 || parsedScrollback === 2000 || parsedScrollback === 5000 || parsedScrollback === 10000)
 		? parsedScrollback
 		: DEFAULTS.terminalScrollback;
+
+	const storedSessionOutputMode = localStorage.getItem(STORAGE_KEYS.sessionOutputMode);
+	sessionOutputMode = (storedSessionOutputMode === 'auto' || storedSessionOutputMode === 'terminal' || storedSessionOutputMode === 'chat')
+		? storedSessionOutputMode
+		: DEFAULTS.sessionOutputMode;
 
 	const storedEpicCelebration = localStorage.getItem(STORAGE_KEYS.epicCelebration);
 	epicCelebration = storedEpicCelebration === null ? DEFAULTS.epicCelebration : storedEpicCelebration === 'true';
@@ -435,6 +444,21 @@ export function setTerminalScrollback(value: TerminalScrollback): void {
 	terminalScrollback = value;
 	if (browser) {
 		localStorage.setItem(STORAGE_KEYS.terminalScrollback, String(value));
+	}
+}
+
+// ============================================================================
+// Session Output Mode (chat vs terminal)
+// ============================================================================
+
+export function getSessionOutputMode(): SessionOutputMode {
+	return sessionOutputMode;
+}
+
+export function setSessionOutputMode(value: SessionOutputMode): void {
+	sessionOutputMode = value;
+	if (browser) {
+		localStorage.setItem(STORAGE_KEYS.sessionOutputMode, value);
 	}
 }
 
